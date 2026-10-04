@@ -235,8 +235,17 @@
   @media (max-width: 640px) {
     .add-form .row { grid-template-columns: 1fr; }
     .stepper .d { display: none; }
-    table.criteria td.r { white-space: normal; }
-    .rate span { width: 32px; height: 34px; }
+    /* على الهاتف: نص البند في سطر، وأزرار التقييم بعرض كامل تحته */
+    table.criteria.edit thead { display: none; }
+    table.criteria.edit tr { display: grid; grid-template-columns: 30px 1fr; border-bottom: 1px solid var(--line); }
+    table.criteria.edit td { border-bottom: 0; }
+    table.criteria.edit td.n { width: auto; }
+    table.criteria.edit td.r { grid-column: 1 / -1; width: auto; padding-top: 0; }
+    .rate { display: flex; }
+    .rate label { flex: 1; }
+    .rate span { width: 100%; height: 44px; }
+    .eval-head h2 { font-size: 1.15rem; }
+    main { padding: 16px 12px 60px; }
   }
   @media print {
     body { background: #fff; }
@@ -606,7 +615,7 @@
       '<span class="save-state" id="save-state"></span></div>' +
       '<div class="progress"><div id="progress-bar" style="width:' + (done / CRITERIA.length * 100) + '%"></div></div>' +
       '<div class="legend">' + SCALE.map(function (s) { return '<span><b>' + s.v + '</b> = ' + s.label + '</span>'; }).join('') + '</div>' +
-      '<div class="table-wrap"><table class="criteria"><thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="table-wrap"><table class="criteria edit"><thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<div class="notes-block"><label class="field" for="notes">ملاحظات المشرف</label>' +
       '<textarea id="notes" placeholder="نقاط القوة، فرص التحسين، التوصيات...">' + esc(t.notes) + '</textarea></div>' +
       (ui.error ? '<div class="msg" role="alert">' + ui.error + '</div>' : '') +
