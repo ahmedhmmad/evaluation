@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقييم المعلمين</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --ink: #1c2733;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --primary: #0f766e;
+    --primary-dark: #0b5a54;
+    --primary-soft: #e6f4f2;
+    --amber: #b45309;
+    --amber-soft: #fef3c7;
+    --blue: #1d4ed8;
+    --blue-soft: #dbeafe;
+    --green: #15803d;
+    --green-soft: #dcfce7;
+    --red: #b91c1c;
+    --red-soft: #fee2e2;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  header.app {
+    background: var(--primary);
+    color: #fff;
+    padding: 16px;
+  }
+  header.app .inner, main {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  header.app h1 { margin: 0; font-size: 1.3rem; }
+  header.app p { margin: 2px 0 0; opacity: .85; font-size: .9rem; }
+  main { padding: 20px 16px 60px; }
+
+  button, input, textarea { font: inherit; color: inherit; }
+  .btn {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .btn:hover { background: #f8fafc; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { background: var(--primary-dark); }
+  .btn.danger { color: var(--red); border-color: #fecaca; }
+  .btn.danger:hover { background: var(--red-soft); }
+  .btn.link { border: 0; background: none; color: var(--primary); padding: 4px 0; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--primary); outline-offset: 2px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .toolbar input[type=search] { flex: 1; min-width: 180px; }
+  input[type=text], input[type=search], textarea {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #fff;
+    width: 100%;
+  }
+  textarea { min-height: 90px; resize: vertical; }
+  label.field { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+
+  /* Teacher list */
+  .teachers { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .teacher {
+    text-align: start;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .teacher:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(15,118,110,.12); }
+  .teacher .name { font-weight: 700; font-size: 1.05rem; }
+  .teacher .subject { color: var(--muted); font-size: .9rem; }
+  .teacher .foot { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+  .teacher .score { font-weight: 700; color: var(--primary); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 700;
+  }
+  .badge.new { background: #eef2f6; color: var(--muted); }
+  .badge.edit { background: var(--amber-soft); color: var(--amber); }
+  .badge.review { background: var(--blue-soft); color: var(--blue); }
+  .badge.approved { background: var(--primary-soft); color: var(--primary); }
+  .badge.published { background: var(--green-soft); color: var(--green); }
+
+  .add-form { display: none; margin-bottom: 16px; }
+  .add-form.open { display: block; }
+  .add-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+
+  /* Evaluation view */
+  .eval-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .eval-head h2 { margin: 0; font-size: 1.3rem; }
+  .eval-head .sub { color: var(--muted); }
+
+  .stepper { display: flex; list-style: none; padding: 0; margin: 0 0 16px; gap: 8px; }
+  .stepper li {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+  }
+  .stepper .num {
+    width: 30px; height: 30px; flex: none;
+    border-radius: 50%;
+    background: #eef2f6;
+    display: grid; place-items: center;
+    font-weight: 700;
+  }
+  .stepper .t { font-weight: 700; }
+  .stepper .d { font-size: .8rem; }
+  .stepper li.current { border-color: var(--primary); color: var(--ink); background: var(--primary-soft); }
+  .stepper li.current .num { background: var(--primary); color: #fff; }
+  .stepper li.done { color: var(--ink); }
+  .stepper li.done .num { background: var(--green); color: #fff; }
+
+  .progress { height: 8px; background: #eef2f6; border-radius: 999px; overflow: hidden; margin: 6px 0 14px; }
+  .progress > div { height: 100%; background: var(--primary); transition: width .2s; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
+
+  table.criteria { width: 100%; border-collapse: collapse; }
+  table.criteria th, table.criteria td { border-bottom: 1px solid var(--line); padding: 10px 8px; vertical-align: middle; }
+  table.criteria th { text-align: start; font-size: .85rem; color: var(--muted); background: #f8fafc; }
+  table.criteria td.n { width: 36px; color: var(--muted); text-align: center; }
+  table.criteria td.r { width: 1%; white-space: nowrap; }
+  table.criteria tr.missing td { background: #fff7ed; }
+
+  .rate { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .rate label { position: relative; cursor: pointer; }
+  .rate input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .rate span {
+    display: grid; place-items: center;
+    width: 38px; height: 36px;
+    font-weight: 700;
+    border-inline-start: 1px solid var(--line);
+    background: #fff;
+  }
+  .rate label:first-child span { border-inline-start: 0; }
+  .rate label:hover span { background: var(--primary-soft); }
+  .rate input:checked + span { background: var(--primary); color: #fff; }
+  .rate input:focus-visible + span { outline: 2px solid var(--primary-dark); outline-offset: -2px; }
+
+  .pill { display: inline-block; min-width: 34px; text-align: center; padding: 2px 8px; border-radius: 6px; font-weight: 700; background: var(--primary-soft); color: var(--primary); }
+
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .summary .box { background: #f8fafc; border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; }
+  .summary .k { color: var(--muted); font-size: .85rem; }
+  .summary .v { font-size: 1.5rem; font-weight: 800; color: var(--primary); }
+
+  .notes-block { margin-top: 16px; }
+  .notes-block h3 { font-size: 1rem; margin: 0 0 6px; }
+  .notes-block p { margin: 0; white-space: pre-wrap; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-start; margin-top: 20px; }
+  .actions .spacer { flex: 1; }
+  .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--red-soft); color: var(--red); font-weight: 600; }
+  .info { padding: 10px 12px; border-radius: 8px; background: var(--green-soft); color: var(--green); font-weight: 600; margin-bottom: 16px; }
+  .table-wrap { overflow-x: auto; }
+
+  @media (max-width: 640px) {
+    .add-form .row { grid-template-columns: 1fr; }
+    .stepper .d { display: none; }
+    table.criteria td.r { white-space: normal; }
+    .rate span { width: 32px; height: 34px; }
+  }
+  @media print {
+    body { background: #fff; }
+    header.app, .no-print, .stepper { display: none !important; }
+    main { padding: 0; max-width: none; }
+    .card { border: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="inner">
+    <h1>تقييم المعلمين</h1>
+    <p>نموذج التقييم الأدائي والكفايات الشخصية</p>
+  </div>
+</header>
+<main id="app"></main>
+
+<script>
+(function () {
+  'use strict';
+
+  // البنود مأخوذة من «نموذج تقييم معلم»
+  var CRITERIA = [
+    'المهارة في إعداد وتحضير وتنفيذ خطط الدروس الصفية',
+    'يضع أهدافًا تعليمية محددة وقابلة للقياس',
+    'يضع أنشطة متنوعة لتحديد الاحتياجات التعليمية لمختلف التلاميذ',
+    'يراعي ما لدى الطلاب من معارف وخبرات سابقة في تخطيط الدروس',
+    'يصمم أساليب مختلفة ومناسبة لتقويم أداء التلاميذ',
+    'يدير وقت التدريس داخل الصف إدارة فعالة',
+    'التمكن من المادة العلمية والقدرة على تحقيق الأهداف',
+    'يظهر عمليًا امتلاكه لمهارات الإدارة الصفية',
+    'يؤكد على ضمان مشاركة الطلاب في أنشطة التعلم بغض النظر عما بينهم من فروق من حيث النوع ومستوى التحصيل الدراسي والاحتياجات الخاصة وغير ذلك',
+    'يشارك الطلاب في تصميم بيئة التعلم ويشجعهم على ذلك',
+    'يستخدم الموارد التعليمية المختلفة استخدامًا فعالًا في شرح المفاهيم والمهارات المتعلقة بالمستوى التعليمي',
+    'يوظف معطيات تكنولوجيا التعليم في زيادة فرص الاكتشاف ومعالجة المعلومات والتعلم بالممارسة',
+    'يستخدم أسئلة كاشفة (عميقة) وأسئلة مفتوحة (غير محددة الإجابة) إلى الطلاب لتشجيعهم على التفكير',
+    'يستخدم استراتيجيات تدريس متنوعة لزيادة المشاركة الطلابية النشطة في التعلم',
+    'يؤكد في تدريسه على تنمية المهارات الاجتماعية ومهارات العمل التعاوني لدى الطلاب',
+    'يتيح للطلاب فرصًا للربط بين محتوى المادة التعليمية والمجالات التطبيقية لها',
+    'يتيح للطلاب فرصًا لربط مجالات المحتوى التعليمي بخبرات الحياة اليومية وتطبيق ما تعلموه واكتسبوه من أفكار ومهارات في التعامل مع المواقف والمشكلات اليومية',
+    'يتيح للطلاب فرصًا لممارسة كل من مهارات التفكير العليا والتفكير الناقد',
+    'يقدم قدرًا مناسبًا من التعزيز اللفظي البناء والدقيق ويساعد الطلاب على ذلك',
+    'يتيح للطلاب فرصًا معدة سلفًا للتأمل في عملية تعلمهم بهدف تقييم وتعديل المسار',
+    'يستخدم أساليب متنوعة ومناسبة لتقويم أداء التلاميذ',
+    'تقبل التوجيهات بشكل إيجابي والالتزام بها'
+  ];
+
+  var SCALE = [
+    { v: 5, label: 'ممتاز' },
+    { v: 4, label: 'جيد جدًا' },
+    { v: 3, label: 'جيد' },
+    { v: 2, label: 'مقبول' },
+    { v: 1, label: 'ضعيف' }
+  ];
+  var MAX = CRITERIA.length * 5;
+
+  var STATUS = {
+    new: 'لم يبدأ',
+    edit: 'قيد التحرير',
+    review: 'بانتظار الاعتماد',
+    approved: 'معتمد',
+    published: 'منشور'
+  };
+
+  var STEPS = [
+    { title: 'التحرير', desc: 'إدخال الدرجات والملاحظات' },
+    { title: 'الاعتماد', desc: 'مراجعة التقييم واعتماده' },
+    { title: 'النشر', desc: 'نشر التقييم النهائي' }
+  ];
+
+  var STORE_KEY = 'teacher-evaluations-v1';
+  var app = document.getElementById('app');
+  var teachers = load();
+  var ui = { search: '', addOpen: false, error: '' };
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    // بيانات تجريبية يمكن حذفها
+    return [
+      newTeacher('معلم تجريبي ١', 'اللغة العربية'),
+      newTeacher('معلم تجريبي ٢', 'الرياضيات'),
+      newTeacher('معلم تجريبي ٣', 'العلوم')
+    ];
+  }
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(teachers)); } catch (e) {}
+  }
+
+  function newTeacher(name, subject) {
+    return {
+      id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      name: name,
+      subject: subject,
+      status: 'new',
+      ratings: {},
+      notes: '',
+      approverNotes: '',
+      approvedAt: null,
+      publishedAt: null
+    };
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function find(id) {
+    for (var i = 0; i < teachers.length; i++) if (teachers[i].id === id) return teachers[i];
+    return null;
+  }
+
+  function ratedCount(t) {
+    var n = 0;
+    for (var i = 0; i < CRITERIA.length; i++) if (t.ratings[i]) n++;
+    return n;
+  }
+
+  function total(t) {
+    var sum = 0;
+    for (var i = 0; i < CRITERIA.length; i++) sum += t.ratings[i] || 0;
+    return sum;
+  }
+
+  function percent(t) { return Math.round(total(t) / MAX * 100); }
+
+  function grade(pct) {
+    if (pct >= 90) return 'ممتاز';
+    if (pct >= 80) return 'جيد جدًا';
+    if (pct >= 70) return 'جيد';
+    if (pct >= 60) return 'مقبول';
+    return 'ضعيف';
+  }
+
+  function fmtDate(iso) {
+    return iso ? new Date(iso).toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+  }
+
+  function stepIndex(status) {
+    if (status === 'review') return 1;
+    if (status === 'approved' || status === 'published') return 2;
+    return 0;
+  }
+
+  /* ---------- القائمة ---------- */
+
+  function renderList() {
+    var q = ui.search.trim();
+    var shown = teachers.filter(function (t) {
+      return !q || t.name.indexOf(q) > -1 || t.subject.indexOf(q) > -1;
+    });
+
+    var cards = shown.map(function (t) {
+      var score = t.status === 'new' ? '' :
+        '<span class="score">' + total(t) + ' / ' + MAX + '</span>';
+      return '<button type="button" class="card teacher" data-open="' + t.id + '">' +
+        '<span class="name">' + esc(t.name) + '</span>' +
+        '<span class="subject">' + esc(t.subject || '—') + '</span>' +
+        '<span class="foot"><span class="badge ' + t.status + '">' + STATUS[t.status] + '</span>' + score + '</span>' +
+        '</button>';
+    }).join('');
+
+    app.innerHTML =
+      '<div class="toolbar">' +
+        '<input type="search" id="search" placeholder="ابحث باسم المعلم أو التخصص" aria-label="بحث" value="' + esc(ui.search) + '">' +
+        '<button type="button" class="btn primary" data-act="toggle-add">+ إضافة معلم</button>' +
+      '</div>' +
+      '<form class="card add-form' + (ui.addOpen ? ' open' : '') + '" id="add-form">' +
+        '<div class="row">' +
+          '<div><label class="field" for="add-name">اسم المعلم</label><input type="text" id="add-name" required></div>' +
+          '<div><label class="field" for="add-subject">التخصص</label><input type="text" id="add-subject"></div>' +
+        '</div>' +
+        '<button type="submit" class="btn primary">حفظ</button> ' +
+        '<button type="button" class="btn" data-act="toggle-add">إلغاء</button>' +
+      '</form>' +
+      (shown.length
+        ? '<div class="teachers">' + cards + '</div>'
+        : '<div class="card empty">' + (teachers.length ? 'لا توجد نتائج مطابقة.' : 'لا يوجد معلمون بعد. أضف معلمًا للبدء.') + '</div>');
+  }
+
+  /* ---------- التقييم ---------- */
+
+  function stepper(t) {
+    var cur = stepIndex(t.status);
+    var allDone = t.status === 'published';
+    return '<ol class="stepper">' + STEPS.map(function (s, i) {
+      var cls = allDone || i < cur ? 'done' : (i === cur ? 'current' : '');
+      return '<li class="' + cls + '"' + (cls === 'current' ? ' aria-current="step"' : '') + '>' +
+        '<span class="num">' + (cls === 'done' ? '✓' : i + 1) + '</span>' +
+        '<span><span class="t">' + s.title + '</span><br><span class="d">' + s.desc + '</span></span></li>';
+    }).join('') + '</ol>';
+  }
+
+  function summary(t) {
+    var pct = percent(t);
+    return '<div class="summary">' +
+      '<div class="box"><div class="k">المجموع</div><div class="v">' + total(t) + ' / ' + MAX + '</div></div>' +
+      '<div class="box"><div class="k">النسبة</div><div class="v">' + pct + '%</div></div>' +
+      '<div class="box"><div class="k">التقدير</div><div class="v">' + grade(pct) + '</div></div>' +
+      '</div>';
+  }
+
+  function readOnlyTable(t) {
+    return '<div class="table-wrap"><table class="criteria"><thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' +
+      CRITERIA.map(function (c, i) {
+        return '<tr><td class="n">' + (i + 1) + '</td><td>' + c + '</td><td class="r"><span class="pill">' + (t.ratings[i] || '—') + '</span></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  function notesBlock(title, text) {
+    return text ? '<div class="notes-block"><h3>' + title + '</h3><p>' + esc(text) + '</p></div>' : '';
+  }
+
+  function editStep(t) {
+    var done = ratedCount(t);
+    var rows = CRITERIA.map(function (c, i) {
+      var opts = SCALE.slice().reverse().map(function (s) {
+        return '<label title="' + s.label + '"><input type="radio" name="c' + i + '" value="' + s.v + '"' +
+          (t.ratings[i] === s.v ? ' checked' : '') + ' aria-label="' + s.v + ' - ' + s.label + '"><span>' + s.v + '</span></label>';
+      }).join('');
+      var missing = ui.error && !t.ratings[i] ? ' class="missing"' : '';
+      return '<tr' + missing + ' data-row="' + i + '"><td class="n">' + (i + 1) + '</td><td>' + c + '</td>' +
+        '<td class="r"><span class="rate" role="radiogroup" aria-label="تقييم البند ' + (i + 1) + '">' + opts + '</span></td></tr>';
+    }).join('');
+
+    return '<div class="card">' +
+      '<div id="progress-text">تم تقييم ' + done + ' من ' + CRITERIA.length + ' بندًا</div>' +
+      '<div class="progress"><div id="progress-bar" style="width:' + (done / CRITERIA.length * 100) + '%"></div></div>' +
+      '<div class="legend">' + SCALE.map(function (s) { return '<span><b>' + s.v + '</b> = ' + s.label + '</span>'; }).join('') + '</div>' +
+      '<div class="table-wrap"><table class="criteria"><thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="notes-block"><label class="field" for="notes">ملاحظات المشرف</label>' +
+      '<textarea id="notes" placeholder="نقاط القوة، فرص التحسين، التوصيات...">' + esc(t.notes) + '</textarea></div>' +
+      (ui.error ? '<div class="msg" role="alert">' + ui.error + '</div>' : '') +
+      '<div class="actions">' +
+        '<button type="button" class="btn primary" data-act="submit">إرسال للاعتماد</button>' +
+        '<button type="button" class="btn" data-act="back">حفظ كمسودة</button>' +
+      '</div></div>';
+  }
+
+  function reviewStep(t) {
+    return '<div class="card">' + summary(t) + readOnlyTable(t) +
+      notesBlock('ملاحظات المشرف', t.notes) +
+      '<div class="notes-block"><label class="field" for="approver-notes">ملاحظات الاعتماد</label>' +
+      '<textarea id="approver-notes" placeholder="ملاحظات المعتمِد (اختياري)">' + esc(t.approverNotes) + '</textarea></div>' +
+      '<div class="actions">' +
+        '<button type="button" class="btn primary" data-act="approve">اعتماد التقييم</button>' +
+        '<button type="button" class="btn" data-act="return">إعادة للتحرير</button>' +
+      '</div></div>';
+  }
+
+  function publishStep(t) {
+    var published = t.status === 'published';
+    return '<div class="card">' +
+      '<div class="info no-print">' + (published
+        ? 'تم نشر التقييم بتاريخ ' + fmtDate(t.publishedAt)
+        : 'تم اعتماد التقييم بتاريخ ' + fmtDate(t.approvedAt) + ' وهو جاهز للنشر.') + '</div>' +
+      summary(t) + readOnlyTable(t) +
+      notesBlock('ملاحظات المشرف', t.notes) +
+      notesBlock('ملاحظات الاعتماد', t.approverNotes) +
+      '<div class="actions no-print">' +
+        (published
+          ? '<button type="button" class="btn primary" data-act="print">طباعة</button>' +
+            '<button type="button" class="btn" data-act="reopen">إعادة فتح للتحرير</button>'
+          : '<button type="button" class="btn primary" data-act="publish">نشر التقييم</button>' +
+            '<button type="button" class="btn" data-act="return">إعادة للتحرير</button>') +
+      '</div></div>';
+  }
+
+  function renderEval(t) {
+    var body = t.status === 'review' ? reviewStep(t)
+      : (t.status === 'approved' || t.status === 'published') ? publishStep(t)
+      : editStep(t);
+
+    app.innerHTML =
+      '<button type="button" class="btn link no-print" data-act="back">→ العودة إلى قائمة المعلمين</button>' +
+      '<div class="eval-head">' +
+        '<div><h2>' + esc(t.name) + '</h2><div class="sub">التخصص: ' + esc(t.subject || '—') + '</div></div>' +
+        '<div class="no-print"><span class="badge ' + t.status + '">' + STATUS[t.status] + '</span> ' +
+        '<button type="button" class="btn danger" data-act="delete">حذف المعلم</button></div>' +
+      '</div>' +
+      stepper(t) + body;
+  }
+
+  /* ---------- التوجيه والأحداث ---------- */
+
+  function currentTeacher() {
+    var m = location.hash.match(/^#\/t\/(.+)$/);
+    return m ? find(m[1]) : null;
+  }
+
+  function render() {
+    var t = currentTeacher();
+    if (t) renderEval(t); else renderList();
+  }
+
+  function go(hash) {
+    ui.error = '';
+    if (location.hash === hash) render(); else location.hash = hash;
+  }
+
+  function setStatus(t, status) {
+    t.status = status;
+    ui.error = '';
+    save();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  window.addEventListener('hashchange', function () { ui.error = ''; render(); window.scrollTo(0, 0); });
+
+  app.addEventListener('click', function (e) {
+    var open = e.target.closest('[data-open]');
+    if (open) { go('#/t/' + open.getAttribute('data-open')); return; }
+
+    var el = e.target.closest('[data-act]');
+    if (!el) return;
+    var act = el.getAttribute('data-act');
+    var t = currentTeacher();
+
+    if (act === 'toggle-add') {
+      ui.addOpen = !ui.addOpen;
+      render();
+      if (ui.addOpen) document.getElementById('add-name').focus();
+    } else if (act === 'back') {
+      go('#/');
+    } else if (!t) {
+      return;
+    } else if (act === 'submit') {
+      var left = CRITERIA.length - ratedCount(t);
+      if (left > 0) {
+        ui.error = 'يجب تقييم جميع البنود قبل الإرسال للاعتماد (متبقٍ ' + left + ').';
+        render();
+        var first = app.querySelector('tr.missing');
+        if (first) first.scrollIntoView({ block: 'center' });
+        return;
+      }
+      setStatus(t, 'review');
+    } else if (act === 'approve') {
+      t.approvedAt = new Date().toISOString();
+      setStatus(t, 'approved');
+    } else if (act === 'return') {
+      t.approvedAt = null;
+      setStatus(t, 'edit');
+    } else if (act === 'publish') {
+      if (!confirm('هل تريد نشر تقييم «' + t.name + '»؟')) return;
+      t.publishedAt = new Date().toISOString();
+      setStatus(t, 'published');
+    } else if (act === 'reopen') {
+      if (!confirm('سيتم إلغاء النشر والاعتماد وإعادة التقييم إلى مرحلة التحرير. هل تريد المتابعة؟')) return;
+      t.approvedAt = null;
+      t.publishedAt = null;
+      setStatus(t, 'edit');
+    } else if (act === 'print') {
+      window.print();
+    } else if (act === 'delete') {
+      if (!confirm('هل تريد حذف «' + t.name + '» وتقييمه نهائيًا؟')) return;
+      teachers = teachers.filter(function (x) { return x.id !== t.id; });
+      save();
+      go('#/');
+    }
+  });
+
+  app.addEventListener('change', function (e) {
+    var t = currentTeacher();
+    if (!t || e.target.type !== 'radio') return;
+    var i = Number(e.target.name.slice(1));
+    t.ratings[i] = Number(e.target.value);
+    if (t.status === 'new') t.status = 'edit';
+    save();
+    var done = ratedCount(t);
+    document.getElementById('progress-text').textContent = 'تم تقييم ' + done + ' من ' + CRITERIA.length + ' بندًا';
+    document.getElementById('progress-bar').style.width = (done / CRITERIA.length * 100) + '%';
+    var row = e.target.closest('tr');
+    if (row) row.classList.remove('missing');
+  });
+
+  app.addEventListener('input', function (e) {
+    var t = currentTeacher();
+    if (e.target.id === 'search') {
+      ui.search = e.target.value;
+      render();
+      var s = document.getElementById('search');
+      s.focus();
+      s.setSelectionRange(s.value.length, s.value.length);
+    } else if (t && e.target.id === 'notes') {
+      t.notes = e.target.value;
+      if (t.status === 'new') t.status = 'edit';
+      save();
+    } else if (t && e.target.id === 'approver-notes') {
+      t.approverNotes = e.target.value;
+      save();
+    }
+  });
+
+  app.addEventListener('submit', function (e) {
+    if (e.target.id !== 'add-form') return;
+    e.preventDefault();
+    var name = document.getElementById('add-name').value.trim();
+    if (!name) return;
+    teachers.push(newTeacher(name, document.getElementById('add-subject').value.trim()));
+    ui.addOpen = false;
+    save();
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
