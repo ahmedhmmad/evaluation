@@ -71,6 +71,24 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- profiles.email is only a display copy of the login email in auth.users; keep it in step.
+create or replace function public.handle_user_email_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $
+begin
+  update public.profiles set email = new.email where id = new.id;
+  return new;
+end;
+$;
+
+drop trigger if exists on_auth_user_email_changed on auth.users;
+create trigger on_auth_user_email_changed
+  after update of email on auth.users
+  for each row execute function public.handle_user_email_change();
+
 -- Only the superadmin may show/hide an evaluation from viewers.
 create or replace function public.guard_teacher_visibility()
 returns trigger
