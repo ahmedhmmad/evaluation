@@ -42,11 +42,28 @@
     max-width: 1000px;
     margin: 0 auto;
   }
+  header.app .inner { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   header.app h1 { margin: 0; font-size: 1.3rem; }
   header.app p { margin: 2px 0 0; opacity: .85; font-size: .9rem; }
+  .userbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
+  .userbar .who { opacity: .9; }
+  .userbar .btn { background: transparent; color: #fff; border-color: rgba(255,255,255,.5); padding: 4px 12px; }
+  .userbar .btn:hover { background: rgba(255,255,255,.15); }
   main { padding: 20px 16px 60px; }
 
-  button, input, textarea { font: inherit; color: inherit; }
+  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+  nav.tabs a {
+    padding: 8px 14px;
+    text-decoration: none;
+    color: var(--muted);
+    font-weight: 700;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+  }
+  nav.tabs a:hover { color: var(--ink); }
+  nav.tabs a.on { color: var(--primary); border-bottom-color: var(--primary); }
+
+  button, input, textarea, select { font: inherit; color: inherit; }
   .btn {
     border: 1px solid var(--line);
     background: var(--surface);
@@ -62,7 +79,7 @@
   .btn.danger:hover { background: var(--red-soft); }
   .btn.link { border: 0; background: none; color: var(--primary); padding: 4px 0; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn:focus-visible, input:focus-visible, textarea:focus-visible {
+  .btn:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible {
     outline: 2px solid var(--primary); outline-offset: 2px;
   }
 
@@ -72,20 +89,33 @@
     border-radius: var(--radius);
     padding: 16px;
   }
+  .card + .card { margin-top: 16px; }
+  .card h2 { margin: 0 0 4px; font-size: 1.1rem; }
+  .card .hint { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
   .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
   .toolbar input[type=search] { flex: 1; min-width: 180px; }
-  input[type=text], input[type=search], textarea {
+  input[type=text], input[type=search], input[type=email], input[type=password], textarea, select {
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 8px 12px;
     background: #fff;
     width: 100%;
   }
+  select { width: auto; }
   textarea { min-height: 90px; resize: vertical; }
   label.field { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 4px; }
+  label.check { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; }
+  label.check input { width: 18px; height: 18px; accent-color: var(--primary); }
+
+  /* Auth */
+  .auth { max-width: 420px; margin: 24px auto; }
+  .auth .f { margin-bottom: 12px; }
+  .auth .btn.primary { width: 100%; }
+  .auth .switch { text-align: center; margin-top: 12px; }
 
   /* Teacher list */
   .teachers { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .teachers .card + .card { margin-top: 0; }
   .teacher {
     text-align: start;
     cursor: pointer;
@@ -108,7 +138,7 @@
     font-size: .8rem;
     font-weight: 700;
   }
-  .badge.new { background: #eef2f6; color: var(--muted); }
+  .badge.new, .badge.pending { background: #eef2f6; color: var(--muted); }
   .badge.edit { background: var(--amber-soft); color: var(--amber); }
   .badge.review { background: var(--blue-soft); color: var(--blue); }
   .badge.approved { background: var(--primary-soft); color: var(--primary); }
@@ -149,14 +179,16 @@
   .stepper li.done { color: var(--ink); }
   .stepper li.done .num { background: var(--green); color: #fff; }
 
+  .progress-row { display: flex; justify-content: space-between; gap: 12px; }
+  .save-state { color: var(--muted); font-size: .85rem; }
   .progress { height: 8px; background: #eef2f6; border-radius: 999px; overflow: hidden; margin: 6px 0 14px; }
   .progress > div { height: 100%; background: var(--primary); transition: width .2s; }
 
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
 
-  table.criteria { width: 100%; border-collapse: collapse; }
-  table.criteria th, table.criteria td { border-bottom: 1px solid var(--line); padding: 10px 8px; vertical-align: middle; }
-  table.criteria th { text-align: start; font-size: .85rem; color: var(--muted); background: #f8fafc; }
+  table.criteria, table.grid { width: 100%; border-collapse: collapse; }
+  table.criteria th, table.criteria td, table.grid th, table.grid td { border-bottom: 1px solid var(--line); padding: 10px 8px; vertical-align: middle; }
+  table.criteria th, table.grid th { text-align: start; font-size: .85rem; color: var(--muted); background: #f8fafc; }
   table.criteria td.n { width: 36px; color: var(--muted); text-align: center; }
   table.criteria td.r { width: 1%; white-space: nowrap; }
   table.criteria tr.missing td { background: #fff7ed; }
@@ -188,10 +220,17 @@
   .notes-block p { margin: 0; white-space: pre-wrap; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 
   .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-start; margin-top: 20px; }
-  .actions .spacer { flex: 1; }
   .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--red-soft); color: var(--red); font-weight: 600; }
   .info { padding: 10px 12px; border-radius: 8px; background: var(--green-soft); color: var(--green); font-weight: 600; margin-bottom: 16px; }
   .table-wrap { overflow-x: auto; }
+
+  #toast {
+    position: fixed; bottom: 20px; inset-inline: 16px; margin: 0 auto; max-width: 480px;
+    background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; text-align: center;
+    opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 10;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err { background: var(--red); }
 
   @media (max-width: 640px) {
     .add-form .row { grid-template-columns: 1fr; }
@@ -201,7 +240,7 @@
   }
   @media print {
     body { background: #fff; }
-    header.app, .no-print, .stepper { display: none !important; }
+    header.app, .no-print, .stepper, nav.tabs, #toast { display: none !important; }
     main { padding: 0; max-width: none; }
     .card { border: 0; padding: 0; }
   }
@@ -210,12 +249,18 @@
 <body>
 <header class="app">
   <div class="inner">
-    <h1>تقييم المعلمين</h1>
-    <p>نموذج التقييم الأدائي والكفايات الشخصية</p>
+    <div>
+      <h1>تقييم المعلمين</h1>
+      <p>نموذج التقييم الأدائي والكفايات الشخصية</p>
+    </div>
+    <div class="userbar" id="userbar"></div>
   </div>
 </header>
 <main id="app"></main>
+<div id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 <script>
 (function () {
   'use strict';
@@ -269,41 +314,29 @@
     { title: 'النشر', desc: 'نشر التقييم النهائي' }
   ];
 
-  var STORE_KEY = 'teacher-evaluations-v1';
+  var ROLES = {
+    pending: 'بانتظار التفعيل',
+    viewer: 'مشاهد',
+    supervisor: 'مشرف',
+    superadmin: 'مدير النظام'
+  };
+
+  // ما يراه المشاهدون (يتحكم به مدير النظام)
+  var VISIBILITY = [
+    { key: 'show_totals', label: 'المجموع والنسبة والتقدير' },
+    { key: 'show_items', label: 'درجات البنود التفصيلية' },
+    { key: 'show_notes', label: 'ملاحظات المشرف' },
+    { key: 'show_approver_notes', label: 'ملاحظات الاعتماد' }
+  ];
+
+  var cfg = window.APP_CONFIG || {};
   var app = document.getElementById('app');
-  var teachers = load();
-  var ui = { search: '', addOpen: false, error: '' };
+  var userbar = document.getElementById('userbar');
+  var toastEl = document.getElementById('toast');
+  var sb = null;
 
-  function load() {
-    try {
-      var raw = localStorage.getItem(STORE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    // بيانات تجريبية يمكن حذفها
-    return [
-      newTeacher('معلم تجريبي ١', 'اللغة العربية'),
-      newTeacher('معلم تجريبي ٢', 'الرياضيات'),
-      newTeacher('معلم تجريبي ٣', 'العلوم')
-    ];
-  }
-
-  function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(teachers)); } catch (e) {}
-  }
-
-  function newTeacher(name, subject) {
-    return {
-      id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-      name: name,
-      subject: subject,
-      status: 'new',
-      ratings: {},
-      notes: '',
-      approverNotes: '',
-      approvedAt: null,
-      publishedAt: null
-    };
-  }
+  var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false };
+  var ui = { search: '', addOpen: false, error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -311,8 +344,24 @@
     });
   }
 
+  var toastTimer;
+  function toast(text, isErr) {
+    toastEl.textContent = text;
+    toastEl.className = 'show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = ''; }, isErr ? 6000 : 2500);
+  }
+
+  function fail(error) {
+    toast('تعذر تنفيذ العملية: ' + (error && error.message ? error.message : 'خطأ غير معروف'), true);
+  }
+
+  function role() { return S.profile ? S.profile.role : 'pending'; }
+  function isAdmin() { return role() === 'superadmin'; }
+  function isStaff() { return role() === 'supervisor' || isAdmin(); }
+
   function find(id) {
-    for (var i = 0; i < teachers.length; i++) if (teachers[i].id === id) return teachers[i];
+    for (var i = 0; i < S.teachers.length; i++) if (S.teachers[i].id === id) return S.teachers[i];
     return null;
   }
 
@@ -327,8 +376,6 @@
     for (var i = 0; i < CRITERIA.length; i++) sum += t.ratings[i] || 0;
     return sum;
   }
-
-  function percent(t) { return Math.round(total(t) / MAX * 100); }
 
   function grade(pct) {
     if (pct >= 90) return 'ممتاز';
@@ -348,11 +395,129 @@
     return 0;
   }
 
-  /* ---------- القائمة ---------- */
+  /* ---------- البيانات ---------- */
+
+  async function loadAll() {
+    S.ready = false;
+    render();
+    var p = await sb.from('profiles').select('*').eq('id', S.uid).maybeSingle();
+    if (p.error) fail(p.error);
+    S.profile = p.data || null;
+    S.teachers = []; S.users = []; S.settings = null; S.results = null;
+
+    if (isStaff()) {
+      var res = await Promise.all([
+        sb.from('teachers').select('*').order('name'),
+        sb.from('settings').select('*').eq('id', 1).maybeSingle(),
+        isAdmin() ? sb.from('profiles').select('*').order('created_at') : Promise.resolve({ data: [] })
+      ]);
+      if (res[0].error) fail(res[0].error);
+      S.teachers = res[0].data || [];
+      S.settings = res[1].data || null;
+      S.users = res[2].data || [];
+    }
+    S.ready = true;
+    render();
+  }
+
+  var loadingResults = false;
+  async function loadResults() {
+    if (loadingResults) return;
+    loadingResults = true;
+    var r = await sb.rpc('get_results');
+    loadingResults = false;
+    if (r.error) fail(r.error);
+    S.results = (r.data && r.data.results) || [];
+    render();
+  }
+
+  // الحفظ التلقائي أثناء التحرير
+  var saveTimer = null, dirty = null;
+
+  function setSaveState(text) {
+    var el = document.getElementById('save-state');
+    if (el) el.textContent = text;
+  }
+
+  async function saveNow(t) {
+    var r = await sb.from('teachers').update({
+      status: t.status,
+      ratings: t.ratings,
+      notes: t.notes,
+      approver_notes: t.approver_notes,
+      approved_at: t.approved_at,
+      published_at: t.published_at
+    }).eq('id', t.id);
+    if (r.error) { setSaveState('لم يتم الحفظ'); fail(r.error); return false; }
+    setSaveState('تم الحفظ');
+    return true;
+  }
+
+  function queueSave(t) {
+    clearTimeout(saveTimer);
+    dirty = t;
+    setSaveState('جارٍ الحفظ…');
+    saveTimer = setTimeout(function () { saveTimer = null; saveNow(t); }, 600);
+  }
+
+  function flush() {
+    if (!saveTimer) return Promise.resolve(true);
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    return saveNow(dirty);
+  }
+
+  /* ---------- الشريط العلوي والتبويبات ---------- */
+
+  function renderUserbar() {
+    userbar.innerHTML = S.uid
+      ? '<span class="who">' + esc(S.email) + (S.ready ? ' · ' + ROLES[role()] : '') + '</span>' +
+        '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>'
+      : '';
+  }
+
+  function tabs(active) {
+    if (!isStaff()) return '';
+    var items = [['#/', 'teachers', 'المعلمون'], ['#/results', 'results', 'النتائج المنشورة']];
+    if (isAdmin()) items.push(['#/admin', 'admin', 'الإدارة']);
+    return '<nav class="tabs no-print">' + items.map(function (it) {
+      return '<a href="' + it[0] + '"' + (it[1] === active ? ' class="on" aria-current="page"' : '') + '>' + it[2] + '</a>';
+    }).join('') + '</nav>';
+  }
+
+  /* ---------- الدخول ---------- */
+
+  function renderSetup() {
+    app.innerHTML = '<div class="card empty">لم يتم ربط قاعدة البيانات بعد.<br>أضف عنوان المشروع والمفتاح العام في الملف <code dir="ltr">config.js</code>.</div>';
+  }
+
+  function renderAuth() {
+    var signup = ui.authMode === 'signup';
+    app.innerHTML =
+      '<form class="card auth" id="auth-form">' +
+        '<h2>' + (signup ? 'إنشاء حساب' : 'تسجيل الدخول') + '</h2>' +
+        (signup ? '<p class="hint">بعد إنشاء الحساب يقوم مدير النظام بتفعيله وتحديد صلاحيته.</p>' : '') +
+        (signup ? '<div class="f"><label class="field" for="au-name">الاسم</label><input type="text" id="au-name" required autocomplete="name"></div>' : '') +
+        '<div class="f"><label class="field" for="au-email">البريد الإلكتروني</label><input type="email" id="au-email" dir="ltr" required autocomplete="email"></div>' +
+        '<div class="f"><label class="field" for="au-pass">كلمة المرور</label><input type="password" id="au-pass" dir="ltr" required minlength="6" autocomplete="' + (signup ? 'new-password' : 'current-password') + '"></div>' +
+        (ui.authErr ? '<div class="msg" role="alert" style="margin:0 0 12px">' + esc(ui.authErr) + '</div>' : '') +
+        (ui.authMsg ? '<div class="info">' + esc(ui.authMsg) + '</div>' : '') +
+        '<button type="submit" class="btn primary"' + (ui.busy ? ' disabled' : '') + '>' + (signup ? 'إنشاء الحساب' : 'دخول') + '</button>' +
+        '<div class="switch"><button type="button" class="btn link" data-act="auth-mode">' +
+          (signup ? 'لديك حساب؟ سجّل الدخول' : 'ليس لديك حساب؟ أنشئ حسابًا') + '</button></div>' +
+      '</form>';
+  }
+
+  function renderPending() {
+    app.innerHTML = '<div class="card empty">حسابك بانتظار التفعيل من مدير النظام.<br>' +
+      '<button type="button" class="btn" data-act="reload" style="margin-top:12px">تحديث</button></div>';
+  }
+
+  /* ---------- قائمة المعلمين ---------- */
 
   function renderList() {
     var q = ui.search.trim();
-    var shown = teachers.filter(function (t) {
+    var shown = S.teachers.filter(function (t) {
       return !q || t.name.indexOf(q) > -1 || t.subject.indexOf(q) > -1;
     });
 
@@ -366,7 +531,7 @@
         '</button>';
     }).join('');
 
-    app.innerHTML =
+    app.innerHTML = tabs('teachers') +
       '<div class="toolbar">' +
         '<input type="search" id="search" placeholder="ابحث باسم المعلم أو التخصص" aria-label="بحث" value="' + esc(ui.search) + '">' +
         '<button type="button" class="btn primary" data-act="toggle-add">+ إضافة معلم</button>' +
@@ -381,7 +546,7 @@
       '</form>' +
       (shown.length
         ? '<div class="teachers">' + cards + '</div>'
-        : '<div class="card empty">' + (teachers.length ? 'لا توجد نتائج مطابقة.' : 'لا يوجد معلمون بعد. أضف معلمًا للبدء.') + '</div>');
+        : '<div class="card empty">' + (S.teachers.length ? 'لا توجد نتائج مطابقة.' : 'لا يوجد معلمون بعد. أضف معلمًا للبدء.') + '</div>');
   }
 
   /* ---------- التقييم ---------- */
@@ -397,19 +562,19 @@
     }).join('') + '</ol>';
   }
 
-  function summary(t) {
-    var pct = percent(t);
+  function summary(sum) {
+    var pct = Math.round(sum / MAX * 100);
     return '<div class="summary">' +
-      '<div class="box"><div class="k">المجموع</div><div class="v">' + total(t) + ' / ' + MAX + '</div></div>' +
+      '<div class="box"><div class="k">المجموع</div><div class="v">' + sum + ' / ' + MAX + '</div></div>' +
       '<div class="box"><div class="k">النسبة</div><div class="v">' + pct + '%</div></div>' +
       '<div class="box"><div class="k">التقدير</div><div class="v">' + grade(pct) + '</div></div>' +
       '</div>';
   }
 
-  function readOnlyTable(t) {
+  function readOnlyTable(ratings) {
     return '<div class="table-wrap"><table class="criteria"><thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' +
       CRITERIA.map(function (c, i) {
-        return '<tr><td class="n">' + (i + 1) + '</td><td>' + c + '</td><td class="r"><span class="pill">' + (t.ratings[i] || '—') + '</span></td></tr>';
+        return '<tr><td class="n">' + (i + 1) + '</td><td>' + c + '</td><td class="r"><span class="pill">' + (ratings[i] || '—') + '</span></td></tr>';
       }).join('') + '</tbody></table></div>';
   }
 
@@ -425,12 +590,13 @@
           (t.ratings[i] === s.v ? ' checked' : '') + ' aria-label="' + s.v + ' - ' + s.label + '"><span>' + s.v + '</span></label>';
       }).join('');
       var missing = ui.error && !t.ratings[i] ? ' class="missing"' : '';
-      return '<tr' + missing + ' data-row="' + i + '"><td class="n">' + (i + 1) + '</td><td>' + c + '</td>' +
+      return '<tr' + missing + '><td class="n">' + (i + 1) + '</td><td>' + c + '</td>' +
         '<td class="r"><span class="rate" role="radiogroup" aria-label="تقييم البند ' + (i + 1) + '">' + opts + '</span></td></tr>';
     }).join('');
 
     return '<div class="card">' +
-      '<div id="progress-text">تم تقييم ' + done + ' من ' + CRITERIA.length + ' بندًا</div>' +
+      '<div class="progress-row"><span id="progress-text">تم تقييم ' + done + ' من ' + CRITERIA.length + ' بندًا</span>' +
+      '<span class="save-state" id="save-state"></span></div>' +
       '<div class="progress"><div id="progress-bar" style="width:' + (done / CRITERIA.length * 100) + '%"></div></div>' +
       '<div class="legend">' + SCALE.map(function (s) { return '<span><b>' + s.v + '</b> = ' + s.label + '</span>'; }).join('') + '</div>' +
       '<div class="table-wrap"><table class="criteria"><thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
@@ -444,10 +610,10 @@
   }
 
   function reviewStep(t) {
-    return '<div class="card">' + summary(t) + readOnlyTable(t) +
+    return '<div class="card">' + summary(total(t)) + readOnlyTable(t.ratings) +
       notesBlock('ملاحظات المشرف', t.notes) +
       '<div class="notes-block"><label class="field" for="approver-notes">ملاحظات الاعتماد</label>' +
-      '<textarea id="approver-notes" placeholder="ملاحظات المعتمِد (اختياري)">' + esc(t.approverNotes) + '</textarea></div>' +
+      '<textarea id="approver-notes" placeholder="ملاحظات المعتمِد (اختياري)">' + esc(t.approver_notes) + '</textarea></div>' +
       '<div class="actions">' +
         '<button type="button" class="btn primary" data-act="approve">اعتماد التقييم</button>' +
         '<button type="button" class="btn" data-act="return">إعادة للتحرير</button>' +
@@ -458,11 +624,11 @@
     var published = t.status === 'published';
     return '<div class="card">' +
       '<div class="info no-print">' + (published
-        ? 'تم نشر التقييم بتاريخ ' + fmtDate(t.publishedAt)
-        : 'تم اعتماد التقييم بتاريخ ' + fmtDate(t.approvedAt) + ' وهو جاهز للنشر.') + '</div>' +
-      summary(t) + readOnlyTable(t) +
+        ? 'تم نشر التقييم بتاريخ ' + fmtDate(t.published_at) + (t.visible ? '' : ' (مخفي عن المشاهدين)')
+        : 'تم اعتماد التقييم بتاريخ ' + fmtDate(t.approved_at) + ' وهو جاهز للنشر.') + '</div>' +
+      summary(total(t)) + readOnlyTable(t.ratings) +
       notesBlock('ملاحظات المشرف', t.notes) +
-      notesBlock('ملاحظات الاعتماد', t.approverNotes) +
+      notesBlock('ملاحظات الاعتماد', t.approver_notes) +
       '<div class="actions no-print">' +
         (published
           ? '<button type="button" class="btn primary" data-act="print">طباعة</button>' +
@@ -487,16 +653,103 @@
       stepper(t) + body;
   }
 
-  /* ---------- التوجيه والأحداث ---------- */
+  /* ---------- النتائج المنشورة (ما يراه المشاهدون) ---------- */
+
+  function renderResults(id) {
+    if (S.results === null) {
+      app.innerHTML = tabs('results') + '<div class="card empty">جارٍ التحميل…</div>';
+      loadResults();
+      return;
+    }
+    var r = null;
+    if (id) S.results.forEach(function (x) { if (x.id === id) r = x; });
+
+    if (r) {
+      app.innerHTML =
+        '<a class="btn link no-print" href="#/results">→ العودة إلى النتائج</a>' +
+        '<div class="eval-head"><div><h2>' + esc(r.name) + '</h2><div class="sub">التخصص: ' + esc(r.subject || '—') +
+        ' · تاريخ النشر: ' + fmtDate(r.published_at) + '</div></div>' +
+        '<div class="no-print"><button type="button" class="btn" data-act="print">طباعة</button></div></div>' +
+        '<div class="card">' +
+          (r.total != null ? summary(r.total) : '') +
+          (r.ratings ? readOnlyTable(r.ratings) : '') +
+          notesBlock('ملاحظات المشرف', r.notes) +
+          notesBlock('ملاحظات الاعتماد', r.approver_notes) +
+          (r.total == null && !r.ratings && !r.notes && !r.approver_notes ? '<div class="empty">لا توجد تفاصيل متاحة للعرض.</div>' : '') +
+        '</div>';
+      return;
+    }
+
+    var cards = S.results.map(function (x) {
+      return '<a class="card teacher" href="#/r/' + x.id + '" style="text-decoration:none;color:inherit">' +
+        '<span class="name">' + esc(x.name) + '</span>' +
+        '<span class="subject">' + esc(x.subject || '—') + '</span>' +
+        '<span class="foot"><span class="badge published">' + fmtDate(x.published_at) + '</span>' +
+        (x.total != null ? '<span class="score">' + x.total + ' / ' + MAX + '</span>' : '') + '</span></a>';
+    }).join('');
+
+    app.innerHTML = tabs('results') +
+      (isStaff() ? '<p class="hint" style="color:var(--muted);margin-top:0">هذه الصفحة تعرض ما يراه أصحاب حسابات «مشاهد».</p>' : '') +
+      (cards ? '<div class="teachers">' + cards + '</div>' : '<div class="card empty">لا توجد نتائج منشورة.</div>');
+  }
+
+  /* ---------- الإدارة (مدير النظام) ---------- */
+
+  function renderAdmin() {
+    var s = S.settings || {};
+    var checks = VISIBILITY.map(function (v) {
+      return '<label class="check"><input type="checkbox" data-setting="' + v.key + '"' + (s[v.key] ? ' checked' : '') + '>' + v.label + '</label>';
+    }).join('');
+
+    var published = S.teachers.filter(function (t) { return t.status === 'published'; });
+    var vis = published.length ? published.map(function (t) {
+      return '<label class="check"><input type="checkbox" data-visible="' + t.id + '"' + (t.visible ? ' checked' : '') + '>' +
+        esc(t.name) + ' <span style="color:var(--muted)">— ' + esc(t.subject || '—') + '</span></label>';
+    }).join('') : '<div class="hint">لا توجد تقييمات منشورة بعد.</div>';
+
+    var users = S.users.map(function (u) {
+      var self = u.id === S.uid;
+      var opts = Object.keys(ROLES).map(function (k) {
+        return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
+      }).join('');
+      return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(u.email) + '</td>' +
+        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : '') + '>' + opts + '</select></td></tr>';
+    }).join('');
+
+    app.innerHTML = tabs('admin') +
+      '<div class="card"><h2>ما يراه المشاهدون</h2>' +
+        '<p class="hint">يُطبَّق على جميع حسابات «مشاهد» في التقييمات المنشورة.</p>' + checks + '</div>' +
+      '<div class="card"><h2>التقييمات الظاهرة للمشاهدين</h2>' +
+        '<p class="hint">أزل العلامة لإخفاء تقييم منشور عن المشاهدين.</p>' + vis + '</div>' +
+      '<div class="card"><h2>المستخدمون والصلاحيات</h2>' +
+        '<p class="hint">الحسابات الجديدة تبقى «بانتظار التفعيل» إلى أن تحدد صلاحيتها.</p>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>البريد الإلكتروني</th><th>الصلاحية</th></tr></thead><tbody>' + users + '</tbody></table></div></div>';
+  }
+
+  /* ---------- التوجيه ---------- */
 
   function currentTeacher() {
+    if (!S.ready || !isStaff()) return null;
     var m = location.hash.match(/^#\/t\/(.+)$/);
     return m ? find(m[1]) : null;
   }
 
   function render() {
+    renderUserbar();
+    if (!sb) return renderSetup();
+    if (!S.uid) return renderAuth();
+    if (!S.ready) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; return; }
+    if (role() === 'pending') return renderPending();
+
+    var h = location.hash;
+    var r = h.match(/^#\/r\/(.+)$/);
+    if (!isStaff()) return renderResults(r && r[1]);
+
     var t = currentTeacher();
-    if (t) renderEval(t); else renderList();
+    if (t) return renderEval(t);
+    if (h === '#/admin' && isAdmin()) return renderAdmin();
+    if (h === '#/results' || r) return renderResults(r && r[1]);
+    renderList();
   }
 
   function go(hash) {
@@ -504,17 +757,30 @@
     if (location.hash === hash) render(); else location.hash = hash;
   }
 
-  function setStatus(t, status) {
+  async function setStatus(t, status) {
+    var prev = { status: t.status, approved_at: t.approved_at, published_at: t.published_at };
     t.status = status;
+    if (status === 'approved') t.approved_at = new Date().toISOString();
+    if (status === 'published') t.published_at = new Date().toISOString();
+    if (status === 'edit') { t.approved_at = null; t.published_at = null; }
     ui.error = '';
-    save();
+    await flush();
+    if (!(await saveNow(t))) Object.assign(t, prev);
     render();
     window.scrollTo(0, 0);
   }
 
-  window.addEventListener('hashchange', function () { ui.error = ''; render(); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', function () {
+    ui.error = '';
+    flush();
+    if (location.hash === '#/results') S.results = null;
+    render();
+    window.scrollTo(0, 0);
+  });
 
-  app.addEventListener('click', function (e) {
+  /* ---------- الأحداث ---------- */
+
+  document.addEventListener('click', async function (e) {
     var open = e.target.closest('[data-open]');
     if (open) { go('#/t/' + open.getAttribute('data-open')); return; }
 
@@ -523,11 +789,23 @@
     var act = el.getAttribute('data-act');
     var t = currentTeacher();
 
-    if (act === 'toggle-add') {
+    if (act === 'signout') {
+      await flush();
+      await sb.auth.signOut();
+    } else if (act === 'auth-mode') {
+      ui.authMode = ui.authMode === 'login' ? 'signup' : 'login';
+      ui.authErr = ''; ui.authMsg = '';
+      render();
+    } else if (act === 'reload') {
+      loadAll();
+    } else if (act === 'print') {
+      window.print();
+    } else if (act === 'toggle-add') {
       ui.addOpen = !ui.addOpen;
       render();
       if (ui.addOpen) document.getElementById('add-name').focus();
     } else if (act === 'back') {
+      await flush();
       go('#/');
     } else if (!t) {
       return;
@@ -542,42 +820,58 @@
       }
       setStatus(t, 'review');
     } else if (act === 'approve') {
-      t.approvedAt = new Date().toISOString();
       setStatus(t, 'approved');
     } else if (act === 'return') {
-      t.approvedAt = null;
       setStatus(t, 'edit');
     } else if (act === 'publish') {
-      if (!confirm('هل تريد نشر تقييم «' + t.name + '»؟')) return;
-      t.publishedAt = new Date().toISOString();
-      setStatus(t, 'published');
+      if (confirm('هل تريد نشر تقييم «' + t.name + '»؟')) setStatus(t, 'published');
     } else if (act === 'reopen') {
-      if (!confirm('سيتم إلغاء النشر والاعتماد وإعادة التقييم إلى مرحلة التحرير. هل تريد المتابعة؟')) return;
-      t.approvedAt = null;
-      t.publishedAt = null;
-      setStatus(t, 'edit');
-    } else if (act === 'print') {
-      window.print();
+      if (confirm('سيتم إلغاء النشر والاعتماد وإعادة التقييم إلى مرحلة التحرير. هل تريد المتابعة؟')) setStatus(t, 'edit');
     } else if (act === 'delete') {
       if (!confirm('هل تريد حذف «' + t.name + '» وتقييمه نهائيًا؟')) return;
-      teachers = teachers.filter(function (x) { return x.id !== t.id; });
-      save();
+      clearTimeout(saveTimer); saveTimer = null;
+      var d = await sb.from('teachers').delete().eq('id', t.id);
+      if (d.error) return fail(d.error);
+      S.teachers = S.teachers.filter(function (x) { return x.id !== t.id; });
       go('#/');
     }
   });
 
-  app.addEventListener('change', function (e) {
-    var t = currentTeacher();
-    if (!t || e.target.type !== 'radio') return;
-    var i = Number(e.target.name.slice(1));
-    t.ratings[i] = Number(e.target.value);
-    if (t.status === 'new') t.status = 'edit';
-    save();
-    var done = ratedCount(t);
-    document.getElementById('progress-text').textContent = 'تم تقييم ' + done + ' من ' + CRITERIA.length + ' بندًا';
-    document.getElementById('progress-bar').style.width = (done / CRITERIA.length * 100) + '%';
-    var row = e.target.closest('tr');
-    if (row) row.classList.remove('missing');
+  app.addEventListener('change', async function (e) {
+    var el = e.target, r;
+
+    if (el.hasAttribute('data-setting') && isAdmin()) {
+      var patch = {};
+      patch[el.getAttribute('data-setting')] = el.checked;
+      r = await sb.from('settings').update(patch).eq('id', 1);
+      if (r.error) { el.checked = !el.checked; return fail(r.error); }
+      Object.assign(S.settings || (S.settings = {}), patch);
+      toast('تم الحفظ');
+    } else if (el.hasAttribute('data-visible') && isAdmin()) {
+      var vt = find(el.getAttribute('data-visible'));
+      r = await sb.from('teachers').update({ visible: el.checked }).eq('id', vt.id);
+      if (r.error) { el.checked = !el.checked; return fail(r.error); }
+      vt.visible = el.checked;
+      toast('تم الحفظ');
+    } else if (el.hasAttribute('data-role') && isAdmin()) {
+      var u = null, uidAttr = el.getAttribute('data-role');
+      S.users.forEach(function (x) { if (x.id === uidAttr) u = x; });
+      r = await sb.from('profiles').update({ role: el.value }).eq('id', u.id);
+      if (r.error) { el.value = u.role; return fail(r.error); }
+      u.role = el.value;
+      toast('تم الحفظ');
+    } else if (el.type === 'radio') {
+      var t = currentTeacher();
+      if (!t) return;
+      t.ratings[Number(el.name.slice(1))] = Number(el.value);
+      if (t.status === 'new') t.status = 'edit';
+      queueSave(t);
+      var done = ratedCount(t);
+      document.getElementById('progress-text').textContent = 'تم تقييم ' + done + ' من ' + CRITERIA.length + ' بندًا';
+      document.getElementById('progress-bar').style.width = (done / CRITERIA.length * 100) + '%';
+      var row = el.closest('tr');
+      if (row) row.classList.remove('missing');
+    }
   });
 
   app.addEventListener('input', function (e) {
@@ -591,24 +885,66 @@
     } else if (t && e.target.id === 'notes') {
       t.notes = e.target.value;
       if (t.status === 'new') t.status = 'edit';
-      save();
+      queueSave(t);
     } else if (t && e.target.id === 'approver-notes') {
-      t.approverNotes = e.target.value;
-      save();
+      t.approver_notes = e.target.value;
+      queueSave(t);
     }
   });
 
-  app.addEventListener('submit', function (e) {
-    if (e.target.id !== 'add-form') return;
+  app.addEventListener('submit', async function (e) {
     e.preventDefault();
-    var name = document.getElementById('add-name').value.trim();
-    if (!name) return;
-    teachers.push(newTeacher(name, document.getElementById('add-subject').value.trim()));
-    ui.addOpen = false;
-    save();
-    render();
+
+    if (e.target.id === 'add-form') {
+      var name = document.getElementById('add-name').value.trim();
+      if (!name) return;
+      var ins = await sb.from('teachers')
+        .insert({ name: name, subject: document.getElementById('add-subject').value.trim() })
+        .select().single();
+      if (ins.error) return fail(ins.error);
+      S.teachers.push(ins.data);
+      ui.addOpen = false;
+      render();
+    } else if (e.target.id === 'auth-form') {
+      var email = document.getElementById('au-email').value.trim();
+      var pass = document.getElementById('au-pass').value;
+      var signup = ui.authMode === 'signup';
+      var fullName = signup ? document.getElementById('au-name').value.trim() : '';
+      ui.busy = true; ui.authErr = ''; ui.authMsg = '';
+      render();
+      var res = signup
+        ? await sb.auth.signUp({
+            email: email, password: pass,
+            options: { data: { full_name: fullName }, emailRedirectTo: location.origin + location.pathname }
+          })
+        : await sb.auth.signInWithPassword({ email: email, password: pass });
+      ui.busy = false;
+      if (res.error) {
+        ui.authErr = signup ? 'تعذر إنشاء الحساب: ' + res.error.message : 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+      } else if (signup && !res.data.session) {
+        ui.authMode = 'login';
+        ui.authMsg = 'تم إنشاء الحساب. افتح رسالة التأكيد في بريدك ثم سجّل الدخول.';
+      }
+      if (!S.uid) render();
+    }
   });
 
+  /* ---------- البدء ---------- */
+
+  if (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase) {
+    sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+    sb.auth.onAuthStateChange(function (event, session) {
+      // لا تُستدعى دوال Supabase مباشرة داخل هذا المستمع
+      setTimeout(function () {
+        var uid = session && session.user ? session.user.id : null;
+        if (uid && uid === S.uid) return; // تجديد الجلسة فقط
+        S.uid = uid;
+        S.email = uid ? session.user.email : '';
+        S.profile = null;
+        if (uid) loadAll(); else { S.ready = false; render(); }
+      }, 0);
+    });
+  }
   render();
 })();
 </script>
