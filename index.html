@@ -330,6 +330,12 @@
   ];
 
   var cfg = window.APP_CONFIG || {};
+  // حسابات اسم المستخدم (بدون بريد حقيقي) تُخزَّن بهذا النطاق
+  var USER_SUFFIX = '@' + (cfg.USERNAME_DOMAIN || 'ahmedhmmad.github.io');
+  function displayName(email) {
+    email = email || '';
+    return email.slice(-USER_SUFFIX.length) === USER_SUFFIX ? email.slice(0, -USER_SUFFIX.length) : email;
+  }
   var app = document.getElementById('app');
   var userbar = document.getElementById('userbar');
   var toastEl = document.getElementById('toast');
@@ -471,7 +477,7 @@
 
   function renderUserbar() {
     userbar.innerHTML = S.uid
-      ? '<span class="who">' + esc(S.email) + (S.ready ? ' · ' + ROLES[role()] : '') + '</span>' +
+      ? '<span class="who">' + esc(displayName(S.email)) + (S.ready ? ' · ' + ROLES[role()] : '') + '</span>' +
         '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>'
       : '';
   }
@@ -498,8 +504,9 @@
         '<h2>' + (signup ? 'إنشاء حساب' : 'تسجيل الدخول') + '</h2>' +
         (signup ? '<p class="hint">بعد إنشاء الحساب يقوم مدير النظام بتفعيله وتحديد صلاحيته.</p>' : '') +
         (signup ? '<div class="f"><label class="field" for="au-name">الاسم</label><input type="text" id="au-name" required autocomplete="name"></div>' : '') +
-        '<div class="f"><label class="field" for="au-email">البريد الإلكتروني</label><input type="email" id="au-email" dir="ltr" required autocomplete="email"></div>' +
-        '<div class="f"><label class="field" for="au-pass">كلمة المرور</label><input type="password" id="au-pass" dir="ltr" required minlength="6" autocomplete="' + (signup ? 'new-password' : 'current-password') + '"></div>' +
+        '<div class="f"><label class="field" for="au-email">' + (signup ? 'البريد الإلكتروني' : 'البريد الإلكتروني أو اسم المستخدم') + '</label>' +
+          '<input type="' + (signup ? 'email' : 'text') + '" id="au-email" dir="ltr" required autocomplete="' + (signup ? 'email' : 'username') + '"></div>' +
+        '<div class="f"><label class="field" for="au-pass">كلمة المرور</label><input type="password" id="au-pass" dir="ltr" required' + (signup ? ' minlength="6"' : '') + ' autocomplete="' + (signup ? 'new-password' : 'current-password') + '"></div>' +
         (ui.authErr ? '<div class="msg" role="alert" style="margin:0 0 12px">' + esc(ui.authErr) + '</div>' : '') +
         (ui.authMsg ? '<div class="info">' + esc(ui.authMsg) + '</div>' : '') +
         '<button type="submit" class="btn primary"' + (ui.busy ? ' disabled' : '') + '>' + (signup ? 'إنشاء الحساب' : 'دخول') + '</button>' +
@@ -712,7 +719,7 @@
       var opts = Object.keys(ROLES).map(function (k) {
         return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
       }).join('');
-      return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(u.email) + '</td>' +
+      return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
         '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : '') + '>' + opts + '</select></td></tr>';
     }).join('');
 
@@ -909,6 +916,7 @@
       var email = document.getElementById('au-email').value.trim();
       var pass = document.getElementById('au-pass').value;
       var signup = ui.authMode === 'signup';
+      if (!signup && email.indexOf('@') < 0) email = email.toLowerCase() + USER_SUFFIX;
       var fullName = signup ? document.getElementById('au-name').value.trim() : '';
       ui.busy = true; ui.authErr = ''; ui.authMsg = '';
       render();
@@ -920,7 +928,7 @@
         : await sb.auth.signInWithPassword({ email: email, password: pass });
       ui.busy = false;
       if (res.error) {
-        ui.authErr = signup ? 'تعذر إنشاء الحساب: ' + res.error.message : 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+        ui.authErr = signup ? 'تعذر إنشاء الحساب: ' + res.error.message : 'بيانات الدخول غير صحيحة.';
       } else if (signup && !res.data.session) {
         ui.authMode = 'login';
         ui.authMsg = 'تم إنشاء الحساب. افتح رسالة التأكيد في بريدك ثم سجّل الدخول.';
