@@ -288,16 +288,31 @@
   #print-sheet .ps-signs div:nth-child(3) { text-align: end; }
   #print-sheet .ps-signs span { display: block; margin-top: .5em; }
   #print-sheet .ps-signs.two div:nth-child(2) { text-align: end; }
-  #print-sheet .ps-meta { display: flex; justify-content: space-between; gap: 1em; margin: .6em 0; padding: 0 .45em; font-weight: bold; }
-  #print-sheet .ps-eval th { font-weight: bold; text-align: center; padding: .25em .1em; font-size: .85em; line-height: 1.2; }
-  #print-sheet .ps-eval th b { display: block; font-size: 1.25em; }
-  #print-sheet .ps-eval td { padding: .12em .45em; line-height: 1.25; }
-  #print-sheet .ps-eval td.c { text-align: center; }
-  #print-sheet .ps-eval td.m { text-align: center; font-weight: bold; font-size: 1.15em; padding: 0; }
-  #print-sheet .ps-sum { margin-top: .6em; }
-  #print-sheet .ps-sum td { text-align: center; height: 2em; }
-  #print-sheet .ps-sum b { font-size: 1.1em; }
-  #print-sheet .ps-box { margin-top: .6em; padding: 0 .45em; }
+
+  /* ورقة التقييم: نفس تصميم الشاشة (بطاقات الملخص وجدول البنود) مع درجة واضحة في خانة مستقلة */
+  #print-sheet.pe { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; color: #1c2733; line-height: 1.4;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-sheet .pe-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1em; margin-bottom: .6em; }
+  #print-sheet .pe-head .nm { font-size: 1.45em; font-weight: 700; }
+  #print-sheet .pe-head .sub { color: #64748b; }
+  #print-sheet .pe-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7em; margin-bottom: .7em; }
+  #print-sheet .pe-summary > div { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: .6em; padding: .35em; text-align: center; }
+  #print-sheet .pe-summary .k { color: #64748b; font-size: .85em; }
+  #print-sheet .pe-summary .v { font-size: 1.5em; font-weight: 800; color: #0f766e; line-height: 1.2; }
+  #print-sheet .pe-table th, #print-sheet .pe-table td { border: 1px solid #cbd5e1; padding: .22em .5em; line-height: 1.3; }
+  #print-sheet .pe-table th { background: #f1f5f9; color: #475569; font-weight: 700; font-size: .9em; }
+  #print-sheet .pe-table td.n { text-align: center; color: #64748b; }
+  #print-sheet .pe-table th.r, #print-sheet .pe-table td.r { text-align: center; }
+  #print-sheet .pe-table td.r { background: #e6f4f2; white-space: nowrap; padding: .1em .3em; }
+  #print-sheet .pe-table td.r b { font-size: 1.45em; font-weight: 800; color: #0b5a54; }
+  #print-sheet .pe-table td.r small { font-size: .8em; color: #0b5a54; margin-inline-start: .35em; }
+  #print-sheet .pe-notes { margin-top: .6em; }
+  #print-sheet .pe-notes b { display: block; margin-bottom: .15em; }
+  #print-sheet .pe-notes div { white-space: pre-wrap; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: .5em; padding: .3em .6em; }
+  #print-sheet .pe-signs { display: grid; grid-template-columns: 1fr 1fr; gap: 2em; margin-top: 1.2em; }
+  #print-sheet .pe-signs div { border-top: 2px solid #0f766e; padding-top: .4em; }
+  #print-sheet .pe-signs b { display: block; }
+  #print-sheet .pe-signs span { display: block; margin-top: .55em; color: #475569; }
 
   @media (max-width: 640px) {
     .grid2 { grid-template-columns: 1fr; }
@@ -1306,6 +1321,7 @@
     var date = d ? dayName(v.visit_date) + ' ' + d[2] + '/' + d[1] + '/' + d[0] : '';
     var text = function (key) { return '<div class="ps-text">' + esc(lines(getField(v, key)).join('\n')) + '</div>'; };
 
+    sheet.className = '';
     sheet.innerHTML =
       '<div class="ps-title">تقرير زيارة إشرافية صفية<br>نموذج الإشراف الميداني المعتمد</div>' +
       '<div class="ps-h">أولاً: البيانات الأساسية</div>' +
@@ -1346,43 +1362,44 @@
     }
   }
 
-  // ورقة «نموذج تقييم معلم»: جدول بالبنود وأعمدة الدرجات، ثم المجموع والتوقيعات.
+  // ورقة التقييم المطبوعة: نفس تصميم الشاشة، في صفحة واحدة، مع خانة واضحة للدرجة وتوقيعين.
   // o: معلم (للمشرف) أو نتيجة منشورة (للمشاهد، وقد تكون بعض حقولها محجوبة)
   function buildEvalSheet(o) {
     var dots = '..............................';
-    var cols = SCALE.slice(); // 5 ← 1
+    var label = {};
+    SCALE.forEach(function (x) { label[x.v] = x.label; });
     var sum = o.total != null ? o.total : (o.ratings ? total(o) : null);
     var pct = sum != null ? Math.round(sum / MAX * 100) : null;
     var principal = S.visits.filter(function (x) { return x.principal_name; })[0];
     var supervisor = isStaff() && S.profile ? S.profile.full_name : '';
-    var block = function (title, text) {
-      return text ? '<div class="ps-box"><b>' + title + ':</b><div class="ps-text">' + esc(text) + '</div></div>' : '';
+    var notes = function (title, text) {
+      return text ? '<div class="pe-notes"><b>' + title + '</b><div>' + esc(text) + '</div></div>' : '';
     };
 
+    sheet.className = 'pe';
     sheet.innerHTML =
-      '<div class="ps-title">نموذج تقييم معلم</div>' +
-      '<div class="ps-meta"><span>اسم المعلم: ' + esc(o.name) + '</span><span>التخصص: ' + esc(o.subject || dots) + '</span>' +
-        (o.published_at ? '<span>التاريخ: ' + fmtDate(o.published_at) + '</span>' : '') + '</div>' +
+      '<div class="pe-head"><div><div class="nm">' + esc(o.name) + '</div><div class="sub">التخصص: ' + esc(o.subject || '—') + '</div></div>' +
+        '<div class="sub">' + (o.published_at ? 'تاريخ النشر: ' + fmtDate(o.published_at) : '') + '</div></div>' +
+      (sum != null
+        ? '<div class="pe-summary">' +
+            '<div><div class="k">المجموع</div><div class="v">' + sum + ' / ' + MAX + '</div></div>' +
+            '<div><div class="k">النسبة</div><div class="v">' + pct + '%</div></div>' +
+            '<div><div class="k">التقدير</div><div class="v">' + grade(pct) + '</div></div></div>'
+        : '') +
       (o.ratings
-        ? '<table class="ps-eval"><colgroup><col style="width:5%"><col style="width:57.5%">' +
-            cols.map(function () { return '<col style="width:7.5%">'; }).join('') + '</colgroup>' +
-          '<tr><th rowspan="2">م</th><th rowspan="2" style="font-size:1em">التقييم الأدائي والكفايات الشخصية</th>' +
-            '<th colspan="' + cols.length + '" style="font-size:1em">التقييم</th></tr>' +
-          '<tr>' + cols.map(function (c) { return '<th><b>' + c.v + '</b>' + c.label + '</th>'; }).join('') + '</tr>' +
+        ? '<table class="pe-table"><colgroup><col style="width:5%"><col style="width:77%"><col style="width:18%"></colgroup>' +
+          '<tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th class="r">التقييم (من 5)</th></tr>' +
           CRITERIA.map(function (c, i) {
-            return '<tr><td class="c">' + (i + 1) + '</td><td>' + c + '</td>' +
-              cols.map(function (k) { return '<td class="m">' + (o.ratings[i] === k.v ? '✓' : '') + '</td>'; }).join('') + '</tr>';
+            var r = o.ratings[i];
+            return '<tr><td class="n">' + (i + 1) + '</td><td>' + c + '</td>' +
+              '<td class="r">' + (r ? '<b>' + r + '</b><small>' + label[r] + '</small>' : '—') + '</td></tr>';
           }).join('') + '</table>'
         : '') +
-      (sum != null
-        ? '<table class="ps-sum"><tr><td>المجموع: <b>' + sum + ' / ' + MAX + '</b></td>' +
-          '<td>النسبة: <b>' + pct + '%</b></td><td>التقدير: <b>' + grade(pct) + '</b></td></tr></table>'
-        : '') +
-      block('ملاحظات المشرف', o.notes) +
-      block('ملاحظات الاعتماد', o.approver_notes) +
-      '<div class="ps-signs two">' +
-        '<div>توقيع المشرف التربوي<span>الاسم: ' + esc(supervisor || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
-        '<div>توقيع مدير/ة المدرسة<span>الاسم: ' + esc((principal && principal.principal_name) || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
+      notes('ملاحظات المشرف', o.notes) +
+      notes('ملاحظات الاعتماد', o.approver_notes) +
+      '<div class="pe-signs">' +
+        '<div><b>المشرف التربوي</b><span>الاسم: ' + esc(supervisor || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
+        '<div><b>مدير/ة المدرسة</b><span>الاسم: ' + esc((principal && principal.principal_name) || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
       '</div>';
 
     fitSheet();
