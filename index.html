@@ -260,9 +260,33 @@
   .visit-row .name { font-weight: 700; }
   .visit-row .meta { color: var(--muted); font-size: .9rem; }
   .print-only { display: none; }
-  .ptext { white-space: pre-wrap; min-height: 2.4em; }
-  .signs { grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 40px; text-align: center; }
-  .signs .line { margin-top: 36px; border-top: 1px dotted #000; padding-top: 6px; }
+
+  /* ورقة الطباعة: نفس تصميم النموذج الورقي (A4، صفحة واحدة). الأحجام بوحدة em ليُصغَّر الخط عند الحاجة */
+  #print-sheet {
+    position: fixed; top: 0; left: 0; visibility: hidden; pointer-events: none; z-index: -1;
+    width: 184.6mm; /* A4 ناقص هامشين 12.7mm */
+    background: #fff; color: #000;
+    font-family: Arial, "Times New Roman", sans-serif; font-size: 12pt; line-height: 1.35;
+  }
+  #print-sheet .ps-title { text-align: center; font-weight: bold; font-size: 1.167em; margin-bottom: .5em; }
+  #print-sheet .ps-h { font-weight: bold; font-size: 1.167em; margin: .5em 0 .3em; padding-inline-start: 1em; }
+  #print-sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #print-sheet td, #print-sheet th { border: 1px solid #000; padding: .2em .45em; vertical-align: middle; text-align: start; font-weight: normal; }
+  #print-sheet .ps-basic td { height: 1.9em; }
+  #print-sheet .ps-domains th { font-weight: bold; font-size: 1.167em; text-align: center; height: 2.6em; }
+  #print-sheet .ps-domains td { height: 3em; }
+  #print-sheet .ps-domains td.c { text-align: center; font-size: 1.167em; }
+  #print-sheet .ps-domains td.c.n { font-weight: bold; }
+  #print-sheet .ps-text { white-space: pre-wrap; }
+  #print-sheet tr.ps-gap td { height: 1em; border-left: 0; border-right: 0; padding: 0; }
+  #print-sheet td.ps-notes { height: 5.5em; vertical-align: top; }
+  #print-sheet td.ps-notes b { font-size: 1.167em; }
+  #print-sheet .ps-rec { margin-top: .8em; min-height: 4.5em; padding: 0 .45em; }
+  #print-sheet .ps-signs { display: flex; justify-content: space-between; gap: 1em; margin-top: 1.4em; padding: 0 .45em; }
+  #print-sheet .ps-signs div { flex: 1; }
+  #print-sheet .ps-signs div:nth-child(2) { text-align: center; }
+  #print-sheet .ps-signs div:nth-child(3) { text-align: end; }
+  #print-sheet .ps-signs span { display: block; margin-top: .5em; }
 
   @media (max-width: 640px) {
     .grid2 { grid-template-columns: 1fr; }
@@ -280,14 +304,16 @@
     .eval-head h2 { font-size: 1.15rem; }
     main { padding: 16px 12px 60px; }
   }
+  @page { size: A4; margin: 12.7mm; }
   @media print {
     body { background: #fff; }
     header.app, .no-print, .stepper, nav.tabs, #toast { display: none !important; }
     main { padding: 0; max-width: none; }
     .card { border: 0; padding: 0; }
     .print-only { display: block; }
-    .signs.print-only { display: grid; }
     textarea, details.bank { display: none !important; }
+    body.print-visit > *:not(#print-sheet) { display: none !important; }
+    body.print-visit #print-sheet { position: static; visibility: visible; }
     input, select { border: 0 !important; padding: 0 !important; background: none !important; appearance: none; }
     .card h2 { border-bottom: 1px solid #000; padding-bottom: 4px; margin-top: 14px; }
     .domain { break-inside: avoid; padding: 8px 0; }
@@ -306,6 +332,7 @@
 </header>
 <main id="app"></main>
 <div id="toast" role="status" aria-live="polite"></div>
+<div id="print-sheet" aria-hidden="true"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
@@ -1175,7 +1202,6 @@
   function fieldBlock(v, key, label) {
     return '<label class="field" for="f-' + key + '">' + label + '</label>' +
       '<textarea id="f-' + key + '" data-vfield="' + key + '" placeholder="اختر من العبارات المقترحة أو اكتب مباشرة">' + esc(getField(v, key)) + '</textarea>' +
-      '<div class="print-only ptext" id="p-' + key + '"></div>' +
       '<details class="bank"><summary>عبارات مقترحة</summary><div id="chips-' + key + '">' + chipsHtml(v, key) + '</div></details>';
   }
 
@@ -1255,22 +1281,64 @@
       '<div class="card no-print"><h2>التوقيعات</h2><div class="grid2" style="margin-top:12px">' +
         basic('اسم المشرف التربوي', '<input type="text" data-vbasic="supervisor_name" aria-label="اسم المشرف التربوي" value="' + esc(v.supervisor_name) + '">') +
         basic('اسم مدير/ة المدرسة', '<input type="text" data-vbasic="principal_name" aria-label="اسم مدير المدرسة" value="' + esc(v.principal_name) + '">') +
-      '</div></div>' +
-
-      '<div class="signs print-only">' +
-        '<div>توقيع المعلم (بالعلم والاطلاع)<div class="line">الاسم: ' + esc(t ? t.name : '') + '</div></div>' +
-        '<div>توقيع المشرف التربوي<div class="line">الاسم: <span id="sign-supervisor_name">' + esc(v.supervisor_name) + '</span></div></div>' +
-        '<div>توقيع مدير/ة المدرسة<div class="line">الاسم: <span id="sign-principal_name">' + esc(v.principal_name) + '</span></div></div>' +
-      '</div>';
+      '</div></div>';
   }
 
-  // قبل الطباعة: تُنسخ نصوص الحقول إلى عناصر تُطبع كاملة (مربعات النص تُقصّ عند الطباعة)
-  window.addEventListener('beforeprint', function () {
-    var areas = app.querySelectorAll('[data-vfield]');
-    for (var i = 0; i < areas.length; i++) {
-      var p = document.getElementById('p-' + areas[i].getAttribute('data-vfield'));
-      if (p) p.textContent = areas[i].value;
+  /* ورقة الطباعة بتصميم النموذج الورقي، وتُصغَّر لتبقى في صفحة A4 واحدة */
+
+  var sheet = document.getElementById('print-sheet');
+
+  function buildVisitSheet(v) {
+    var t = find(v.teacher_id);
+    var dots = '..............................';
+    var d = v.visit_date ? v.visit_date.split('-') : null;
+    var date = d ? dayName(v.visit_date) + ' ' + d[2] + '/' + d[1] + '/' + d[0] : '';
+    var text = function (key) { return '<div class="ps-text">' + esc(lines(getField(v, key)).join('\n')) + '</div>'; };
+
+    sheet.innerHTML =
+      '<div class="ps-title">تقرير زيارة إشرافية صفية<br>نموذج الإشراف الميداني المعتمد</div>' +
+      '<div class="ps-h">أولاً: البيانات الأساسية</div>' +
+      '<table class="ps-basic"><colgroup><col style="width:16%"><col style="width:34%"><col style="width:16%"><col style="width:34%"></colgroup>' +
+        '<tr><td>اليوم / التاريخ</td><td>' + esc(date) + '</td><td>اسم المعلم</td><td>' + esc(t ? t.name : '') + '</td></tr>' +
+        '<tr><td>المبحث / المادة</td><td>' + esc(v.subject) + '</td><td>الصف والشعبة</td><td>' + esc(v.class_section) + '</td></tr>' +
+        '<tr><td>الحصة</td><td>' + esc(v.period) + '</td><td>رقم الزيارة</td><td>' + esc(v.visit_number) + '</td></tr>' +
+        '<tr><td>عنوان الدرس</td><td colspan="3">' + esc(v.lesson_title) + '</td></tr>' +
+      '</table>' +
+      '<div class="ps-h">ثانياً: مجالات التقييم والملاحظات الصفية</div>' +
+      '<table class="ps-domains"><colgroup><col style="width:6%"><col style="width:25%"><col style="width:69%"></colgroup>' +
+        '<tr><th>م</th><th>مؤشرات الأداء والمعايير الإشرافية</th><th>أبرز نقاط القوة والتميز</th></tr>' +
+        DOMAINS.map(function (dm, i) {
+          return '<tr><td class="c n">' + (i + 1) + '</td><td class="c">' + dm.title + '</td><td>' + text('d' + i) + '</td></tr>';
+        }).join('') +
+        '<tr class="ps-gap"><td colspan="3"></td></tr>' +
+        '<tr><td colspan="3" class="ps-notes"><b>الملاحظات ومجالات التطوير والتنمية المهنية المطلوبة:</b>' + text('development') + '</td></tr>' +
+      '</table>' +
+      '<div class="ps-rec"><b>التوصيات / الإجراء التطويري:</b>' + text('recommendations') + '</div>' +
+      '<div class="ps-signs">' +
+        '<div>توقيع المعلم (بالعلم والاطلاع)<span>الاسم: ' + esc((t && t.name) || dots) + '</span></div>' +
+        '<div>توقيع المشرف التربوي<span>الاسم: ' + esc(v.supervisor_name || dots) + '</span></div>' +
+        '<div>توقيع مدير/ة المدرسة<span>الاسم: ' + esc(v.principal_name || dots) + '</span></div>' +
+      '</div>';
+
+    // المساحة المتاحة في صفحة A4 بعد الهوامش، مع هامش أمان صغير
+    var maxPx = (297 - 2 * 12.7 - 4) * 96 / 25.4;
+    var size = 12;
+    sheet.style.fontSize = size + 'pt';
+    while (sheet.offsetHeight > maxPx && size > 6) {
+      size -= 0.25;
+      sheet.style.fontSize = size + 'pt';
     }
+  }
+
+  window.addEventListener('beforeprint', function () {
+    var v = currentVisit();
+    if (!v) return;
+    buildVisitSheet(v);
+    document.body.classList.add('print-visit');
+  });
+
+  window.addEventListener('afterprint', function () {
+    document.body.classList.remove('print-visit');
   });
 
   async function createVisit(teacherId) {
