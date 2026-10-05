@@ -46,7 +46,8 @@ alter table public.profiles
 -- ---------- School settings ----------
 
 alter table public.settings
-  add column if not exists principal_name text not null default 'أ. سمر أبو مدين';
+  add column if not exists principal_name text not null default 'أ. سمر أبو مدين',
+  add column if not exists classes jsonb not null default '[]'::jsonb;   -- the school's classes and sections
 
 -- Readable by the superadmin only (the default password must not be visible to other accounts).
 create table if not exists public.private_settings (

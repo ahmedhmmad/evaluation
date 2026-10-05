@@ -234,10 +234,11 @@
   .grid2 .day { color: var(--muted); font-size: .85rem; margin-top: 2px; }
   input[type=date], input[type=number] { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fff; width: 100%; }
   .grid2 select { width: 100%; }
-  .domain { padding: 14px 0; border-bottom: 1px solid var(--line); }
-  .domain:last-child { border-bottom: 0; padding-bottom: 0; }
-  .domain h3 { margin: 0 0 6px; font-size: 1rem; }
-  .domain h3 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: .85rem; margin-inline-end: 6px; }
+  .domain { border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; margin-top: 16px; background: #fff; }
+  .domain h3 { margin: 0; font-size: 1rem; padding: 10px 14px; background: var(--primary-soft); border-bottom: 1px solid #cbd5e1; }
+  .domain .body { padding: 12px 14px 14px; }
+  .classes-pick { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .domain h3 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--primary); color: #fff; font-size: .85rem; margin-inline-end: 6px; }
   details.bank { margin-top: 8px; }
   details.bank summary { cursor: pointer; color: var(--primary); font-weight: 700; font-size: .9rem; padding: 4px 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -339,7 +340,7 @@
     body.print-sheet #print-sheet { position: static; visibility: visible; }
     input, select { border: 0 !important; padding: 0 !important; background: none !important; appearance: none; }
     .card h2 { border-bottom: 1px solid #000; padding-bottom: 4px; margin-top: 14px; }
-    .domain { break-inside: avoid; padding: 8px 0; }
+    .domain { break-inside: avoid; }
   }
 </style>
 </head>
@@ -560,6 +561,23 @@
   function role() { return S.profile ? S.profile.role : 'pending'; }
   function isAdmin() { return role() === 'superadmin'; }
   function isStaff() { return role() === 'supervisor' || isAdmin(); }
+
+  // «علوم عامة، رياضيات» → ['علوم عامة', 'رياضيات']
+  function splitList(text) {
+    return String(text || '').split(/[،,]/).map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+
+  // صفوف المدرسة وشعبها كما عرّفها مدير النظام
+  function schoolClasses() {
+    return S.settings && Array.isArray(S.settings.classes) ? S.settings.classes : [];
+  }
+
+  function optionsHtml(list, current) {
+    if (current && list.indexOf(current) < 0) list = list.concat([current]);
+    return '<option value="">— اختر —</option>' + list.map(function (x) {
+      return '<option' + (x === current ? ' selected' : '') + '>' + esc(x) + '</option>';
+    }).join('');
+  }
 
   function principalName() {
     return (S.settings && S.settings.principal_name) || DEFAULT_PRINCIPAL;
@@ -796,12 +814,20 @@
       return '<div' + (wide ? ' style="grid-column:1/-1"' : '') + '><label class="field" for="' + id + '">' + label + '</label>' + inner + '</div>';
     };
 
+    var own = splitList(t && t.classes);
+    var all = schoolClasses().concat(own.filter(function (c) { return schoolClasses().indexOf(c) < 0; }));
+    var classPick = all.length
+      ? '<div class="classes-pick" id="tf-classes">' + all.map(function (c) {
+          return '<label class="check"><input type="checkbox" name="tf-class" value="' + esc(c) + '"' + (own.indexOf(c) > -1 ? ' checked' : '') + '>' + esc(c) + '</label>';
+        }).join('') + '</div>'
+      : '<div class="day" id="tf-classes">عرّف صفوف المدرسة أولًا من تبويب «الإدارة» ثم اخترها هنا.</div>';
+
     var form = !ed ? '' :
       '<form class="card" id="teacher-form"><h2>' + (t ? 'تعديل بيانات المعلم' : 'إضافة معلم') + '</h2>' +
       '<div class="grid2" style="margin-top:12px">' +
         f('tf-name', 'اسم المعلم', '<input type="text" id="tf-name" required value="' + val('name') + '">') +
-        f('tf-subject', 'المباحث التي يدرّسها', '<input type="text" id="tf-subject" required placeholder="مثال: علوم عامة، رياضيات" value="' + val('subject') + '">') +
-        f('tf-classes', 'الصفوف والشعب', '<input type="text" id="tf-classes" placeholder="مثال: السابع (أ، ب)، الثامن (أ)" value="' + val('classes') + '">') +
+        f('tf-subject', 'المباحث التي يدرّسها', '<input type="text" id="tf-subject" required placeholder="مثال: علوم عامة، رياضيات" value="' + val('subject') + '"><div class="day">افصل بين المباحث بفاصلة.</div>') +
+        f('tf-classes', 'الصفوف والشعب التي يدرّسها', classPick, true) +
         f('tf-phone', 'رقم الجوال', '<input type="text" id="tf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('phone') + '">') +
         f('tf-qualification', 'المؤهل العلمي', '<input type="text" id="tf-qualification" placeholder="مثال: بكالوريوس تربية علوم" value="' + val('qualification') + '">') +
         f('tf-hire', 'تاريخ التعيين', '<input type="date" id="tf-hire" value="' + val('hire_date') + '">') +
@@ -840,7 +866,8 @@
     var g = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
     var t = ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
     var data = {
-      name: g('tf-name'), subject: g('tf-subject'), classes: g('tf-classes'), phone: g('tf-phone'),
+      name: g('tf-name'), subject: splitList(g('tf-subject')).join('، '), phone: g('tf-phone'),
+      classes: Array.prototype.map.call(document.querySelectorAll('[name="tf-class"]:checked'), function (c) { return c.value; }).join('، '),
       qualification: g('tf-qualification'), hire_date: g('tf-hire') || null, details: g('tf-details')
     };
     var login = g('tf-login');
@@ -883,9 +910,34 @@
     toast('تم الحفظ');
   }
 
+  async function saveClasses(list) {
+    var r = await sb.from('settings').update({ classes: list }).eq('id', 1);
+    if (r.error) return fail(r.error);
+    (S.settings || (S.settings = {})).classes = list;
+    render();
+    var box = document.getElementById('new-class');
+    if (box) box.focus();
+  }
+
+  function addClass() {
+    var name = document.getElementById('new-class').value.trim();
+    if (!name) return;
+    if (schoolClasses().indexOf(name) > -1) return toast('هذا الصف موجود مسبقًا.', true);
+    saveClasses(schoolClasses().concat([name]));
+  }
+
+  app.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.id === 'new-class' && isAdmin()) { e.preventDefault(); addClass(); }
+  });
+
   document.addEventListener('click', async function (e) {
     if (!isAdmin()) return;
     var el, t;
+    if (e.target.closest('[data-addclass]')) return addClass();
+    if ((el = e.target.closest('[data-delclass]'))) {
+      var gone = el.getAttribute('data-delclass');
+      return saveClasses(schoolClasses().filter(function (c) { return c !== gone; }));
+    }
     if ((el = e.target.closest('[data-tedit]'))) {
       ui.editTeacher = el.getAttribute('data-tedit') || null;
       render();
@@ -1112,7 +1164,15 @@
       '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="principal-name" style="margin-top:8px">اسم مدير/ة المدرسة</label>' +
         '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
-        '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p></div>' +
+        '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p>' +
+        '<label class="field" for="new-class" style="margin-top:16px">الصفوف والشعب</label>' +
+        '<p class="hint" style="margin:0 0 6px">تظهر كقائمة اختيار في بيانات المعلمين وتقارير الزيارات.</p>' +
+        '<div class="chips" style="margin:0 0 4px">' + (schoolClasses().map(function (c) {
+          return '<span class="chip-wrap"><span class="chip" style="cursor:default">' + esc(c) + '</span>' +
+            '<button type="button" class="chip-del" data-delclass="' + esc(c) + '" aria-label="حذف ' + esc(c) + '">×</button></span>';
+        }).join('') || '<span class="hint">لا توجد صفوف بعد.</span>') + '</div>' +
+        '<div class="addstmt"><input type="text" id="new-class" placeholder="مثال: السابع (أ)" aria-label="صف جديد">' +
+        '<button type="button" class="btn" data-addclass>إضافة</button></div></div>' +
       '<div class="card"><h2>ما يراه المشاهدون</h2>' +
         '<p class="hint">يُطبَّق على جميع حسابات «مشاهد» في التقييمات المنشورة.</p>' + checks + '</div>' +
       '<div class="card"><h2>التقييمات الظاهرة للمشاهدين</h2>' +
@@ -1436,7 +1496,10 @@
   function renderVisit(v) {
     var t = find(v.teacher_id);
     var basic = function (label, inner) { return '<div><label class="field">' + label + '</label>' + inner + '</div>'; };
-    var periods = '<option value=""></option>' + PERIODS.map(function (p) {
+    // صفوف المعلم إن حُدِّدت له، وإلا كل صفوف المدرسة
+    var classList = splitList(t && t.classes);
+    if (!classList.length) classList = schoolClasses();
+    var periods = '<option value="">— اختر —</option>' + PERIODS.map(function (p) {
       return '<option' + (v.period === p ? ' selected' : '') + '>' + p + '</option>';
     }).join('');
 
@@ -1453,8 +1516,11 @@
         basic('اليوم / التاريخ', '<input type="date" data-vbasic="visit_date" aria-label="التاريخ" value="' + esc(v.visit_date) + '">' +
           '<div class="day" id="visit-day">' + dayName(v.visit_date) + '</div>') +
         basic('اسم المعلم', '<input type="text" value="' + esc(t ? t.name : '') + '" readonly aria-label="اسم المعلم">') +
-        basic('المبحث / المادة', '<input type="text" data-vbasic="subject" aria-label="المبحث" value="' + esc(v.subject) + '">') +
-        basic('الصف والشعبة', '<input type="text" data-vbasic="class_section" aria-label="الصف والشعبة" placeholder="مثال: السابع (أ)" value="' + esc(v.class_section) + '">') +
+        basic('المبحث / المادة', '<select data-vbasic="subject" aria-label="المبحث">' + optionsHtml(splitList(t && t.subject), v.subject) + '</select>') +
+        basic('الصف والشعبة', classList.length || v.class_section
+          ? '<select data-vbasic="class_section" aria-label="الصف والشعبة">' + optionsHtml(classList, v.class_section) + '</select>'
+          : '<input type="text" data-vbasic="class_section" aria-label="الصف والشعبة" value="">' +
+            '<div class="day">لم تُعرَّف صفوف المدرسة بعد؛ يعرّفها مدير النظام من تبويب «الإدارة».</div>') +
         basic('الحصة', '<select data-vbasic="period" aria-label="الحصة">' + periods + '</select>') +
         basic('رقم الزيارة', '<input type="number" min="1" data-vbasic="visit_number" aria-label="رقم الزيارة" value="' + esc(v.visit_number) + '">') +
         '<div style="grid-column:1/-1"><label class="field">عنوان الدرس</label>' +
@@ -1464,8 +1530,8 @@
       '<div class="card"><h2>ثانيًا: مجالات التقييم والملاحظات الصفية</h2>' +
         '<p class="hint no-print">لكل مجال: اختر من العبارات المقترحة أو اكتب أبرز نقاط القوة والتميز.</p>' +
         DOMAINS.map(function (d, i) {
-          return '<div class="domain"><h3><span class="n">' + (i + 1) + '</span>' + d.title + '</h3>' +
-            fieldBlock(v, 'd' + i, 'أبرز نقاط القوة والتميز') + '</div>';
+          return '<div class="domain"><h3><span class="n">' + (i + 1) + '</span>' + d.title + '</h3><div class="body">' +
+            fieldBlock(v, 'd' + i, 'أبرز نقاط القوة والتميز') + '</div></div>';
         }).join('') +
       '</div>' +
 
@@ -1602,7 +1668,8 @@
     var ins = await sb.from('visits').insert({
       teacher_id: teacherId,
       visit_date: todayISO(),
-      subject: t.subject || '',
+      // مبحث واحد يُعبأ تلقائيًا؛ أكثر من مبحث يختاره المشرف من القائمة
+      subject: splitList(t.subject).length === 1 ? splitList(t.subject)[0] : '',
       class_section: mine.length ? mine[0].class_section : '',
       visit_number: maxNo + 1,
       supervisor_name: (S.profile && S.profile.full_name) || '',
