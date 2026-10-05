@@ -144,9 +144,6 @@
   .badge.approved { background: var(--primary-soft); color: var(--primary); }
   .badge.published { background: var(--green-soft); color: var(--green); }
 
-  .add-form { display: none; margin-bottom: 16px; }
-  .add-form.open { display: block; }
-  .add-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
 
   /* Evaluation view */
   .eval-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -317,7 +314,6 @@
 
   @media (max-width: 640px) {
     .grid2 { grid-template-columns: 1fr; }
-    .add-form .row { grid-template-columns: 1fr; }
     .stepper .d { display: none; }
     /* على الهاتف: نص البند في سطر، وأزرار التقييم بعرض كامل تحته */
     table.criteria.edit thead { display: none; }
@@ -419,6 +415,7 @@
   var ROLES = {
     pending: 'بانتظار التفعيل',
     viewer: 'مشاهد',
+    teacher: 'معلم',
     supervisor: 'مشرف',
     superadmin: 'مدير النظام'
   };
@@ -522,7 +519,9 @@
     ]
   };
 
-  var PERIODS = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'];
+  // اليوم الدراسي ست حصص
+  var PERIODS = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
+  var DEFAULT_PRINCIPAL = 'أ. سمر أبو مدين';
 
   var cfg = window.APP_CONFIG || {};
   // حسابات اسم المستخدم (بدون بريد حقيقي) تُخزَّن بهذا النطاق
@@ -537,8 +536,8 @@
   var sb = null;
 
   var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false,
-            visits: [], statements: [], visitsMissing: false };
-  var ui = { search: '', addOpen: false, error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+            visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false };
+  var ui = { search: '', editTeacher: null, error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -561,6 +560,16 @@
   function role() { return S.profile ? S.profile.role : 'pending'; }
   function isAdmin() { return role() === 'superadmin'; }
   function isStaff() { return role() === 'supervisor' || isAdmin(); }
+
+  function principalName() {
+    return (S.settings && S.settings.principal_name) || DEFAULT_PRINCIPAL;
+  }
+
+  // اسم المستخدم بدون @ يُحوَّل إلى بريد داخلي
+  function toEmail(login) {
+    login = login.trim().toLowerCase();
+    return login.indexOf('@') < 0 ? login + USER_SUFFIX : login;
+  }
 
   function find(id) {
     for (var i = 0; i < S.teachers.length; i++) if (S.teachers[i].id === id) return S.teachers[i];
@@ -606,7 +615,7 @@
     if (p.error) fail(p.error);
     S.profile = p.data || null;
     S.teachers = []; S.users = []; S.settings = null; S.results = null;
-    S.visits = []; S.statements = []; S.visitsMissing = false;
+    S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -624,6 +633,12 @@
         sb.from('statements').select('*').order('created_at')
       ]);
       // الجدولان غير موجودين إلى أن يُشغَّل الملف supabase/visits.sql
+      if (isAdmin()) {
+        // غير موجود إلى أن يُشغَّل الملف supabase/teacher_accounts.sql
+        var ps = await sb.from('private_settings').select('*').eq('id', 1).maybeSingle();
+        S.accountsMissing = !!ps.error;
+        S.defaultPw = (ps.data && ps.data.default_password) || '';
+      }
       S.visitsMissing = !!(vis[0].error || vis[1].error);
       S.visits = vis[0].data || [];
       S.statements = vis[1].data || [];
@@ -640,6 +655,7 @@
     loadingResults = false;
     if (r.error) fail(r.error);
     S.results = (r.data && r.data.results) || [];
+    if (!isStaff() && r.data && r.data.settings) S.settings = r.data.settings;
     render();
   }
 
@@ -719,7 +735,7 @@
   function tabs(active) {
     if (!isStaff()) return '';
     var items = [['#/', 'teachers', 'المعلمون'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']];
-    if (isAdmin()) items.push(['#/admin', 'admin', 'الإدارة']);
+    if (isAdmin()) items.push(['#/staff', 'staff', 'بيانات المعلمين'], ['#/admin', 'admin', 'الإدارة']);
     return '<nav class="tabs no-print">' + items.map(function (it) {
       return '<a href="' + it[0] + '"' + (it[1] === active ? ' class="on" aria-current="page"' : '') + '>' + it[2] + '</a>';
     }).join('') + '</nav>';
@@ -754,6 +770,146 @@
       '<button type="button" class="btn" data-act="reload" style="margin-top:12px">تحديث</button></div>';
   }
 
+  function renderChangePw() {
+    app.innerHTML =
+      '<form class="card auth" id="pw-form">' +
+        '<h2>اختر كلمة مرور جديدة</h2>' +
+        '<p class="hint">تم إنشاء حسابك بكلمة مرور افتراضية. اختر كلمة مرور خاصة بك للمتابعة.</p>' +
+        '<div class="f"><label class="field" for="pw-new">كلمة المرور الجديدة</label><input type="password" id="pw-new" dir="ltr" required minlength="6" autocomplete="new-password"></div>' +
+        '<div class="f"><label class="field" for="pw-again">تأكيد كلمة المرور</label><input type="password" id="pw-again" dir="ltr" required minlength="6" autocomplete="new-password"></div>' +
+        (ui.authErr ? '<div class="msg" role="alert" style="margin:0 0 12px">' + esc(ui.authErr) + '</div>' : '') +
+        '<button type="submit" class="btn primary">حفظ ومتابعة</button>' +
+      '</form>';
+  }
+
+  /* ---------- بيانات المعلمين (مدير النظام) ---------- */
+
+  function renderStaff() {
+    if (S.accountsMissing) {
+      app.innerHTML = tabs('staff') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لبيانات المعلمين وحساباتهم بعد.<br>' +
+        'شغّل الملف <code dir="ltr">supabase/teacher_accounts.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    var ed = ui.editTeacher, t = ed && ed !== 'new' ? find(ed) : null;
+    var val = function (k) { return esc(t && t[k] != null ? t[k] : ''); };
+    var f = function (id, label, inner, wide) {
+      return '<div' + (wide ? ' style="grid-column:1/-1"' : '') + '><label class="field" for="' + id + '">' + label + '</label>' + inner + '</div>';
+    };
+
+    var form = !ed ? '' :
+      '<form class="card" id="teacher-form"><h2>' + (t ? 'تعديل بيانات المعلم' : 'إضافة معلم') + '</h2>' +
+      '<div class="grid2" style="margin-top:12px">' +
+        f('tf-name', 'اسم المعلم', '<input type="text" id="tf-name" required value="' + val('name') + '">') +
+        f('tf-subject', 'المباحث التي يدرّسها', '<input type="text" id="tf-subject" required placeholder="مثال: علوم عامة، رياضيات" value="' + val('subject') + '">') +
+        f('tf-classes', 'الصفوف والشعب', '<input type="text" id="tf-classes" placeholder="مثال: السابع (أ، ب)، الثامن (أ)" value="' + val('classes') + '">') +
+        f('tf-phone', 'رقم الجوال', '<input type="text" id="tf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('phone') + '">') +
+        f('tf-qualification', 'المؤهل العلمي', '<input type="text" id="tf-qualification" placeholder="مثال: بكالوريوس تربية علوم" value="' + val('qualification') + '">') +
+        f('tf-hire', 'تاريخ التعيين', '<input type="date" id="tf-hire" value="' + val('hire_date') + '">') +
+        (t && t.user_id
+          ? f('tf-login-ro', 'حساب الدخول', '<input type="text" id="tf-login-ro" dir="ltr" readonly style="text-align:right" value="' + esc(displayName(t.login)) + '">')
+          : f('tf-login', 'اسم المستخدم للدخول', '<input type="text" id="tf-login" dir="ltr" style="text-align:right"' + (t ? '' : ' required') +
+              ' placeholder="أحرف إنجليزية وأرقام، أو بريد إلكتروني" autocomplete="off">' +
+              '<div class="day">يُنشأ الحساب بكلمة المرور الافتراضية، ويُطلب من المعلم تغييرها عند أول دخول.</div>')) +
+        f('tf-details', 'بيانات أخرى', '<textarea id="tf-details" placeholder="أي معلومات إضافية عن المعلم">' + val('details') + '</textarea>', true) +
+      '</div>' +
+      '<div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
+      '<button type="button" class="btn" data-tedit="">إلغاء</button></div></form>';
+
+    var rows = S.teachers.map(function (x) {
+      return '<tr><td><b>' + esc(x.name) + '</b></td><td>' + esc(x.subject || '—') + '</td><td>' + esc(x.classes || '—') + '</td>' +
+        '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td>' +
+        '<td dir="ltr" style="text-align:right">' + (x.user_id ? esc(displayName(x.login)) : '<span class="badge pending" dir="rtl">بدون حساب</span>') + '</td>' +
+        '<td style="white-space:nowrap"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button> ' +
+        (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '">إعادة تعيين كلمة المرور</button> ' : '') +
+        '<button type="button" class="btn danger" data-tdel="' + x.id + '">حذف</button></td></tr>';
+    }).join('');
+
+    app.innerHTML = tabs('staff') +
+      '<form class="card" id="defaultpw-form"><h2>كلمة المرور الافتراضية لحسابات المعلمين</h2>' +
+        '<p class="hint">تُستخدم عند إنشاء حساب معلم أو إعادة تعيين كلمة مروره، ويُطلب منه تغييرها عند أول دخول.</p>' +
+        '<div class="toolbar" style="margin:0"><input type="text" id="default-pw" dir="ltr" minlength="6" required autocomplete="off" aria-label="كلمة المرور الافتراضية" ' +
+        'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
+        '<button type="submit" class="btn">حفظ</button></div></form>' +
+      (ed ? form : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة معلم</button></div>') +
+      '<div class="card">' + (rows
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>المباحث</th><th>الصفوف</th><th>الجوال</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا يوجد معلمون بعد.</div>') + '</div>';
+  }
+
+  async function saveTeacherForm() {
+    var g = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    var t = ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
+    var data = {
+      name: g('tf-name'), subject: g('tf-subject'), classes: g('tf-classes'), phone: g('tf-phone'),
+      qualification: g('tf-qualification'), hire_date: g('tf-hire') || null, details: g('tf-details')
+    };
+    var login = g('tf-login');
+    if (login) {
+      if (login.indexOf('@') < 0 && !/^[a-z0-9._-]{3,}$/i.test(login)) {
+        return toast('اسم المستخدم: ثلاثة أحرف إنجليزية أو أرقام على الأقل، بدون مسافات.', true);
+      }
+      if (S.defaultPw.length < 6) return toast('احفظ كلمة المرور الافتراضية أولًا (6 أحرف على الأقل).', true);
+    }
+
+    if (t) {
+      var up = await sb.from('teachers').update(data).eq('id', t.id);
+      if (up.error) return fail(up.error);
+      Object.assign(t, data);
+    } else {
+      var ins = await sb.from('teachers').insert(data).select().single();
+      if (ins.error) return fail(ins.error);
+      t = ins.data;
+      t.ratings = t.ratings || {};
+      S.teachers.push(t);
+      S.teachers.sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    }
+
+    if (login && !t.user_id) {
+      var acc = await sb.rpc('create_teacher_account', { p_teacher: t.id, p_login: toEmail(login), p_password: S.defaultPw });
+      if (acc.error) {
+        // بيانات المعلم حُفظت، والحساب لم يُنشأ: يبقى النموذج مفتوحًا لتصحيح اسم المستخدم
+        ui.editTeacher = t.id;
+        render();
+        return fail(acc.error);
+      }
+      t.user_id = acc.data;
+      t.login = toEmail(login);
+      // ليظهر الحساب الجديد في قائمة المستخدمين
+      var us = await sb.from('profiles').select('*').order('created_at');
+      if (!us.error) S.users = us.data || [];
+    }
+    ui.editTeacher = null;
+    render();
+    toast('تم الحفظ');
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (!isAdmin()) return;
+    var el, t;
+    if ((el = e.target.closest('[data-tedit]'))) {
+      ui.editTeacher = el.getAttribute('data-tedit') || null;
+      render();
+      var first = document.getElementById('tf-name');
+      if (first) { first.focus(); first.scrollIntoView({ block: 'center' }); }
+    } else if ((el = e.target.closest('[data-treset]'))) {
+      t = find(el.getAttribute('data-treset'));
+      if (S.defaultPw.length < 6) return toast('احفظ كلمة المرور الافتراضية أولًا (6 أحرف على الأقل).', true);
+      if (!confirm('إعادة كلمة مرور «' + t.name + '» إلى الكلمة الافتراضية؟')) return;
+      var r = await sb.rpc('reset_teacher_password', { p_teacher: t.id, p_password: S.defaultPw });
+      if (r.error) return fail(r.error);
+      toast('تمت إعادة تعيين كلمة المرور');
+    } else if ((el = e.target.closest('[data-tdel]'))) {
+      t = find(el.getAttribute('data-tdel'));
+      if (!confirm('هل تريد حذف «' + t.name + '» مع تقييمه وتقارير زياراته وحسابه نهائيًا؟')) return;
+      var d = await sb.from('teachers').delete().eq('id', t.id);
+      if (d.error) return fail(d.error);
+      S.teachers = S.teachers.filter(function (x) { return x.id !== t.id; });
+      S.visits = S.visits.filter(function (x) { return x.teacher_id !== t.id; });
+      if (ui.editTeacher === t.id) ui.editTeacher = null;
+      render();
+    }
+  });
+
   /* ---------- قائمة المعلمين ---------- */
 
   function renderList() {
@@ -775,19 +931,12 @@
     app.innerHTML = tabs('teachers') +
       '<div class="toolbar">' +
         '<input type="search" id="search" placeholder="ابحث باسم المعلم أو التخصص" aria-label="بحث" value="' + esc(ui.search) + '">' +
-        '<button type="button" class="btn primary" data-act="toggle-add">+ إضافة معلم</button>' +
+        (isAdmin() ? '<a class="btn primary" href="#/staff" style="text-decoration:none">+ إضافة معلم</a>' : '') +
       '</div>' +
-      '<form class="card add-form' + (ui.addOpen ? ' open' : '') + '" id="add-form">' +
-        '<div class="row">' +
-          '<div><label class="field" for="add-name">اسم المعلم</label><input type="text" id="add-name" required></div>' +
-          '<div><label class="field" for="add-subject">التخصص</label><input type="text" id="add-subject"></div>' +
-        '</div>' +
-        '<button type="submit" class="btn primary">حفظ</button> ' +
-        '<button type="button" class="btn" data-act="toggle-add">إلغاء</button>' +
-      '</form>' +
       (shown.length
         ? '<div class="teachers">' + cards + '</div>'
-        : '<div class="card empty">' + (S.teachers.length ? 'لا توجد نتائج مطابقة.' : 'لا يوجد معلمون بعد. أضف معلمًا للبدء.') + '</div>');
+        : '<div class="card empty">' + (S.teachers.length ? 'لا توجد نتائج مطابقة.'
+            : isAdmin() ? 'لا يوجد معلمون بعد. أضفهم من تبويب «بيانات المعلمين».' : 'لا يوجد معلمون بعد. يضيفهم مدير النظام.') + '</div>');
   }
 
   /* ---------- التقييم ---------- */
@@ -889,7 +1038,7 @@
       '<div class="eval-head">' +
         '<div><h2>' + esc(t.name) + '</h2><div class="sub">التخصص: ' + esc(t.subject || '—') + '</div></div>' +
         '<div class="no-print"><span class="badge ' + t.status + '">' + STATUS[t.status] + '</span> ' +
-        '<button type="button" class="btn danger" data-act="delete">حذف المعلم</button></div>' +
+        (isAdmin() ? '<button type="button" class="btn danger" data-act="delete">حذف المعلم</button>' : '') + '</div>' +
       '</div>' +
       stepper(t) + body;
   }
@@ -950,14 +1099,20 @@
 
     var users = S.users.map(function (u) {
       var self = u.id === S.uid;
-      var opts = Object.keys(ROLES).map(function (k) {
+      // حسابات المعلمين تُدار من تبويب «بيانات المعلمين»
+      var isTeacher = u.role === 'teacher';
+      var opts = Object.keys(ROLES).filter(function (k) { return isTeacher || k !== 'teacher'; }).map(function (k) {
         return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
       }).join('');
       return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
-        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : '') + '>' + opts + '</select></td></tr>';
+        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td></tr>';
     }).join('');
 
     app.innerHTML = tabs('admin') +
+      '<div class="card"><h2>بيانات المدرسة</h2>' +
+        '<label class="field" for="principal-name" style="margin-top:8px">اسم مدير/ة المدرسة</label>' +
+        '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
+        '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p></div>' +
       '<div class="card"><h2>ما يراه المشاهدون</h2>' +
         '<p class="hint">يُطبَّق على جميع حسابات «مشاهد» في التقييمات المنشورة.</p>' + checks + '</div>' +
       '<div class="card"><h2>التقييمات الظاهرة للمشاهدين</h2>' +
@@ -981,6 +1136,7 @@
     if (!S.uid) return renderAuth();
     if (!S.ready) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; return; }
     if (role() === 'pending') return renderPending();
+    if (S.profile && S.profile.must_change_password) return renderChangePw();
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
@@ -991,6 +1147,7 @@
     var v = currentVisit();
     if (v) return renderVisit(v);
     if (h === '#/visits' || /^#\/v\//.test(h)) return renderVisits();
+    if (h === '#/staff' && isAdmin()) return renderStaff();
     if (h === '#/admin' && isAdmin()) return renderAdmin();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     renderList();
@@ -1044,10 +1201,6 @@
       loadAll();
     } else if (act === 'print') {
       window.print();
-    } else if (act === 'toggle-add') {
-      ui.addOpen = !ui.addOpen;
-      render();
-      if (ui.addOpen) document.getElementById('add-name').focus();
     } else if (act === 'back') {
       await flush();
       go('#/');
@@ -1090,6 +1243,13 @@
       r = await sb.from('settings').update(patch).eq('id', 1);
       if (r.error) { el.checked = !el.checked; return fail(r.error); }
       Object.assign(S.settings || (S.settings = {}), patch);
+      toast('تم الحفظ');
+    } else if (el.hasAttribute('data-settingtext') && isAdmin()) {
+      var tp = {};
+      tp[el.getAttribute('data-settingtext')] = el.value.trim();
+      r = await sb.from('settings').update(tp).eq('id', 1);
+      if (r.error) return fail(r.error);
+      Object.assign(S.settings || (S.settings = {}), tp);
       toast('تم الحفظ');
     } else if (el.hasAttribute('data-visible') && isAdmin()) {
       var vt = find(el.getAttribute('data-visible'));
@@ -1139,16 +1299,26 @@
   app.addEventListener('submit', async function (e) {
     e.preventDefault();
 
-    if (e.target.id === 'add-form') {
-      var name = document.getElementById('add-name').value.trim();
-      if (!name) return;
-      var ins = await sb.from('teachers')
-        .insert({ name: name, subject: document.getElementById('add-subject').value.trim() })
-        .select().single();
-      if (ins.error) return fail(ins.error);
-      S.teachers.push(ins.data);
-      ui.addOpen = false;
+    if (e.target.id === 'teacher-form') {
+      saveTeacherForm();
+    } else if (e.target.id === 'defaultpw-form') {
+      var pw = document.getElementById('default-pw').value;
+      if (pw.length < 6) return toast('كلمة المرور الافتراضية يجب ألا تقل عن 6 أحرف.', true);
+      var up = await sb.from('private_settings').update({ default_password: pw }).eq('id', 1);
+      if (up.error) return fail(up.error);
+      S.defaultPw = pw;
+      toast('تم الحفظ');
+    } else if (e.target.id === 'pw-form') {
+      var p1 = document.getElementById('pw-new').value, p2 = document.getElementById('pw-again').value;
+      ui.authErr = p1.length < 6 ? 'كلمة المرور يجب ألا تقل عن 6 أحرف.' : p1 !== p2 ? 'كلمتا المرور غير متطابقتين.' : '';
+      if (ui.authErr) return render();
+      var ch = await sb.auth.updateUser({ password: p1 });
+      if (ch.error) { ui.authErr = 'تعذر تغيير كلمة المرور: ' + ch.error.message; return render(); }
+      var done = await sb.rpc('finish_password_change');
+      if (done.error) return fail(done.error);
+      S.profile.must_change_password = false;
       render();
+      toast('تم تغيير كلمة المرور');
     } else if (e.target.id === 'auth-form') {
       var email = document.getElementById('au-email').value.trim();
       var pass = document.getElementById('au-pass').value;
@@ -1369,7 +1539,6 @@
     var dots = '..............................';
     var sum = o.total != null ? o.total : (o.ratings ? total(o) : null);
     var pct = sum != null ? Math.round(sum / MAX * 100) : null;
-    var principal = S.visits.filter(function (x) { return x.principal_name; })[0];
     var supervisor = isStaff() && S.profile ? S.profile.full_name : '';
     var notes = function (title, text) {
       return text ? '<div class="pe-notes"><b>' + title + '</b><div>' + esc(text) + '</div></div>' : '';
@@ -1399,7 +1568,7 @@
       notes('ملاحظات الاعتماد', o.approver_notes) +
       '<div class="pe-signs">' +
         '<div><b>المشرف التربوي</b><span>الاسم: ' + esc(supervisor || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
-        '<div><b>مدير/ة المدرسة</b><span>الاسم: ' + esc((principal && principal.principal_name) || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
+        '<div><b>مدير/ة المدرسة</b><span>الاسم: ' + esc(principalName()) + '</span><span>التوقيع: ' + dots + '</span></div>' +
       '</div>';
 
     fitSheet();
@@ -1428,7 +1597,6 @@
     var t = find(teacherId);
     if (!t) return;
     var mine = S.visits.filter(function (x) { return x.teacher_id === teacherId; });
-    var withPrincipal = S.visits.filter(function (x) { return x.principal_name; })[0];
     var maxNo = mine.reduce(function (m, x) { return Math.max(m, x.visit_number || 0); }, 0);
     // تُعبأ البيانات الأساسية تلقائيًا قدر الإمكان
     var ins = await sb.from('visits').insert({
@@ -1438,7 +1606,7 @@
       class_section: mine.length ? mine[0].class_section : '',
       visit_number: maxNo + 1,
       supervisor_name: (S.profile && S.profile.full_name) || '',
-      principal_name: withPrincipal ? withPrincipal.principal_name : ''
+      principal_name: principalName()
     }).select().single();
     if (ins.error) return fail(ins.error);
     var v = ins.data;
