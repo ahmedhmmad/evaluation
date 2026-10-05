@@ -305,7 +305,8 @@
   #print-sheet .pe-table th.r, #print-sheet .pe-table td.r { text-align: center; }
   #print-sheet .pe-table td.r { background: #e6f4f2; white-space: nowrap; padding: .1em .3em; }
   #print-sheet .pe-table td.r b { font-size: 1.45em; font-weight: 800; color: #0b5a54; }
-  #print-sheet .pe-table td.r small { font-size: .8em; color: #0b5a54; margin-inline-start: .35em; }
+  #print-sheet .pe-legend { margin-top: .4em; font-size: .85em; color: #475569; display: flex; flex-wrap: wrap; gap: .2em 1.2em; }
+  #print-sheet .pe-legend b { color: #0b5a54; }
   #print-sheet .pe-notes { margin-top: .6em; }
   #print-sheet .pe-notes b { display: block; margin-bottom: .15em; }
   #print-sheet .pe-notes div { white-space: pre-wrap; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: .5em; padding: .3em .6em; }
@@ -1366,8 +1367,6 @@
   // o: معلم (للمشرف) أو نتيجة منشورة (للمشاهد، وقد تكون بعض حقولها محجوبة)
   function buildEvalSheet(o) {
     var dots = '..............................';
-    var label = {};
-    SCALE.forEach(function (x) { label[x.v] = x.label; });
     var sum = o.total != null ? o.total : (o.ratings ? total(o) : null);
     var pct = sum != null ? Math.round(sum / MAX * 100) : null;
     var principal = S.visits.filter(function (x) { return x.principal_name; })[0];
@@ -1387,13 +1386,14 @@
             '<div><div class="k">التقدير</div><div class="v">' + grade(pct) + '</div></div></div>'
         : '') +
       (o.ratings
-        ? '<table class="pe-table"><colgroup><col style="width:5%"><col style="width:77%"><col style="width:18%"></colgroup>' +
-          '<tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th class="r">التقييم (من 5)</th></tr>' +
+        ? '<table class="pe-table"><colgroup><col style="width:5%"><col style="width:83%"><col style="width:12%"></colgroup>' +
+          '<tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th class="r">التقييم</th></tr>' +
           CRITERIA.map(function (c, i) {
             var r = o.ratings[i];
             return '<tr><td class="n">' + (i + 1) + '</td><td>' + c + '</td>' +
-              '<td class="r">' + (r ? '<b>' + r + '</b><small>' + label[r] + '</small>' : '—') + '</td></tr>';
-          }).join('') + '</table>'
+              '<td class="r">' + (r ? '<b>' + r + '</b>' : '—') + '</td></tr>';
+          }).join('') + '</table>' +
+          '<div class="pe-legend">مفتاح الدرجات: ' + SCALE.map(function (x) { return '<span><b>' + x.v + '</b> = ' + x.label + '</span>'; }).join('') + '</div>'
         : '') +
       notes('ملاحظات المشرف', o.notes) +
       notes('ملاحظات الاعتماد', o.approver_notes) +
