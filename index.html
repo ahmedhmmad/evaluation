@@ -232,7 +232,40 @@
   #toast.show { opacity: 1; }
   #toast.err { background: var(--red); }
 
+  /* Visit report */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .grid2 .day { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+  input[type=date], input[type=number] { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fff; width: 100%; }
+  .grid2 select { width: 100%; }
+  .domain { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .domain:last-child { border-bottom: 0; padding-bottom: 0; }
+  .domain h3 { margin: 0 0 6px; font-size: 1rem; }
+  .domain h3 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: .85rem; margin-inline-end: 6px; }
+  details.bank { margin-top: 8px; }
+  details.bank summary { cursor: pointer; color: var(--primary); font-weight: 700; font-size: .9rem; padding: 4px 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .chip {
+    border: 1px solid var(--line); background: #fff; border-radius: 999px;
+    padding: 6px 12px; cursor: pointer; font-size: .9rem; text-align: start;
+  }
+  .chip:hover { border-color: var(--primary); }
+  .chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .chip-wrap { display: inline-flex; align-items: center; gap: 2px; }
+  .chip-del { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 4px 6px; }
+  .chip-del:hover { color: var(--red); }
+  .addstmt { display: flex; gap: 8px; margin-top: 10px; }
+  .addstmt input { flex: 1; min-width: 0; }
+  .visit-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; text-align: start; width: 100%; cursor: pointer; }
+  .visit-row:hover { border-color: var(--primary); }
+  .visit-row .name { font-weight: 700; }
+  .visit-row .meta { color: var(--muted); font-size: .9rem; }
+  .print-only { display: none; }
+  .ptext { white-space: pre-wrap; min-height: 2.4em; }
+  .signs { grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 40px; text-align: center; }
+  .signs .line { margin-top: 36px; border-top: 1px dotted #000; padding-top: 6px; }
+
   @media (max-width: 640px) {
+    .grid2 { grid-template-columns: 1fr; }
     .add-form .row { grid-template-columns: 1fr; }
     .stepper .d { display: none; }
     /* على الهاتف: نص البند في سطر، وأزرار التقييم بعرض كامل تحته */
@@ -252,6 +285,12 @@
     header.app, .no-print, .stepper, nav.tabs, #toast { display: none !important; }
     main { padding: 0; max-width: none; }
     .card { border: 0; padding: 0; }
+    .print-only { display: block; }
+    .signs.print-only { display: grid; }
+    textarea, details.bank { display: none !important; }
+    input, select { border: 0 !important; padding: 0 !important; background: none !important; appearance: none; }
+    .card h2 { border-bottom: 1px solid #000; padding-bottom: 4px; margin-top: 14px; }
+    .domain { break-inside: avoid; padding: 8px 0; }
   }
 </style>
 </head>
@@ -338,6 +377,99 @@
     { key: 'show_approver_notes', label: 'ملاحظات الاعتماد' }
   ];
 
+  // تقرير الزيارة الإشرافية: المجالات السبعة وعبارات مقترحة لكل حقل
+  var DOMAINS = [
+    { title: 'التخطيط والإعداد', bank: [
+      'يعدّ خطة درس مكتملة العناصر ومتسلسلة',
+      'يصوغ أهدافًا تعليمية واضحة وقابلة للقياس',
+      'يربط أهداف الدرس بنتاجات المنهاج',
+      'يخطط لأنشطة تراعي الفروق الفردية بين الطلبة',
+      'يجهّز الوسائل وأوراق العمل قبل الحصة',
+      'يوزّع زمن الحصة على فعالياتها بشكل مناسب'
+    ] },
+    { title: 'التمهيد والتهيئة', bank: [
+      'يبدأ الحصة بتمهيد مشوّق يثير دافعية الطلبة',
+      'يربط الدرس الجديد بالتعلم السابق',
+      'يستخدم سؤالًا أو موقفًا حياتيًا لإثارة التفكير',
+      'يعرض أهداف الدرس على الطلبة بوضوح',
+      'يراجع المتطلبات السابقة للدرس',
+      'يهيّئ البيئة الصفية قبل البدء بالدرس'
+    ] },
+    { title: 'استراتيجيات التدريس', bank: [
+      'ينوّع في استراتيجيات التدريس بما يناسب أهداف الدرس',
+      'يوظف التعلم النشط والعمل في مجموعات',
+      'يطرح أسئلة تنمّي مهارات التفكير العليا',
+      'يفعّل دور الطالب بوصفه محور العملية التعليمية',
+      'يراعي الفروق الفردية وأنماط التعلم',
+      'يربط المحتوى بحياة الطلبة وخبراتهم',
+      'يتمكن من المادة العلمية ويعرضها بتسلسل منطقي'
+    ] },
+    { title: 'الوسائل والتقنيات', bank: [
+      'يوظف الوسائل التعليمية المناسبة لأهداف الدرس',
+      'يستخدم التقنيات الحديثة والعروض التفاعلية بفاعلية',
+      'يستثمر السبورة بشكل منظم وواضح',
+      'ينتج وسائل تعليمية من خامات البيئة',
+      'يشرك الطلبة في استخدام الوسائل والتقنيات',
+      'يوظف مصادر تعلم متنوعة غير الكتاب المدرسي'
+    ] },
+    { title: 'الإدارة الصفية', bank: [
+      'يدير وقت الحصة بفاعلية',
+      'يضبط الصف بأسلوب تربوي هادئ',
+      'يوفر بيئة صفية آمنة ومحفزة على التعلم',
+      'يعزز السلوك الإيجابي لدى الطلبة',
+      'يوزع المشاركة بعدالة بين الطلبة',
+      'يبني علاقة احترام متبادل مع الطلبة',
+      'يتحرك داخل الصف ويتابع الطلبة جميعهم'
+    ] },
+    { title: 'التقويم والتغذية الراجعة', bank: [
+      'ينوّع في أساليب التقويم (قبلي، تكويني، ختامي)',
+      'يتحقق من بلوغ أهداف الدرس في نهاية الحصة',
+      'يقدم تغذية راجعة فورية وبنّاءة',
+      'يوظف أدوات تقويم متنوعة (سلالم تقدير، قوائم رصد)',
+      'يستخدم نتائج التقويم في تعديل مسار التدريس',
+      'يشجع التقويم الذاتي وتقويم الأقران'
+    ] },
+    { title: 'متابعة أعمال الطلبة', bank: [
+      'يتابع دفاتر الطلبة وكراساتهم بانتظام',
+      'يصحح أعمال الطلبة ويدوّن عليها ملاحظات مفيدة',
+      'يكلف الطلبة بواجبات بيتية هادفة ومتنوعة',
+      'يتابع تنفيذ الواجبات ويقدم تغذية راجعة عنها',
+      'يوثق تقدم الطلبة في سجلات منظمة',
+      'يتابع الطلبة ذوي التحصيل المتدني بخطط علاجية',
+      'يعرض أعمال الطلبة المتميزة ويحتفي بها'
+    ] }
+  ];
+
+  var BANK = {
+    development: [
+      'تنويع استراتيجيات التدريس وتفعيل التعلم النشط',
+      'صياغة الأهداف بصورة إجرائية قابلة للقياس',
+      'تحسين إدارة وقت الحصة وتوزيعه على الفعاليات',
+      'توظيف التقنيات والوسائل التعليمية بصورة أوسع',
+      'طرح أسئلة تنمّي مهارات التفكير العليا',
+      'مراعاة الفروق الفردية وتقديم أنشطة علاجية وإثرائية',
+      'تنويع أساليب التقويم وأدواته',
+      'تفعيل مشاركة جميع الطلبة وعدم الاقتصار على فئة محددة',
+      'متابعة دفاتر الطلبة وتصحيحها بانتظام',
+      'تفعيل الغلق والتقويم الختامي في نهاية الحصة',
+      'تعزيز مهارات الإدارة الصفية وضبط الصف'
+    ],
+    recommendations: [
+      'حضور ورشة تدريبية في استراتيجيات التعلم النشط',
+      'تبادل الزيارات الصفية مع الزملاء ذوي الخبرة',
+      'إعداد خطة علاجية للطلبة ذوي التحصيل المتدني',
+      'إعداد أنشطة إثرائية للطلبة المتفوقين',
+      'الاطلاع على دليل المعلم وتوظيف ما ورد فيه',
+      'إعداد أوراق عمل وأدوات تقويم متنوعة',
+      'توثيق أعمال الطلبة وتحديث السجلات بانتظام',
+      'تنفيذ درس توضيحي ومناقشته مع المشرف',
+      'زيارة متابعة للتحقق من تنفيذ التوصيات',
+      'الاستمرار في الأداء المتميز ونقل الخبرة للزملاء'
+    ]
+  };
+
+  var PERIODS = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة'];
+
   var cfg = window.APP_CONFIG || {};
   // حسابات اسم المستخدم (بدون بريد حقيقي) تُخزَّن بهذا النطاق
   var USER_SUFFIX = '@' + (cfg.USERNAME_DOMAIN || 'ahmedhmmad.github.io');
@@ -350,7 +482,8 @@
   var toastEl = document.getElementById('toast');
   var sb = null;
 
-  var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false };
+  var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false,
+            visits: [], statements: [], visitsMissing: false };
   var ui = { search: '', addOpen: false, error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
@@ -419,6 +552,7 @@
     if (p.error) fail(p.error);
     S.profile = p.data || null;
     S.teachers = []; S.users = []; S.settings = null; S.results = null;
+    S.visits = []; S.statements = []; S.visitsMissing = false;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -430,6 +564,15 @@
       S.teachers = res[0].data || [];
       S.settings = res[1].data || null;
       S.users = res[2].data || [];
+
+      var vis = await Promise.all([
+        sb.from('visits').select('*').order('visit_date', { ascending: false }),
+        sb.from('statements').select('*').order('created_at')
+      ]);
+      // الجدولان غير موجودين إلى أن يُشغَّل الملف supabase/visits.sql
+      S.visitsMissing = !!(vis[0].error || vis[1].error);
+      S.visits = vis[0].data || [];
+      S.statements = vis[1].data || [];
     }
     S.ready = true;
     render();
@@ -476,10 +619,38 @@
   }
 
   function flush() {
-    if (!saveTimer) return Promise.resolve(true);
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    return saveNow(dirty);
+    var a = true, b = true;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; a = saveNow(dirty); }
+    if (visitTimer) { clearTimeout(visitTimer); visitTimer = null; b = saveVisit(visitDirty); }
+    return Promise.all([a, b]);
+  }
+
+  var visitTimer = null, visitDirty = null;
+
+  async function saveVisit(v) {
+    var r = await sb.from('visits').update({
+      visit_date: v.visit_date,
+      subject: v.subject,
+      class_section: v.class_section,
+      period: v.period,
+      lesson_title: v.lesson_title,
+      visit_number: v.visit_number,
+      strengths: v.strengths,
+      development: v.development,
+      recommendations: v.recommendations,
+      supervisor_name: v.supervisor_name,
+      principal_name: v.principal_name
+    }).eq('id', v.id);
+    if (r.error) { setSaveState('لم يتم الحفظ'); fail(r.error); return false; }
+    setSaveState('تم الحفظ');
+    return true;
+  }
+
+  function queueVisit(v) {
+    clearTimeout(visitTimer);
+    visitDirty = v;
+    setSaveState('جارٍ الحفظ…');
+    visitTimer = setTimeout(function () { visitTimer = null; saveVisit(v); }, 600);
   }
 
   /* ---------- الشريط العلوي والتبويبات ---------- */
@@ -493,7 +664,7 @@
 
   function tabs(active) {
     if (!isStaff()) return '';
-    var items = [['#/', 'teachers', 'المعلمون'], ['#/results', 'results', 'النتائج المنشورة']];
+    var items = [['#/', 'teachers', 'المعلمون'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']];
     if (isAdmin()) items.push(['#/admin', 'admin', 'الإدارة']);
     return '<nav class="tabs no-print">' + items.map(function (it) {
       return '<a href="' + it[0] + '"' + (it[1] === active ? ' class="on" aria-current="page"' : '') + '>' + it[2] + '</a>';
@@ -763,6 +934,9 @@
 
     var t = currentTeacher();
     if (t) return renderEval(t);
+    var v = currentVisit();
+    if (v) return renderVisit(v);
+    if (h === '#/visits' || /^#\/v\//.test(h)) return renderVisits();
     if (h === '#/admin' && isAdmin()) return renderAdmin();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     renderList();
@@ -943,6 +1117,269 @@
         ui.authMsg = 'تم إنشاء الحساب. افتح رسالة التأكيد في بريدك ثم سجّل الدخول.';
       }
       if (!S.uid) render();
+    }
+  });
+
+  /* ---------- تقرير الزيارة الإشرافية ---------- */
+
+  function findVisit(id) {
+    for (var i = 0; i < S.visits.length; i++) if (S.visits[i].id === id) return S.visits[i];
+    return null;
+  }
+
+  function currentVisit() {
+    if (!S.ready || !isStaff()) return null;
+    var m = location.hash.match(/^#\/v\/(.+)$/);
+    return m ? findVisit(m[1]) : null;
+  }
+
+  function todayISO() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  function dayName(iso) {
+    return iso ? new Date(iso + 'T00:00').toLocaleDateString('ar', { weekday: 'long' }) : '';
+  }
+
+  // مفاتيح الحقول: d0..d6 لنقاط القوة في كل مجال، ثم development و recommendations
+  function getField(v, key) {
+    return (key.charAt(0) === 'd' && key.length === 2 ? v.strengths[key.slice(1)] : v[key]) || '';
+  }
+
+  function setField(v, key, val) {
+    if (key.charAt(0) === 'd' && key.length === 2) v.strengths[key.slice(1)] = val; else v[key] = val;
+  }
+
+  function lines(text) {
+    return text.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  }
+
+  function chipsHtml(v, key) {
+    var have = lines(getField(v, key));
+    var builtin = key.charAt(0) === 'd' && key.length === 2 ? DOMAINS[Number(key.slice(1))].bank : BANK[key];
+    var chip = function (text) {
+      var on = have.indexOf(text) > -1;
+      return '<button type="button" class="chip' + (on ? ' on' : '') + '" data-chip="' + key + '" data-text="' + esc(text) +
+        '" aria-pressed="' + on + '">' + esc(text) + '</button>';
+    };
+    var custom = S.statements.filter(function (x) { return x.field === key; }).map(function (x) {
+      return '<span class="chip-wrap">' + chip(x.body) +
+        '<button type="button" class="chip-del" data-delstmt="' + x.id + '" data-key="' + key + '" title="حذف العبارة من القائمة" aria-label="حذف العبارة من القائمة">×</button></span>';
+    }).join('');
+    return '<div class="chips">' + builtin.map(chip).join('') + custom + '</div>' +
+      '<div class="addstmt"><input type="text" data-newstmt="' + key + '" placeholder="اكتب عبارة جديدة لإضافتها إلى القائمة" aria-label="عبارة جديدة">' +
+      '<button type="button" class="btn" data-addstmt="' + key + '">إضافة</button></div>';
+  }
+
+  function fieldBlock(v, key, label) {
+    return '<label class="field" for="f-' + key + '">' + label + '</label>' +
+      '<textarea id="f-' + key + '" data-vfield="' + key + '" placeholder="اختر من العبارات المقترحة أو اكتب مباشرة">' + esc(getField(v, key)) + '</textarea>' +
+      '<div class="print-only ptext" id="p-' + key + '"></div>' +
+      '<details class="bank"><summary>عبارات مقترحة</summary><div id="chips-' + key + '">' + chipsHtml(v, key) + '</div></details>';
+  }
+
+  function refreshChips(v, key) {
+    var box = document.getElementById('chips-' + key);
+    if (box) box.innerHTML = chipsHtml(v, key);
+  }
+
+  function renderVisits() {
+    if (S.visitsMissing) {
+      app.innerHTML = tabs('visits') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لتقارير الزيارات بعد.<br>' +
+        'شغّل الملف <code dir="ltr">supabase/visits.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    var options = S.teachers.map(function (t) {
+      return '<option value="' + t.id + '">' + esc(t.name) + (t.subject ? ' — ' + esc(t.subject) : '') + '</option>';
+    }).join('');
+
+    var rows = S.visits.map(function (v) {
+      var t = find(v.teacher_id);
+      return '<button type="button" class="card visit-row" data-openv="' + v.id + '">' +
+        '<span><span class="name">' + esc(t ? t.name : '—') + '</span><br>' +
+        '<span class="meta">' + esc(v.lesson_title || 'بدون عنوان درس') + ' · ' + esc(v.subject || '—') + '</span></span>' +
+        '<span class="meta" style="text-align:end">' + fmtDate(v.visit_date + 'T00:00') + '<br>الزيارة رقم ' + v.visit_number + '</span></button>';
+    }).join('');
+
+    app.innerHTML = tabs('visits') +
+      (S.teachers.length
+        ? '<div class="toolbar"><select id="visit-teacher" aria-label="المعلم" style="flex:1;min-width:180px">' + options + '</select>' +
+          '<button type="button" class="btn primary" data-newvisit>+ تقرير زيارة جديد</button></div>'
+        : '') +
+      (rows || '<div class="card empty">' + (S.teachers.length ? 'لا توجد تقارير زيارات بعد.' : 'أضف معلمًا أولًا من تبويب «المعلمون».') + '</div>');
+  }
+
+  function renderVisit(v) {
+    var t = find(v.teacher_id);
+    var basic = function (label, inner) { return '<div><label class="field">' + label + '</label>' + inner + '</div>'; };
+    var periods = '<option value=""></option>' + PERIODS.map(function (p) {
+      return '<option' + (v.period === p ? ' selected' : '') + '>' + p + '</option>';
+    }).join('');
+
+    app.innerHTML =
+      '<a class="btn link no-print" href="#/visits">→ العودة إلى الزيارات الإشرافية</a>' +
+      '<div class="eval-head">' +
+        '<div><h2>تقرير زيارة إشرافية صفية</h2><div class="sub">نموذج الإشراف الميداني المعتمد</div></div>' +
+        '<div class="no-print"><span class="save-state" id="save-state"></span> ' +
+        '<button type="button" class="btn primary" data-act="print">طباعة</button> ' +
+        '<button type="button" class="btn danger" data-delvisit>حذف التقرير</button></div>' +
+      '</div>' +
+
+      '<div class="card"><h2>أولًا: البيانات الأساسية</h2><div class="grid2" style="margin-top:12px">' +
+        basic('اليوم / التاريخ', '<input type="date" data-vbasic="visit_date" aria-label="التاريخ" value="' + esc(v.visit_date) + '">' +
+          '<div class="day" id="visit-day">' + dayName(v.visit_date) + '</div>') +
+        basic('اسم المعلم', '<input type="text" value="' + esc(t ? t.name : '') + '" readonly aria-label="اسم المعلم">') +
+        basic('المبحث / المادة', '<input type="text" data-vbasic="subject" aria-label="المبحث" value="' + esc(v.subject) + '">') +
+        basic('الصف والشعبة', '<input type="text" data-vbasic="class_section" aria-label="الصف والشعبة" placeholder="مثال: السابع (أ)" value="' + esc(v.class_section) + '">') +
+        basic('الحصة', '<select data-vbasic="period" aria-label="الحصة">' + periods + '</select>') +
+        basic('رقم الزيارة', '<input type="number" min="1" data-vbasic="visit_number" aria-label="رقم الزيارة" value="' + esc(v.visit_number) + '">') +
+        '<div style="grid-column:1/-1"><label class="field">عنوان الدرس</label>' +
+          '<input type="text" data-vbasic="lesson_title" aria-label="عنوان الدرس" value="' + esc(v.lesson_title) + '"></div>' +
+      '</div></div>' +
+
+      '<div class="card"><h2>ثانيًا: مجالات التقييم والملاحظات الصفية</h2>' +
+        '<p class="hint no-print">لكل مجال: اختر من العبارات المقترحة أو اكتب أبرز نقاط القوة والتميز.</p>' +
+        DOMAINS.map(function (d, i) {
+          return '<div class="domain"><h3><span class="n">' + (i + 1) + '</span>' + d.title + '</h3>' +
+            fieldBlock(v, 'd' + i, 'أبرز نقاط القوة والتميز') + '</div>';
+        }).join('') +
+      '</div>' +
+
+      '<div class="card"><h2>الملاحظات ومجالات التطوير والتنمية المهنية المطلوبة</h2>' +
+        fieldBlock(v, 'development', 'الملاحظات ومجالات التطوير') + '</div>' +
+
+      '<div class="card"><h2>التوصيات / الإجراء التطويري</h2>' +
+        fieldBlock(v, 'recommendations', 'التوصيات') + '</div>' +
+
+      '<div class="card no-print"><h2>التوقيعات</h2><div class="grid2" style="margin-top:12px">' +
+        basic('اسم المشرف التربوي', '<input type="text" data-vbasic="supervisor_name" aria-label="اسم المشرف التربوي" value="' + esc(v.supervisor_name) + '">') +
+        basic('اسم مدير/ة المدرسة', '<input type="text" data-vbasic="principal_name" aria-label="اسم مدير المدرسة" value="' + esc(v.principal_name) + '">') +
+      '</div></div>' +
+
+      '<div class="signs print-only">' +
+        '<div>توقيع المعلم (بالعلم والاطلاع)<div class="line">الاسم: ' + esc(t ? t.name : '') + '</div></div>' +
+        '<div>توقيع المشرف التربوي<div class="line">الاسم: <span id="sign-supervisor_name">' + esc(v.supervisor_name) + '</span></div></div>' +
+        '<div>توقيع مدير/ة المدرسة<div class="line">الاسم: <span id="sign-principal_name">' + esc(v.principal_name) + '</span></div></div>' +
+      '</div>';
+  }
+
+  // قبل الطباعة: تُنسخ نصوص الحقول إلى عناصر تُطبع كاملة (مربعات النص تُقصّ عند الطباعة)
+  window.addEventListener('beforeprint', function () {
+    var areas = app.querySelectorAll('[data-vfield]');
+    for (var i = 0; i < areas.length; i++) {
+      var p = document.getElementById('p-' + areas[i].getAttribute('data-vfield'));
+      if (p) p.textContent = areas[i].value;
+    }
+  });
+
+  async function createVisit(teacherId) {
+    var t = find(teacherId);
+    if (!t) return;
+    var mine = S.visits.filter(function (x) { return x.teacher_id === teacherId; });
+    var withPrincipal = S.visits.filter(function (x) { return x.principal_name; })[0];
+    var maxNo = mine.reduce(function (m, x) { return Math.max(m, x.visit_number || 0); }, 0);
+    // تُعبأ البيانات الأساسية تلقائيًا قدر الإمكان
+    var ins = await sb.from('visits').insert({
+      teacher_id: teacherId,
+      visit_date: todayISO(),
+      subject: t.subject || '',
+      class_section: mine.length ? mine[0].class_section : '',
+      visit_number: maxNo + 1,
+      supervisor_name: (S.profile && S.profile.full_name) || '',
+      principal_name: withPrincipal ? withPrincipal.principal_name : ''
+    }).select().single();
+    if (ins.error) return fail(ins.error);
+    var v = ins.data;
+    v.strengths = v.strengths || {};
+    S.visits.unshift(v);
+    go('#/v/' + v.id);
+  }
+
+  document.addEventListener('click', async function (e) {
+    var el;
+    if ((el = e.target.closest('[data-openv]'))) return go('#/v/' + el.getAttribute('data-openv'));
+    if (e.target.closest('[data-newvisit]')) return createVisit(document.getElementById('visit-teacher').value);
+
+    var v = currentVisit();
+    if (!v) return;
+
+    if (e.target.closest('[data-delvisit]')) {
+      if (!confirm('هل تريد حذف هذا التقرير نهائيًا؟')) return;
+      clearTimeout(visitTimer); visitTimer = null;
+      var d = await sb.from('visits').delete().eq('id', v.id);
+      if (d.error) return fail(d.error);
+      S.visits = S.visits.filter(function (x) { return x.id !== v.id; });
+      return go('#/visits');
+    }
+
+    if ((el = e.target.closest('[data-chip]'))) {
+      var key = el.getAttribute('data-chip'), text = el.getAttribute('data-text');
+      var cur = lines(getField(v, key));
+      var at = cur.indexOf(text);
+      if (at > -1) cur.splice(at, 1); else cur.push(text);
+      setField(v, key, cur.join('\n'));
+      document.getElementById('f-' + key).value = getField(v, key);
+      el.classList.toggle('on', at < 0);
+      el.setAttribute('aria-pressed', at < 0);
+      return queueVisit(v);
+    }
+
+    if ((el = e.target.closest('[data-addstmt]'))) return addStatement(v, el.getAttribute('data-addstmt'));
+
+    if ((el = e.target.closest('[data-delstmt]'))) {
+      if (!confirm('هل تريد حذف هذه العبارة من القائمة المقترحة؟ (لن تُحذف من التقارير المحفوظة)')) return;
+      var sid = el.getAttribute('data-delstmt');
+      var r = await sb.from('statements').delete().eq('id', sid);
+      if (r.error) return fail(r.error);
+      S.statements = S.statements.filter(function (x) { return x.id !== sid; });
+      refreshChips(v, el.getAttribute('data-key'));
+    }
+  });
+
+  async function addStatement(v, key) {
+    var input = app.querySelector('[data-newstmt="' + key + '"]');
+    var text = input.value.trim();
+    if (!text) return input.focus();
+    var builtin = key.charAt(0) === 'd' && key.length === 2 ? DOMAINS[Number(key.slice(1))].bank : BANK[key];
+    var known = builtin.indexOf(text) > -1 ||
+      S.statements.some(function (x) { return x.field === key && x.body === text; });
+    if (!known) {
+      var ins = await sb.from('statements').insert({ field: key, body: text }).select().single();
+      if (ins.error) return fail(ins.error);
+      S.statements.push(ins.data);
+    }
+    var cur = lines(getField(v, key));
+    if (cur.indexOf(text) < 0) cur.push(text);
+    setField(v, key, cur.join('\n'));
+    document.getElementById('f-' + key).value = getField(v, key);
+    refreshChips(v, key);
+    queueVisit(v);
+  }
+
+  app.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || !e.target.hasAttribute('data-newstmt')) return;
+    e.preventDefault();
+    var v = currentVisit();
+    if (v) addStatement(v, e.target.getAttribute('data-newstmt'));
+  });
+
+  app.addEventListener('input', function (e) {
+    var v = currentVisit(), el = e.target;
+    if (!v) return;
+    if (el.hasAttribute('data-vfield')) {
+      var key = el.getAttribute('data-vfield');
+      setField(v, key, el.value);
+      refreshChips(v, key);
+      queueVisit(v);
+    } else if (el.hasAttribute('data-vbasic')) {
+      var col = el.getAttribute('data-vbasic');
+      if (col === 'visit_date' && !el.value) return;
+      v[col] = col === 'visit_number' ? Math.max(1, parseInt(el.value, 10) || 1) : el.value;
+      if (col === 'visit_date') document.getElementById('visit-day').textContent = dayName(v.visit_date);
+      var sign = document.getElementById('sign-' + col);
+      if (sign) sign.textContent = el.value;
+      queueVisit(v);
     }
   });
 
