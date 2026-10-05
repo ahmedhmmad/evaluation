@@ -287,6 +287,17 @@
   #print-sheet .ps-signs div:nth-child(2) { text-align: center; }
   #print-sheet .ps-signs div:nth-child(3) { text-align: end; }
   #print-sheet .ps-signs span { display: block; margin-top: .5em; }
+  #print-sheet .ps-signs.two div:nth-child(2) { text-align: end; }
+  #print-sheet .ps-meta { display: flex; justify-content: space-between; gap: 1em; margin: .6em 0; padding: 0 .45em; font-weight: bold; }
+  #print-sheet .ps-eval th { font-weight: bold; text-align: center; padding: .25em .1em; font-size: .85em; line-height: 1.2; }
+  #print-sheet .ps-eval th b { display: block; font-size: 1.25em; }
+  #print-sheet .ps-eval td { padding: .12em .45em; line-height: 1.25; }
+  #print-sheet .ps-eval td.c { text-align: center; }
+  #print-sheet .ps-eval td.m { text-align: center; font-weight: bold; font-size: 1.15em; padding: 0; }
+  #print-sheet .ps-sum { margin-top: .6em; }
+  #print-sheet .ps-sum td { text-align: center; height: 2em; }
+  #print-sheet .ps-sum b { font-size: 1.1em; }
+  #print-sheet .ps-box { margin-top: .6em; padding: 0 .45em; }
 
   @media (max-width: 640px) {
     .grid2 { grid-template-columns: 1fr; }
@@ -312,8 +323,8 @@
     .card { border: 0; padding: 0; }
     .print-only { display: block; }
     textarea, details.bank { display: none !important; }
-    body.print-visit > *:not(#print-sheet) { display: none !important; }
-    body.print-visit #print-sheet { position: static; visibility: visible; }
+    body.print-sheet > *:not(#print-sheet) { display: none !important; }
+    body.print-sheet #print-sheet { position: static; visibility: visible; }
     input, select { border: 0 !important; padding: 0 !important; background: none !important; appearance: none; }
     .card h2 { border-bottom: 1px solid #000; padding-bottom: 4px; margin-top: 14px; }
     .domain { break-inside: avoid; padding: 8px 0; }
@@ -1320,7 +1331,12 @@
         '<div>توقيع مدير/ة المدرسة<span>الاسم: ' + esc(v.principal_name || dots) + '</span></div>' +
       '</div>';
 
-    // المساحة المتاحة في صفحة A4 بعد الهوامش، مع هامش أمان صغير
+    fitSheet();
+  }
+
+  // يُصغَّر الخط إلى أن تتسع الورقة في صفحة A4 واحدة
+  function fitSheet() {
+    // المساحة المتاحة بعد الهوامش، مع هامش أمان صغير
     var maxPx = (297 - 2 * 12.7 - 4) * 96 / 25.4;
     var size = 12;
     sheet.style.fontSize = size + 'pt';
@@ -1330,15 +1346,65 @@
     }
   }
 
+  // ورقة «نموذج تقييم معلم»: جدول بالبنود وأعمدة الدرجات، ثم المجموع والتوقيعات.
+  // o: معلم (للمشرف) أو نتيجة منشورة (للمشاهد، وقد تكون بعض حقولها محجوبة)
+  function buildEvalSheet(o) {
+    var dots = '..............................';
+    var cols = SCALE.slice(); // 5 ← 1
+    var sum = o.total != null ? o.total : (o.ratings ? total(o) : null);
+    var pct = sum != null ? Math.round(sum / MAX * 100) : null;
+    var principal = S.visits.filter(function (x) { return x.principal_name; })[0];
+    var supervisor = isStaff() && S.profile ? S.profile.full_name : '';
+    var block = function (title, text) {
+      return text ? '<div class="ps-box"><b>' + title + ':</b><div class="ps-text">' + esc(text) + '</div></div>' : '';
+    };
+
+    sheet.innerHTML =
+      '<div class="ps-title">نموذج تقييم معلم</div>' +
+      '<div class="ps-meta"><span>اسم المعلم: ' + esc(o.name) + '</span><span>التخصص: ' + esc(o.subject || dots) + '</span>' +
+        (o.published_at ? '<span>التاريخ: ' + fmtDate(o.published_at) + '</span>' : '') + '</div>' +
+      (o.ratings
+        ? '<table class="ps-eval"><colgroup><col style="width:5%"><col style="width:57.5%">' +
+            cols.map(function () { return '<col style="width:7.5%">'; }).join('') + '</colgroup>' +
+          '<tr><th rowspan="2">م</th><th rowspan="2" style="font-size:1em">التقييم الأدائي والكفايات الشخصية</th>' +
+            '<th colspan="' + cols.length + '" style="font-size:1em">التقييم</th></tr>' +
+          '<tr>' + cols.map(function (c) { return '<th><b>' + c.v + '</b>' + c.label + '</th>'; }).join('') + '</tr>' +
+          CRITERIA.map(function (c, i) {
+            return '<tr><td class="c">' + (i + 1) + '</td><td>' + c + '</td>' +
+              cols.map(function (k) { return '<td class="m">' + (o.ratings[i] === k.v ? '✓' : '') + '</td>'; }).join('') + '</tr>';
+          }).join('') + '</table>'
+        : '') +
+      (sum != null
+        ? '<table class="ps-sum"><tr><td>المجموع: <b>' + sum + ' / ' + MAX + '</b></td>' +
+          '<td>النسبة: <b>' + pct + '%</b></td><td>التقدير: <b>' + grade(pct) + '</b></td></tr></table>'
+        : '') +
+      block('ملاحظات المشرف', o.notes) +
+      block('ملاحظات الاعتماد', o.approver_notes) +
+      '<div class="ps-signs two">' +
+        '<div>توقيع المشرف التربوي<span>الاسم: ' + esc(supervisor || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
+        '<div>توقيع مدير/ة المدرسة<span>الاسم: ' + esc((principal && principal.principal_name) || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
+      '</div>';
+
+    fitSheet();
+  }
+
+  function currentResult() {
+    var m = location.hash.match(/^#\/r\/(.+)$/);
+    if (!m || !S.results) return null;
+    for (var i = 0; i < S.results.length; i++) if (S.results[i].id === m[1]) return S.results[i];
+    return null;
+  }
+
   window.addEventListener('beforeprint', function () {
-    var v = currentVisit();
-    if (!v) return;
-    buildVisitSheet(v);
-    document.body.classList.add('print-visit');
+    var v = currentVisit(), o = currentTeacher() || currentResult();
+    if (v) buildVisitSheet(v);
+    else if (o) buildEvalSheet(o);
+    else return;
+    document.body.classList.add('print-sheet');
   });
 
   window.addEventListener('afterprint', function () {
-    document.body.classList.remove('print-visit');
+    document.body.classList.remove('print-sheet');
   });
 
   async function createVisit(teacherId) {
