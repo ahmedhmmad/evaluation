@@ -338,6 +338,17 @@
 
   table.grid td .mnote { display: block; margin-top: 6px; width: 150px; padding: 6px 8px; }
 
+  /* كشف الطلاب المطبوع */
+  #print-sheet.ls { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; }
+  #print-sheet .ls-school { text-align: center; font-size: 1.3em; font-weight: 700; }
+  #print-sheet .ls-title { text-align: center; font-size: 1.15em; font-weight: 700; margin-top: .2em; }
+  #print-sheet .ls-sub { display: flex; justify-content: space-between; margin: .6em 0 .5em; }
+  #print-sheet.ls table { table-layout: auto; }
+  #print-sheet.ls th { font-weight: 700; background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-sheet.ls td, #print-sheet.ls th { padding: .25em .4em; }
+  #print-sheet.ls tr { break-inside: avoid; }
+  #print-sheet.ls thead { display: table-header-group; }
+
   /* إيصال السداد المطبوع */
   #print-sheet.rc { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; font-size: 13pt; line-height: 1.6; }
   #print-sheet .rc-box { border: 2px solid #000; border-radius: 3mm; padding: 8mm 10mm; }
@@ -585,7 +596,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false };
-  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, stFlag: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1156,12 +1167,65 @@
     }
   }
 
-  function studentsTableHtml() {
-    var q = norm(ui.stSearch), cls = ui.stClass;
-    var shown = S.students.filter(function (x) {
+  // معايير إضافية لتصفية الطلاب (وللطباعة). extra: عمود إضافي يظهر في الكشف المطبوع
+  var ST_FLAGS = {
+    orphan: { label: 'الأيتام', test: function (x) { return x.is_orphan === true; }, extra: ['يتيم', function (x) { return x.orphan_of; }] },
+    health: { label: 'لديهم حالة صحية', test: function (x) { return x.has_health_condition === true; } },
+    meds: { label: 'يتناولون أدوية بانتظام', test: function (x) { return x.takes_medication === true; } },
+    needs: { label: 'احتياجات تعليمية خاصة أو صعوبات تعلم', test: function (x) { return x.has_special_needs === true; } },
+    quran: { label: 'يحفظون من القرآن', test: function (x) { return x.memorizes_quran === true; }, extra: ['عدد الأجزاء', function (x) { return x.quran_parts; }] },
+    nocert: { label: 'بدون شهادة العام السابق', test: function (x) { return x.has_prev_certificate === false; } },
+    transport: { label: 'مشتركون في المواصلات', test: function (x, groupOf) { return !!groupOf[x.id]; },
+      extra: ['نقطة التجمع', function (x, groupOf) { var g = findGroup(groupOf[x.id]); return g ? g.assembly_point : ''; }] },
+    notransport: { label: 'غير مشتركين في المواصلات', test: function (x, groupOf) { return !groupOf[x.id]; } }
+  };
+
+  function transportGroupOf() {
+    var map = {};
+    S.tMembers.forEach(function (m) { map[m.student_id] = m.group_id; });
+    return map;
+  }
+
+  // الطلاب المطابقون للبحث والصف والمعيار المختار
+  function filteredStudents() {
+    var q = norm(ui.stSearch), cls = ui.stClass, flag = ST_FLAGS[ui.stFlag], groupOf = flag ? transportGroupOf() : null;
+    return S.students.filter(function (x) {
       if (cls === '-' ? x.class_name : cls && x.class_name !== cls) return false;
+      if (flag && !flag.test(x, groupOf)) return false;
       return !q || norm(x.full_name).indexOf(q) > -1 || x.national_id.indexOf(latinDigits(ui.stSearch)) > -1;
     });
+  }
+
+  // كشف مطبوع بكل الطلاب المطابقين (قد يمتد لأكثر من صفحة، ويتكرر رأس الجدول)
+  function buildStudentsSheet() {
+    var list = filteredStudents(), flag = ST_FLAGS[ui.stFlag], groupOf = transportGroupOf();
+    var school = S.settings && S.settings.school_name;
+    var showClass = !ui.stClass || ui.stClass === '-';
+    var crit = [];
+    if (ui.stClass) crit.push(ui.stClass === '-' ? 'بدون صف' : 'الصف: ' + ui.stClass);
+    if (flag) crit.push(flag.label);
+    if (ui.stSearch.trim()) crit.push('بحث: ' + ui.stSearch.trim());
+    var d = todayISO().split('-');
+
+    sheet.className = 'ls';
+    sheet.style.fontSize = '';
+    sheet.innerHTML =
+      (school ? '<div class="ls-school">' + esc(school) + '</div>' : '') +
+      '<div class="ls-title">كشف الطلاب' + (crit.length ? ' — ' + esc(crit.join(' · ')) : '') + '</div>' +
+      '<div class="ls-sub"><span>عدد الطلاب: ' + list.length + '</span><span>التاريخ: ' + d[2] + '/' + d[1] + '/' + d[0] + '</span></div>' +
+      '<table><thead><tr><th>م</th><th>اسم الطالب</th><th>رقم الهوية</th>' + (showClass ? '<th>الصف</th>' : '') +
+        '<th>الهاتف</th><th>ولي الأمر</th>' + (flag && flag.extra ? '<th>' + flag.extra[0] + '</th>' : '') + '<th>ملاحظات</th></tr></thead><tbody>' +
+      list.map(function (x, i) {
+        var extra = flag && flag.extra ? flag.extra[1](x, groupOf) : null;
+        return '<tr><td style="text-align:center">' + (i + 1) + '</td><td>' + esc(x.full_name) + '</td><td>' + esc(x.national_id) + '</td>' +
+          (showClass ? '<td>' + esc(x.class_name || '—') + '</td>' : '') +
+          '<td>' + esc(x.phone || x.whatsapp || '') + '</td><td>' + esc(x.guardian_name) + '</td>' +
+          (flag && flag.extra ? '<td>' + esc(extra == null ? '' : extra) + '</td>' : '') + '<td style="width:18%"></td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  function studentsTableHtml() {
+    var shown = filteredStudents();
     var LIMIT = 300;
     var rows = shown.slice(0, LIMIT).map(function (x) {
       return '<tr><td><b>' + esc(x.full_name) + '</b></td><td dir="ltr" style="text-align:right">' + esc(x.national_id) + '</td>' +
@@ -1232,6 +1296,10 @@
         '</div>') +
       '<div class="card"><div class="toolbar">' +
         '<input type="search" id="st-search" placeholder="ابحث بالاسم أو رقم الهوية" aria-label="بحث" value="' + esc(ui.stSearch) + '">' + classFilter +
+        '<select id="st-flag" aria-label="معيار إضافي"><option value="">كل الطلاب</option>' + Object.keys(ST_FLAGS).map(function (k) {
+          return '<option value="' + k + '"' + (ui.stFlag === k ? ' selected' : '') + '>' + ST_FLAGS[k].label + '</option>';
+        }).join('') + '</select>' +
+        '<button type="button" class="btn" data-stprint>طباعة الكشف</button>' +
       '</div><div id="st-table">' + studentsTableHtml() + '</div></div>';
     syncStudentDeps();
   }
@@ -1472,6 +1540,9 @@
       S.students = S.students.filter(function (x) { return x.id !== st.id; });
       S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
       render();
+    } else if (e.target.closest('[data-stprint]')) {
+      if (!filteredStudents().length) return toast('لا يوجد طلاب مطابقون للطباعة.', true);
+      window.print();
     } else if (e.target.closest('[data-impopen]')) {
       document.getElementById('imp-file').click();
     } else if (e.target.closest('[data-imptemplate]')) {
@@ -1491,8 +1562,8 @@
     var el = e.target;
     if (el.id === 'imp-file') {
       if (el.files[0]) readImportFile(el.files[0]);
-    } else if (el.id === 'st-class') {
-      ui.stClass = el.value;
+    } else if (el.id === 'st-class' || el.id === 'st-flag') {
+      if (el.id === 'st-class') ui.stClass = el.value; else ui.stFlag = el.value;
       document.getElementById('st-table').innerHTML = studentsTableHtml();
     } else if (el.hasAttribute('data-stclass')) {
       var st = findStudent(el.getAttribute('data-stclass'));
@@ -2521,6 +2592,7 @@
   window.addEventListener('beforeprint', function () {
     var v = currentVisit(), o = currentTeacher() || currentResult();
     if (pendingReceipt) buildReceiptSheet(pendingReceipt);
+    else if (location.hash === '#/students' && isAdmin() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
     else return;
