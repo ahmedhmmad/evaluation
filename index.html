@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>تقييم المعلمين</title>
+<title>إدارة المدرسة</title>
 <style>
   :root {
     --bg: #f4f6f8;
@@ -51,6 +51,13 @@
   .userbar .btn:hover { background: rgba(255,255,255,.15); }
   main { padding: 20px 16px 60px; }
 
+  nav.sections { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  nav.sections a {
+    padding: 8px 20px; border-radius: 999px; text-decoration: none; font-weight: 700;
+    color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  }
+  nav.sections a:hover { border-color: var(--primary); }
+  nav.sections a.on { background: var(--primary); border-color: var(--primary); color: #fff; }
   nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
   nav.tabs a {
     padding: 8px 14px;
@@ -313,6 +320,22 @@
   #print-sheet .pe-signs b { display: block; }
   #print-sheet .pe-signs span { display: block; margin-top: .55em; color: #475569; }
 
+  /* Transport */
+  .tgroup { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
+  .tgroup:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(15,118,110,.12); }
+  .tgroup .name { font-weight: 700; font-size: 1.05rem; }
+  .tgroup .meta { color: var(--muted); font-size: .9rem; }
+  .tgroup .money { display: flex; justify-content: space-between; font-size: .9rem; margin-top: 4px; }
+  .tgroup .progress { display: block; margin: 2px 0 0; }
+  table.grid input[type=number] { width: 90px; padding: 6px 8px; }
+  table.grid tfoot td { font-weight: 700; background: #f8fafc; }
+  .badge.paid { background: var(--green-soft); color: var(--green); }
+  .badge.part { background: var(--amber-soft); color: var(--amber); }
+  .badge.unpaid { background: var(--red-soft); color: var(--red); }
+  .cand { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .cand:last-child { border-bottom: 0; }
+  .cand .meta { color: var(--muted); font-size: .85rem; }
+
   /* Students */
   .yn { display: flex; gap: 20px; }
   .yn label.check { padding: 2px 0; }
@@ -340,7 +363,7 @@
   @page { size: A4; margin: 12.7mm; }
   @media print {
     body { background: #fff; }
-    header.app, .no-print, .stepper, nav.tabs, #toast { display: none !important; }
+    header.app, .no-print, .stepper, nav.tabs, nav.sections, #toast { display: none !important; }
     main { padding: 0; max-width: none; }
     .card { border: 0; padding: 0; }
     .print-only { display: block; }
@@ -357,8 +380,8 @@
 <header class="app">
   <div class="inner">
     <div>
-      <h1>تقييم المعلمين</h1>
-      <p>نموذج التقييم الأدائي والكفايات الشخصية</p>
+      <h1>إدارة المدرسة</h1>
+      <p>شؤون المعلمين والطلاب</p>
     </div>
     <div class="userbar" id="userbar"></div>
   </div>
@@ -547,8 +570,9 @@
 
   var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false,
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
-            students: [], studentsMissing: false };
-  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+            students: [], studentsMissing: false,
+            tGroups: [], tMembers: [], tPay: {}, transportMissing: false };
+  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -645,6 +669,7 @@
     S.teachers = []; S.users = []; S.settings = null; S.results = null;
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false;
+    S.tGroups = []; S.tMembers = []; S.tPay = {}; S.transportMissing = false;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -668,6 +693,7 @@
         S.accountsMissing = !!ps.error;
         S.defaultPw = (ps.data && ps.data.default_password) || '';
         await loadStudents();
+        await loadTransport();
       }
       S.visitsMissing = !!(vis[0].error || vis[1].error);
       S.visits = vis[0].data || [];
@@ -677,18 +703,46 @@
     render();
   }
 
-  // تُحمَّل على دفعات لأن قاعدة البيانات تعيد ألف صف كحد أقصى في الطلب الواحد
-  async function loadStudents() {
+  // قاعدة البيانات تعيد ألف صف كحد أقصى في الطلب الواحد، فتُجلب الجداول الكبيرة على دفعات.
+  // make: دالة تبني الاستعلام من جديد لكل دفعة. تعيد null عند الخطأ (الجدول غير موجود بعد)
+  async function fetchAll(make) {
     var all = [], page = 1000;
     for (var from = 0; ; from += page) {
-      var r = await sb.from('students').select('*').order('full_name').range(from, from + page - 1);
-      // الجدول غير موجود إلى أن يُشغَّل الملف supabase/students.sql
-      if (r.error) { S.studentsMissing = true; S.students = []; return; }
+      var r = await make().range(from, from + page - 1);
+      if (r.error) return null;
       all = all.concat(r.data || []);
-      if (!r.data || r.data.length < page) break;
+      if (!r.data || r.data.length < page) return all;
     }
-    S.studentsMissing = false;
-    S.students = all;
+  }
+
+  async function loadStudents() {
+    // الجدول غير موجود إلى أن يُشغَّل الملف supabase/students.sql
+    var all = await fetchAll(function () { return sb.from('students').select('*').order('full_name'); });
+    S.studentsMissing = !all;
+    S.students = all || [];
+  }
+
+  async function loadTransport() {
+    // الجداول غير موجودة إلى أن يُشغَّل الملف supabase/transport.sql
+    var g = await sb.from('transport_groups').select('*').order('assembly_point');
+    var m = g.error ? null : await fetchAll(function () { return sb.from('transport_members').select('*').order('joined_at'); });
+    S.transportMissing = !m;
+    S.tGroups = g.data || [];
+    S.tMembers = m || [];
+    S.tPay = {};
+  }
+
+  // مدفوعات الشهر تُجلب عند أول عرض له ثم تُحفظ: { studentId: amount }
+  var loadingPay = {};
+  async function loadPayments(month) {
+    if (loadingPay[month]) return;
+    loadingPay[month] = true;
+    var rows = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('month', month).order('student_id'); });
+    loadingPay[month] = false;
+    var map = {};
+    (rows || []).forEach(function (p) { map[p.student_id] = Number(p.amount) || 0; });
+    S.tPay[month] = map;
+    render();
   }
 
   var loadingResults = false;
@@ -776,13 +830,31 @@
       : '';
   }
 
+  // التبويبات مقسّمة إلى أقسام: المعلمون، الطلاب، الإدارة. لكل قسم تبويباته
   function tabs(active) {
     if (!isStaff()) return '';
-    var items = [['#/', 'teachers', 'المعلمون'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']];
-    if (isAdmin()) items.push(['#/staff', 'staff', 'بيانات المعلمين'], ['#/students', 'students', 'الطلاب'], ['#/admin', 'admin', 'الإدارة']);
-    return '<nav class="tabs no-print">' + items.map(function (it) {
-      return '<a href="' + it[0] + '"' + (it[1] === active ? ' class="on" aria-current="page"' : '') + '>' + it[2] + '</a>';
-    }).join('') + '</nav>';
+    var sections = [{ key: 'teachers', label: 'المعلمون', href: '#/', items: [
+      ['#/', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']
+    ] }];
+    if (isAdmin()) {
+      sections[0].items.push(['#/staff', 'staff', 'بيانات المعلمين']);
+      sections.push(
+        { key: 'students', label: 'الطلاب', href: '#/students', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/transport', 'transport', 'المواصلات']] },
+        { key: 'admin', label: 'الإدارة', href: '#/admin', items: [['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
+      );
+    }
+    var current = sections.filter(function (sec) {
+      return sec.items.some(function (it) { return it[1] === active; });
+    })[0] || sections[0];
+    var link = function (href, on, label) {
+      return '<a href="' + href + '"' + (on ? ' class="on" aria-current="page"' : '') + '>' + label + '</a>';
+    };
+    return (sections.length > 1
+        ? '<nav class="sections no-print" aria-label="الأقسام">' + sections.map(function (sec) { return link(sec.href, sec === current, sec.label); }).join('') + '</nav>'
+        : '') +
+      (current.items.length > 1
+        ? '<nav class="tabs no-print">' + current.items.map(function (it) { return link(it[0], it[1] === active, it[2]); }).join('') + '</nav>'
+        : '');
   }
 
   /* ---------- الدخول ---------- */
@@ -1384,6 +1456,7 @@
       var d = await sb.from('students').delete().eq('id', st.id);
       if (d.error) return fail(d.error);
       S.students = S.students.filter(function (x) { return x.id !== st.id; });
+      S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
       render();
     } else if (e.target.closest('[data-impopen]')) {
       document.getElementById('imp-file').click();
@@ -1422,6 +1495,265 @@
     if (e.target.id !== 'st-search' || !isAdmin()) return;
     ui.stSearch = e.target.value;
     document.getElementById('st-table').innerHTML = studentsTableHtml();
+  });
+
+  /* ---------- مواصلات الطلاب (مدير النظام) ---------- */
+
+  function findGroup(id) {
+    for (var i = 0; i < S.tGroups.length; i++) if (S.tGroups[i].id === id) return S.tGroups[i];
+    return null;
+  }
+
+  function currentGroup() {
+    var m = location.hash.match(/^#\/transport\/(.+)$/);
+    return m && isAdmin() ? findGroup(m[1]) : null;
+  }
+
+  function membersOf(gid) {
+    return S.tMembers.filter(function (m) { return m.group_id === gid && findStudent(m.student_id); });
+  }
+
+  // حصة الطالب: المحددة له، وإلا اشتراك المجموعة
+  function shareOf(m, g) {
+    return m.share != null && m.share !== '' ? Number(m.share) : Number(g.fee) || 0;
+  }
+
+  function money(x) {
+    return (Math.round(x * 100) / 100).toLocaleString('en');
+  }
+
+  function thisMonth() {
+    return todayISO().slice(0, 7);
+  }
+
+  function monthLabel(m) {
+    return new Date(m + '-01T00:00').toLocaleDateString('ar', { month: 'long', year: 'numeric' });
+  }
+
+  // المطلوب والمحصَّل لمجموعة في الشهر المعروض
+  function groupTotals(g) {
+    var pay = S.tPay[ui.tMonth] || {}, due = 0, paid = 0, n = 0;
+    membersOf(g.id).forEach(function (m) { n++; due += shareOf(m, g); paid += pay[m.student_id] || 0; });
+    return { n: n, due: due, paid: paid };
+  }
+
+  function groupFormHtml(g) {
+    var val = function (k) { return esc(g && g[k] != null ? g[k] : ''); };
+    var f = function (id, label, inner, wide) {
+      return '<div' + (wide ? ' style="grid-column:1/-1"' : '') + '><label class="field" for="' + id + '">' + label + '</label>' + inner + '</div>';
+    };
+    return '<form class="card" id="group-form"><h2>' + (g ? 'تعديل المجموعة' : 'مجموعة مواصلات جديدة') + '</h2>' +
+      '<div class="grid2" style="margin-top:12px">' +
+        f('gf-point', 'نقطة التجمع <span class="req">*</span>', '<input type="text" id="gf-point" required placeholder="مثال: دوار المدينة" value="' + val('assembly_point') + '">') +
+        f('gf-time', 'وقت التجمع', '<input type="time" id="gf-time" value="' + val('pickup_time') + '">') +
+        f('gf-sup', 'المشرف المرافق', '<input type="text" id="gf-sup" list="gf-sup-list" value="' + val('supervisor_name') + '">' +
+          '<datalist id="gf-sup-list">' + S.teachers.map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist>') +
+        f('gf-phone', 'هاتف المشرف', '<input type="text" id="gf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('supervisor_phone') + '">') +
+        f('gf-fee', 'اشتراك الطالب الشهري', '<input type="number" id="gf-fee" min="0" step="any" value="' + val('fee') + '">' +
+          '<div class="day">حصة كل طالب من أجرة المواصلات شهريًا؛ يمكن تعديلها لطالب بعينه داخل المجموعة.</div>') +
+        f('gf-notes', 'ملاحظات', '<input type="text" id="gf-notes" value="' + val('notes') + '">') +
+      '</div><div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
+      '<button type="button" class="btn" data-gedit="">إلغاء</button></div></form>';
+  }
+
+  // مرشحون للإضافة: طلاب ليسوا في هذه المجموعة، بالبحث في الاسم أو الهوية أو العنوان أو الصف
+  function candidatesHtml(g) {
+    var q = norm(ui.tSearch), inGroup = {};
+    S.tMembers.forEach(function (m) { inGroup[m.student_id] = m.group_id; });
+    var list = S.students.filter(function (x) {
+      if (inGroup[x.id] === g.id) return false;
+      return !q || norm(x.full_name + ' ' + x.address + ' ' + x.class_name).indexOf(q) > -1 || x.national_id.indexOf(latinDigits(ui.tSearch)) > -1;
+    });
+    // غير الملتحقين بأي مجموعة أولًا
+    list.sort(function (a, b) { return (inGroup[a.id] ? 1 : 0) - (inGroup[b.id] ? 1 : 0); });
+    var LIMIT = 30;
+    return (list.slice(0, LIMIT).map(function (x) {
+      var other = inGroup[x.id] && findGroup(inGroup[x.id]);
+      return '<div class="cand"><span><b>' + esc(x.full_name) + '</b><br><span class="meta">' + esc(x.class_name || 'بدون صف') +
+        (x.address ? ' · ' + esc(x.address) : '') + (other ? ' · في مجموعة «' + esc(other.assembly_point) + '»' : '') + '</span></span>' +
+        '<button type="button" class="btn" data-madd="' + x.id + '">' + (other ? 'نقل إلى هنا' : 'إضافة') + '</button></div>';
+    }).join('') || '<div class="empty">' + (S.students.length ? 'لا يوجد طلاب مطابقون.' : 'سجّل الطلاب أولًا من تبويب «تسجيل الطلاب».') + '</div>') +
+      (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ اكتب في البحث لتضييق القائمة.</p>' : '');
+  }
+
+  function membersTableHtml(g) {
+    var pay = S.tPay[ui.tMonth] || {}, members = membersOf(g.id), due = 0, paid = 0;
+    members.sort(function (a, b) { return findStudent(a.student_id).full_name.localeCompare(findStudent(b.student_id).full_name, 'ar'); });
+    var rows = members.map(function (m, i) {
+      var x = findStudent(m.student_id), sh = shareOf(m, g), p = pay[x.id] || 0;
+      due += sh; paid += p;
+      var badge = sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
+        '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
+        '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + (Number(g.fee) || 0) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
+        '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (p || '') + '"></td>' +
+        '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
+        '<td class="no-print" style="white-space:nowrap">' + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
+    }).join('');
+    return rows
+      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة</th><th>المدفوع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
+        '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + money(due) + '</td><td>' + money(paid) + '</td>' +
+        '<td colspan="2">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>'
+      : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
+  }
+
+  function renderTransport() {
+    if (S.studentsMissing || S.transportMissing) {
+      app.innerHTML = tabs('transport') + '<div class="card empty">لم تُجهَّز قاعدة البيانات للمواصلات بعد.<br>' +
+        'شغّل الملف <code dir="ltr">supabase/' + (S.studentsMissing ? 'students.sql ثم transport.sql' : 'transport.sql') + '</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    if (!ui.tMonth) ui.tMonth = thisMonth();
+    if (!S.tPay[ui.tMonth]) {
+      app.innerHTML = tabs('transport') + '<div class="card empty">جارٍ التحميل…</div>';
+      loadPayments(ui.tMonth);
+      return;
+    }
+    var monthPick = '<label class="field" for="t-month" style="margin:0">الشهر</label>' +
+      '<input type="month" id="t-month" value="' + ui.tMonth + '" style="width:auto;border:1px solid var(--line);border-radius:8px;padding:8px 12px">';
+    var g = currentGroup();
+
+    if (g) {
+      var editing = ui.editGroup === g.id, tot = groupTotals(g);
+      app.innerHTML = tabs('transport') +
+        '<a class="btn link no-print" href="#/transport">→ العودة إلى مجموعات المواصلات</a>' +
+        '<div class="eval-head"><div><h2>' + esc(g.assembly_point) + '</h2><div class="sub">' +
+          'المشرف: ' + esc(g.supervisor_name || '—') + (g.supervisor_phone ? ' · <span dir="ltr">' + esc(g.supervisor_phone) + '</span>' : '') +
+          (g.pickup_time ? ' · وقت التجمع: ' + esc(g.pickup_time) : '') + (g.notes ? '<br>' + esc(g.notes) : '') + '</div></div>' +
+          '<div class="no-print"><button type="button" class="btn" data-act="print">طباعة</button> ' +
+          '<button type="button" class="btn" data-gedit="' + g.id + '">تعديل</button> ' +
+          '<button type="button" class="btn danger" data-gdel="' + g.id + '">حذف المجموعة</button></div></div>' +
+        (editing ? groupFormHtml(g) : '') +
+        '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الطلاب (' + tot.n + ') — ' + monthLabel(ui.tMonth) + '</h2>' +
+          '<span class="no-print" style="display:flex;gap:8px;align-items:center">' + monthPick + '</span></div>' +
+          '<div id="t-members">' + membersTableHtml(g) + '</div></div>' +
+        '<div class="card no-print"><h2>إضافة طلاب إلى المجموعة</h2>' +
+          '<input type="search" id="t-search" placeholder="ابحث بالاسم أو رقم الهوية أو العنوان أو الصف" aria-label="بحث عن طالب" style="margin:8px 0" value="' + esc(ui.tSearch) + '">' +
+          '<div id="t-cands">' + candidatesHtml(g) + '</div></div>';
+      return;
+    }
+
+    var all = { n: 0, due: 0, paid: 0 };
+    var cards = S.tGroups.map(function (x) {
+      var t = groupTotals(x);
+      all.n += t.n; all.due += t.due; all.paid += t.paid;
+      return '<a class="card tgroup" href="#/transport/' + x.id + '">' +
+        '<span class="name">' + esc(x.assembly_point) + '</span>' +
+        '<span class="meta">المشرف: ' + esc(x.supervisor_name || '—') + (x.pickup_time ? ' · ' + esc(x.pickup_time) : '') + '</span>' +
+        '<span class="meta">عدد الطلاب: ' + t.n + ' · الاشتراك ' + money(Number(x.fee) || 0) + '</span>' +
+        '<span class="money"><span>المحصَّل: <b>' + money(t.paid) + '</b></span><span>المطلوب: ' + money(t.due) + '</span></span>' +
+        '<span class="progress"><span style="display:block;height:100%;background:var(--primary);width:' + (t.due ? Math.min(100, t.paid / t.due * 100) : 0) + '%"></span></span></a>';
+    }).join('');
+
+    app.innerHTML = tabs('transport') +
+      (ui.editGroup === 'new' ? groupFormHtml(null) :
+        '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-gedit="new">+ مجموعة جديدة</button>' +
+        '<span style="flex:1"></span>' + monthPick + '</div>') +
+      (cards
+        ? '<p class="st-count">' + monthLabel(ui.tMonth) + ' — المجموعات: ' + S.tGroups.length + ' · الطلاب: ' + all.n + ' · المحصَّل ' + money(all.paid) + ' من ' + money(all.due) + '</p>' +
+          '<div class="teachers">' + cards + '</div>'
+        : '<div class="card empty">لا توجد مجموعات مواصلات بعد. أنشئ مجموعة لكل نقطة تجمع.</div>');
+  }
+
+  async function saveGroupForm() {
+    var g = ui.editGroup !== 'new' ? findGroup(ui.editGroup) : null;
+    var v = function (id) { return document.getElementById(id).value.trim(); };
+    var data = {
+      assembly_point: v('gf-point'), pickup_time: v('gf-time'), supervisor_name: v('gf-sup'),
+      supervisor_phone: latinDigits(v('gf-phone')), fee: Number(v('gf-fee')) || 0, notes: v('gf-notes')
+    };
+    if (g) {
+      var up = await sb.from('transport_groups').update(data).eq('id', g.id);
+      if (up.error) return fail(up.error);
+      Object.assign(g, data);
+      ui.editGroup = null;
+      render();
+    } else {
+      var ins = await sb.from('transport_groups').insert(data).select().single();
+      if (ins.error) return fail(ins.error);
+      S.tGroups.push(ins.data);
+      ui.editGroup = null;
+      go('#/transport/' + ins.data.id);
+    }
+    toast('تم الحفظ');
+  }
+
+  async function setPayment(g, studentId, amount) {
+    amount = Math.max(0, Number(amount) || 0);
+    var r = await sb.from('transport_payments').upsert(
+      { student_id: studentId, month: ui.tMonth, amount: amount, updated_at: new Date().toISOString() },
+      { onConflict: 'student_id,month' });
+    if (r.error) return fail(r.error);
+    S.tPay[ui.tMonth][studentId] = amount;
+    document.getElementById('t-members').innerHTML = membersTableHtml(g);
+    toast('تم الحفظ');
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
+    var el, g = currentGroup(), r;
+    if ((el = e.target.closest('[data-gedit]'))) {
+      ui.editGroup = el.getAttribute('data-gedit') || null;
+      render();
+      var first = document.getElementById('gf-point');
+      if (first) { first.focus(); first.scrollIntoView({ block: 'center' }); }
+    } else if ((el = e.target.closest('[data-gdel]'))) {
+      if (!confirm('هل تريد حذف مجموعة «' + g.assembly_point + '»؟ يُزال طلابها من المواصلات وتبقى مدفوعاتهم محفوظة.')) return;
+      r = await sb.from('transport_groups').delete().eq('id', g.id);
+      if (r.error) return fail(r.error);
+      S.tGroups = S.tGroups.filter(function (x) { return x.id !== g.id; });
+      S.tMembers = S.tMembers.filter(function (m) { return m.group_id !== g.id; });
+      go('#/transport');
+    } else if (g && (el = e.target.closest('[data-madd]'))) {
+      var sid = el.getAttribute('data-madd');
+      // الطالب في مجموعة واحدة: إن كان في غيرها يُنقل إلى هذه
+      r = await sb.from('transport_members').upsert({ student_id: sid, group_id: g.id, share: null }, { onConflict: 'student_id' });
+      if (r.error) return fail(r.error);
+      S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== sid; });
+      S.tMembers.push({ student_id: sid, group_id: g.id, share: null });
+      render();
+      var box = document.getElementById('t-search');
+      if (box) box.focus();
+    } else if (g && (el = e.target.closest('[data-mdel]'))) {
+      var rid = el.getAttribute('data-mdel');
+      if (!confirm('إزالة «' + findStudent(rid).full_name + '» من المجموعة؟')) return;
+      r = await sb.from('transport_members').delete().eq('student_id', rid);
+      if (r.error) return fail(r.error);
+      S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== rid; });
+      render();
+    } else if (g && (el = e.target.closest('[data-mfull]'))) {
+      var fid = el.getAttribute('data-mfull');
+      var mem = S.tMembers.filter(function (m) { return m.student_id === fid; })[0];
+      setPayment(g, fid, shareOf(mem, g));
+    }
+  });
+
+  app.addEventListener('change', async function (e) {
+    if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
+    var el = e.target, g = currentGroup();
+    if (el.id === 't-month') {
+      if (!el.value) return;
+      ui.tMonth = el.value;
+      render();
+    } else if (g && el.hasAttribute('data-mpaid')) {
+      setPayment(g, el.getAttribute('data-mpaid'), el.value);
+    } else if (g && el.hasAttribute('data-mshare')) {
+      var sid = el.getAttribute('data-mshare');
+      var share = el.value === '' ? null : Math.max(0, Number(el.value) || 0);
+      var r = await sb.from('transport_members').update({ share: share }).eq('student_id', sid);
+      if (r.error) return fail(r.error);
+      S.tMembers.forEach(function (m) { if (m.student_id === sid) m.share = share; });
+      document.getElementById('t-members').innerHTML = membersTableHtml(g);
+      toast('تم الحفظ');
+    }
+  });
+
+  app.addEventListener('input', function (e) {
+    var g = currentGroup();
+    if (e.target.id !== 't-search' || !g) return;
+    ui.tSearch = e.target.value;
+    document.getElementById('t-cands').innerHTML = candidatesHtml(g);
   });
 
   /* ---------- قائمة المعلمين ---------- */
@@ -1671,6 +2003,7 @@
     if (h === '#/visits' || /^#\/v\//.test(h)) return renderVisits();
     if (h === '#/staff' && isAdmin()) return renderStaff();
     if (h === '#/students' && isAdmin()) return renderStudents();
+    if (/^#\/transport/.test(h) && isAdmin()) return renderTransport();
     if (h === '#/admin' && isAdmin()) return renderAdmin();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     renderList();
@@ -1826,6 +2159,8 @@
       saveTeacherForm();
     } else if (e.target.id === 'student-form') {
       saveStudentForm();
+    } else if (e.target.id === 'group-form') {
+      saveGroupForm();
     } else if (e.target.id === 'defaultpw-form') {
       var pw = document.getElementById('default-pw').value;
       if (pw.length < 6) return toast('كلمة المرور الافتراضية يجب ألا تقل عن 6 أحرف.', true);
