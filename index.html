@@ -336,6 +336,19 @@
   .cand:last-child { border-bottom: 0; }
   .cand .meta { color: var(--muted); font-size: .85rem; }
 
+  table.grid td .mnote { display: block; margin-top: 6px; width: 150px; padding: 6px 8px; }
+
+  /* إيصال السداد المطبوع */
+  #print-sheet.rc { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; font-size: 13pt; line-height: 1.6; }
+  #print-sheet .rc-box { border: 2px solid #000; border-radius: 3mm; padding: 8mm 10mm; }
+  #print-sheet .rc-school { text-align: center; font-size: 1.25em; font-weight: 700; }
+  #print-sheet .rc-title { text-align: center; font-size: 1.1em; font-weight: 700; margin: .3em 0 .9em; padding-bottom: .5em; border-bottom: 1px solid #000; }
+  #print-sheet .rc-top { display: flex; justify-content: space-between; margin-bottom: .8em; }
+  #print-sheet .rc-line { margin: .45em 0; }
+  #print-sheet .rc-line b { border-bottom: 1px dotted #000; padding: 0 .6em; }
+  #print-sheet .rc-amount { display: inline-block; border: 2px solid #000; border-radius: 2mm; padding: .1em 1em; font-size: 1.2em; font-weight: 800; }
+  #print-sheet .rc-signs { display: flex; justify-content: space-between; margin-top: 2.2em; }
+
   /* Students */
   .yn { display: flex; gap: 20px; }
   .yn label.check { padding: 2px 0; }
@@ -732,7 +745,7 @@
     S.tPay = {};
   }
 
-  // مدفوعات الشهر تُجلب عند أول عرض له ثم تُحفظ: { studentId: amount }
+  // مدفوعات الشهر تُجلب عند أول عرض له ثم تُحفظ: { studentId: صف الدفعة }
   var loadingPay = {};
   async function loadPayments(month) {
     if (loadingPay[month]) return;
@@ -740,7 +753,7 @@
     var rows = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('month', month).order('student_id'); });
     loadingPay[month] = false;
     var map = {};
-    (rows || []).forEach(function (p) { map[p.student_id] = Number(p.amount) || 0; });
+    (rows || []).forEach(function (p) { p.amount = Number(p.amount) || 0; map[p.student_id] = p; });
     S.tPay[month] = map;
     render();
   }
@@ -1535,7 +1548,7 @@
   // المطلوب والمحصَّل لمجموعة في الشهر المعروض
   function groupTotals(g) {
     var pay = S.tPay[ui.tMonth] || {}, due = 0, paid = 0, n = 0;
-    membersOf(g.id).forEach(function (m) { n++; due += shareOf(m, g); paid += pay[m.student_id] || 0; });
+    membersOf(g.id).forEach(function (m) { n++; due += shareOf(m, g); paid += pay[m.student_id] ? pay[m.student_id].amount : 0; });
     return { n: n, due: due, paid: paid };
   }
 
@@ -1582,21 +1595,26 @@
     var pay = S.tPay[ui.tMonth] || {}, members = membersOf(g.id), due = 0, paid = 0;
     members.sort(function (a, b) { return findStudent(a.student_id).full_name.localeCompare(findStudent(b.student_id).full_name, 'ar'); });
     var rows = members.map(function (m, i) {
-      var x = findStudent(m.student_id), sh = shareOf(m, g), p = pay[x.id] || 0;
+      var x = findStudent(m.student_id), sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0;
+      var method = rec.method || 'cash';
       due += sh; paid += p;
       var badge = sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
         '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + (Number(g.fee) || 0) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (p || '') + '"></td>' +
+        '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
+          return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
+        }).join('') + '</select>' +
+        (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
-        '<td class="no-print" style="white-space:nowrap">' + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
     }).join('');
     return rows
-      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
+      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
         '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + money(due) + '</td><td>' + money(paid) + '</td>' +
-        '<td colspan="2">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>'
+        '<td colspan="3">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>'
       : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
   }
 
@@ -1681,15 +1699,56 @@
     toast('تم الحفظ');
   }
 
-  async function setPayment(g, studentId, amount) {
-    amount = Math.max(0, Number(amount) || 0);
-    var r = await sb.from('transport_payments').upsert(
-      { student_id: studentId, month: ui.tMonth, amount: amount, updated_at: new Date().toISOString() },
-      { onConflict: 'student_id,month' });
+  var PAY_METHODS = { cash: 'نقدًا', instapay: 'إنستاباي', vodafone: 'فودافون كاش', other: 'أخرى' };
+
+  function payMethodLabel(rec) {
+    return rec.method === 'other' ? (rec.method_note || PAY_METHODS.other) : PAY_METHODS[rec.method || 'cash'];
+  }
+
+  // patch: ما تغيّر في دفعة الطالب لهذا الشهر (المبلغ أو طريقة الدفع)
+  async function setPayment(g, studentId, patch) {
+    var old = S.tPay[ui.tMonth][studentId] || {};
+    var row = {
+      student_id: studentId, month: ui.tMonth,
+      amount: old.amount || 0, method: old.method || 'cash', method_note: old.method_note || '',
+      paid_on: old.paid_on || todayISO(), updated_at: new Date().toISOString()
+    };
+    Object.assign(row, patch);
+    row.amount = Math.max(0, Number(row.amount) || 0);
+    if (row.method !== 'other') row.method_note = '';
+    if ('amount' in patch) row.paid_on = todayISO();
+    var r = await sb.from('transport_payments').upsert(row, { onConflict: 'student_id,month' }).select().single();
     if (r.error) return fail(r.error);
-    S.tPay[ui.tMonth][studentId] = amount;
+    row.receipt_no = r.data ? r.data.receipt_no : old.receipt_no;
+    S.tPay[ui.tMonth][studentId] = row;
     document.getElementById('t-members').innerHTML = membersTableHtml(g);
     toast('تم الحفظ');
+  }
+
+  // إيصال سداد اشتراك المواصلات لطالب عن الشهر المعروض
+  var pendingReceipt = null;
+
+  function buildReceiptSheet(q) {
+    var g = q.g, x = findStudent(q.sid), rec = S.tPay[ui.tMonth][q.sid];
+    var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0];
+    var left = Math.max(0, shareOf(mem, g) - rec.amount);
+    var d = (rec.paid_on || todayISO()).split('-');
+    var school = S.settings && S.settings.school_name;
+    sheet.className = 'rc';
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<div class="rc-box">' +
+      (school ? '<div class="rc-school">' + esc(school) + '</div>' : '') +
+      '<div class="rc-title">إيصال سداد اشتراك المواصلات</div>' +
+      '<div class="rc-top"><span>رقم الإيصال: <b>' + (rec.receipt_no != null ? esc(rec.receipt_no) : '—') + '</b></span>' +
+        '<span>التاريخ: <b>' + d[2] + '/' + d[1] + '/' + d[0] + '</b></span></div>' +
+      '<div class="rc-line">استلمنا من ولي أمر الطالب/ـة: <b>' + esc(x.full_name) + '</b>' + (x.class_name ? ' الصف: <b>' + esc(x.class_name) + '</b>' : '') + '</div>' +
+      '<div class="rc-line">مبلغًا وقدره: <span class="rc-amount">' + money(rec.amount) + '</span></div>' +
+      '<div class="rc-line">وذلك عن: اشتراك المواصلات لشهر <b>' + monthLabel(ui.tMonth) + '</b> — نقطة التجمع: <b>' + esc(g.assembly_point) + '</b></div>' +
+      '<div class="rc-line">طريقة الدفع: <b>' + esc(payMethodLabel(rec)) + '</b></div>' +
+      '<div class="rc-line">' + (left > 0 ? 'المتبقي من اشتراك الشهر: <b>' + money(left) + '</b>' : 'تم سداد اشتراك الشهر كاملًا.') + '</div>' +
+      '<div class="rc-signs"><span>المستلم: ' + esc((S.profile && S.profile.full_name) || '....................') + '</span>' +
+        '<span>التوقيع: ....................</span><span>الختم</span></div>' +
+    '</div>';
   }
 
   document.addEventListener('click', async function (e) {
@@ -1727,7 +1786,10 @@
     } else if (g && (el = e.target.closest('[data-mfull]'))) {
       var fid = el.getAttribute('data-mfull');
       var mem = S.tMembers.filter(function (m) { return m.student_id === fid; })[0];
-      setPayment(g, fid, shareOf(mem, g));
+      setPayment(g, fid, { amount: shareOf(mem, g) });
+    } else if (g && (el = e.target.closest('[data-mreceipt]'))) {
+      pendingReceipt = { g: g, sid: el.getAttribute('data-mreceipt') };
+      window.print();
     }
   });
 
@@ -1739,7 +1801,11 @@
       ui.tMonth = el.value;
       render();
     } else if (g && el.hasAttribute('data-mpaid')) {
-      setPayment(g, el.getAttribute('data-mpaid'), el.value);
+      setPayment(g, el.getAttribute('data-mpaid'), { amount: el.value });
+    } else if (g && el.hasAttribute('data-mmethod')) {
+      setPayment(g, el.getAttribute('data-mmethod'), { method: el.value });
+    } else if (g && el.hasAttribute('data-mnote')) {
+      setPayment(g, el.getAttribute('data-mnote'), { method_note: el.value.trim() });
     } else if (g && el.hasAttribute('data-mshare')) {
       var sid = el.getAttribute('data-mshare');
       var share = el.value === '' ? null : Math.max(0, Number(el.value) || 0);
@@ -1958,7 +2024,10 @@
 
     app.innerHTML = tabs('admin') +
       '<div class="card"><h2>بيانات المدرسة</h2>' +
-        '<label class="field" for="principal-name" style="margin-top:8px">اسم مدير/ة المدرسة</label>' +
+        '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
+        '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
+        '<p class="hint" style="margin:6px 0 0">يظهر في أعلى إيصالات السداد.</p>' +
+        '<label class="field" for="principal-name" style="margin-top:14px">اسم مدير/ة المدرسة</label>' +
         '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
         '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p>' +
         '<label class="field" for="new-class" style="margin-top:16px">الصفوف والشعب</label>' +
@@ -2451,13 +2520,15 @@
 
   window.addEventListener('beforeprint', function () {
     var v = currentVisit(), o = currentTeacher() || currentResult();
-    if (v) buildVisitSheet(v);
+    if (pendingReceipt) buildReceiptSheet(pendingReceipt);
+    else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
     else return;
     document.body.classList.add('print-sheet');
   });
 
   window.addEventListener('afterprint', function () {
+    pendingReceipt = null;
     document.body.classList.remove('print-sheet');
   });
 
