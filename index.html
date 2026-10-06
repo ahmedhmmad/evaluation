@@ -1297,7 +1297,8 @@
   // Excel يحذف الصفر الأول من أرقام الجوال المخزّنة كأرقام
   function parsePhone(x) {
     x = latinDigits(x).replace(/[\s-]/g, '');
-    return /^5\d{8}$/.test(x) ? '0' + x : x;
+    // رقم فلسطيني 5xxxxxxxx أو مصري 1xxxxxxxxx
+    return /^(5\d{8}|1[0125]\d{8})$/.test(x) ? '0' + x : x;
   }
 
   // قيم b غير الفارغة تغلب قيم a
@@ -1518,8 +1519,9 @@
     return m.share != null && m.share !== '' ? Number(m.share) : Number(g.fee) || 0;
   }
 
+  // المبالغ بالجنيه المصري
   function money(x) {
-    return (Math.round(x * 100) / 100).toLocaleString('en');
+    return (Math.round(x * 100) / 100).toLocaleString('en') + ' ج.م';
   }
 
   function thisMonth() {
@@ -1549,7 +1551,7 @@
         f('gf-sup', 'المشرف المرافق', '<input type="text" id="gf-sup" list="gf-sup-list" value="' + val('supervisor_name') + '">' +
           '<datalist id="gf-sup-list">' + S.teachers.map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist>') +
         f('gf-phone', 'هاتف المشرف', '<input type="text" id="gf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('supervisor_phone') + '">') +
-        f('gf-fee', 'اشتراك الطالب الشهري', '<input type="number" id="gf-fee" min="0" step="any" value="' + val('fee') + '">' +
+        f('gf-fee', 'اشتراك الطالب الشهري (بالجنيه المصري)', '<input type="number" id="gf-fee" min="0" step="any" value="' + val('fee') + '">' +
           '<div class="day">حصة كل طالب من أجرة المواصلات شهريًا؛ يمكن تعديلها لطالب بعينه داخل المجموعة.</div>') +
         f('gf-notes', 'ملاحظات', '<input type="text" id="gf-notes" value="' + val('notes') + '">') +
       '</div><div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
@@ -1592,7 +1594,7 @@
         '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
     }).join('');
     return rows
-      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة</th><th>المدفوع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
+      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
         '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + money(due) + '</td><td>' + money(paid) + '</td>' +
         '<td colspan="2">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>'
       : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
