@@ -33,42 +33,72 @@
     font-size: 16px;
     line-height: 1.6;
   }
-  header.app {
-    background: var(--primary);
-    color: #fff;
-    padding: 16px;
+  /* الهيكل: قائمة جانبية (يمين الصفحة) ومحتوى */
+  #shell { display: flex; min-height: 100vh; }
+  #side {
+    width: 250px; flex: none; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    display: flex; flex-direction: column; background: #0b3b37; color: #fff;
   }
-  header.app .inner, main {
-    max-width: 1000px;
-    margin: 0 auto;
+  #side .brand { display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px; }
+  #side .brand .logo {
+    width: 38px; height: 38px; flex: none; border-radius: 10px; background: #fff; color: var(--primary-dark);
+    display: grid; place-items: center; font-weight: 800; font-size: 1.2rem;
   }
-  header.app .inner { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-  header.app h1 { margin: 0; font-size: 1.3rem; }
-  header.app p { margin: 2px 0 0; opacity: .85; font-size: .9rem; }
-  .userbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .9rem; }
-  .userbar .who { opacity: .9; }
-  .userbar .btn { background: transparent; color: #fff; border-color: rgba(255,255,255,.5); padding: 4px 12px; }
-  .userbar .btn:hover { background: rgba(255,255,255,.15); }
-  main { padding: 20px 16px 60px; }
+  #side .brand strong { display: block; font-size: 1.05rem; line-height: 1.3; }
+  #side .brand small { opacity: .7; font-size: .8rem; }
+  #side-nav { flex: 1; padding: 4px 10px 12px; }
+  #side-nav h3 { margin: 16px 12px 4px; font-size: .75rem; font-weight: 700; opacity: .55; }
+  #side-nav a {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin-bottom: 2px; border-radius: 8px;
+    color: #dcefec; text-decoration: none; font-weight: 600;
+  }
+  #side-nav a:hover { background: rgba(255,255,255,.09); color: #fff; }
+  #side-nav a.on { background: #fff; color: var(--primary-dark); }
+  #side-nav a:focus-visible, .side-user .btn:focus-visible, #menu-btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+  #side-nav svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .side-user { padding: 12px 16px 16px; border-top: 1px solid rgba(255,255,255,.14); font-size: .9rem; }
+  .side-user .who { font-weight: 700; overflow-wrap: anywhere; }
+  .side-user .role { opacity: .7; font-size: .8rem; margin-bottom: 8px; }
+  .side-user .btn { width: 100%; background: transparent; color: #fff; border-color: rgba(255,255,255,.4); padding: 6px 12px; }
+  .side-user .btn:hover { background: rgba(255,255,255,.12); }
+  #content { flex: 1; min-width: 0; }
+  .topbar { display: none; align-items: center; gap: 12px; background: var(--primary); color: #fff; padding: 10px 14px; position: sticky; top: 0; z-index: 10; }
+  #menu-btn { background: none; border: 0; color: #fff; font-size: 1.6rem; line-height: 1; padding: 2px 8px; cursor: pointer; border-radius: 6px; }
+  #scrim { display: none; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 24px 60px; }
+  /* بدون قائمة: قبل الدخول وأثناء انتظار التفعيل */
+  #shell.bare #side, #shell.bare #menu-btn { display: none; }
+  #shell.bare .topbar { display: flex; justify-content: center; padding: 16px; font-size: 1.15rem; position: static; }
 
-  nav.sections { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-  nav.sections a {
-    padding: 8px 20px; border-radius: 999px; text-decoration: none; font-weight: 700;
-    color: var(--ink); background: var(--surface); border: 1px solid var(--line);
+  .page-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .page-head h1 { margin: 0; font-size: 1.45rem; }
+  .page-head p { margin: 2px 0 0; color: var(--muted); }
+
+  /* الرئيسية */
+  .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stats .card + .card { margin-top: 0; }
+  .stat { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 2px; transition: border-color .15s, box-shadow .15s; }
+  .stat:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(15,118,110,.12); }
+  .stat .lbl { font-weight: 700; }
+  .stat .num { font-size: 2rem; font-weight: 800; color: var(--primary); line-height: 1.2; }
+  .stat .sub { color: var(--muted); font-size: .85rem; }
+  .quick { display: flex; flex-wrap: wrap; gap: 10px; }
+  a.btn { text-decoration: none; display: inline-block; }
+  a.btn:not(.primary):not(.link) { color: var(--ink); }
+  .todo a { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); text-decoration: none; color: inherit; }
+  .todo a:last-child { border-bottom: 0; }
+  .todo a:hover { color: var(--primary); }
+  .todo .n { font-weight: 800; color: var(--amber); }
+
+  @media (max-width: 900px) {
+    .topbar { display: flex; }
+    #side { position: fixed; top: 0; bottom: 0; right: 0; width: 270px; z-index: 30; transform: translateX(100%); transition: transform .2s; }
+    #shell.open #side { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.35); }
+    #shell.open #scrim { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20; }
+    main { padding: 16px 14px 60px; }
+    .stats { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat .num { font-size: 1.6rem; }
   }
-  nav.sections a:hover { border-color: var(--primary); }
-  nav.sections a.on { background: var(--primary); border-color: var(--primary); color: #fff; }
-  nav.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
-  nav.tabs a {
-    padding: 8px 14px;
-    text-decoration: none;
-    color: var(--muted);
-    font-weight: 700;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -1px;
-  }
-  nav.tabs a:hover { color: var(--ink); }
-  nav.tabs a.on { color: var(--primary); border-bottom-color: var(--primary); }
 
   button, input, textarea, select { font: inherit; color: inherit; }
   .btn {
@@ -382,12 +412,12 @@
     .rate label { flex: 1; }
     .rate span { width: 100%; height: 44px; }
     .eval-head h2 { font-size: 1.15rem; }
-    main { padding: 16px 12px 60px; }
   }
   @page { size: A4; margin: 12.7mm; }
   @media print {
     body { background: #fff; }
-    header.app, .no-print, .stepper, nav.tabs, nav.sections, #toast { display: none !important; }
+    #side, .topbar, #scrim, .no-print, .stepper, #toast { display: none !important; }
+    #shell { display: block; min-height: 0; }
     main { padding: 0; max-width: none; }
     .card { border: 0; padding: 0; }
     .print-only { display: block; }
@@ -401,16 +431,18 @@
 </style>
 </head>
 <body>
-<header class="app">
-  <div class="inner">
-    <div>
-      <h1>إدارة المدرسة</h1>
-      <p>شؤون المعلمين والطلاب</p>
-    </div>
-    <div class="userbar" id="userbar"></div>
+<div id="shell" class="bare">
+  <aside id="side" aria-label="التنقل الرئيسي">
+    <div class="brand"><span class="logo" aria-hidden="true">م</span><div><strong>إدارة المدرسة</strong><small id="brand-sub">شؤون المعلمين والطلاب</small></div></div>
+    <nav id="side-nav"></nav>
+    <div class="side-user" id="userbar"></div>
+  </aside>
+  <div id="scrim"></div>
+  <div id="content">
+    <div class="topbar"><button type="button" id="menu-btn" aria-label="فتح القائمة" aria-expanded="false">☰</button><strong>إدارة المدرسة</strong></div>
+    <main id="app"></main>
   </div>
-</header>
-<main id="app"></main>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="print-sheet" aria-hidden="true"></div>
 
@@ -847,38 +879,134 @@
 
   /* ---------- الشريط العلوي والتبويبات ---------- */
 
-  function renderUserbar() {
-    userbar.innerHTML = S.uid
-      ? '<span class="who">' + esc(displayName(S.email)) + (S.ready ? ' · ' + ROLES[role()] : '') + '</span>' +
-        '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>'
-      : '';
-  }
+  var shell = document.getElementById('shell');
+  var sideNav = document.getElementById('side-nav');
 
-  // التبويبات مقسّمة إلى أقسام: المعلمون، الطلاب، الإدارة. لكل قسم تبويباته
-  function tabs(active) {
-    if (!isStaff()) return '';
-    var sections = [{ key: 'teachers', label: 'المعلمون', href: '#/', items: [
-      ['#/', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']
-    ] }];
+  var ICONS = {
+    home: 'M3 11l9-8 9 8M5 10v10h14V10',
+    teachers: 'M12 3l2.7 5.6 6.3.9-4.5 4.3 1 6.2L12 17l-5.5 3 1-6.2L3 9.5l6.3-.9z',
+    visits: 'M9 4h6v3H9zM7 5H5v16h14V5h-2M8 11h8M8 15h8',
+    results: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+    staff: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0',
+    students: 'M2 9l10-5 10 5-10 5zM6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5',
+    transport: 'M5 4h14a1 1 0 011 1v11H4V5a1 1 0 011-1zM4 11h16M7 16v3M17 16v3M8 14h.01M16 14h.01',
+    admin: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4'
+  };
+
+  // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
+  function navModel() {
+    if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']] }];
+    var groups = [
+      { items: [['#/', 'home', 'الرئيسية']] },
+      { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']] }
+    ];
     if (isAdmin()) {
-      sections[0].items.push(['#/staff', 'staff', 'بيانات المعلمين']);
-      sections.push(
-        { key: 'students', label: 'الطلاب', href: '#/students', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/transport', 'transport', 'المواصلات']] },
-        { key: 'admin', label: 'الإدارة', href: '#/admin', items: [['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
+      groups[1].items.push(['#/staff', 'staff', 'بيانات المعلمين']);
+      groups.push(
+        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/transport', 'transport', 'المواصلات']] },
+        { title: 'الإدارة', items: [['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
       );
     }
-    var current = sections.filter(function (sec) {
-      return sec.items.some(function (it) { return it[1] === active; });
-    })[0] || sections[0];
-    var link = function (href, on, label) {
-      return '<a href="' + href + '"' + (on ? ' class="on" aria-current="page"' : '') + '>' + label + '</a>';
+    return groups;
+  }
+
+  // الصفحة الحالية كما يدل عليها العنوان (صفحات التفاصيل تتبع قائمتها)
+  function activeKey() {
+    var h = location.hash;
+    if (!isStaff()) return 'results';
+    if (h === '#/teachers' || /^#\/t\//.test(h)) return 'teachers';
+    if (h === '#/visits' || /^#\/v\//.test(h)) return 'visits';
+    if (h === '#/results' || /^#\/r\//.test(h)) return 'results';
+    if (/^#\/transport/.test(h)) return 'transport';
+    var m = h.match(/^#\/(staff|students|admin)$/);
+    return m && isAdmin() ? m[1] : 'home';
+  }
+
+  function pageLabel(key) {
+    var label = '';
+    navModel().forEach(function (g) { g.items.forEach(function (it) { if (it[1] === key) label = it[2]; }); });
+    return label;
+  }
+
+  function renderSide() {
+    var signedIn = !!(S.uid && S.ready && role() !== 'pending' && !(S.profile && S.profile.must_change_password));
+    shell.classList.toggle('bare', !signedIn);
+    if (!signedIn) { sideNav.innerHTML = ''; userbar.innerHTML = ''; return; }
+    var active = activeKey();
+    sideNav.innerHTML = navModel().map(function (g) {
+      return (g.title ? '<h3>' + g.title + '</h3>' : '') + g.items.map(function (it) {
+        return '<a href="' + it[0] + '"' + (it[1] === active ? ' class="on" aria-current="page"' : '') + '>' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONS[it[1]] + '"/></svg>' + it[2] + '</a>';
+      }).join('');
+    }).join('');
+    document.getElementById('brand-sub').textContent = (S.settings && S.settings.school_name) || 'شؤون المعلمين والطلاب';
+    userbar.innerHTML =
+      '<div class="who">' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</div>' +
+      '<div class="role">' + ROLES[role()] + '</div>' +
+      '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>';
+  }
+
+  function closeMenu() {
+    shell.classList.remove('open');
+    document.getElementById('menu-btn').setAttribute('aria-expanded', 'false');
+  }
+
+  document.getElementById('menu-btn').addEventListener('click', function () {
+    this.setAttribute('aria-expanded', String(shell.classList.toggle('open')));
+  });
+  document.getElementById('scrim').addEventListener('click', closeMenu);
+  sideNav.addEventListener('click', function (e) { if (e.target.closest('a')) closeMenu(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
+
+  // عنوان الصفحة أعلى المحتوى
+  function tabs(active) {
+    return '<div class="page-head no-print"><h1>' + pageLabel(active) + '</h1></div>';
+  }
+
+  /* ---------- الرئيسية ---------- */
+
+  function renderHome() {
+    var count = function (list, test) { return list.filter(test).length; };
+    var month = todayISO().slice(0, 7);
+    var stat = function (href, label, num, sub) {
+      return '<a class="card stat" href="' + href + '"><span class="lbl">' + label + '</span><span class="num">' + num + '</span><span class="sub">' + sub + '</span></a>';
     };
-    return (sections.length > 1
-        ? '<nav class="sections no-print" aria-label="الأقسام">' + sections.map(function (sec) { return link(sec.href, sec === current, sec.label); }).join('') + '</nav>'
-        : '') +
-      (current.items.length > 1
-        ? '<nav class="tabs no-print">' + current.items.map(function (it) { return link(it[0], it[1] === active, it[2]); }).join('') + '</nav>'
-        : '');
+    var stats =
+      stat('#/teachers', 'المعلمون', S.teachers.length,
+        'تقييمات منشورة: ' + count(S.teachers, function (t) { return t.status === 'published'; }) +
+        ' · قيد العمل: ' + count(S.teachers, function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
+      stat('#/visits', 'الزيارات الإشرافية', S.visits.length,
+        'هذا الشهر: ' + count(S.visits, function (v) { return (v.visit_date || '').slice(0, 7) === month; }));
+    if (isAdmin()) {
+      stats +=
+        stat('#/students', 'الطلاب', S.students.length, 'بدون صف: ' + count(S.students, function (x) { return !x.class_name; })) +
+        stat('#/transport', 'المواصلات', S.tGroups.length, 'مجموعات · الطلاب المشتركون: ' + count(S.tMembers, function (m) { return findStudent(m.student_id); }));
+    }
+
+    // ما يحتاج متابعة
+    var todo = [];
+    var add = function (n, text, href) { if (n) todo.push('<a href="' + href + '"><span>' + text + '</span><span class="n">' + n + '</span></a>'); };
+    add(count(S.teachers, function (t) { return t.status === 'review'; }), 'تقييمات بانتظار الاعتماد', '#/teachers');
+    add(count(S.teachers, function (t) { return t.status === 'approved'; }), 'تقييمات معتمدة لم تُنشر', '#/teachers');
+    add(count(S.teachers, function (t) { return t.status === 'new'; }), 'معلمون لم يبدأ تقييمهم', '#/teachers');
+    if (isAdmin()) {
+      if (!S.accountsMissing) add(count(S.teachers, function (t) { return !t.user_id; }), 'معلمون بدون حساب دخول', '#/staff');
+      add(count(S.students, function (x) { return !x.class_name; }), 'طلاب بدون صف', '#/students');
+      add(count(S.users, function (u) { return u.role === 'pending'; }), 'حسابات بانتظار التفعيل', '#/admin');
+      if (!schoolClasses().length) todo.push('<a href="#/admin"><span>لم تُعرَّف صفوف المدرسة بعد</span><span class="n">!</span></a>');
+    }
+
+    app.innerHTML =
+      '<div class="page-head"><div><h1>مرحبًا، ' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</h1>' +
+        '<p>' + new Date().toLocaleDateString('ar', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></div></div>' +
+      '<div class="stats">' + stats + '</div>' +
+      '<div class="card"><h2>إجراءات سريعة</h2><div class="quick" style="margin-top:10px">' +
+        '<a class="btn primary" href="#/visits">+ تقرير زيارة إشرافية</a>' +
+        '<a class="btn" href="#/teachers">تقييم معلم</a>' +
+        (isAdmin() ? '<a class="btn" href="#/students">تسجيل طالب أو استيراد Excel</a><a class="btn" href="#/transport">مدفوعات المواصلات</a><a class="btn" href="#/staff">إضافة معلم</a>' : '') +
+      '</div></div>' +
+      '<div class="card"><h2>يحتاج متابعة</h2><div class="todo" style="margin-top:6px">' +
+        (todo.join('') || '<div class="empty" style="padding:20px">لا توجد مهام معلّقة.</div>') + '</div></div>';
   }
 
   /* ---------- الدخول ---------- */
@@ -2041,7 +2169,7 @@
 
     if (r) {
       app.innerHTML =
-        '<a class="btn link no-print" href="#/results">→ العودة إلى النتائج</a>' +
+        '<a class="btn link no-print" href="' + (isStaff() ? '#/results' : '#/') + '">→ العودة إلى النتائج</a>' +
         '<div class="eval-head"><div><h2>' + esc(r.name) + '</h2><div class="sub">التخصص: ' + esc(r.subject || '—') +
         ' · تاريخ النشر: ' + fmtDate(r.published_at) + '</div></div>' +
         '<div class="no-print"><button type="button" class="btn" data-act="print">طباعة</button></div></div>' +
@@ -2127,7 +2255,7 @@
   }
 
   function render() {
-    renderUserbar();
+    renderSide();
     if (!sb) return renderSetup();
     if (!S.uid) return renderAuth();
     if (!S.ready) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; return; }
@@ -2148,7 +2276,8 @@
     if (/^#\/transport/.test(h) && isAdmin()) return renderTransport();
     if (h === '#/admin' && isAdmin()) return renderAdmin();
     if (h === '#/results' || r) return renderResults(r && r[1]);
-    renderList();
+    if (h === '#/teachers') return renderList();
+    renderHome();
   }
 
   function go(hash) {
@@ -2170,6 +2299,7 @@
   }
 
   window.addEventListener('hashchange', function () {
+    closeMenu();
     ui.error = '';
     flush();
     if (location.hash === '#/results') S.results = null;
@@ -2201,7 +2331,7 @@
       window.print();
     } else if (act === 'back') {
       await flush();
-      go('#/');
+      go('#/teachers');
     } else if (!t) {
       return;
     } else if (act === 'submit') {
@@ -2228,7 +2358,7 @@
       var d = await sb.from('teachers').delete().eq('id', t.id);
       if (d.error) return fail(d.error);
       S.teachers = S.teachers.filter(function (x) { return x.id !== t.id; });
-      go('#/');
+      go('#/teachers');
     }
   });
 
