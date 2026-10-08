@@ -368,6 +368,22 @@
 
   table.grid td .mnote { display: block; margin-top: 6px; width: 150px; padding: 6px 8px; }
 
+  .formhint { margin-top: 4px; font-size: .85rem; color: var(--amber); background: var(--amber-soft); border-radius: 6px; padding: 2px 8px; overflow-wrap: anywhere; }
+
+  /* ملف الطالب المطبوع */
+  #print-sheet.pf { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; line-height: 1.4; }
+  #print-sheet .pf-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: .8em; }
+  #print-sheet .pf-school { font-size: 1.3em; font-weight: 700; }
+  #print-sheet .pf-title { font-size: 1.6em; font-weight: 800; }
+  #print-sheet .pf-status { margin-top: .2em; }
+  #print-sheet .pf-photo { width: 6.5em; height: 8em; border: 1px solid #000; display: grid; place-items: center; text-align: center; font-size: .85em; color: #555; }
+  #print-sheet.pf th { font-weight: 700; background: #f1f1f1; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-sheet.pf th.pf-sec { background: #d9d9d9; text-align: start; font-size: 1.05em; }
+  #print-sheet.pf td, #print-sheet.pf th { padding: .4em .55em; overflow-wrap: anywhere; }
+  #print-sheet .pf-doc { display: inline-block; margin-inline-end: 1.6em; }
+  #print-sheet .pf-signs { display: flex; justify-content: space-between; gap: 1em; margin-top: 1.8em; }
+  #print-sheet .pf-signs span { display: block; margin-top: .6em; }
+
   /* كشف الطلاب المطبوع */
   #print-sheet.ls { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; }
   #print-sheet .ls-school { text-align: center; font-size: 1.3em; font-weight: 700; }
@@ -626,9 +642,9 @@
 
   var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false,
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
-            students: [], studentsMissing: false,
+            students: [], studentsMissing: false, regMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false };
-  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, stFlag: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -724,7 +740,7 @@
     S.profile = p.data || null;
     S.teachers = []; S.users = []; S.settings = null; S.results = null;
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
-    S.students = []; S.studentsMissing = false;
+    S.students = []; S.studentsMissing = false; S.regMissing = false;
     S.tGroups = []; S.tMembers = []; S.tPay = {}; S.transportMissing = false;
 
     if (isStaff()) {
@@ -776,6 +792,8 @@
     var all = await fetchAll(function () { return sb.from('students').select('*').order('full_name'); });
     S.studentsMissing = !all;
     S.students = all || [];
+    // أعمدة التسجيل على مرحلتين غير موجودة إلى أن يُشغَّل الملف supabase/student_registration.sql
+    S.regMissing = !!all && !!(await sb.from('students').select('status').limit(1)).error;
   }
 
   async function loadTransport() {
@@ -979,7 +997,8 @@
         'هذا الشهر: ' + count(S.visits, function (v) { return (v.visit_date || '').slice(0, 7) === month; }));
     if (isAdmin()) {
       stats +=
-        stat('#/students', 'الطلاب', S.students.length, 'بدون صف: ' + count(S.students, function (x) { return !x.class_name; })) +
+        stat('#/students', 'الطلاب', S.students.length, 'تسجيل نهائي: ' + count(S.students, function (x) { return x.status === 'final'; }) +
+          ' · مبدئي: ' + count(S.students, function (x) { return x.status !== 'final'; })) +
         stat('#/transport', 'المواصلات', S.tGroups.length, 'مجموعات · الطلاب المشتركون: ' + count(S.tMembers, function (m) { return findStudent(m.student_id); }));
     }
 
@@ -991,7 +1010,7 @@
     add(count(S.teachers, function (t) { return t.status === 'new'; }), 'معلمون لم يبدأ تقييمهم', '#/teachers');
     if (isAdmin()) {
       if (!S.accountsMissing) add(count(S.teachers, function (t) { return !t.user_id; }), 'معلمون بدون حساب دخول', '#/staff');
-      add(count(S.students, function (x) { return !x.class_name; }), 'طلاب بدون صف', '#/students');
+      add(count(S.students, function (x) { return x.status !== 'final'; }), 'تسجيلات مبدئية بانتظار المراجعة والاعتماد', '#/students');
       add(count(S.users, function (u) { return u.role === 'pending'; }), 'حسابات بانتظار التفعيل', '#/admin');
       if (!schoolClasses().length) todo.push('<a href="#/admin"><span>لم تُعرَّف صفوف المدرسة بعد</span><span class="n">!</span></a>');
     }
@@ -1217,11 +1236,13 @@
   // حقول استمارة التسجيل. match: كلمات تُعرَف بها أعمدة ملف Excel (بعد توحيد الحروف)
   var ST_FIELDS = [
     { k: 'full_name', label: 'اسم الطالب رباعي', req: true, match: ['اسم الطالب'] },
-    { k: 'national_id', label: 'رقم هوية الطالب', req: true, ltr: true, match: ['هويه'] },
-    { k: 'phone', label: 'رقم الهاتف الأساسي', req: true, ltr: true, match: ['الهاتف', 'الجوال'] },
-    { k: 'whatsapp', label: 'رقم الواتساب', req: true, ltr: true, match: ['واتس'] },
+    { k: 'national_id', label: 'رقم هوية الطالب', req: true, ltr: true, num: true, match: ['هويه'] },
+    { k: 'gender', label: 'جنس الطالب', type: 'select', options: ['ذكر', 'أنثى'], req: true, match: ['جنس'] },
     { k: 'birth_date', label: 'تاريخ الميلاد', type: 'date', req: true, match: ['الميلاد'] },
-    { k: 'class_name', label: 'الصف الذي سيلتحق به', type: 'class', req: true, match: ['الصف'] },
+    { k: 'phone', label: 'رقم الهاتف الأساسي', req: true, ltr: true, num: true, match: ['الهاتف', 'الجوال'] },
+    { k: 'whatsapp', label: 'رقم الواتساب', req: true, ltr: true, num: true, match: ['واتس'] },
+    { k: 'email', label: 'البريد الإلكتروني', ltr: true, match: ['email', 'البريد'] },
+    { k: 'class_name', label: 'الصف', type: 'class', req: true, match: ['الصف'] },
     { k: 'address', label: 'عنوان السكن الحالي بالتفصيل', req: true, wide: true, match: ['عنوان', 'السكن'] },
     { k: 'has_prev_certificate', label: 'هل حصل على شهادة العام السابق؟', type: 'yn', req: true, match: ['شهاده'] },
     { k: 'prev_grade', label: 'التقدير في العام السابق', dep: 'has_prev_certificate', list: ['ممتاز', 'جيد جدًا', 'جيد', 'مقبول', 'ضعيف'], match: ['التقدير'] },
@@ -1239,6 +1260,18 @@
   // عند مطابقة عناوين الأعمدة: الحقول الأخص أولًا (عنوان «في حالة أن الطفل يتيم…» يحتوي كلمة «يتيم» أيضًا)
   var ST_MATCH_ORDER = ['orphan_of', 'quran_parts', 'guardian_name'].concat(ST_FIELDS.map(function (f) { return f.k; }));
 
+  // المستندات التي يُحضرها ولي الأمر عند مراجعة التسجيل في المدرسة
+  var ST_DOCS = [
+    ['birth', 'شهادة الميلاد'],
+    ['guardian_id', 'صورة هوية أو إقامة ولي الأمر'],
+    ['certificate', 'شهادة العام السابق'],
+    ['photos', 'صور شخصية']
+  ];
+
+  var ST_STATUS = { pending: 'تسجيل مبدئي', final: 'تسجيل نهائي' };
+
+  function stStatus(x) { return x.status === 'final' ? 'final' : 'pending'; }
+
   function stField(k) {
     for (var i = 0; i < ST_FIELDS.length; i++) if (ST_FIELDS[i].k === k) return ST_FIELDS[i];
   }
@@ -1251,7 +1284,7 @@
   // توحيد الكتابة العربية للمقارنة: بلا تشكيل، وبهمزات وتاء مربوطة موحّدة
   function norm(x) {
     return String(x == null ? '' : x)
-      .replace(/[\u064B-\u0652\u0640*؟?:]/g, '')
+      .replace(/[ً-ْـ*؟?:]/g, '')
       .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
       .replace(/\s+/g, ' ').trim().toLowerCase();
   }
@@ -1259,6 +1292,8 @@
   function latinDigits(x) {
     return String(x == null ? '' : x).replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }).trim();
   }
+
+  function yesNo(v) { return v === true ? 'نعم' : v === false ? 'لا' : ''; }
 
   function studentFieldHtml(f, st) {
     var v = st ? st[f.k] : null, id = 'sf-' + f.k, inner;
@@ -1269,19 +1304,23 @@
           return '<label class="check"><input type="radio" name="' + id + '" value="' + o[0] + '"' + (v === o[2] ? ' checked' : '') + ' required>' + o[1] + '</label>';
         }).join('') + '</div>';
     } else if (f.type === 'class') {
-      inner = '<select id="' + id + '"' + (schoolClasses().length ? ' required' : '') + '>' + optionsHtml(schoolClasses(), v || '') + '</select>' +
-        (schoolClasses().length ? '' : '<div class="day">عرّف صفوف المدرسة أولًا من تبويب «الإدارة».</div>');
+      inner = '<select id="' + id + '" required>' + optionsHtml(schoolClasses(), v || '') + '</select>' +
+        '<div class="day">' + (schoolClasses().length ? 'يُحدَّد عند اعتماد التسجيل النهائي.' : 'عرّف صفوف المدرسة أولًا من «الإعدادات والمستخدمون».') + '</div>';
     } else if (f.type === 'select') {
-      inner = '<select id="' + id + '">' + optionsHtml(f.options.slice(), v || '') + '</select>';
+      inner = '<select id="' + id + '"' + (f.req ? ' required' : '') + '>' + optionsHtml(f.options.slice(), v || '') + '</select>';
     } else {
       inner = '<input type="' + (f.type || 'text') + '" id="' + id + '"' + (f.req ? ' required' : '') +
-        (f.ltr ? ' dir="ltr" style="text-align:right" inputmode="numeric"' : '') +
+        (f.ltr ? ' dir="ltr" style="text-align:right"' : '') + (f.num ? ' inputmode="numeric"' : '') +
         (f.type === 'number' ? ' min="0" max="30" step="0.5"' : '') +
         (f.list ? ' list="' + id + '-list"' : '') + ' value="' + esc(v == null ? '' : v) + '">' +
         (f.list ? '<datalist id="' + id + '-list">' + f.list.map(function (o) { return '<option value="' + o + '">'; }).join('') + '</datalist>' : '');
     }
+    // ما كتبه ولي الأمر في الاستمارة، إن اختلف عن القيمة الحالية (للمراجعة مع المستندات)
+    var raw = st && st.form_answers ? st.form_answers[f.k] : '';
+    var cur = f.type === 'yn' ? yesNo(v) : (v == null ? '' : String(v));
+    var hint = raw && norm(raw) !== norm(cur) ? '<div class="formhint">في الاستمارة: ' + esc(raw) + '</div>' : '';
     return '<div' + (f.wide ? ' style="grid-column:1/-1"' : '') + (f.dep ? ' data-dep="' + f.dep + '"' : '') + '>' +
-      '<label class="field"' + (f.type === 'yn' ? '' : ' for="' + id + '"') + '>' + f.label + star + '</label>' + inner + '</div>';
+      '<label class="field"' + (f.type === 'yn' ? '' : ' for="' + id + '"') + '>' + f.label + star + '</label>' + inner + hint + '</div>';
   }
 
   // الحقول التابعة (التقدير، نوع اليتم، عدد الأجزاء) تظهر وتصبح مطلوبة عند الإجابة بنعم
@@ -1314,13 +1353,14 @@
     return map;
   }
 
-  // الطلاب المطابقون للبحث والصف والمعيار المختار
+  // الطلاب المطابقون للبحث والحالة والصف والمعيار المختار
   function filteredStudents() {
     var q = norm(ui.stSearch), cls = ui.stClass, flag = ST_FLAGS[ui.stFlag], groupOf = flag ? transportGroupOf() : null;
     return S.students.filter(function (x) {
+      if (ui.stStatus && stStatus(x) !== ui.stStatus) return false;
       if (cls === '-' ? x.class_name : cls && x.class_name !== cls) return false;
       if (flag && !flag.test(x, groupOf)) return false;
-      return !q || norm(x.full_name).indexOf(q) > -1 || x.national_id.indexOf(latinDigits(ui.stSearch)) > -1;
+      return !q || norm(x.full_name).indexOf(q) > -1 || String(x.national_id || '').indexOf(latinDigits(ui.stSearch)) > -1;
     });
   }
 
@@ -1330,6 +1370,7 @@
     var school = S.settings && S.settings.school_name;
     var showClass = !ui.stClass || ui.stClass === '-';
     var crit = [];
+    if (ui.stStatus) crit.push(ST_STATUS[ui.stStatus]);
     if (ui.stClass) crit.push(ui.stClass === '-' ? 'بدون صف' : 'الصف: ' + ui.stClass);
     if (flag) crit.push(flag.label);
     if (ui.stSearch.trim()) crit.push('بحث: ' + ui.stSearch.trim());
@@ -1352,70 +1393,132 @@
       }).join('') + '</tbody></table>';
   }
 
+  // ملف الطالب المطبوع: كل بياناته في صفحة واحدة
+  var pendingProfile = null;
+
+  function buildProfileSheet(x) {
+    var school = S.settings && S.settings.school_name, final = stStatus(x) === 'final';
+    var docs = x.documents || {};
+    var fmt = function (iso) { var d = String(iso || '').slice(0, 10).split('-'); return d.length === 3 ? d[2] + '/' + d[1] + '/' + d[0] : ''; };
+    var pair = function (label, value) { return '<th>' + label + '</th><td>' + esc(value == null ? '' : value) + '</td>'; };
+    var row2 = function (a, b) { return '<tr>' + pair(a[0], a[1]) + pair(b[0], b[1]) + '</tr>'; };
+    var row1 = function (label, value) { return '<tr><th>' + label + '</th><td colspan="3">' + esc(value == null ? '' : value) + '</td></tr>'; };
+    var head = function (title) { return '<tr><th colspan="4" class="pf-sec">' + title + '</th></tr>'; };
+
+    sheet.className = 'pf';
+    sheet.innerHTML =
+      '<div class="pf-top"><div>' + (school ? '<div class="pf-school">' + esc(school) + '</div>' : '') +
+        '<div class="pf-title">ملف الطالب</div>' +
+        '<div class="pf-status">' + (final ? 'تسجيل نهائي' + (x.finalized_at ? ' — بتاريخ ' + fmt(x.finalized_at) : '') : 'تسجيل مبدئي — غير نهائي') + '</div></div>' +
+        '<div class="pf-photo">صورة<br>شخصية</div></div>' +
+      '<table><colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' +
+        head('بيانات الطالب') +
+        row1('الاسم رباعي', x.full_name) +
+        row2(['رقم الهوية', x.national_id], ['الجنس', x.gender]) +
+        row2(['تاريخ الميلاد', fmt(x.birth_date)], ['الصف', x.class_name]) +
+        row1('عنوان السكن', x.address) +
+        row2(['الهاتف الأساسي', x.phone], ['واتساب', x.whatsapp]) +
+        (x.email ? row1('البريد الإلكتروني', x.email) : '') +
+        head('التحصيل السابق') +
+        row2(['شهادة العام السابق', yesNo(x.has_prev_certificate)], ['التقدير', x.prev_grade]) +
+        head('ولي الأمر') +
+        row2(['الاسم', x.guardian_name], ['صلة القرابة', x.guardian_relation]) +
+        row1('المهنة', x.guardian_job) +
+        head('الحالة الصحية والاجتماعية') +
+        row2(['حالة صحية', yesNo(x.has_health_condition)], ['أدوية منتظمة', yesNo(x.takes_medication)]) +
+        row2(['احتياجات تعليمية خاصة', yesNo(x.has_special_needs)], ['يتيم', yesNo(x.is_orphan) + (x.is_orphan && x.orphan_of ? ' (' + x.orphan_of + ')' : '')]) +
+        row2(['يحفظ من القرآن', yesNo(x.memorizes_quran)], ['عدد الأجزاء', x.memorizes_quran ? x.quran_parts : '']) +
+        head('المستندات المستلمة') +
+        '<tr><td colspan="4">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
+          (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</td></tr>' +
+      '</table>' +
+      '<div class="pf-signs"><div>ولي الأمر<span>الاسم: ' + esc(x.guardian_name || '....................') + '</span><span>التوقيع: ....................</span></div>' +
+        '<div>مسؤول التسجيل<span>الاسم: ' + esc((S.profile && S.profile.full_name) || '....................') + '</span><span>التوقيع: ....................</span></div>' +
+        '<div>مدير/ة المدرسة<span>الاسم: ' + esc(principalName()) + '</span><span>التوقيع: ....................</span></div></div>';
+    fitSheet();
+  }
+
   function studentsTableHtml() {
     var shown = filteredStudents();
+    // رقم الهوية المكرر علامة على تسجيل مزدوج يحتاج مراجعة
+    var idCount = {};
+    S.students.forEach(function (x) { if (x.national_id) idCount[x.national_id] = (idCount[x.national_id] || 0) + 1; });
     var LIMIT = 300;
     var rows = shown.slice(0, LIMIT).map(function (x) {
-      return '<tr><td><b>' + esc(x.full_name) + '</b></td><td dir="ltr" style="text-align:right">' + esc(x.national_id) + '</td>' +
-        '<td><select data-stclass="' + x.id + '" aria-label="صف ' + esc(x.full_name) + '">' + optionsHtml(schoolClasses(), x.class_name) + '</select></td>' +
-        '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td><td>' + esc(x.guardian_name || '—') + '</td>' +
-        '<td style="white-space:nowrap"><button type="button" class="btn" data-stedit="' + x.id + '">تعديل</button> ' +
+      var st = stStatus(x);
+      return '<tr><td><b>' + esc(x.full_name) + '</b></td>' +
+        '<td dir="ltr" style="text-align:right">' + esc(x.national_id || '—') + (idCount[x.national_id] > 1 ? ' <span class="badge unpaid" dir="rtl">مكرر</span>' : '') + '</td>' +
+        '<td><span class="badge ' + (st === 'final' ? 'published' : 'edit') + '">' + ST_STATUS[st] + '</span></td>' +
+        '<td>' + (st === 'final'
+          ? '<select data-stclass="' + x.id + '" aria-label="صف ' + esc(x.full_name) + '">' + optionsHtml(schoolClasses(), x.class_name) + '</select>'
+          : '<span style="color:var(--muted);font-size:.9rem">' + esc(x.class_name || x.requested_class || '—') + '</span>') + '</td>' +
+        '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td>' +
+        '<td style="white-space:nowrap"><button type="button" class="btn' + (st === 'final' ? '' : ' primary') + '" data-stedit="' + x.id + '">' + (st === 'final' ? 'تعديل' : 'مراجعة') + '</button> ' +
+        '<button type="button" class="btn" data-stprofile="' + x.id + '">ملف الطالب</button> ' +
         '<button type="button" class="btn danger" data-stdel="' + x.id + '">حذف</button></td></tr>';
     }).join('');
     return '<p class="st-count">عدد الطلاب: ' + shown.length + (shown.length !== S.students.length ? ' من ' + S.students.length : '') +
-      (shown.length > LIMIT ? ' — يُعرض أول ' + LIMIT + '؛ استخدم البحث أو الصف لتضييق القائمة.' : '') + '</p>' +
+      (shown.length > LIMIT ? ' — يُعرض أول ' + LIMIT + '؛ استخدم البحث أو التصفية لتضييق القائمة.' : '') + '</p>' +
       (rows
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>رقم الهوية</th><th>الصف</th><th>الهاتف</th><th>ولي الأمر</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>رقم الهوية</th><th>الحالة</th><th>الصف</th><th>الهاتف</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="empty">' + (S.students.length ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب مسجلون بعد.') + '</div>');
   }
 
   function importPreviewHtml() {
     var p = ui.imp;
-    var known = schoolClasses(), newClasses = Object.keys(p.classes).filter(function (c) { return known.indexOf(c) < 0; });
     return '<div class="card"><h2>استيراد من ملف: ' + esc(p.file) + '</h2>' +
       '<ul class="imp-list">' +
-        '<li>طلاب جاهزون للاستيراد: <b>' + p.rows.length + '</b>' +
-          (p.updates ? ' (منهم ' + p.updates + ' مسجلون مسبقًا برقم الهوية وستُحدَّث بياناتهم)' : '') + '</li>' +
+        '<li>طلاب جدد سيُضافون بحالة «تسجيل مبدئي»: <b>' + p.rows.length + '</b></li>' +
+        (p.skipped ? '<li>مسجلون مسبقًا ولن تتغير بياناتهم: ' + p.skipped + '</li>' : '') +
         '<li>الأعمدة التي تم التعرف عليها: ' + (p.mapped.map(function (k) { return stField(k).label; }).join('، ') || 'لا شيء') + '</li>' +
-        (p.unmapped.length ? '<li>أعمدة لم تُستخدم: ' + esc(p.unmapped.join('، ')) + '</li>' : '') +
-        (p.dupes ? '<li>أرقام هوية مكررة داخل الملف: ' + p.dupes + ' (دُمجت صفوف كل رقم)</li>' : '') +
+        (p.unmapped.length ? '<li>أعمدة لم تُستخدم: ' + esc(p.unmapped.slice(0, 6).join('، ')) + (p.unmapped.length > 6 ? ' … و' + (p.unmapped.length - 6) + ' أخرى' : '') + '</li>' : '') +
+        (p.dupIds ? '<li>أرقام هوية متكررة في الملف: ' + p.dupIds + ' — ستظهر بعلامة «مكرر» لتراجعها</li>' : '') +
+        (p.noId ? '<li>بدون رقم هوية صالح: ' + p.noId + ' — يُستكمل عند المراجعة</li>' : '') +
         p.errors.slice(0, 8).map(function (e) { return '<li class="bad">' + esc(e) + '</li>'; }).join('') +
         (p.errors.length > 8 ? '<li class="bad">… و' + (p.errors.length - 8) + ' صفوف أخرى فيها نقص</li>' : '') +
       '</ul>' +
-      '<label class="field" for="imp-class" style="margin-top:14px">تعيين الصف</label>' +
-      '<select id="imp-class"><option value="">كما ورد في الملف</option>' + known.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select>' +
-      (newClasses.length
-        ? '<label class="check" style="margin-top:8px"><input type="checkbox" id="imp-addclasses" checked>' +
-          'إضافة الصفوف الواردة في الملف وغير المعرّفة إلى صفوف المدرسة: ' + esc(newClasses.join('، ')) + '</label>' +
-          '<p class="hint" style="margin:0">بدون هذا الخيار يُستورد طلاب هذه الصفوف بلا صف، وتعيّنهم لاحقًا من القائمة.</p>'
-        : '') +
+      '<p class="hint" style="margin:12px 0 0">تُحفظ إجابات الاستمارة كما كُتبت، وتظهر بجانب كل حقل عند مراجعة الطالب. الصف يُحدَّد عند اعتماد التسجيل النهائي.</p>' +
       '<div class="actions"><button type="button" class="btn primary" data-impgo' + (p.rows.length ? '' : ' disabled') + '>استيراد الطلاب (' + p.rows.length + ')</button>' +
       '<button type="button" class="btn" data-impcancel>إلغاء</button></div></div>';
   }
 
+  function studentFormHtml(st) {
+    var final = st && stStatus(st) === 'final', docs = (st && st.documents) || {};
+    return '<form class="card" id="student-form">' +
+      '<div class="toolbar" style="align-items:center;margin-bottom:4px"><h2 style="margin:0;flex:1">' + (st ? (final ? 'تعديل بيانات الطالب' : 'مراجعة تسجيل الطالب') : 'تسجيل طالب') + '</h2>' +
+        '<span class="badge ' + (final ? 'published' : 'edit') + '">' + ST_STATUS[final ? 'final' : 'pending'] + '</span></div>' +
+      (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الصف واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
+      '<div class="grid2" style="margin-top:12px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' +
+      '<h2 style="margin-top:20px">المستندات المستلمة</h2>' +
+      '<div class="classes-pick" style="margin-top:6px">' + ST_DOCS.map(function (d) {
+        return '<label class="check"><input type="checkbox" name="sf-doc" value="' + d[0] + '"' + (docs[d[0]] ? ' checked' : '') + '>' + d[1] + '</label>';
+      }).join('') + '</div>' +
+      '<label class="field" for="sf-docnote" style="margin-top:8px">مستندات أخرى أو ملاحظات</label>' +
+      '<input type="text" id="sf-docnote" value="' + esc((st && st.documents_note) || '') + '">' +
+      '<div class="actions">' +
+        (final
+          ? '<button type="submit" class="btn primary" data-mode="final">حفظ</button>' +
+            '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
+          : '<button type="submit" class="btn primary" data-mode="final">حفظ واعتماد التسجيل النهائي</button>' +
+            '<button type="submit" class="btn" data-mode="save" formnovalidate>حفظ دون اعتماد</button>') +
+        (st ? '<button type="button" class="btn" data-stprofile="' + st.id + '">طباعة ملف الطالب</button>' : '') +
+        '<button type="button" class="btn" data-stedit="">إلغاء</button>' +
+      '</div></form>';
+  }
+
   function renderStudents() {
-    if (S.studentsMissing) {
+    if (S.studentsMissing || S.regMissing) {
       app.innerHTML = tabs('students') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لتسجيل الطلاب بعد.<br>' +
-        'شغّل الملف <code dir="ltr">supabase/students.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+        'شغّل الملف <code dir="ltr">supabase/' + (S.studentsMissing ? 'students.sql ثم student_registration.sql' : 'student_registration.sql') + '</code> في محرر SQL ثم حدّث الصفحة.</div>';
       return;
     }
     var ed = ui.editStudent, st = ed && ed !== 'new' ? findStudent(ed) : null;
-    var counts = {};
-    S.students.forEach(function (x) { counts[x.class_name] = (counts[x.class_name] || 0) + 1; });
-    var classFilter = '<select id="st-class" aria-label="الصف"><option value="">كل الصفوف</option>' +
-      '<option value="-"' + (ui.stClass === '-' ? ' selected' : '') + '>بدون صف (' + (counts[''] || 0) + ')</option>' +
-      schoolClasses().map(function (c) {
-        return '<option value="' + esc(c) + '"' + (ui.stClass === c ? ' selected' : '') + '>' + esc(c) + ' (' + (counts[c] || 0) + ')</option>';
-      }).join('') + '</select>';
-
-    var form = !ed ? '' :
-      '<form class="card" id="student-form"><h2>' + (st ? 'تعديل بيانات الطالب' : 'تسجيل طالب') + '</h2>' +
-      '<div class="grid2" style="margin-top:12px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' +
-      '<div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
-      '<button type="button" class="btn" data-stedit="">إلغاء</button></div></form>';
+    var counts = {}, byStatus = { pending: 0, final: 0 };
+    S.students.forEach(function (x) { counts[x.class_name || ''] = (counts[x.class_name || ''] || 0) + 1; byStatus[stStatus(x)]++; });
+    var opt = function (value, label, current) { return '<option value="' + esc(value) + '"' + (current === value ? ' selected' : '') + '>' + label + '</option>'; };
 
     app.innerHTML = tabs('students') +
-      (ui.imp ? importPreviewHtml() : ed ? form :
+      (ui.imp ? importPreviewHtml() : ed ? studentFormHtml(st) :
         '<div class="toolbar">' +
           '<button type="button" class="btn primary" data-stedit="new">+ تسجيل طالب</button>' +
           '<button type="button" class="btn" data-impopen>استيراد من Excel</button>' +
@@ -1423,16 +1526,20 @@
           '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' +
         '</div>') +
       '<div class="card"><div class="toolbar">' +
-        '<input type="search" id="st-search" placeholder="ابحث بالاسم أو رقم الهوية" aria-label="بحث" value="' + esc(ui.stSearch) + '">' + classFilter +
-        '<select id="st-flag" aria-label="معيار إضافي"><option value="">كل الطلاب</option>' + Object.keys(ST_FLAGS).map(function (k) {
-          return '<option value="' + k + '"' + (ui.stFlag === k ? ' selected' : '') + '>' + ST_FLAGS[k].label + '</option>';
-        }).join('') + '</select>' +
+        '<input type="search" id="st-search" placeholder="ابحث بالاسم أو رقم الهوية" aria-label="بحث" value="' + esc(ui.stSearch) + '">' +
+        '<select id="st-status" aria-label="حالة التسجيل">' + opt('', 'كل الحالات', ui.stStatus) +
+          opt('pending', 'تسجيل مبدئي (' + byStatus.pending + ')', ui.stStatus) + opt('final', 'تسجيل نهائي (' + byStatus.final + ')', ui.stStatus) + '</select>' +
+        '<select id="st-class" aria-label="الصف">' + opt('', 'كل الصفوف', ui.stClass) + opt('-', 'بدون صف (' + (counts[''] || 0) + ')', ui.stClass) +
+          schoolClasses().map(function (c) { return opt(c, esc(c) + ' (' + (counts[c] || 0) + ')', ui.stClass); }).join('') + '</select>' +
+        '<select id="st-flag" aria-label="معيار إضافي">' + opt('', 'كل الطلاب', ui.stFlag) +
+          Object.keys(ST_FLAGS).map(function (k) { return opt(k, ST_FLAGS[k].label, ui.stFlag); }).join('') + '</select>' +
         '<button type="button" class="btn" data-stprint>طباعة الكشف</button>' +
       '</div><div id="st-table">' + studentsTableHtml() + '</div></div>';
     syncStudentDeps();
   }
 
-  async function saveStudentForm() {
+  // mode: 'final' يعتمد التسجيل النهائي (بعد اكتمال البيانات والصف)، 'save' يحفظ فقط
+  async function saveStudentForm(mode) {
     var st = ui.editStudent !== 'new' ? findStudent(ui.editStudent) : null, data = {};
     ST_FIELDS.forEach(function (f) {
       if (f.type === 'yn') {
@@ -1440,25 +1547,39 @@
         data[f.k] = c ? c.value === 'yes' : null;
       } else {
         var v = document.getElementById('sf-' + f.k).value.trim();
-        data[f.k] = f.type === 'date' ? (v || null) : f.type === 'number' ? (v === '' ? null : Number(v)) : f.ltr ? latinDigits(v) : v;
+        data[f.k] = f.type === 'date' ? (v || null) : f.type === 'number' ? (v === '' ? null : Number(v)) : f.num ? latinDigits(v) : v;
       }
     });
     // الحقول التابعة تُفرَّغ عند الإجابة بلا
     if (!data.has_prev_certificate) data.prev_grade = '';
     if (!data.is_orphan) data.orphan_of = '';
     if (!data.memorizes_quran) data.quran_parts = null;
+    data.documents = {};
+    Array.prototype.forEach.call(app.querySelectorAll('[name="sf-doc"]:checked'), function (c) { data.documents[c.value] = true; });
+    data.documents_note = document.getElementById('sf-docnote').value.trim();
+
+    if (!data.full_name) return toast('اكتب اسم الطالب.', true);
+    var wasFinal = st && stStatus(st) === 'final';
+    if (mode === 'final' && !wasFinal) {
+      var missing = ST_DOCS.filter(function (d) { return !data.documents[d[0]]; }).map(function (d) { return d[1]; });
+      if (missing.length && !confirm('لم تُسجَّل هذه المستندات: ' + missing.join('، ') + '.\nهل تريد اعتماد التسجيل النهائي مع ذلك؟')) return;
+      data.status = 'final';
+      data.finalized_at = new Date().toISOString();
+    } else if (!st) {
+      data.status = 'pending';
+    }
 
     var r = st
       ? await sb.from('students').update(data).eq('id', st.id)
       : await sb.from('students').insert(data).select().single();
     if (r.error) {
-      return /duplicate|unique/i.test(r.error.message) ? toast('رقم الهوية مسجل لطالب آخر.', true) : fail(r.error);
+      return /duplicate|unique/i.test(r.error.message) ? toast('رقم الهوية مسجل نهائيًا لطالب آخر.', true) : fail(r.error);
     }
     if (st) Object.assign(st, data); else S.students.push(r.data);
     S.students.sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
     ui.editStudent = null;
     render();
-    toast('تم الحفظ');
+    toast(data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : 'تم الحفظ');
   }
 
   /* ----- الاستيراد من Excel ----- */
@@ -1483,14 +1604,14 @@
     return null;
   }
 
-  // يقبل 2015-03-21 أو 21/3/2015 (اليوم أولًا)
+  // يقبل 2015-03-21 أو 21/3/2015 (اليوم أولًا)، ويرفض السنوات غير المعقولة لطالب
   function parseDate(x) {
     x = latinDigits(x);
     var m = x.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/), y, mo, d;
     if (m) { y = m[1]; mo = m[2]; d = m[3]; }
     else if ((m = x.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/))) { d = m[1]; mo = m[2]; y = m[3]; }
     else return null;
-    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    if (mo < 1 || mo > 12 || d < 1 || d > 31 || y < 1990 || y > new Date().getFullYear() - 2) return null;
     return y + '-' + ('0' + mo).slice(-2) + '-' + ('0' + d).slice(-2);
   }
 
@@ -1503,19 +1624,16 @@
     return '';
   }
 
+  function parseGender(x) {
+    x = norm(x);
+    return /^(ذكر|ولد|male|m$)/.test(x) ? 'ذكر' : /^(انثي|بنت|female|f$)/.test(x) ? 'أنثى' : '';
+  }
+
   // Excel يحذف الصفر الأول من أرقام الجوال المخزّنة كأرقام
   function parsePhone(x) {
     x = latinDigits(x).replace(/[\s-]/g, '');
     // رقم فلسطيني 5xxxxxxxx أو مصري 1xxxxxxxxx
     return /^(5\d{8}|1[0125]\d{8})$/.test(x) ? '0' + x : x;
-  }
-
-  // قيم b غير الفارغة تغلب قيم a
-  function mergeFilled(a, b) {
-    if (!a) return b;
-    var out = Object.assign({}, a);
-    Object.keys(b).forEach(function (k) { if (b[k] !== '' && b[k] != null) out[k] = b[k]; });
-    return out;
   }
 
   async function readImportFile(file) {
@@ -1537,30 +1655,41 @@
           }
         }
       });
-      if (!col.full_name || !col.national_id) {
-        return toast('لم يُعثر في الملف على عمودي «اسم الطالب» و«رقم هوية الطالب».', true);
-      }
+      if (!col.full_name) return toast('لم يُعثر في الملف على عمود «اسم الطالب».', true);
+      // ملفات ردود النماذج فيها طابع زمني لكل رد: يُعرَف به الرد عند إعادة الاستيراد
+      var stamp = headers.filter(function (h) { return /timestamp|طابع زمني/.test(norm(h)); })[0];
+      if (stamp) used[stamp] = true;
 
-      var known = schoolClasses(), byNorm = {}, existing = {};
-      known.forEach(function (c) { byNorm[norm(c)] = c; });
-      S.students.forEach(function (x) { existing[x.national_id] = x; });
+      var haveKey = {}, haveId = {};
+      S.students.forEach(function (x) { if (x.form_key) haveKey[x.form_key] = true; if (x.national_id) haveId[x.national_id] = true; });
 
-      var byId = {}, errors = [], classes = {}, dupes = 0;
+      var rows = [], errors = [], seenId = {}, skipped = 0, dupIds = 0, noId = 0;
       raw.forEach(function (row, i) {
         var get = function (k) {
           var x = col[k] ? row[col[k]] : '';
           // خلايا التاريخ تصل ككائن Date (منتصف الليل UTC مع انحراف بسيط أحيانًا)
           if (x instanceof Date) return new Date(x.getTime() + 12 * 3600e3).toISOString().slice(0, 10);
-          return String(x).trim();
+          // تُحذف علامات الاتجاه غير المرئية التي تُلصق مع الأرقام المنسوخة
+          return String(x).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
         };
+        var answers = {};
+        ST_FIELDS.forEach(function (f) { var a = get(f.k); if (a) answers[f.k] = a; });
+        // رقم الهوية: أرقام فقط إن أمكن، وإلا النص كما كُتب ليُصحَّح عند المراجعة
+        var idDigits = latinDigits(get('national_id')).replace(/[\s-]/g, '');
+        var validId = /^\d{5,20}$/.test(idDigits);
+        var ts = stamp ? row[stamp] : '';
+        var parts = parseFloat(latinDigits(get('quran_parts')));
         var d = {
           full_name: get('full_name').replace(/\s+/g, ' '),
-          national_id: latinDigits(get('national_id')).replace(/\s/g, ''),
+          national_id: validId ? idDigits : '',
+          gender: parseGender(get('gender')),
           phone: parsePhone(get('phone')),
           whatsapp: parsePhone(get('whatsapp')),
+          email: get('email'),
           birth_date: parseDate(get('birth_date')),
           address: get('address'),
-          class_name: get('class_name'),
+          class_name: '',
+          requested_class: get('class_name'),
           has_prev_certificate: parseYesNo(get('has_prev_certificate')),
           prev_grade: get('prev_grade'),
           guardian_name: get('guardian_name'),
@@ -1572,34 +1701,24 @@
           is_orphan: parseYesNo(get('is_orphan')),
           orphan_of: parseOrphanOf(get('orphan_of')),
           memorizes_quran: parseYesNo(get('memorizes_quran')),
-          quran_parts: null
+          quran_parts: !isNaN(parts) && parts >= 0 && parts <= 30 ? parts : null,
+          status: 'pending',
+          form_key: ts instanceof Date ? ts.toISOString() : (ts === '' ? null : String(ts)),
+          form_answers: answers
         };
-        var parts = parseFloat(latinDigits(get('quran_parts')));
-        if (!isNaN(parts)) d.quran_parts = parts;
-        if (!d.full_name && !d.national_id) return; // صف فارغ
-        if (!d.full_name || !d.national_id) {
-          return errors.push('الصف ' + (i + 2) + ': ' + (d.full_name ? 'رقم الهوية ناقص (' + d.full_name + ')' : 'اسم الطالب ناقص'));
-        }
-        // الصف كما هو معرّف في المدرسة إن وُجد (مع تجاهل فروق الهمزات والمسافات)
-        if (d.class_name) {
-          d.class_name = byNorm[norm(d.class_name)] || d.class_name.replace(/\s+/g, ' ');
-          classes[d.class_name] = (classes[d.class_name] || 0) + 1;
-        }
-        if (byId[d.national_id]) dupes++;
-        byId[d.national_id] = mergeFilled(byId[d.national_id], d);
+        if (!d.is_orphan) d.orphan_of = '';
+        if (!d.full_name && !Object.keys(answers).length) return; // صف فارغ
+        if (!d.full_name) return errors.push('الصف ' + (i + 2) + ': اسم الطالب ناقص');
+        // لا تُعدَّل بيانات من سبق استيراده: يُعرَف برد الاستمارة، أو برقم الهوية في الملفات الأخرى
+        if (d.form_key ? haveKey[d.form_key] : (d.national_id && haveId[d.national_id])) return skipped++;
+        if (!d.national_id) noId++;
+        else if (seenId[d.national_id] || haveId[d.national_id]) dupIds++;
+        seenId[d.national_id] = true;
+        rows.push(d);
       });
 
-      // المسجل مسبقًا: تُحدَّث الحقول الواردة في الملف فقط، ولا تُمحى بياناته بالخانات الفارغة
-      var rows = Object.keys(byId).map(function (k) {
-        var old = existing[k];
-        if (!old) return byId[k];
-        var base = {};
-        Object.keys(byId[k]).forEach(function (f) { base[f] = old[f]; });
-        return mergeFilled(base, byId[k]);
-      });
       ui.imp = {
-        file: file.name, rows: rows, errors: errors, classes: classes, dupes: dupes,
-        updates: rows.filter(function (d) { return existing[d.national_id]; }).length,
+        file: file.name, rows: rows, errors: errors, skipped: skipped, dupIds: dupIds, noId: noId,
         mapped: ST_FIELDS.filter(function (f) { return col[f.k]; }).map(function (f) { return f.k; }),
         unmapped: headers.filter(function (h) { return !used[h]; })
       };
@@ -1610,32 +1729,16 @@
   }
 
   async function runImport() {
-    var p = ui.imp, forced = document.getElementById('imp-class').value;
-    var addBox = document.getElementById('imp-addclasses');
-    var known = schoolClasses().slice();
-    var rows = p.rows.map(function (d) {
-      d = Object.assign({}, d);
-      if (forced) d.class_name = forced;
-      else if (d.class_name && known.indexOf(d.class_name) < 0 && !(addBox && addBox.checked)) d.class_name = '';
-      return d;
-    });
-
-    if (!forced && addBox && addBox.checked) {
-      var extra = Object.keys(p.classes).filter(function (c) { return known.indexOf(c) < 0; });
-      var cr = await sb.from('settings').update({ classes: known.concat(extra) }).eq('id', 1);
-      if (cr.error) return fail(cr.error);
-      (S.settings || (S.settings = {})).classes = known.concat(extra);
-    }
-
-    // الطالب المسجل مسبقًا بالرقم نفسه تُحدَّث بياناته
-    for (var i = 0; i < rows.length; i += 200) {
-      var r = await sb.from('students').upsert(rows.slice(i, i + 200), { onConflict: 'national_id' });
+    var rows = ui.imp.rows;
+    for (var i = 0; i < rows.length; i += 100) {
+      var r = await sb.from('students').insert(rows.slice(i, i + 100));
       if (r.error) { await loadStudents(); render(); return fail(r.error); }
     }
     await loadStudents();
     ui.imp = null;
+    ui.stStatus = 'pending';
     render();
-    toast('تم استيراد الطلاب (' + rows.length + ')');
+    toast('تم استيراد الطلاب (' + rows.length + ') بحالة تسجيل مبدئي');
   }
 
   async function downloadTemplate() {
@@ -1654,17 +1757,27 @@
 
   document.addEventListener('click', async function (e) {
     if (!isAdmin() || location.hash !== '#/students') return;
-    var el, st;
+    var el, st, r;
     if ((el = e.target.closest('[data-stedit]'))) {
       ui.editStudent = el.getAttribute('data-stedit') || null;
       render();
       var first = document.getElementById('sf-full_name');
       if (first) { first.focus(); window.scrollTo(0, 0); }
+    } else if ((el = e.target.closest('[data-stprofile]'))) {
+      pendingProfile = findStudent(el.getAttribute('data-stprofile'));
+      window.print();
+    } else if ((el = e.target.closest('[data-stunfinal]'))) {
+      st = findStudent(el.getAttribute('data-stunfinal'));
+      if (!confirm('إعادة تسجيل «' + st.full_name + '» إلى الحالة المبدئية؟')) return;
+      r = await sb.from('students').update({ status: 'pending', finalized_at: null }).eq('id', st.id);
+      if (r.error) return fail(r.error);
+      st.status = 'pending'; st.finalized_at = null;
+      render();
     } else if ((el = e.target.closest('[data-stdel]'))) {
       st = findStudent(el.getAttribute('data-stdel'));
       if (!confirm('هل تريد حذف الطالب «' + st.full_name + '» نهائيًا؟')) return;
-      var d = await sb.from('students').delete().eq('id', st.id);
-      if (d.error) return fail(d.error);
+      r = await sb.from('students').delete().eq('id', st.id);
+      if (r.error) return fail(r.error);
       S.students = S.students.filter(function (x) { return x.id !== st.id; });
       S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
       render();
@@ -1690,11 +1803,12 @@
     var el = e.target;
     if (el.id === 'imp-file') {
       if (el.files[0]) readImportFile(el.files[0]);
-    } else if (el.id === 'st-class' || el.id === 'st-flag') {
-      if (el.id === 'st-class') ui.stClass = el.value; else ui.stFlag = el.value;
+    } else if (el.id === 'st-class' || el.id === 'st-flag' || el.id === 'st-status') {
+      ui[{ 'st-class': 'stClass', 'st-flag': 'stFlag', 'st-status': 'stStatus' }[el.id]] = el.value;
       document.getElementById('st-table').innerHTML = studentsTableHtml();
     } else if (el.hasAttribute('data-stclass')) {
       var st = findStudent(el.getAttribute('data-stclass'));
+      if (!el.value) { el.value = st.class_name; return toast('الطالب المسجل نهائيًا يجب أن يكون في صف.', true); }
       var r = await sb.from('students').update({ class_name: el.value }).eq('id', st.id);
       if (r.error) { el.value = st.class_name; return fail(r.error); }
       st.class_name = el.value;
@@ -2430,7 +2544,7 @@
     if (e.target.id === 'teacher-form') {
       saveTeacherForm();
     } else if (e.target.id === 'student-form') {
-      saveStudentForm();
+      saveStudentForm(e.submitter ? e.submitter.getAttribute('data-mode') : 'save');
     } else if (e.target.id === 'group-form') {
       saveGroupForm();
     } else if (e.target.id === 'defaultpw-form') {
@@ -2722,6 +2836,7 @@
   window.addEventListener('beforeprint', function () {
     var v = currentVisit(), o = currentTeacher() || currentResult();
     if (pendingReceipt) buildReceiptSheet(pendingReceipt);
+    else if (pendingProfile) buildProfileSheet(pendingProfile);
     else if (location.hash === '#/students' && isAdmin() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
@@ -2731,6 +2846,7 @@
 
   window.addEventListener('afterprint', function () {
     pendingReceipt = null;
+    pendingProfile = null;
     document.body.classList.remove('print-sheet');
   });
 
