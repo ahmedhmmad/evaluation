@@ -643,7 +643,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false };
-  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1936,6 +1936,7 @@
         'شغّل الملف <code dir="ltr">supabase/' + (S.studentsMissing ? 'students.sql ثم transport.sql' : 'transport.sql') + '</code> في محرر SQL ثم حدّث الصفحة.</div>';
       return;
     }
+    if (ui.cl && !currentGroup()) return renderCluster();
     if (!ui.tMonth) ui.tMonth = thisMonth();
     if (!S.tPay[ui.tMonth]) {
       app.innerHTML = tabs('transport') + '<div class="card empty">جارٍ التحميل…</div>';
@@ -1981,6 +1982,7 @@
     app.innerHTML = tabs('transport') +
       (ui.editGroup === 'new' ? groupFormHtml(null) :
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-gedit="new">+ مجموعة جديدة</button>' +
+        '<button type="button" class="btn" data-clopen>اقتراح نقاط التجمع من العناوين</button>' +
         '<span style="flex:1"></span>' + monthPick + '</div>') +
       (cards
         ? '<p class="st-count">' + monthLabel(ui.tMonth) + ' — المجموعات: ' + S.tGroups.length + ' · الطلاب: ' + all.n + ' · المحصَّل ' + money(all.paid) + ' من ' + money(all.due) + '</p>' +
@@ -2134,6 +2136,224 @@
     if (e.target.id !== 't-search' || !g) return;
     ui.tSearch = e.target.value;
     document.getElementById('t-cands').innerHTML = candidatesHtml(g);
+  });
+
+  /* ----- اقتراح نقاط التجمع من عناوين السكن (بالذكاء الاصطناعي) ----- */
+
+  // الطلاب الذين لهم عنوان وليسوا في أي مجموعة مواصلات
+  function clusterPool(includePending) {
+    var inGroup = transportGroupOf();
+    return S.students.filter(function (x) {
+      return !inGroup[x.id] && String(x.address || '').trim() && (includePending || stStatus(x) === 'final');
+    });
+  }
+
+  // لا يُرسَل إلا رقم تسلسلي ونص العنوان: بلا أسماء ولا أرقام هوية ولا هواتف
+  function clusterPayload(pool) {
+    return {
+      addresses: pool.map(function (x, i) { return { n: i + 1, a: String(x.address).replace(/\s+/g, ' ').trim() }; }),
+      existing: S.tGroups.map(function (g) { return g.assembly_point; })
+    };
+  }
+
+  // نص جاهز للصق في محادثة مع Claude عند عدم توفر الخدمة الآلية
+  function clusterPromptText(payload) {
+    return 'أمامك عناوين سكن طلاب مدرسة كتبها أولياء الأمور نصًّا حرًّا. اجمعها في «نقاط تجمع» للمواصلات: كل مجموعة تضم من يسكنون متقاربين ' +
+      '(الحي نفسه أو الكمبوند نفسه أو حول المَعلم نفسه)، وسمِّ كل مجموعة بأشهر مكان مشترك ورد في عناوينها دون اختراع أماكن. ' +
+      'العنوان الغامض ضعه في unclear. كل رقم يظهر مرة واحدة فقط.' +
+      (payload.existing.length ? '\nنقاط تجمع موجودة (استخدم الاسم نفسه إن انطبق): ' + payload.existing.join('، ') : '') +
+      '\n\nأجب بـ JSON فقط بهذا الشكل دون أي شرح:\n{"clusters":[{"name":"اسم نقطة التجمع","area":"المنطقة الأوسع","members":[1,2]}],"unclear":[3]}' +
+      '\n\nالعناوين (الرقم: النص):\n' + payload.addresses.map(function (x) { return x.n + ': ' + x.a; }).join('\n');
+  }
+
+  // يحوّل إجابة النموذج إلى مجموعات من الطلاب، ويضمن أن كل طالب في مكان واحد فقط
+  function readClusterResult(result, pool) {
+    if (!result || !Array.isArray(result.clusters)) throw new Error('الإجابة ليست بالشكل المتوقع');
+    var seen = {}, clusters = [];
+    result.clusters.forEach(function (c) {
+      var ids = [];
+      (Array.isArray(c.members) ? c.members : []).forEach(function (n) {
+        var st = pool[Number(n) - 1];
+        if (st && !seen[st.id]) { seen[st.id] = true; ids.push(st.id); }
+      });
+      var name = String(c.name || '').replace(/\s+/g, ' ').trim();
+      if (ids.length && name) clusters.push({ name: name, area: String(c.area || '').trim(), ids: ids, on: true });
+      else ids.forEach(function (id) { delete seen[id]; });
+    });
+    clusters.sort(function (a, b) { return a.area.localeCompare(b.area, 'ar') || b.ids.length - a.ids.length; });
+    return { clusters: clusters, unclear: pool.filter(function (x) { return !seen[x.id]; }).map(function (x) { return x.id; }) };
+  }
+
+  async function runClustering() {
+    var cl = ui.cl, pool = clusterPool(cl.includePending);
+    if (!pool.length) return toast('لا يوجد طلاب بعناوين خارج مجموعات المواصلات.', true);
+    cl.pool = pool; cl.step = 'busy'; cl.error = '';
+    render();
+    var r;
+    try {
+      r = await sb.functions.invoke('cluster-addresses', { body: clusterPayload(pool) });
+    } catch (err) {
+      r = { error: err };
+    }
+    if (ui.cl !== cl) return; // أُلغي أثناء الانتظار
+    if (r.error || !r.data || r.data.error) {
+      // الخدمة الآلية غير مفعّلة أو تعذّرت: يُعرض النص ليُنسخ يدويًا
+      cl.step = 'manual';
+      cl.error = (r.data && r.data.error) || '';
+      return render();
+    }
+    try {
+      Object.assign(cl, readClusterResult(r.data, pool), { step: 'review' });
+    } catch (err) {
+      cl.step = 'manual'; cl.error = err.message;
+    }
+    render();
+  }
+
+  function clusterMoveSelect(id, current) {
+    var cl = ui.cl;
+    return '<select data-clmove="' + id + '" aria-label="نقل إلى مجموعة">' +
+      cl.clusters.map(function (c, i) { return '<option value="' + i + '"' + (i === current ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') +
+      '<option value="-1"' + (current === -1 ? ' selected' : '') + '>بدون مجموعة</option></select>';
+  }
+
+  function clusterMemberRow(id, current) {
+    var x = findStudent(id);
+    return '<div class="cand"><span><b>' + esc(x.full_name) + '</b><br><span class="meta">' + esc(x.address) + '</span></span>' + clusterMoveSelect(id, current) + '</div>';
+  }
+
+  function renderCluster() {
+    var cl = ui.cl, head = tabs('transport') +
+      '<button type="button" class="btn link" data-clcancel>→ العودة إلى مجموعات المواصلات</button>';
+
+    if (cl.step === 'setup' || cl.step === 'busy') {
+      var n = clusterPool(cl.includePending).length, busy = cl.step === 'busy';
+      app.innerHTML = head + '<div class="card"><h2>اقتراح نقاط التجمع من عناوين السكن</h2>' +
+        '<p class="hint">يقرأ الذكاء الاصطناعي عناوين الطلاب غير المشتركين في المواصلات ويقترح تجميعهم حول نقاط تجمع. ' +
+        'يُرسَل نص العنوان فقط مع رقم تسلسلي، بلا أسماء ولا أرقام هوية ولا هواتف. تراجع الاقتراح وتعدّله قبل إنشاء أي مجموعة.</p>' +
+        '<label class="check"><input type="checkbox" id="cl-pending"' + (cl.includePending ? ' checked' : '') + (busy ? ' disabled' : '') + '>تضمين الطلاب ذوي التسجيل المبدئي</label>' +
+        '<p class="st-count" style="margin-top:8px">عدد العناوين التي ستُحلَّل: ' + n + '</p>' +
+        '<div class="actions"><button type="button" class="btn primary" data-clrun' + (busy || !n ? ' disabled' : '') + '>' +
+        (busy ? 'جارٍ تحليل العناوين… قد يستغرق دقيقة' : 'تحليل العناوين') + '</button></div></div>';
+      return;
+    }
+
+    if (cl.step === 'manual') {
+      app.innerHTML = head + '<div class="card"><h2>التحليل اليدوي عبر محادثة Claude</h2>' +
+        '<p class="hint">الخدمة الآلية غير مفعّلة بعد' + (cl.error ? ' (' + esc(cl.error) + ')' : '') + '. يمكنك إتمام العمل يدويًا في ثلاث خطوات:</p>' +
+        '<ol style="margin:0 0 10px;padding-inline-start:20px"><li>انسخ النص التالي.</li><li>الصقه في محادثة جديدة على claude.ai وأرسله.</li><li>انسخ إجابة Claude كاملة والصقها في المربع الثاني ثم اضغط «قراءة الإجابة».</li></ol>' +
+        '<textarea id="cl-prompt" readonly style="min-height:150px" dir="rtl">' + esc(clusterPromptText(clusterPayload(cl.pool))) + '</textarea>' +
+        '<div class="actions" style="margin-top:8px"><button type="button" class="btn" data-clcopy>نسخ النص</button></div>' +
+        '<label class="field" for="cl-answer" style="margin-top:16px">إجابة Claude</label>' +
+        '<textarea id="cl-answer" style="min-height:120px" dir="ltr" placeholder=\'{"clusters":[...],"unclear":[...]}\'></textarea>' +
+        '<div class="actions" style="margin-top:8px"><button type="button" class="btn primary" data-clparse>قراءة الإجابة</button></div></div>';
+      return;
+    }
+
+    // مراجعة الاقتراح
+    var known = {};
+    S.tGroups.forEach(function (g) { known[norm(g.assembly_point)] = true; });
+    var chosen = cl.clusters.filter(function (c) { return c.on && c.ids.length; });
+    var area = null;
+    app.innerHTML = head +
+      '<div class="page-head"><div><h1 style="font-size:1.2rem">نقاط التجمع المقترحة</h1><p>عدّل الأسماء، انقل الطلاب بين المجموعات، وأزل العلامة عمّا لا تريده. لا يُحفظ شيء قبل الضغط على «إنشاء المجموعات».</p></div></div>' +
+      cl.clusters.map(function (c, i) {
+        var title = c.area !== area ? '<h2 style="margin:18px 0 8px;font-size:1rem;color:var(--muted)">' + esc(c.area || 'منطقة غير محددة') + '</h2>' : '';
+        area = c.area;
+        return title + '<div class="card" style="margin-top:8px"><div class="toolbar" style="align-items:center;margin:0">' +
+          '<input type="checkbox" data-clon="' + i + '"' + (c.on ? ' checked' : '') + ' aria-label="إنشاء هذه المجموعة" style="width:18px;height:18px;accent-color:var(--primary)">' +
+          '<input type="text" data-clname="' + i + '" aria-label="اسم نقطة التجمع" style="flex:1;min-width:160px;font-weight:700" value="' + esc(c.name) + '">' +
+          '<span class="badge ' + (known[norm(c.name)] ? 'review' : 'approved') + '">' + c.ids.length + ' ' + (known[norm(c.name)] ? '· يُضافون إلى مجموعة موجودة' : '· مجموعة جديدة') + '</span></div>' +
+          '<details class="bank"><summary>الطلاب (' + c.ids.length + ')</summary>' + c.ids.map(function (id) { return clusterMemberRow(id, i); }).join('') + '</details></div>';
+      }).join('') +
+      (cl.unclear.length
+        ? '<div class="card"><h2>عناوين غير واضحة أو بدون مجموعة (' + cl.unclear.length + ')</h2><p class="hint">اختر لكل طالب مجموعة، أو اتركه ليُضاف يدويًا لاحقًا.</p>' +
+          cl.unclear.map(function (id) { return clusterMemberRow(id, -1); }).join('') + '</div>'
+        : '') +
+      '<div class="actions"><button type="button" class="btn primary" data-clapply' + (chosen.length ? '' : ' disabled') + '>إنشاء المجموعات (' + chosen.length + ') وإضافة الطلاب (' +
+        chosen.reduce(function (a, c) { return a + c.ids.length; }, 0) + ')</button>' +
+      '<button type="button" class="btn" data-clcancel>إلغاء</button></div>';
+  }
+
+  async function applyClusters() {
+    var cl = ui.cl, chosen = cl.clusters.filter(function (c) { return c.on && c.ids.length && c.name.trim(); });
+    for (var i = 0; i < chosen.length; i++) {
+      var c = chosen[i], name = c.name.trim();
+      var g = S.tGroups.filter(function (x) { return norm(x.assembly_point) === norm(name); })[0];
+      if (!g) {
+        var ins = await sb.from('transport_groups').insert({ assembly_point: name, notes: c.area || '' }).select().single();
+        if (ins.error) { render(); return fail(ins.error); }
+        g = ins.data;
+        S.tGroups.push(g);
+      }
+      var rows = c.ids.map(function (id) { return { student_id: id, group_id: g.id, share: null }; });
+      var up = await sb.from('transport_members').upsert(rows, { onConflict: 'student_id' });
+      if (up.error) { render(); return fail(up.error); }
+      S.tMembers = S.tMembers.filter(function (m) { return c.ids.indexOf(m.student_id) < 0; }).concat(rows);
+      c.on = false; // لا تُكرَّر إن أُعيد الضغط بعد خطأ لاحق
+    }
+    S.tGroups.sort(function (a, b) { return a.assembly_point.localeCompare(b.assembly_point, 'ar'); });
+    ui.cl = null;
+    render();
+    toast('تم إنشاء المجموعات وإضافة الطلاب');
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (!isAdmin() || location.hash !== '#/transport') return;
+    var cl = ui.cl;
+    if (e.target.closest('[data-clopen]')) {
+      ui.cl = { step: 'setup', includePending: true, pool: [], clusters: [], unclear: [], error: '' };
+      render();
+    } else if (!cl) {
+      return;
+    } else if (e.target.closest('[data-clcancel]')) {
+      if (cl.step === 'review' && !confirm('إلغاء الاقتراح الحالي دون إنشاء المجموعات؟')) return;
+      ui.cl = null;
+      render();
+    } else if (e.target.closest('[data-clrun]')) {
+      runClustering();
+    } else if (e.target.closest('[data-clcopy]')) {
+      var box = document.getElementById('cl-prompt');
+      try { await navigator.clipboard.writeText(box.value); toast('تم نسخ النص'); }
+      catch (err) { box.focus(); box.select(); toast('حدِّد النص وانسخه يدويًا (Ctrl+C).', true); }
+    } else if (e.target.closest('[data-clparse]')) {
+      // الإجابة قد تأتي محاطة بشرح أو بعلامات تنسيق: يُؤخذ منها كائن JSON فقط
+      var text = document.getElementById('cl-answer').value, a = text.indexOf('{'), b = text.lastIndexOf('}');
+      try {
+        if (a < 0 || b <= a) throw new Error('لا تحتوي على JSON');
+        Object.assign(cl, readClusterResult(JSON.parse(text.slice(a, b + 1)), cl.pool), { step: 'review' });
+        render();
+      } catch (err) {
+        toast('تعذرت قراءة الإجابة: ' + err.message, true);
+      }
+    } else if (e.target.closest('[data-clapply]')) {
+      e.target.closest('[data-clapply]').disabled = true;
+      applyClusters();
+    }
+  });
+
+  app.addEventListener('change', function (e) {
+    var cl = ui.cl, el = e.target;
+    if (!cl || !isAdmin() || location.hash !== '#/transport') return;
+    if (el.id === 'cl-pending') {
+      cl.includePending = el.checked;
+      render();
+    } else if (el.hasAttribute('data-clon')) {
+      cl.clusters[Number(el.getAttribute('data-clon'))].on = el.checked;
+      render();
+    } else if (el.hasAttribute('data-clname')) {
+      cl.clusters[Number(el.getAttribute('data-clname'))].name = el.value.replace(/\s+/g, ' ').trim();
+      render();
+    } else if (el.hasAttribute('data-clmove')) {
+      var id = el.getAttribute('data-clmove'), to = Number(el.value);
+      cl.clusters.forEach(function (c) { c.ids = c.ids.filter(function (x) { return x !== id; }); });
+      cl.unclear = cl.unclear.filter(function (x) { return x !== id; });
+      if (to >= 0) cl.clusters[to].ids.push(id); else cl.unclear.push(id);
+      // تبقى قوائم الطلاب المفتوحة مفتوحة بعد إعادة الرسم
+      var open = Array.prototype.map.call(app.querySelectorAll('details.bank'), function (d) { return d.open; });
+      render();
+      Array.prototype.forEach.call(app.querySelectorAll('details.bank'), function (d, i) { d.open = !!open[i]; });
+    }
   });
 
   /* ---------- قائمة المعلمين ---------- */
