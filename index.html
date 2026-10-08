@@ -392,7 +392,6 @@
   #print-sheet.ls table { table-layout: auto; }
   #print-sheet.ls th { font-weight: 700; background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #print-sheet.ls td, #print-sheet.ls th { padding: .25em .4em; }
-  #print-sheet.ls tr { break-inside: avoid; }
   #print-sheet.ls thead { display: table-header-group; }
 
   /* إيصال السداد المطبوع */
@@ -1765,7 +1764,7 @@
       if (first) { first.focus(); window.scrollTo(0, 0); }
     } else if ((el = e.target.closest('[data-stprofile]'))) {
       pendingProfile = findStudent(el.getAttribute('data-stprofile'));
-      window.print();
+      printNow();
     } else if ((el = e.target.closest('[data-stunfinal]'))) {
       st = findStudent(el.getAttribute('data-stunfinal'));
       if (!confirm('إعادة تسجيل «' + st.full_name + '» إلى الحالة المبدئية؟')) return;
@@ -1783,7 +1782,7 @@
       render();
     } else if (e.target.closest('[data-stprint]')) {
       if (!filteredStudents().length) return toast('لا يوجد طلاب مطابقون للطباعة.', true);
-      window.print();
+      printNow();
     } else if (e.target.closest('[data-impopen]')) {
       document.getElementById('imp-file').click();
     } else if (e.target.closest('[data-imptemplate]')) {
@@ -2102,7 +2101,7 @@
       setPayment(g, fid, { amount: shareOf(mem, g) });
     } else if (g && (el = e.target.closest('[data-mreceipt]'))) {
       pendingReceipt = { g: g, sid: el.getAttribute('data-mreceipt') };
-      window.print();
+      printNow();
     }
   });
 
@@ -2442,7 +2441,7 @@
     } else if (act === 'reload') {
       loadAll();
     } else if (act === 'print') {
-      window.print();
+      printNow();
     } else if (act === 'back') {
       await flush();
       go('#/teachers');
@@ -2833,21 +2832,59 @@
     return null;
   }
 
-  window.addEventListener('beforeprint', function () {
+  // يبني الورقة المناسبة للصفحة الحالية (إيصال، ملف طالب، كشف، تقرير زيارة، تقييم). يعيد false إن لم تكن للصفحة ورقة خاصة
+  function buildCurrentSheet() {
     var v = currentVisit(), o = currentTeacher() || currentResult();
     if (pendingReceipt) buildReceiptSheet(pendingReceipt);
     else if (pendingProfile) buildProfileSheet(pendingProfile);
     else if (location.hash === '#/students' && isAdmin() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
-    else return;
-    document.body.classList.add('print-sheet');
+    else return false;
+    pendingReceipt = null;
+    pendingProfile = null;
+    return true;
+  }
+
+  // أزرار الطباعة: تُطبع الورقة من إطار مستقل لا يحتوي إلا عليها وعلى تنسيقها،
+  // فلا تتأثر الطباعة بحجم الصفحة الأصلية ولا بتخطيطها
+  function printNow() {
+    if (!buildCurrentSheet()) return window.print();
+    var css = '@page{size:A4;margin:12.7mm}html,body{margin:0;background:#fff}';
+    var rules = document.styleSheets[0].cssRules;
+    for (var i = 0; i < rules.length; i++) {
+      var sel = rules[i].selectorText || '';
+      if (sel.indexOf('#print-sheet') > -1 && sel.indexOf('body.print-sheet') < 0) css += rules[i].cssText;
+    }
+    css += '#print-sheet{position:static!important;visibility:visible!important}';
+
+    var old = document.getElementById('print-frame');
+    if (old) old.remove();
+    var frame = document.createElement('iframe');
+    frame.id = 'print-frame';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(frame);
+    var doc = frame.contentDocument;
+    doc.open();
+    doc.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>' + esc(document.title) + '</title><style>' + css + '</style></head><body>' +
+      sheet.outerHTML + '</body></html>');
+    doc.close();
+    sheet.innerHTML = ''; // الورقة صارت في الإطار؛ لا تبقى نسخة مخفية تثقل الصفحة
+    setTimeout(function () {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    }, 100);
+  }
+
+  // Ctrl+P من المتصفح مباشرة
+  window.addEventListener('beforeprint', function () {
+    if (buildCurrentSheet()) document.body.classList.add('print-sheet');
   });
 
   window.addEventListener('afterprint', function () {
-    pendingReceipt = null;
-    pendingProfile = null;
     document.body.classList.remove('print-sheet');
+    sheet.innerHTML = '';
   });
 
   async function createVisit(teacherId) {
