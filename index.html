@@ -317,6 +317,7 @@
     font-family: var(--font-body); font-size: 10.5pt; line-height: 1.45;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
+  #print-sheet * { box-sizing: border-box; }
   /* العلامة المائية: الشعار في منتصف كل صفحة بشفافية خفيفة */
   #print-sheet .wm { position: fixed; top: 50%; left: 50%; width: 115mm; height: auto; transform: translate(-50%, -50%); opacity: .055; z-index: 2; }
 
@@ -360,15 +361,16 @@
   #print-sheet .bad { color: var(--bad); }
 
   /* التوقيعات والختم */
-  #print-sheet .rs { display: flex; gap: .9em; align-items: stretch; margin-top: 1.5em; break-inside: avoid; }
+  #print-sheet .rs { display: flex; gap: .9em; align-items: stretch; justify-content: flex-end; margin-top: 1.5em; break-inside: avoid; }
   #print-sheet .rs > div { flex: 1; padding: .45em .7em .6em; border: .5pt solid var(--rule); border-top: 1.5pt solid var(--navy); }
   #print-sheet .rs b { display: block; font-family: var(--font-head); color: var(--navy); }
   #print-sheet .rs span { display: block; margin-top: .55em; }
   #print-sheet .rs .stamp { flex: 0 0 6.6em; height: 6.6em; padding: 0; display: grid; place-items: center; border: .75pt dashed var(--gold); border-radius: 50%; color: #999; font-size: .9em; }
 
   /* تقرير الزيارة */
-  #print-sheet.ps .ps-domains td { height: 2.9em; }
-  #print-sheet.ps .rbox { min-height: 4.2em; }
+  #print-sheet.ps .ps-domains td { height: 2.3em; }
+  #print-sheet.ps .rbox { min-height: 3.2em; }
+  #print-sheet.ps .rs { margin-top: 1em; }
   /* تقييم المعلم */
   #print-sheet .pe-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8em; margin-bottom: .8em; }
   #print-sheet .pe-summary > div { border: .5pt solid var(--rule); border-top: 1.5pt solid var(--gold); padding: .3em; text-align: center; }
@@ -387,10 +389,9 @@
   /* كشوف الطلاب */
   #print-sheet.ls table { table-layout: auto; }
   #print-sheet td.ls-head { border: 0; padding: 0 0 .3em; background: #fff; font-size: 1.087em; }
+  #print-sheet td.pg-space { border: 0; padding: 0; background: none; height: 0; }
   #print-sheet table.newpage { break-before: page; }
   /* ملف الطالب */
-  #print-sheet .pf-row { display: flex; gap: .8em; align-items: flex-start; }
-  #print-sheet .pf-photo { flex: 0 0 6.6em; height: 8.2em; border: .5pt solid var(--rule); display: grid; place-items: center; text-align: center; font-size: .9em; color: #888; }
   #print-sheet .pf-doc { display: inline-block; margin-inline-end: 1.6em; }
 
   /* Transport */
@@ -1293,10 +1294,9 @@
 
   // المستندات التي يُحضرها ولي الأمر عند مراجعة التسجيل في المدرسة
   var ST_DOCS = [
-    ['birth', 'شهادة الميلاد'],
-    ['guardian_id', 'صورة هوية أو إقامة ولي الأمر'],
-    ['certificate', 'شهادة العام السابق'],
-    ['photos', 'صور شخصية']
+    ['birth', 'شهادة الميلاد / صورة جواز السفر'],
+    ['guardian_id', 'صورة جواز سفر ولي الأمر'],
+    ['certificate', 'شهادة العام السابق']
   ];
 
   var ST_STATUS = { pending: 'تسجيل مبدئي', final: 'تسجيل نهائي' };
@@ -3018,7 +3018,8 @@
 
   function render() {
     document.getElementById('page-lh').innerHTML = letterhead();
-    document.getElementById('page-css').textContent = pageCss();
+    document.getElementById('page-css').textContent = pageCss() + '@media print{' + sheetPadCss('body.print-sheet ') +
+      '#content{padding:' + REPORT.page.marginY + 'mm ' + REPORT.page.marginX + 'mm}}';
     renderSide();
     if (!sb) return renderSetup();
     if (!S.uid) return renderAuth();
@@ -3448,15 +3449,18 @@
     }).join('') + '<div class="stamp">الختم</div></div>';
   }
 
-  // إعداد الصفحة والتذييل: رقم الصفحة يمينًا، بيانات التواصل في الوسط، تاريخ ووقت الإصدار يسارًا، وفوقها خط ذهبي
+  // إعداد الصفحة: هامش الصفحة صفر حتى لا يطبع المتصفح سطوره (العنوان والتاريخ أعلى الصفحة، والرابط ورقم الصفحة أسفلها)؛
+  // الهوامش الفعلية (12mm أعلى وأسفل، 15mm من الجانبين) تأتي من حشو الورقة نفسها
   function pageCss() {
-    var q = function (text) { return '"' + String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\s+/g, ' ') + '"'; };
-    var box = 'font:8pt "IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;color:#555;border-top:.75pt solid #C5A46D;padding-top:1.5mm;vertical-align:top;';
-    var p = REPORT.page;
-    return '@page{size:A4 portrait;margin:' + p.marginY + 'mm ' + p.marginX + 'mm;' +
-      '@bottom-right{content:"صفحة " counter(page) " من " counter(pages);' + box + 'text-align:right}' +
-      '@bottom-center{content:' + q((S.settings && S.settings.contact_info) || '') + ';' + box + 'text-align:center}' +
-      '@bottom-left{content:' + q(nowStamp()) + ';' + box + 'text-align:left}}';
+    return '@page{size:A4 portrait;margin:0}';
+  }
+
+  function sheetPadCss(prefix) {
+    var p = REPORT.page, y = p.marginY + 'mm', x = p.marginX + 'mm';
+    return prefix + '#print-sheet{box-sizing:content-box;padding:' + y + ' ' + x + '}' +
+      // الكشوف متعددة الصفحات: الهامشان العلوي والسفلي صفّان فارغان في رأس الجدول وذيله يتكرران في كل صفحة
+      prefix + '#print-sheet.ls{padding:0 ' + x + ' ' + y + '}' +
+      prefix + '#print-sheet td.pg-space{height:' + y + '}';
   }
 
   // رقم الصف من اسم الشعبة: «السابع (أ)» → 7. يعيد 0 إن لم يُعرف
@@ -3470,16 +3474,21 @@
 
   var sheet = document.getElementById('print-sheet');
 
-  // يُصغَّر الخط إلى أن تتسع الورقة في صفحة A4 واحدة
-  function fitSheet() {
-    // هامش أمان 8mm: القياس هنا والطباعة الفعلية يختلفان قليلًا
-    var p = REPORT.page, maxPx = (p.height - 2 * p.marginY - 8) * 96 / 25.4;
+  // يُصغَّر خط الورقة إلى أن تتسع في صفحة A4 واحدة. el: الورقة (هنا أو داخل إطار الطباعة)؛
+  // padded: الورقة تحمل هوامش الصفحة حشوًا فيدخل في ارتفاعها
+  function fitElement(el, padded) {
+    var p = REPORT.page, maxPx = (p.height - (padded ? 0 : 2 * p.marginY) - 6) * 96 / 25.4;
     var size = REPORT.baseSize;
-    sheet.style.fontSize = size + 'pt';
-    while (sheet.offsetHeight > maxPx && size > REPORT.minSize) {
+    el.style.fontSize = size + 'pt';
+    while (el.offsetHeight > maxPx && size > REPORT.minSize) {
       size -= 0.25;
-      sheet.style.fontSize = size + 'pt';
+      el.style.fontSize = size + 'pt';
     }
+  }
+
+  function fitSheet() {
+    sheet.setAttribute('data-fit', '1');
+    fitElement(sheet, false);
   }
 
   /* ----- تقرير الزيارة الإشرافية ----- */
@@ -3550,6 +3559,7 @@
     var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0];
     var left = Math.max(0, shareOf(mem, g) - rec.amount);
     sheet.className = 'rc';
+    sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     sheet.innerHTML =
       reportHead('إيصال سداد اشتراك المواصلات', [['رقم الإيصال', rec.receipt_no != null ? rec.receipt_no : '—'], ['تاريخ السداد', dmy(rec.paid_on || todayISO())]]) +
@@ -3590,10 +3600,12 @@
 
     var cols = 6 + (oneClass ? 0 : 1) + (flag && flag.extra ? 1 : 0);
     sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + parts.map(function (part, pi) {
       var head = reportHead(part[0], info.concat([['عدد الطلاب', part[1].length]])).replace(/^<img class="wm"[^>]*>/, '');
       return '<table class="rz' + (pi ? ' newpage' : '') + '"><thead>' +
+        '<tr><td class="pg-space" colspan="' + cols + '"></td></tr>' +
         '<tr><td class="ls-head" colspan="' + cols + '">' + head + '</td></tr>' +
         '<tr><th>م</th><th>اسم الطالب</th><th>رقم الهوية</th>' + (oneClass ? '' : '<th>الصف</th>') +
           '<th>الهاتف</th><th>ولي الأمر</th>' + (flag && flag.extra ? '<th>' + flag.extra[0] + '</th>' : '') + '<th>ملاحظات</th></tr></thead><tbody>' +
@@ -3603,7 +3615,7 @@
             (oneClass ? '' : '<td class="c">' + esc(x.class_name || '—') + '</td>') +
             '<td class="c">' + esc(x.phone || x.whatsapp || '') + '</td><td>' + esc(x.guardian_name) + '</td>' +
             (flag && flag.extra ? '<td class="c">' + esc(extra == null ? '' : extra) + '</td>' : '') + '<td style="width:16%"></td></tr>';
-        }).join('') + '</tbody></table>';
+        }).join('') + '</tbody><tfoot><tr><td class="pg-space" colspan="' + cols + '"></td></tr></tfoot></table>';
     }).join('') +
       reportSigns([['معلم المادة', ''], ['المرشد أو المنسق', ''], ['مدير/ة الأكاديمية', principalName()]]);
   }
@@ -3623,7 +3635,7 @@
     sheet.innerHTML =
       reportHead('ملف الطالب', [['حالة التسجيل', final ? 'تسجيل نهائي' + (x.finalized_at ? ' — ' + dmy(x.finalized_at) : '') : 'تسجيل مبدئي — غير نهائي'], ['الشعبة', x.class_name]]) +
       '<div class="rsec">بيانات الطالب</div>' +
-      '<div class="pf-row">' + table(
+      table(
         row1('الاسم رباعي', x.full_name) +
         row2(['رقم الهوية', x.national_id], ['الجنس', x.gender]) +
         row2(['تاريخ الميلاد', dmy(x.birth_date)], ['الشعبة', x.class_name]) +
@@ -3631,20 +3643,18 @@
         row1('المواصلات', rideText) +
         row2(['الهاتف الأساسي', x.phone], ['واتساب', x.whatsapp]) +
         (x.email ? row1('البريد الإلكتروني', x.email) : '')) +
-        '<div class="pf-photo">صورة<br>شخصية</div></div>' +
-      '<div class="rsec">التحصيل السابق</div>' +
+      '<div class="rsec">الخلفية الدراسية</div>' +
       table(row2(['شهادة العام السابق', yesNo(x.has_prev_certificate)], ['التقدير', x.prev_grade])) +
-      '<div class="rsec">ولي الأمر</div>' +
+      '<div class="rsec">بيانات ولي الأمر</div>' +
       table(row2(['الاسم', x.guardian_name], ['صلة القرابة', x.guardian_relation]) + row1('المهنة', x.guardian_job)) +
       '<div class="rsec">الحالة الصحية والاجتماعية</div>' +
       table(
         row2(['حالة صحية', yesNo(x.has_health_condition)], ['أدوية منتظمة', yesNo(x.takes_medication)]) +
-        row2(['احتياجات تعليمية خاصة', yesNo(x.has_special_needs)], ['يتيم', yesNo(x.is_orphan) + (x.is_orphan && x.orphan_of ? ' (' + x.orphan_of + ')' : '')]) +
-        row2(['يحفظ من القرآن', yesNo(x.memorizes_quran)], ['عدد الأجزاء', x.memorizes_quran ? x.quran_parts : ''])) +
+        row2(['احتياجات تعليمية خاصة', yesNo(x.has_special_needs)], ['يتيم', yesNo(x.is_orphan) + (x.is_orphan && x.orphan_of ? ' (' + x.orphan_of + ')' : '')])) +
       '<div class="rsec">المستندات المستلمة</div>' +
       '<div class="rbox">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
         (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</div>' +
-      reportSigns([['ولي الأمر', x.guardian_name], ['مسؤول التسجيل', S.profile && S.profile.full_name], ['مدير/ة الأكاديمية', principalName()]]);
+      reportSigns([]); // بلا توقيعات: خانة الختم فقط
     fitSheet();
   }
 
@@ -3683,7 +3693,7 @@
       var sel = rules[i].selectorText || '';
       if (sel.indexOf('#print-sheet') > -1 && sel.indexOf('body.print-sheet') < 0) css += rules[i].cssText;
     }
-    css += '#print-sheet{position:static!important;visibility:visible!important}';
+    css += '#print-sheet{position:static!important;visibility:visible!important;box-sizing:content-box}' + sheetPadCss('');
 
     var old = document.getElementById('print-frame');
     if (old) old.remove();
@@ -3705,6 +3715,9 @@
     });
     await Promise.race([Promise.all(imgs.concat([reportFontsReady(doc)])), new Promise(function (resolve) { setTimeout(resolve, 3000); })]);
     if (!frame.isConnected) return;
+    // القياس النهائي داخل الإطار نفسه بعد تحميل خطوطه: هو ما سيُطبع فعلًا
+    var printed = doc.getElementById('print-sheet');
+    if (printed.getAttribute('data-fit')) fitElement(printed, true);
     frame.contentWindow.focus();
     frame.contentWindow.print();
   }
