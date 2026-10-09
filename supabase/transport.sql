@@ -66,3 +66,7 @@ alter table public.transport_payments
 
 alter table public.settings
   add column if not exists school_name text not null default '';     -- printed at the top of receipts
+
+-- Other spellings and names of the same assembly point ("جاردينيا ستي" for "جاردينيا سيتي"),
+-- so addresses written either way are recognised as this group.
+alter table public.transport_groups add column if not exists aliases jsonb not null default '[]'::jsonb;

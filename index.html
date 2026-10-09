@@ -405,6 +405,10 @@
   #print-sheet .rc-amount { display: inline-block; border: 2px solid #000; border-radius: 2mm; padding: .1em 1em; font-size: 1.2em; font-weight: 800; }
   #print-sheet .rc-signs { display: flex; justify-content: space-between; margin-top: 2.2em; }
 
+  .simset { border-top: 1px solid var(--line); padding: 10px 0; }
+  .simset:first-of-type { border-top: 0; }
+  .simset label.check { display: inline-flex; margin-inline-end: 18px; }
+
   /* Students */
   .yn { display: flex; gap: 20px; }
   .yn label.check { padding: 2px 0; }
@@ -642,7 +646,7 @@
   var S = { uid: null, email: '', profile: null, teachers: [], settings: null, users: [], results: null, ready: false,
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
-            tGroups: [], tMembers: [], tPay: {}, transportMissing: false };
+            tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
   var ui = { search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
@@ -802,6 +806,8 @@
     var g = await sb.from('transport_groups').select('*').order('assembly_point');
     var m = g.error ? null : await fetchAll(function () { return sb.from('transport_members').select('*').order('joined_at'); });
     S.transportMissing = !m;
+    // عمود التسميات البديلة أُضيف لاحقًا إلى supabase/transport.sql
+    S.aliasMissing = !!m && !!(await sb.from('transport_groups').select('aliases').limit(1)).error;
     S.tGroups = g.data || [];
     S.tMembers = m || [];
     S.tPay = {};
@@ -2346,9 +2352,12 @@
       return n > Math.max(3, cl.pool.length * 0.34);
     };
     var keysOf = function (c) {
-      var parts = String(c.name).split(/[\/,،\-–()]+/).map(compact).filter(function (k) { return k.length >= 4; });
-      var all = compact(c.name);
-      if (all.length >= 4 && parts.indexOf(all) < 0) parts.push(all);
+      var parts = [];
+      [c.name].concat(c.aliases || []).forEach(function (name) {
+        String(name).split(/[\/,،\-–()]+/).map(compact).concat([compact(name)]).forEach(function (k) {
+          if (k.length >= 4 && parts.indexOf(k) < 0) parts.push(k);
+        });
+      });
       return parts.filter(function (k) { return !broad(k); });
     };
     var targets = (onlyCluster ? [onlyCluster] : cl.clusters).map(function (c) { return { c: c, keys: keysOf(c) }; });
@@ -2385,14 +2394,112 @@
 
   // بعد أي نتيجة: من بقي بلا مجموعة ويذكر عنوانه اسم مجموعة مقترحة أو موجودة يُضم إليها
   function finishClusters(cl, result) {
-    Object.assign(cl, result, { step: 'review' });
+    Object.assign(cl, result, { step: 'review', notSame: {} });
+    // المجموعات الموجودة تدخل بأسمائها وتسمياتها البديلة: ما طابقها من المقترحات يُدمج فيها مباشرة
     S.tGroups.forEach(function (g) {
-      if (!cl.clusters.some(function (c) { return norm(c.name) === norm(g.assembly_point); })) {
-        cl.clusters.push({ name: g.assembly_point, area: '', ids: [], on: true, existing: true });
-      }
+      var names = [g.assembly_point].concat(Array.isArray(g.aliases) ? g.aliases : []).map(compact);
+      var mine = { name: g.assembly_point, area: '', ids: [], on: true, aliases: (g.aliases || []).slice() };
+      cl.clusters = cl.clusters.filter(function (c) {
+        if (names.indexOf(compact(c.name)) < 0) return true;
+        mine.ids = mine.ids.concat(c.ids);
+        if (!mine.area) mine.area = c.area;
+        return false;
+      });
+      cl.clusters.push(mine);
     });
     absorbByName(cl);
     cl.clusters = cl.clusters.filter(function (c) { return c.ids.length; });
+    cl.clusters.sort(function (a, b) { return a.area.localeCompare(b.area, 'ar') || b.ids.length - a.ids.length; });
+  }
+
+  /* --- حسم الأماكن المتشابهة: هل هي مكان واحد؟ --- */
+
+  // عدد التعديلات (حذف/إضافة/تبديل حرف) بين نصّين
+  function editDistance(a, b) {
+    var prev = [], i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      var cur = [i];
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  function placeWords(name) {
+    return norm(name).split(/[\s\/,،\-–()]+/).filter(function (w) { return w.length >= 4 && ADDR_GENERIC.indexOf(w) < 0; });
+  }
+
+  // اسمان يُحتمل أنهما مكان واحد: أحدهما جزء من الآخر، أو يختلفان بحرف أو حرفين، أو يشتركان في كلمة مميزة
+  function looksSamePlace(a, b) {
+    // تُقارن الأسماء دون الكلمات العامة: «الحي السابع» و«الحي التاسع» لا يتشابهان لمجرد اشتراكهما في «الحي»
+    var bare = function (name) {
+      return norm(name).split(/[\s\/,،\-–()]+/).filter(function (w) { return w && ADDR_GENERIC.indexOf(w) < 0; }).join('');
+    };
+    var ka = bare(a), kb = bare(b);
+    if (ka.length < 3 || kb.length < 3) return false;
+    if (ka.indexOf(kb) > -1 || kb.indexOf(ka) > -1) return true;
+    if (editDistance(ka, kb) <= (Math.min(ka.length, kb.length) >= 8 ? 2 : 1)) return true;
+    var wa = placeWords(a), wb = placeWords(b);
+    return wa.some(function (x) { return wb.some(function (y) { return x === y || (x.length >= 6 && y.length >= 6 && editDistance(x, y) <= 1); }); });
+  }
+
+  function pairKey(a, b) { return [norm(a), norm(b)].sort().join('|'); }
+
+  // مجموعات من الأسماء المتشابهة التي لم يُحسم أمرها بعد: [[فهرس، فهرس…]، …]
+  function similarSets(cl) {
+    var n = cl.clusters.length, parent = [], i, j;
+    var find = function (x) { while (parent[x] !== x) x = parent[x] = parent[parent[x]]; return x; };
+    for (i = 0; i < n; i++) parent[i] = i;
+    for (i = 0; i < n; i++) {
+      for (j = i + 1; j < n; j++) {
+        var a = cl.clusters[i].name, b = cl.clusters[j].name;
+        if (!cl.notSame[pairKey(a, b)] && looksSamePlace(a, b)) parent[find(i)] = find(j);
+      }
+    }
+    var sets = {};
+    for (i = 0; i < n; i++) (sets[find(i)] || (sets[find(i)] = [])).push(i);
+    return Object.keys(sets).map(function (k) { return sets[k]; }).filter(function (s) { return s.length > 1; });
+  }
+
+  // يدمج المجموعات المذكورة في واحدة تحمل الاسم المختار، وتُحفظ الأسماء الأخرى كتسميات بديلة لها
+  function mergeClusters(cl, indices, keepIndex) {
+    var keep = cl.clusters[keepIndex], names = {};
+    (keep.aliases || []).forEach(function (a) { names[a] = true; });
+    indices.forEach(function (i) {
+      if (i === keepIndex) return;
+      var c = cl.clusters[i];
+      keep.ids = keep.ids.concat(c.ids);
+      names[c.name] = true;
+      (c.aliases || []).forEach(function (a) { names[a] = true; });
+      if (!keep.area) keep.area = c.area;
+    });
+    delete names[keep.name];
+    keep.aliases = Object.keys(names);
+    keep.on = true;
+    cl.clusters = cl.clusters.filter(function (c, i) { return i === keepIndex || indices.indexOf(i) < 0; });
+  }
+
+  function similarCardHtml(cl) {
+    var sets = similarSets(cl);
+    if (!sets.length) return '';
+    return '<div class="card" style="border-color:var(--amber)"><h2>أسماء متشابهة: هل هي مكان واحد؟ (' + sets.length + ')</h2>' +
+      '<p class="hint">اختر الاسم الذي يبقى ثم «دمج»، أو «أماكن مختلفة» إن لم تكن مكانًا واحدًا. الأسماء المدموجة تُحفظ كتسميات بديلة، فيُعرف المكان بها في المرات القادمة.</p>' +
+      sets.map(function (set, si) {
+        // الاسم المقترح للبقاء: الأكثر طلابًا
+        var top = set.slice().sort(function (a, b) { return cl.clusters[b].ids.length - cl.clusters[a].ids.length; })[0];
+        return '<div class="simset">' + set.map(function (i) {
+          var c = cl.clusters[i];
+          return '<label class="check"><input type="radio" name="clm-' + si + '" value="' + i + '"' + (i === top ? ' checked' : '') + '>' +
+            '<b>' + esc(c.name) + '</b> <span style="color:var(--muted)">(' + c.ids.length + ')</span></label>';
+        }).join('') +
+          '<div class="actions" style="margin-top:6px"><button type="button" class="btn primary" data-clmerge="' + set.join(',') + '" data-set="' + si + '">دمج في الاسم المختار</button>' +
+          '<button type="button" class="btn" data-clnotsame="' + set.join(',') + '">أماكن مختلفة</button></div></div>';
+      }).join('') +
+      (sets.length > 1 ? '<div class="actions"><button type="button" class="btn" data-clmergeall>دمج كل المقترحات (الاسم الأكثر طلابًا)</button></div>' : '') +
+      '</div>';
   }
 
   async function runClustering() {
@@ -2474,6 +2581,7 @@
       '<div class="page-head"><div><h1 style="font-size:1.2rem">نقاط التجمع المقترحة</h1>' +
         '<p>المجموعات: ' + cl.clusters.length + ' · طلاب في مجموعات: ' + placed + ' · بدون مجموعة: ' + cl.unclear.length + '</p>' +
         '<p>عدّل الأسماء، انقل الطلاب بين المجموعات، وأزل العلامة عمّا لا تريده. لا يُحفظ شيء قبل الضغط على «إنشاء المجموعات».</p></div></div>' +
+      similarCardHtml(cl) +
       '<div class="card"><label class="field" for="cl-newname">إضافة نقطة تجمع باسم مكان</label>' +
         '<div class="addstmt" style="margin-top:0"><input type="text" id="cl-newname" placeholder="مثال: حي السفارات">' +
         '<button type="button" class="btn" data-clnew>إنشاء وضم من يذكرونه</button></div>' +
@@ -2484,7 +2592,10 @@
         return title + '<div class="card" style="margin-top:8px"><div class="toolbar" style="align-items:center;margin:0">' +
           '<input type="checkbox" data-clon="' + i + '"' + (c.on ? ' checked' : '') + ' aria-label="إنشاء هذه المجموعة" style="width:18px;height:18px;accent-color:var(--primary)">' +
           '<input type="text" data-clname="' + i + '" aria-label="اسم نقطة التجمع" style="flex:1;min-width:160px;font-weight:700" value="' + esc(c.name) + '">' +
-          '<span class="badge ' + (known[norm(c.name)] ? 'review' : 'approved') + '">' + c.ids.length + ' ' + (known[norm(c.name)] ? '· يُضافون إلى مجموعة موجودة' : '· مجموعة جديدة') + '</span></div>' +
+          '<span class="badge ' + (known[norm(c.name)] ? 'review' : 'approved') + '">' + c.ids.length + ' ' + (known[norm(c.name)] ? '· يُضافون إلى مجموعة موجودة' : '· مجموعة جديدة') + '</span>' +
+          '<select data-clinto="' + i + '" aria-label="دمج هذه المجموعة في مجموعة أخرى"><option value="">دمج في…</option>' +
+            cl.clusters.map(function (o, k) { return k === i ? '' : '<option value="' + k + '">' + esc(o.name) + '</option>'; }).join('') + '</select></div>' +
+          (c.aliases && c.aliases.length ? '<p class="hint" style="margin:6px 0 0">تسميات بديلة: ' + esc(c.aliases.join('، ')) + '</p>' : '') +
           '<details class="bank"><summary>الطلاب (' + c.ids.length + ')</summary>' + c.ids.map(function (id) { return clusterMemberRow(id, i); }).join('') + '</details></div>';
       }).join('') +
       (cl.unclear.length
@@ -2502,10 +2613,17 @@
       var c = chosen[i], name = c.name.trim();
       var g = S.tGroups.filter(function (x) { return norm(x.assembly_point) === norm(name); })[0];
       if (!g) {
-        var ins = await sb.from('transport_groups').insert({ assembly_point: name, notes: c.area || '' }).select().single();
+        var fresh = { assembly_point: name, notes: c.area || '' };
+        if (!S.aliasMissing) fresh.aliases = c.aliases || [];
+        var ins = await sb.from('transport_groups').insert(fresh).select().single();
         if (ins.error) { render(); return fail(ins.error); }
         g = ins.data;
         S.tGroups.push(g);
+      } else if (!S.aliasMissing && c.aliases && c.aliases.length) {
+        var merged = (Array.isArray(g.aliases) ? g.aliases : []).concat(c.aliases.filter(function (a) { return (g.aliases || []).indexOf(a) < 0; }));
+        var al = await sb.from('transport_groups').update({ aliases: merged }).eq('id', g.id);
+        if (al.error) { render(); return fail(al.error); }
+        g.aliases = merged;
       }
       var rows = c.ids.map(function (id) { return { student_id: id, group_id: g.id, share: null }; });
       var up = await sb.from('transport_members').upsert(rows, { onConflict: 'student_id' });
@@ -2539,7 +2657,7 @@
     if (!isAdmin() || location.hash !== '#/transport') return;
     var cl = ui.cl;
     if (e.target.closest('[data-clopen]')) {
-      ui.cl = { step: 'setup', includePending: true, pool: [], clusters: [], unclear: [], error: '' };
+      ui.cl = { step: 'setup', includePending: true, pool: [], clusters: [], unclear: [], notSame: {}, error: '' };
       render();
     } else if (!cl) {
       return;
@@ -2556,6 +2674,22 @@
       render();
     } else if (e.target.closest('[data-clnew]')) {
       addClusterByName();
+    } else if (e.target.closest('[data-clmerge]')) {
+      var mb = e.target.closest('[data-clmerge]');
+      var picked = app.querySelector('[name="clm-' + mb.getAttribute('data-set') + '"]:checked');
+      mergeClusters(cl, mb.getAttribute('data-clmerge').split(',').map(Number), Number(picked.value));
+      render();
+    } else if (e.target.closest('[data-clnotsame]')) {
+      var idx = e.target.closest('[data-clnotsame]').getAttribute('data-clnotsame').split(',').map(Number);
+      idx.forEach(function (a) { idx.forEach(function (b) { if (a < b) cl.notSame[pairKey(cl.clusters[a].name, cl.clusters[b].name)] = true; }); });
+      render();
+    } else if (e.target.closest('[data-clmergeall]')) {
+      // تُعاد قراءة المقترحات بعد كل دمج لأن الفهارس تتغير
+      for (var sets = similarSets(cl); sets.length; sets = similarSets(cl)) {
+        var set = sets[0];
+        mergeClusters(cl, set, set.slice().sort(function (a, b) { return cl.clusters[b].ids.length - cl.clusters[a].ids.length; })[0]);
+      }
+      render();
     } else if (e.target.closest('[data-clcopy]')) {
       var box = document.getElementById('cl-prompt');
       try { await navigator.clipboard.writeText(box.value); toast('تم نسخ النص'); }
@@ -2589,6 +2723,10 @@
       render();
     } else if (el.hasAttribute('data-clon')) {
       cl.clusters[Number(el.getAttribute('data-clon'))].on = el.checked;
+      render();
+    } else if (el.hasAttribute('data-clinto')) {
+      if (el.value === '') return;
+      mergeClusters(cl, [Number(el.getAttribute('data-clinto')), Number(el.value)], Number(el.value));
       render();
     } else if (el.hasAttribute('data-clname')) {
       cl.clusters[Number(el.getAttribute('data-clname'))].name = el.value.replace(/\s+/g, ' ').trim();
