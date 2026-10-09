@@ -1398,6 +1398,7 @@
   function buildProfileSheet(x) {
     var school = S.settings && S.settings.school_name, final = stStatus(x) === 'final';
     var docs = x.documents || {};
+    var ride = findGroup(transportGroupOf()[x.id]);
     var fmt = function (iso) { var d = String(iso || '').slice(0, 10).split('-'); return d.length === 3 ? d[2] + '/' + d[1] + '/' + d[0] : ''; };
     var pair = function (label, value) { return '<th>' + label + '</th><td>' + esc(value == null ? '' : value) + '</td>'; };
     var row2 = function (a, b) { return '<tr>' + pair(a[0], a[1]) + pair(b[0], b[1]) + '</tr>'; };
@@ -1416,6 +1417,7 @@
         row2(['رقم الهوية', x.national_id], ['الجنس', x.gender]) +
         row2(['تاريخ الميلاد', fmt(x.birth_date)], ['الصف', x.class_name]) +
         row1('عنوان السكن', x.address) +
+        row1('المواصلات', ride ? 'نقطة التجمع: ' + ride.assembly_point + (ride.pickup_time ? ' — ' + ride.pickup_time : '') : 'بدون مواصلات') +
         row2(['الهاتف الأساسي', x.phone], ['واتساب', x.whatsapp]) +
         (x.email ? row1('البريد الإلكتروني', x.email) : '') +
         head('التحصيل السابق') +
@@ -1483,11 +1485,22 @@
 
   function studentFormHtml(st) {
     var final = st && stStatus(st) === 'final', docs = (st && st.documents) || {};
+    var groupId = st ? transportGroupOf()[st.id] : '';
     return '<form class="card" id="student-form">' +
       '<div class="toolbar" style="align-items:center;margin-bottom:4px"><h2 style="margin:0;flex:1">' + (st ? (final ? 'تعديل بيانات الطالب' : 'مراجعة تسجيل الطالب') : 'تسجيل طالب') + '</h2>' +
         '<span class="badge ' + (final ? 'published' : 'edit') + '">' + ST_STATUS[final ? 'final' : 'pending'] + '</span></div>' +
       (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الصف واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
       '<div class="grid2" style="margin-top:12px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' +
+      (S.transportMissing ? '' :
+        '<h2 style="margin-top:20px">المواصلات</h2>' +
+        '<label class="field" for="sf-transport" style="margin-top:6px">نقطة التجمع</label>' +
+        '<select id="sf-transport" style="width:100%;max-width:420px"><option value="">بدون مواصلات</option>' + S.tGroups.map(function (g) {
+          return '<option value="' + g.id + '"' + (g.id === groupId ? ' selected' : '') + '>' + esc(g.assembly_point) +
+            (g.pickup_time ? ' — ' + esc(g.pickup_time) : '') + '</option>';
+        }).join('') + '</select>' +
+        '<div class="day">' + (S.tGroups.length
+          ? 'اختر أقرب نقطة تجمع لعنوان السكن مع ولي الأمر؛ يُضاف الطالب إلى مجموعتها عند الحفظ.'
+          : 'لا توجد مجموعات مواصلات بعد؛ أنشئها من صفحة «المواصلات».') + '</div>') +
       '<h2 style="margin-top:20px">المستندات المستلمة</h2>' +
       '<div class="classes-pick" style="margin-top:6px">' + ST_DOCS.map(function (d) {
         return '<label class="check"><input type="checkbox" name="sf-doc" value="' + d[0] + '"' + (docs[d[0]] ? ' checked' : '') + '>' + d[1] + '</label>';
@@ -1574,8 +1587,28 @@
     if (r.error) {
       return /duplicate|unique/i.test(r.error.message) ? toast('رقم الهوية مسجل نهائيًا لطالب آخر.', true) : fail(r.error);
     }
-    if (st) Object.assign(st, data); else S.students.push(r.data);
+    if (st) Object.assign(st, data); else S.students.push(st = r.data);
     S.students.sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
+
+    var pick = document.getElementById('sf-transport');
+    if (pick) {
+      var was = transportGroupOf()[st.id] || '', want = pick.value, tr = null;
+      if (want && want !== was) {
+        tr = await sb.from('transport_members').upsert({ student_id: st.id, group_id: want, share: null }, { onConflict: 'student_id' });
+      } else if (!want && was) {
+        tr = await sb.from('transport_members').delete().eq('student_id', st.id);
+      }
+      if (tr && tr.error) {
+        // بيانات الطالب حُفظت؛ المواصلات لم تتغير
+        ui.editStudent = st.id;
+        render();
+        return fail(tr.error);
+      }
+      if (tr) {
+        S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
+        if (want) S.tMembers.push({ student_id: st.id, group_id: want, share: null });
+      }
+    }
     ui.editStudent = null;
     render();
     toast(data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : 'تم الحفظ');
