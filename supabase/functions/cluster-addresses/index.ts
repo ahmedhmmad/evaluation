@@ -19,12 +19,13 @@ const SYSTEM = `You help a school organise student transport. Parents typed each
 
 Group the addresses into assembly points: places where students who live near each other can gather to be picked up together.
 
-- Put two addresses in the same group only when they are plausibly within a short walk or a very short ride of each other: the same neighbourhood, the same compound, or around the same landmark. Use what you know of the local geography to recognise different spellings and names of the same place, and to keep apart places that only sound alike.
-- Name each group after the most recognisable place its addresses share, in Arabic, as the parents wrote it (for example a district plus a landmark). Never invent a place that does not appear in the addresses.
+- Every place name that appears in the addresses (a neighbourhood, a compound, a landmark, a sub-district) is an assembly point, and every address that mentions that place belongs to it, however it is spelled. For example "حي السفارات" is an assembly point and every address containing "السفارات" joins it; "جاردينيا سيتي", "جاردينياسيتي" and "جاردينيا ستي" are one place.
+- Create the group even when only one address mentions the place. Give each address the most specific place it names (the neighbourhood or compound, not the whole city). When an address names only the city or a very wide district, group it under that name.
+- Use what you know of the local geography to recognise different names of the same place, and to keep apart places that only sound alike.
+- Name each group as the parents wrote the place, in Arabic. Never invent a place that does not appear in the addresses.
 - "area" is the wider district or city the group belongs to, so that neighbouring groups can be merged by a person later.
 - If an existing assembly point already covers an address, reuse that assembly point's name exactly.
-- Prefer groups a single vehicle could serve. Split a very large neighbourhood by street or landmark when the addresses allow it; keep a student alone in a group only when nobody lives nearby.
-- An address that is empty of location information, or too vague to place, goes in "unclear" rather than being guessed into a group.
+- "unclear" is only for an address that names no place at all. Do not use it for addresses that are merely short.
 
 Every address number must appear exactly once, either in one group's "members" or in "unclear".`;
 

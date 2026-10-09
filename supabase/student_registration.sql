@@ -22,3 +22,6 @@ create unique index if not exists students_final_national_id
   where status = 'final' and national_id <> '';
 
 create index if not exists students_status_idx on public.students (status);
+
+-- Whether the student needs school transport: true, false, or null while not yet asked.
+alter table public.students add column if not exists wants_transport boolean;
