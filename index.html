@@ -3,8 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>إدارة المدرسة</title>
-<style>
+<title>أكاديمية الركيزة الثالثة</title>
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;800&family=IBM+Plex+Sans+Arabic:wght@400;600&family=Montserrat:wght@600;700&display=swap">
+<style id="page-css"></style>
+<style id="app-css">
   :root {
     --bg: #f4f6f8;
     --surface: #ffffff;
@@ -40,10 +45,7 @@
     display: flex; flex-direction: column; background: #0b3b37; color: #fff;
   }
   #side .brand { display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px; }
-  #side .brand .logo {
-    width: 38px; height: 38px; flex: none; border-radius: 10px; background: #fff; color: var(--primary-dark);
-    display: grid; place-items: center; font-weight: 800; font-size: 1.2rem;
-  }
+  #side .brand .logo { width: 46px; height: 46px; flex: none; border-radius: 50%; background: #fff; object-fit: cover; }
   #side .brand strong { display: block; font-size: 1.05rem; line-height: 1.3; }
   #side .brand small { opacity: .7; font-size: .8rem; }
   #side-nav { flex: 1; padding: 4px 10px 12px; }
@@ -296,59 +298,100 @@
   .visit-row .meta { color: var(--muted); font-size: .9rem; }
   .print-only { display: none; }
 
-  /* ورقة الطباعة: نفس تصميم النموذج الورقي (A4، صفحة واحدة). الأحجام بوحدة em ليُصغَّر الخط عند الحاجة */
+
+
+  /* ===== هوية التقارير المطبوعة (قالب مركزي واحد): عدّل القيم هنا فتتغير كل التقارير ===== */
+  #print-sheet, .page-lh {
+    --navy: #1B3A6B; --navy-dark: #0F2647; --navy-soft: #E3E9F2;
+    --gold: #C5A46D; --gold-soft: #F3EBDD; --ivory: #FBF9F5;
+    --body: #2B2B2B; --rule: #D9D9D9;
+    --ok: #2E7D4F; --bad: #B23A3A; --warn: #C27C2C;
+    --font-head: "Cairo", "Tajawal", "Segoe UI", Tahoma, sans-serif;
+    --font-body: "IBM Plex Sans Arabic", "Noto Naskh Arabic", "Segoe UI", Tahoma, sans-serif;
+    --font-en: "Montserrat", "Poppins", "Segoe UI", Arial, sans-serif;
+  }
+  /* الورقة: عرض A4 ناقص هامشين 15mm. الأحجام بوحدة em ليُصغَّر الخط عند الحاجة فتبقى في صفحة واحدة */
   #print-sheet {
     position: fixed; top: 0; left: 0; visibility: hidden; pointer-events: none; z-index: -1;
-    width: 184.6mm; /* A4 ناقص هامشين 12.7mm */
-    background: #fff; color: #000;
-    font-family: Arial, "Times New Roman", sans-serif; font-size: 12pt; line-height: 1.35;
+    width: 180mm; background: #fff; color: var(--body); direction: rtl;
+    font-family: var(--font-body); font-size: 10.5pt; line-height: 1.45;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  #print-sheet .ps-title { text-align: center; font-weight: bold; font-size: 1.167em; margin-bottom: .5em; }
-  #print-sheet .ps-h { font-weight: bold; font-size: 1.167em; margin: .5em 0 .3em; padding-inline-start: 1em; }
-  #print-sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  #print-sheet td, #print-sheet th { border: 1px solid #000; padding: .2em .45em; vertical-align: middle; text-align: start; font-weight: normal; }
-  #print-sheet .ps-basic td { height: 1.9em; }
-  #print-sheet .ps-domains th { font-weight: bold; font-size: 1.167em; text-align: center; height: 2.6em; }
-  #print-sheet .ps-domains td { height: 3em; }
-  #print-sheet .ps-domains td.c { text-align: center; font-size: 1.167em; }
-  #print-sheet .ps-domains td.c.n { font-weight: bold; }
-  #print-sheet .ps-text { white-space: pre-wrap; }
-  #print-sheet tr.ps-gap td { height: 1em; border-left: 0; border-right: 0; padding: 0; }
-  #print-sheet td.ps-notes { height: 5.5em; vertical-align: top; }
-  #print-sheet td.ps-notes b { font-size: 1.167em; }
-  #print-sheet .ps-rec { margin-top: .8em; min-height: 4.5em; padding: 0 .45em; }
-  #print-sheet .ps-signs { display: flex; justify-content: space-between; gap: 1em; margin-top: 1.4em; padding: 0 .45em; }
-  #print-sheet .ps-signs div { flex: 1; }
-  #print-sheet .ps-signs div:nth-child(2) { text-align: center; }
-  #print-sheet .ps-signs div:nth-child(3) { text-align: end; }
-  #print-sheet .ps-signs span { display: block; margin-top: .5em; }
-  #print-sheet .ps-signs.two div:nth-child(2) { text-align: end; }
+  /* العلامة المائية: الشعار في منتصف كل صفحة بشفافية خفيفة */
+  #print-sheet .wm { position: fixed; top: 50%; left: 50%; width: 115mm; height: auto; transform: translate(-50%, -50%); opacity: .055; z-index: 2; }
 
-  /* ورقة التقييم: نفس تصميم الشاشة (بطاقات الملخص وجدول البنود) مع درجة واضحة في خانة مستقلة */
-  #print-sheet.pe { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; color: #1c2733; line-height: 1.4;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  #print-sheet .pe-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1em; margin-bottom: .6em; }
-  #print-sheet .pe-head .nm { font-size: 1.45em; font-weight: 700; }
-  #print-sheet .pe-head .sub { color: #64748b; }
-  #print-sheet .pe-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7em; margin-bottom: .7em; }
-  #print-sheet .pe-summary > div { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: .6em; padding: .35em; text-align: center; }
-  #print-sheet .pe-summary .k { color: #64748b; font-size: .85em; }
-  #print-sheet .pe-summary .v { font-size: 1.5em; font-weight: 800; color: #0f766e; line-height: 1.2; }
-  #print-sheet .pe-table th, #print-sheet .pe-table td { border: 1px solid #cbd5e1; padding: .22em .5em; line-height: 1.3; }
-  #print-sheet .pe-table th { background: #f1f5f9; color: #475569; font-weight: 700; font-size: .9em; }
-  #print-sheet .pe-table td.n { text-align: center; color: #64748b; }
-  #print-sheet .pe-table th.r, #print-sheet .pe-table td.r { text-align: center; }
-  #print-sheet .pe-table td.r { background: #e6f4f2; white-space: nowrap; padding: .1em .3em; }
-  #print-sheet .pe-table td.r b { font-size: 1.45em; font-weight: 800; color: #0b5a54; }
-  #print-sheet .pe-legend { margin-top: .4em; font-size: .85em; color: #475569; display: flex; flex-wrap: wrap; gap: .2em 1.2em; }
-  #print-sheet .pe-legend b { color: #0b5a54; }
-  #print-sheet .pe-notes { margin-top: .6em; }
-  #print-sheet .pe-notes b { display: block; margin-bottom: .15em; }
-  #print-sheet .pe-notes div { white-space: pre-wrap; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: .5em; padding: .3em .6em; }
-  #print-sheet .pe-signs { display: grid; grid-template-columns: 1fr 1fr; gap: 2em; margin-top: 1.2em; }
-  #print-sheet .pe-signs div { border-top: 2px solid #0f766e; padding-top: .4em; }
-  #print-sheet .pe-signs b { display: block; }
-  #print-sheet .pe-signs span { display: block; margin-top: .55em; color: #475569; }
+  /* الترويسة */
+  #print-sheet .rh, .page-lh .rh {
+    display: flex; align-items: center; justify-content: space-between; gap: 1em; direction: rtl;
+    padding-bottom: .6em; margin-bottom: .9em; border-bottom: 1pt solid var(--gold);
+  }
+  #print-sheet .rh > div, .page-lh .rh > div { flex: 1; min-width: 0; }
+  #print-sheet .rh img, .page-lh .rh img { height: 5.9em; width: auto; flex: none; }
+  #print-sheet .rh b, .page-lh .rh b { display: block; color: var(--navy-dark); line-height: 1.3; }
+  #print-sheet .rh small, .page-lh .rh small { display: block; font-size: .85em; color: var(--navy); min-height: 1.2em; }
+  #print-sheet .rh-ar b, .page-lh .rh-ar b { font-family: var(--font-head); font-size: 1.55em; font-weight: 800; }
+  #print-sheet .rh-en, .page-lh .rh-en { direction: ltr; text-align: left; }
+  #print-sheet .rh-en b, .page-lh .rh-en b { font-family: var(--font-en); font-size: 1.15em; font-weight: 700; letter-spacing: .03em; }
+  #print-sheet .rh-en small, .page-lh .rh-en small { text-align: left; }
+
+  /* كتلة عنوان التقرير وشريط معلوماته */
+  #print-sheet .rt { text-align: center; margin-bottom: .9em; }
+  #print-sheet .rt h1 { margin: 0 0 .25em; font-family: var(--font-head); font-size: 1.8em; font-weight: 800; color: var(--navy); line-height: 1.3; }
+  #print-sheet .rt-info { display: flex; flex-wrap: wrap; justify-content: center; gap: .15em 1.6em; padding: .35em 1em; background: var(--gold-soft); border-radius: .4em; font-size: .95em; }
+  #print-sheet .rt-info b { color: var(--navy); font-weight: 600; }
+  #print-sheet .rsec { margin: .9em 0 .45em; padding-inline-start: .6em; border-inline-start: 3pt solid var(--gold); font-family: var(--font-head); font-size: 1.28em; font-weight: 700; color: var(--navy); line-height: 1.3; }
+
+  /* الجداول */
+  #print-sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .92em; }
+  #print-sheet th, #print-sheet td { border: .5pt solid var(--rule); padding: .32em .55em; vertical-align: middle; text-align: start; overflow-wrap: anywhere; }
+  #print-sheet thead { display: table-header-group; }
+  #print-sheet thead th { background: var(--navy); color: #fff; font-weight: 700; text-align: center; }
+  #print-sheet tr { break-inside: avoid; }
+  #print-sheet td.c { text-align: center; }
+  #print-sheet table.rz tbody tr:nth-child(even) td { background: var(--gold-soft); }
+  #print-sheet tr.total td { background: var(--navy-soft); font-weight: 700; }
+  /* جدول بيانات (عنوان: قيمة) */
+  #print-sheet table.rk th { background: var(--gold-soft); color: var(--navy-dark); font-weight: 600; width: 19%; }
+  #print-sheet .pre { white-space: pre-wrap; }
+  #print-sheet .rbox { margin-top: .7em; padding: .45em .7em; border: .5pt solid var(--rule); border-radius: .4em; break-inside: avoid; }
+  #print-sheet .rbox > b { display: block; margin-bottom: .2em; color: var(--navy); }
+  #print-sheet .ok { color: var(--ok); font-weight: 600; }
+  #print-sheet .warn { color: var(--warn); }
+  #print-sheet .bad { color: var(--bad); }
+
+  /* التوقيعات والختم */
+  #print-sheet .rs { display: flex; gap: .9em; align-items: stretch; margin-top: 1.5em; break-inside: avoid; }
+  #print-sheet .rs > div { flex: 1; padding: .45em .7em .6em; border: .5pt solid var(--rule); border-top: 1.5pt solid var(--navy); }
+  #print-sheet .rs b { display: block; font-family: var(--font-head); color: var(--navy); }
+  #print-sheet .rs span { display: block; margin-top: .55em; }
+  #print-sheet .rs .stamp { flex: 0 0 6.6em; height: 6.6em; padding: 0; display: grid; place-items: center; border: .75pt dashed var(--gold); border-radius: 50%; color: #999; font-size: .9em; }
+
+  /* تقرير الزيارة */
+  #print-sheet.ps .ps-domains td { height: 2.9em; }
+  #print-sheet.ps .rbox { min-height: 4.2em; }
+  /* تقييم المعلم */
+  #print-sheet .pe-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8em; margin-bottom: .8em; }
+  #print-sheet .pe-summary > div { border: .5pt solid var(--rule); border-top: 1.5pt solid var(--gold); padding: .3em; text-align: center; }
+  #print-sheet .pe-summary .k { display: block; font-size: .9em; color: var(--navy); }
+  #print-sheet .pe-summary .v { display: block; font-family: var(--font-head); font-size: 1.5em; font-weight: 800; color: var(--navy-dark); line-height: 1.25; }
+  #print-sheet.pe table.rz td { padding: .22em .55em; line-height: 1.3; }
+  #print-sheet td.mark { font-family: var(--font-head); font-size: 1.35em; font-weight: 800; color: var(--navy-dark); padding: 0; }
+  #print-sheet .pe-legend { display: flex; flex-wrap: wrap; gap: .2em 1.3em; margin-top: .45em; font-size: .9em; color: #555; }
+  #print-sheet .pe-legend b { color: var(--navy); }
+  /* إيصال السداد */
+  #print-sheet.rc { font-size: 12pt; }
+  #print-sheet .rc-box { border: .75pt solid var(--navy); border-radius: .5em; padding: 1em 1.3em; }
+  #print-sheet .rc-line { margin: .5em 0; }
+  #print-sheet .rc-line b { padding: 0 .5em; border-bottom: .5pt dotted var(--body); }
+  #print-sheet .rc-amount { display: inline-block; padding: .1em 1em; border: 1pt solid var(--gold); background: var(--gold-soft); font-family: var(--font-head); font-size: 1.2em; font-weight: 800; color: var(--navy-dark); }
+  /* كشوف الطلاب */
+  #print-sheet.ls table { table-layout: auto; }
+  #print-sheet td.ls-head { border: 0; padding: 0 0 .3em; background: #fff; font-size: 1.087em; }
+  #print-sheet table.newpage { break-before: page; }
+  /* ملف الطالب */
+  #print-sheet .pf-row { display: flex; gap: .8em; align-items: flex-start; }
+  #print-sheet .pf-photo { flex: 0 0 6.6em; height: 8.2em; border: .5pt solid var(--rule); display: grid; place-items: center; text-align: center; font-size: .9em; color: #888; }
+  #print-sheet .pf-doc { display: inline-block; margin-inline-end: 1.6em; }
 
   /* Transport */
   .tgroup { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
@@ -370,40 +413,8 @@
 
   .formhint { margin-top: 4px; font-size: .85rem; color: var(--amber); background: var(--amber-soft); border-radius: 6px; padding: 2px 8px; overflow-wrap: anywhere; }
 
-  /* ملف الطالب المطبوع */
-  #print-sheet.pf { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; line-height: 1.4; }
-  #print-sheet .pf-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: .8em; }
-  #print-sheet .pf-school { font-size: 1.3em; font-weight: 700; }
-  #print-sheet .pf-title { font-size: 1.6em; font-weight: 800; }
-  #print-sheet .pf-status { margin-top: .2em; }
-  #print-sheet .pf-photo { width: 6.5em; height: 8em; border: 1px solid #000; display: grid; place-items: center; text-align: center; font-size: .85em; color: #555; }
-  #print-sheet.pf th { font-weight: 700; background: #f1f1f1; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  #print-sheet.pf th.pf-sec { background: #d9d9d9; text-align: start; font-size: 1.05em; }
-  #print-sheet.pf td, #print-sheet.pf th { padding: .4em .55em; overflow-wrap: anywhere; }
-  #print-sheet .pf-doc { display: inline-block; margin-inline-end: 1.6em; }
-  #print-sheet .pf-signs { display: flex; justify-content: space-between; gap: 1em; margin-top: 1.8em; }
-  #print-sheet .pf-signs span { display: block; margin-top: .6em; }
 
-  /* كشف الطلاب المطبوع */
-  #print-sheet.ls { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; font-size: 10.5pt; line-height: 1.35; }
-  #print-sheet .ls-school { text-align: center; font-size: 1.3em; font-weight: 700; }
-  #print-sheet .ls-title { text-align: center; font-size: 1.15em; font-weight: 700; margin-top: .2em; }
-  #print-sheet .ls-sub { display: flex; justify-content: space-between; margin: .6em 0 .5em; }
-  #print-sheet.ls table { table-layout: auto; }
-  #print-sheet.ls th { font-weight: 700; background: #eee; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  #print-sheet.ls td, #print-sheet.ls th { padding: .25em .4em; }
-  #print-sheet.ls thead { display: table-header-group; }
 
-  /* إيصال السداد المطبوع */
-  #print-sheet.rc { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif; font-size: 13pt; line-height: 1.6; }
-  #print-sheet .rc-box { border: 2px solid #000; border-radius: 3mm; padding: 8mm 10mm; }
-  #print-sheet .rc-school { text-align: center; font-size: 1.25em; font-weight: 700; }
-  #print-sheet .rc-title { text-align: center; font-size: 1.1em; font-weight: 700; margin: .3em 0 .9em; padding-bottom: .5em; border-bottom: 1px solid #000; }
-  #print-sheet .rc-top { display: flex; justify-content: space-between; margin-bottom: .8em; }
-  #print-sheet .rc-line { margin: .45em 0; }
-  #print-sheet .rc-line b { border-bottom: 1px dotted #000; padding: 0 .6em; }
-  #print-sheet .rc-amount { display: inline-block; border: 2px solid #000; border-radius: 2mm; padding: .1em 1em; font-size: 1.2em; font-weight: 800; }
-  #print-sheet .rc-signs { display: flex; justify-content: space-between; margin-top: 2.2em; }
 
   .simset { border-top: 1px solid var(--line); padding: 10px 0; }
   .simset:first-of-type { border-top: 0; }
@@ -441,7 +452,6 @@
     .rate span { width: 100%; height: 44px; }
     .eval-head h2 { font-size: 1.15rem; }
   }
-  @page { size: A4; margin: 12.7mm; }
   @media print {
     body { background: #fff; }
     #side, .topbar, #scrim, .no-print, .stepper, #toast { display: none !important; }
@@ -461,13 +471,14 @@
 <body>
 <div id="shell" class="bare">
   <aside id="side" aria-label="التنقل الرئيسي">
-    <div class="brand"><span class="logo" aria-hidden="true">م</span><div><strong>إدارة المدرسة</strong><small id="brand-sub">شؤون المعلمين والطلاب</small></div></div>
+    <div class="brand"><img class="logo" src="logo.png" alt=""><div><strong id="brand-name">أكاديمية الركيزة الثالثة</strong><small>Third Pillar Academy</small></div></div>
     <nav id="side-nav"></nav>
     <div class="side-user" id="userbar"></div>
   </aside>
   <div id="scrim"></div>
   <div id="content">
-    <div class="topbar"><button type="button" id="menu-btn" aria-label="فتح القائمة" aria-expanded="false">☰</button><strong>إدارة المدرسة</strong></div>
+    <div class="topbar"><button type="button" id="menu-btn" aria-label="فتح القائمة" aria-expanded="false">☰</button><strong>أكاديمية الركيزة الثالثة</strong></div>
+    <div class="page-lh print-only" id="page-lh"></div>
     <main id="app"></main>
   </div>
 </div>
@@ -733,7 +744,7 @@
   }
 
   function fmtDate(iso) {
-    return iso ? new Date(iso).toLocaleDateString('ar', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
+    return iso ? new Date(iso).toLocaleDateString('ar-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '';
   }
 
   function stepIndex(status) {
@@ -975,7 +986,7 @@
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONS[it[1]] + '"/></svg>' + it[2] + '</a>';
       }).join('');
     }).join('');
-    document.getElementById('brand-sub').textContent = (S.settings && S.settings.school_name) || 'شؤون المعلمين والطلاب';
+    document.getElementById('brand-name').textContent = schoolName();
     userbar.innerHTML =
       '<div class="who">' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</div>' +
       '<div class="role">' + ROLES[role()] + '</div>' +
@@ -1037,7 +1048,7 @@
 
     app.innerHTML =
       '<div class="page-head"><div><h1>مرحبًا، ' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</h1>' +
-        '<p>' + new Date().toLocaleDateString('ar', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></div></div>' +
+        '<p>' + new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></div></div>' +
       '<div class="stats">' + stats + '</div>' +
       '<div class="card"><h2>إجراءات سريعة</h2><div class="quick" style="margin-top:10px">' +
         '<a class="btn primary" href="#/visits">+ تقرير زيارة إشرافية</a>' +
@@ -1387,87 +1398,10 @@
     });
   }
 
-  // كشف مطبوع بكل الطلاب المطابقين (قد يمتد لأكثر من صفحة، ويتكرر رأس الجدول)
-  // className: كشف شعبة بعينها (من صفحة الشعب)؛ بدونه يُطبع ما تعرضه شاشة التسجيل بتصفيتها الحالية
-  function buildStudentsSheet(className) {
-    var list = className ? classStudents(className) : filteredStudents();
-    var flag = className ? null : ST_FLAGS[ui.stFlag], groupOf = transportGroupOf();
-    var school = S.settings && S.settings.school_name;
-    var showClass = !className && (!ui.stClass || ui.stClass === '-');
-    var crit = [];
-    if (className) crit.push('الشعبة: ' + className);
-    else {
-      if (ui.stStatus) crit.push(ST_STATUS[ui.stStatus]);
-      if (ui.stClass) crit.push(ui.stClass === '-' ? 'بدون صف' : 'الصف: ' + ui.stClass);
-      if (flag) crit.push(flag.label);
-      if (ui.stSearch.trim()) crit.push('بحث: ' + ui.stSearch.trim());
-    }
-    var d = todayISO().split('-');
-
-    sheet.className = 'ls';
-    sheet.style.fontSize = '';
-    sheet.innerHTML =
-      (school ? '<div class="ls-school">' + esc(school) + '</div>' : '') +
-      '<div class="ls-title">كشف الطلاب' + (crit.length ? ' — ' + esc(crit.join(' · ')) : '') + '</div>' +
-      '<div class="ls-sub"><span>عدد الطلاب: ' + list.length + '</span><span>التاريخ: ' + d[2] + '/' + d[1] + '/' + d[0] + '</span></div>' +
-      '<table><thead><tr><th>م</th><th>اسم الطالب</th><th>رقم الهوية</th>' + (showClass ? '<th>الصف</th>' : '') +
-        '<th>الهاتف</th><th>ولي الأمر</th>' + (flag && flag.extra ? '<th>' + flag.extra[0] + '</th>' : '') + '<th>ملاحظات</th></tr></thead><tbody>' +
-      list.map(function (x, i) {
-        var extra = flag && flag.extra ? flag.extra[1](x, groupOf) : null;
-        return '<tr><td style="text-align:center">' + (i + 1) + '</td><td>' + esc(x.full_name) + '</td><td>' + esc(x.national_id) + '</td>' +
-          (showClass ? '<td>' + esc(x.class_name || '—') + '</td>' : '') +
-          '<td>' + esc(x.phone || x.whatsapp || '') + '</td><td>' + esc(x.guardian_name) + '</td>' +
-          (flag && flag.extra ? '<td>' + esc(extra == null ? '' : extra) + '</td>' : '') + '<td style="width:18%"></td></tr>';
-      }).join('') + '</tbody></table>';
-  }
 
   // ملف الطالب المطبوع: كل بياناته في صفحة واحدة
   var pendingProfile = null;
 
-  function buildProfileSheet(x) {
-    var school = S.settings && S.settings.school_name, final = stStatus(x) === 'final';
-    var docs = x.documents || {};
-    var ride = findGroup(transportGroupOf()[x.id]);
-    var fmt = function (iso) { var d = String(iso || '').slice(0, 10).split('-'); return d.length === 3 ? d[2] + '/' + d[1] + '/' + d[0] : ''; };
-    var pair = function (label, value) { return '<th>' + label + '</th><td>' + esc(value == null ? '' : value) + '</td>'; };
-    var row2 = function (a, b) { return '<tr>' + pair(a[0], a[1]) + pair(b[0], b[1]) + '</tr>'; };
-    var row1 = function (label, value) { return '<tr><th>' + label + '</th><td colspan="3">' + esc(value == null ? '' : value) + '</td></tr>'; };
-    var head = function (title) { return '<tr><th colspan="4" class="pf-sec">' + title + '</th></tr>'; };
-
-    sheet.className = 'pf';
-    sheet.innerHTML =
-      '<div class="pf-top"><div>' + (school ? '<div class="pf-school">' + esc(school) + '</div>' : '') +
-        '<div class="pf-title">ملف الطالب</div>' +
-        '<div class="pf-status">' + (final ? 'تسجيل نهائي' + (x.finalized_at ? ' — بتاريخ ' + fmt(x.finalized_at) : '') : 'تسجيل مبدئي — غير نهائي') + '</div></div>' +
-        '<div class="pf-photo">صورة<br>شخصية</div></div>' +
-      '<table><colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' +
-        head('بيانات الطالب') +
-        row1('الاسم رباعي', x.full_name) +
-        row2(['رقم الهوية', x.national_id], ['الجنس', x.gender]) +
-        row2(['تاريخ الميلاد', fmt(x.birth_date)], ['الصف', x.class_name]) +
-        row1('عنوان السكن', x.address) +
-        row1('المواصلات', ride ? 'نقطة التجمع: ' + ride.assembly_point + (ride.pickup_time ? ' — ' + ride.pickup_time : '')
-          : x.wants_transport === false ? 'لا يحتاج مواصلات' : x.wants_transport === true ? 'يحتاج مواصلات — لم تُحدَّد نقطة التجمع' : 'لم يُحدَّد') +
-        row2(['الهاتف الأساسي', x.phone], ['واتساب', x.whatsapp]) +
-        (x.email ? row1('البريد الإلكتروني', x.email) : '') +
-        head('التحصيل السابق') +
-        row2(['شهادة العام السابق', yesNo(x.has_prev_certificate)], ['التقدير', x.prev_grade]) +
-        head('ولي الأمر') +
-        row2(['الاسم', x.guardian_name], ['صلة القرابة', x.guardian_relation]) +
-        row1('المهنة', x.guardian_job) +
-        head('الحالة الصحية والاجتماعية') +
-        row2(['حالة صحية', yesNo(x.has_health_condition)], ['أدوية منتظمة', yesNo(x.takes_medication)]) +
-        row2(['احتياجات تعليمية خاصة', yesNo(x.has_special_needs)], ['يتيم', yesNo(x.is_orphan) + (x.is_orphan && x.orphan_of ? ' (' + x.orphan_of + ')' : '')]) +
-        row2(['يحفظ من القرآن', yesNo(x.memorizes_quran)], ['عدد الأجزاء', x.memorizes_quran ? x.quran_parts : '']) +
-        head('المستندات المستلمة') +
-        '<tr><td colspan="4">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
-          (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</td></tr>' +
-      '</table>' +
-      '<div class="pf-signs"><div>ولي الأمر<span>الاسم: ' + esc(x.guardian_name || '....................') + '</span><span>التوقيع: ....................</span></div>' +
-        '<div>مسؤول التسجيل<span>الاسم: ' + esc((S.profile && S.profile.full_name) || '....................') + '</span><span>التوقيع: ....................</span></div>' +
-        '<div>مدير/ة المدرسة<span>الاسم: ' + esc(principalName()) + '</span><span>التوقيع: ....................</span></div></div>';
-    fitSheet();
-  }
 
   function studentsTableHtml() {
     var shown = filteredStudents();
@@ -2041,7 +1975,7 @@
   }
 
   function monthLabel(m) {
-    return new Date(m + '-01T00:00').toLocaleDateString('ar', { month: 'long', year: 'numeric' });
+    return new Date(m + '-01T00:00').toLocaleDateString('ar-u-nu-latn', { month: 'long', year: 'numeric' });
   }
 
   // المطلوب والمحصَّل لمجموعة في الشهر المعروض
@@ -2229,28 +2163,6 @@
   // إيصال سداد اشتراك المواصلات لطالب عن الشهر المعروض
   var pendingReceipt = null;
 
-  function buildReceiptSheet(q) {
-    var g = q.g, x = findStudent(q.sid), rec = S.tPay[ui.tMonth][q.sid];
-    var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0];
-    var left = Math.max(0, shareOf(mem, g) - rec.amount);
-    var d = (rec.paid_on || todayISO()).split('-');
-    var school = S.settings && S.settings.school_name;
-    sheet.className = 'rc';
-    sheet.style.fontSize = '';
-    sheet.innerHTML = '<div class="rc-box">' +
-      (school ? '<div class="rc-school">' + esc(school) + '</div>' : '') +
-      '<div class="rc-title">إيصال سداد اشتراك المواصلات</div>' +
-      '<div class="rc-top"><span>رقم الإيصال: <b>' + (rec.receipt_no != null ? esc(rec.receipt_no) : '—') + '</b></span>' +
-        '<span>التاريخ: <b>' + d[2] + '/' + d[1] + '/' + d[0] + '</b></span></div>' +
-      '<div class="rc-line">استلمنا من ولي أمر الطالب/ـة: <b>' + esc(x.full_name) + '</b>' + (x.class_name ? ' الصف: <b>' + esc(x.class_name) + '</b>' : '') + '</div>' +
-      '<div class="rc-line">مبلغًا وقدره: <span class="rc-amount">' + money(rec.amount) + '</span></div>' +
-      '<div class="rc-line">وذلك عن: اشتراك المواصلات لشهر <b>' + monthLabel(ui.tMonth) + '</b> — نقطة التجمع: <b>' + esc(g.assembly_point) + '</b></div>' +
-      '<div class="rc-line">طريقة الدفع: <b>' + esc(payMethodLabel(rec)) + '</b></div>' +
-      '<div class="rc-line">' + (left > 0 ? 'المتبقي من اشتراك الشهر: <b>' + money(left) + '</b>' : 'تم سداد اشتراك الشهر كاملًا.') + '</div>' +
-      '<div class="rc-signs"><span>المستلم: ' + esc((S.profile && S.profile.full_name) || '....................') + '</span>' +
-        '<span>التوقيع: ....................</span><span>الختم</span></div>' +
-    '</div>';
-  }
 
   document.addEventListener('click', async function (e) {
     if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
@@ -3069,8 +2981,14 @@
       '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
         '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
-        '<p class="hint" style="margin:6px 0 0">يظهر في أعلى إيصالات السداد.</p>' +
-        '<label class="field" for="principal-name" style="margin-top:14px">اسم مدير/ة المدرسة</label>' +
+        '<p class="hint" style="margin:6px 0 0">يظهر بجانب الشعار في ترويسة كل التقارير المطبوعة. اتركه فارغًا لاستخدام «أكاديمية الركيزة الثالثة».</p>' +
+        '<label class="field" for="rep-sub" style="margin-top:14px">المرحلة أو القسم (سطر تحت اسم الأكاديمية في الترويسة)</label>' +
+        '<input type="text" id="rep-sub" data-settingtext="report_subtitle" value="' + esc((S.settings && S.settings.report_subtitle) || '') + '">' +
+        '<label class="field" for="rep-year" style="margin-top:14px">العام الدراسي</label>' +
+        '<input type="text" id="rep-year" dir="ltr" style="text-align:right" data-settingtext="academic_year" placeholder="' + esc(academicYear()) + '" value="' + esc((S.settings && S.settings.academic_year) || '') + '">' +
+        '<label class="field" for="rep-contact" style="margin-top:14px">بيانات التواصل (تظهر في تذييل كل تقرير)</label>' +
+        '<input type="text" id="rep-contact" data-settingtext="contact_info" placeholder="العنوان · الهاتف · البريد الإلكتروني" value="' + esc((S.settings && S.settings.contact_info) || '') + '">' +
+        '<label class="field" for="principal-name" style="margin-top:14px">اسم مدير/ة الأكاديمية</label>' +
         '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
         '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p>' +
         '<label class="field" for="new-class" style="margin-top:16px">الصفوف والشعب</label>' +
@@ -3099,6 +3017,8 @@
   }
 
   function render() {
+    document.getElementById('page-lh').innerHTML = letterhead();
+    document.getElementById('page-css').textContent = pageCss();
     renderSide();
     if (!sb) return renderSetup();
     if (!S.uid) return renderAuth();
@@ -3340,7 +3260,7 @@
   }
 
   function dayName(iso) {
-    return iso ? new Date(iso + 'T00:00').toLocaleDateString('ar', { weekday: 'long' }) : '';
+    return iso ? new Date(iso + 'T00:00').toLocaleDateString('ar-u-nu-latn', { weekday: 'long' }) : '';
   }
 
   // مفاتيح الحقول: d0..d6 لنقاط القوة في كل مجال، ثم development و recommendations
@@ -3460,108 +3380,272 @@
 
       '<div class="card no-print"><h2>التوقيعات</h2><div class="grid2" style="margin-top:12px">' +
         basic('اسم المشرف التربوي', '<input type="text" data-vbasic="supervisor_name" aria-label="اسم المشرف التربوي" value="' + esc(v.supervisor_name) + '">') +
-        basic('اسم مدير/ة المدرسة', '<input type="text" data-vbasic="principal_name" aria-label="اسم مدير المدرسة" value="' + esc(v.principal_name) + '">') +
+        basic('اسم مدير/ة الأكاديمية', '<input type="text" data-vbasic="principal_name" aria-label="اسم مدير الأكاديمية" value="' + esc(v.principal_name) + '">') +
       '</div></div>';
   }
 
   /* ورقة الطباعة بتصميم النموذج الورقي، وتُصغَّر لتبقى في صفحة A4 واحدة */
 
-  var sheet = document.getElementById('print-sheet');
+  /* ========== قالب التقارير الموحّد (هوية أكاديمية الركيزة الثالثة) ==========
+     كل تقرير مطبوع يُبنى من هذه الدوال: الترويسة، كتلة العنوان، الجداول، التوقيعات، التذييل.
+     الألوان والخطوط في CSS تحت «هوية التقارير المطبوعة»؛ والثوابت النصية هنا. يكفي التعديل في هذين الموضعين. */
 
-  function buildVisitSheet(v) {
-    var t = find(v.teacher_id);
-    var dots = '..............................';
-    var d = v.visit_date ? v.visit_date.split('-') : null;
-    var date = d ? dayName(v.visit_date) + ' ' + d[2] + '/' + d[1] + '/' + d[0] : '';
-    var text = function (key) { return '<div class="ps-text">' + esc(lines(getField(v, key)).join('\n')) + '</div>'; };
+  var REPORT = {
+    nameAr: 'أكاديمية الركيزة الثالثة',
+    nameEn: 'Third Pillar Academy',
+    logo: 'logo.png',
+    // A4 عمودي: 12mm أعلى وأسفل، 15mm من الجانبين
+    page: { width: 210, height: 297, marginY: 12, marginX: 15 },
+    fonts: 'https://fonts.googleapis.com/css2?family=Cairo:wght@700;800&family=IBM+Plex+Sans+Arabic:wght@400;600&family=Montserrat:wght@600;700&display=swap',
+    baseSize: 10.5, // pt: نص التقرير؛ بقية الأحجام نسبة منه
+    minSize: 6.5
+  };
 
-    sheet.className = '';
-    sheet.innerHTML =
-      '<div class="ps-title">تقرير زيارة إشرافية صفية<br>نموذج الإشراف الميداني المعتمد</div>' +
-      '<div class="ps-h">أولاً: البيانات الأساسية</div>' +
-      '<table class="ps-basic"><colgroup><col style="width:16%"><col style="width:34%"><col style="width:16%"><col style="width:34%"></colgroup>' +
-        '<tr><td>اليوم / التاريخ</td><td>' + esc(date) + '</td><td>اسم المعلم</td><td>' + esc(t ? t.name : '') + '</td></tr>' +
-        '<tr><td>المبحث / المادة</td><td>' + esc(v.subject) + '</td><td>الصف والشعبة</td><td>' + esc(v.class_section) + '</td></tr>' +
-        '<tr><td>الحصة</td><td>' + esc(v.period) + '</td><td>رقم الزيارة</td><td>' + esc(v.visit_number) + '</td></tr>' +
-        '<tr><td>عنوان الدرس</td><td colspan="3">' + esc(v.lesson_title) + '</td></tr>' +
-      '</table>' +
-      '<div class="ps-h">ثانياً: مجالات التقييم والملاحظات الصفية</div>' +
-      '<table class="ps-domains"><colgroup><col style="width:6%"><col style="width:25%"><col style="width:69%"></colgroup>' +
-        '<tr><th>م</th><th>مؤشرات الأداء والمعايير الإشرافية</th><th>أبرز نقاط القوة والتميز</th></tr>' +
-        DOMAINS.map(function (dm, i) {
-          return '<tr><td class="c n">' + (i + 1) + '</td><td class="c">' + dm.title + '</td><td>' + text('d' + i) + '</td></tr>';
-        }).join('') +
-        '<tr class="ps-gap"><td colspan="3"></td></tr>' +
-        '<tr><td colspan="3" class="ps-notes"><b>الملاحظات ومجالات التطوير والتنمية المهنية المطلوبة:</b>' + text('development') + '</td></tr>' +
-      '</table>' +
-      '<div class="ps-rec"><b>التوصيات / الإجراء التطويري:</b>' + text('recommendations') + '</div>' +
-      '<div class="ps-signs">' +
-        '<div>توقيع المعلم (بالعلم والاطلاع)<span>الاسم: ' + esc((t && t.name) || dots) + '</span></div>' +
-        '<div>توقيع المشرف التربوي<span>الاسم: ' + esc(v.supervisor_name || dots) + '</span></div>' +
-        '<div>توقيع مدير/ة المدرسة<span>الاسم: ' + esc(v.principal_name || dots) + '</span></div>' +
-      '</div>';
-
-    fitSheet();
+  function schoolName() {
+    return (S.settings && S.settings.school_name) || REPORT.nameAr;
   }
+
+  // العام الدراسي من الإعدادات، وإلا يُحسب: يبدأ في أغسطس
+  function academicYear() {
+    if (S.settings && S.settings.academic_year) return S.settings.academic_year;
+    var d = new Date(), y = d.getFullYear();
+    return d.getMonth() >= 7 ? y + '/' + (y + 1) : (y - 1) + '/' + y;
+  }
+
+  // يوم/شهر/سنة بأرقام غربية
+  function dmy(iso) {
+    var p = String(iso || '').slice(0, 10).split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : '';
+  }
+
+  function nowStamp() {
+    var d = new Date(), two = function (n) { return ('0' + n).slice(-2); };
+    return two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
+  }
+
+  // الترويسة: الاسم العربي يمينًا، الشعار الدائري في الوسط، الاسم الإنجليزي والعام الدراسي يسارًا، وتحتها خط ذهبي
+  function letterhead() {
+    var cfg = S.settings || {};
+    return '<div class="rh"><div class="rh-ar"><b>' + esc(schoolName()) + '</b><small>' + esc(cfg.report_subtitle || '') + '</small></div>' +
+      '<img src="' + REPORT.logo + '" alt="">' +
+      '<div class="rh-en"><b>' + REPORT.nameEn + '</b><small dir="rtl">العام الدراسي ' + esc(academicYear()) + '</small></div></div>';
+  }
+
+  // بداية كل تقرير: العلامة المائية، الترويسة، ثم اسم التقرير وشريط معلوماته. info: [[العنوان، القيمة]، …]
+  function reportHead(title, info) {
+    var rows = (info || []).filter(function (p) { return p && p[1] !== '' && p[1] != null; });
+    rows.push(['تاريخ الإصدار', dmy(todayISO())]);
+    return '<img class="wm" src="' + REPORT.logo + '" alt="">' + letterhead() +
+      '<div class="rt"><h1>' + esc(title) + '</h1><div class="rt-info">' +
+      rows.map(function (p) { return '<span><b>' + p[0] + ':</b> ' + esc(p[1]) + '</span>'; }).join('') + '</div></div>';
+  }
+
+  // منطقة التوقيعات: خانات من اليمين بالترتيب المعطى، ثم خانة الختم. list: [[الصفة، الاسم]، …]
+  function reportSigns(list) {
+    var dots = '........................';
+    return '<div class="rs">' + list.map(function (p) {
+      return '<div><b>' + p[0] + '</b><span>الاسم: ' + esc(p[1] || dots) + '</span><span>التوقيع: ' + dots + '</span></div>';
+    }).join('') + '<div class="stamp">الختم</div></div>';
+  }
+
+  // إعداد الصفحة والتذييل: رقم الصفحة يمينًا، بيانات التواصل في الوسط، تاريخ ووقت الإصدار يسارًا، وفوقها خط ذهبي
+  function pageCss() {
+    var q = function (text) { return '"' + String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\s+/g, ' ') + '"'; };
+    var box = 'font:8pt "IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;color:#555;border-top:.75pt solid #C5A46D;padding-top:1.5mm;vertical-align:top;';
+    var p = REPORT.page;
+    return '@page{size:A4 portrait;margin:' + p.marginY + 'mm ' + p.marginX + 'mm;' +
+      '@bottom-right{content:"صفحة " counter(page) " من " counter(pages);' + box + 'text-align:right}' +
+      '@bottom-center{content:' + q((S.settings && S.settings.contact_info) || '') + ';' + box + 'text-align:center}' +
+      '@bottom-left{content:' + q(nowStamp()) + ';' + box + 'text-align:left}}';
+  }
+
+  // رقم الصف من اسم الشعبة: «السابع (أ)» → 7. يعيد 0 إن لم يُعرف
+  function gradeOf(className) {
+    var n = norm(latinDigits(className)), m = n.match(/\d+/);
+    if (m) return Number(m[0]);
+    var words = ['الاول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+    for (var i = words.length - 1; i >= 0; i--) if (n.indexOf(words[i]) > -1) return i + 1;
+    return 0;
+  }
+
+  var sheet = document.getElementById('print-sheet');
 
   // يُصغَّر الخط إلى أن تتسع الورقة في صفحة A4 واحدة
   function fitSheet() {
-    // المساحة المتاحة بعد الهوامش، مع هامش أمان صغير
-    var maxPx = (297 - 2 * 12.7 - 4) * 96 / 25.4;
-    var size = 12;
+    // هامش أمان 8mm: القياس هنا والطباعة الفعلية يختلفان قليلًا
+    var p = REPORT.page, maxPx = (p.height - 2 * p.marginY - 8) * 96 / 25.4;
+    var size = REPORT.baseSize;
     sheet.style.fontSize = size + 'pt';
-    while (sheet.offsetHeight > maxPx && size > 6) {
+    while (sheet.offsetHeight > maxPx && size > REPORT.minSize) {
       size -= 0.25;
       sheet.style.fontSize = size + 'pt';
     }
   }
 
-  // ورقة التقييم المطبوعة: نفس تصميم الشاشة، في صفحة واحدة، مع خانة واضحة للدرجة وتوقيعين.
-  // o: معلم (للمشرف) أو نتيجة منشورة (للمشاهد، وقد تكون بعض حقولها محجوبة)
+  /* ----- تقرير الزيارة الإشرافية ----- */
+  function buildVisitSheet(v) {
+    var t = find(v.teacher_id);
+    var text = function (key) { return '<div class="pre">' + esc(lines(getField(v, key)).join('\n')) + '</div>'; };
+    var kv = function (a, b) { return '<tr><th>' + a[0] + '</th><td>' + esc(a[1]) + '</td><th>' + b[0] + '</th><td>' + esc(b[1]) + '</td></tr>'; };
+
+    sheet.className = 'ps';
+    sheet.innerHTML =
+      reportHead('تقرير زيارة إشرافية صفية', [['النموذج', 'نموذج الإشراف الميداني المعتمد'], ['المعلم', t ? t.name : '']]) +
+      '<div class="rsec">أولًا: البيانات الأساسية</div>' +
+      '<table class="rk">' +
+        kv(['اليوم / التاريخ', v.visit_date ? dayName(v.visit_date) + ' ' + dmy(v.visit_date) : ''], ['اسم المعلم', t ? t.name : '']) +
+        kv(['المبحث / المادة', v.subject], ['الصف والشعبة', v.class_section]) +
+        kv(['الحصة', v.period], ['رقم الزيارة', v.visit_number]) +
+        '<tr><th>عنوان الدرس</th><td colspan="3">' + esc(v.lesson_title) + '</td></tr>' +
+      '</table>' +
+      '<div class="rsec">ثانيًا: مجالات التقييم والملاحظات الصفية</div>' +
+      '<table class="ps-domains"><colgroup><col style="width:6%"><col style="width:25%"><col style="width:69%"></colgroup>' +
+        '<thead><tr><th>م</th><th>مؤشرات الأداء والمعايير الإشرافية</th><th>أبرز نقاط القوة والتميز</th></tr></thead><tbody>' +
+        DOMAINS.map(function (dm, i) {
+          return '<tr><td class="c">' + (i + 1) + '</td><td class="c"><b>' + dm.title + '</b></td><td>' + text('d' + i) + '</td></tr>';
+        }).join('') + '</tbody></table>' +
+      '<div class="rbox"><b>الملاحظات ومجالات التطوير والتنمية المهنية المطلوبة</b>' + text('development') + '</div>' +
+      '<div class="rbox"><b>التوصيات / الإجراء التطويري</b>' + text('recommendations') + '</div>' +
+      reportSigns([['المعلم (بالعلم والاطلاع)', t ? t.name : ''], ['المشرف التربوي', v.supervisor_name], ['مدير/ة الأكاديمية', v.principal_name || principalName()]]);
+    fitSheet();
+  }
+
+  /* ----- تقييم المعلم -----
+     o: معلم (للمشرف) أو نتيجة منشورة (للمشاهد، وقد تكون بعض حقولها محجوبة) */
   function buildEvalSheet(o) {
-    var dots = '..............................';
     var sum = o.total != null ? o.total : (o.ratings ? total(o) : null);
     var pct = sum != null ? Math.round(sum / MAX * 100) : null;
     var supervisor = isStaff() && S.profile ? S.profile.full_name : '';
-    var notes = function (title, text) {
-      return text ? '<div class="pe-notes"><b>' + title + '</b><div>' + esc(text) + '</div></div>' : '';
+    var notes = function (title, body) {
+      return body ? '<div class="rbox"><b>' + title + '</b><div class="pre">' + esc(body) + '</div></div>' : '';
     };
 
     sheet.className = 'pe';
     sheet.innerHTML =
-      '<div class="pe-head"><div><div class="nm">' + esc(o.name) + '</div><div class="sub">التخصص: ' + esc(o.subject || '—') + '</div></div>' +
-        '<div class="sub">' + (o.published_at ? 'تاريخ النشر: ' + fmtDate(o.published_at) : '') + '</div></div>' +
+      reportHead('تقييم أداء المعلم', [['المعلم', o.name], ['التخصص', o.subject], ['تاريخ النشر', dmy(o.published_at)]]) +
       (sum != null
         ? '<div class="pe-summary">' +
-            '<div><div class="k">المجموع</div><div class="v">' + sum + ' / ' + MAX + '</div></div>' +
-            '<div><div class="k">النسبة</div><div class="v">' + pct + '%</div></div>' +
-            '<div><div class="k">التقدير</div><div class="v">' + grade(pct) + '</div></div></div>'
+            '<div><span class="k">المجموع</span><span class="v">' + sum + ' / ' + MAX + '</span></div>' +
+            '<div><span class="k">النسبة</span><span class="v">' + pct + '%</span></div>' +
+            '<div><span class="k">التقدير</span><span class="v">' + grade(pct) + '</span></div></div>'
         : '') +
       (o.ratings
-        ? '<table class="pe-table"><colgroup><col style="width:5%"><col style="width:83%"><col style="width:12%"></colgroup>' +
-          '<tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th class="r">التقييم</th></tr>' +
+        ? '<table class="rz"><colgroup><col style="width:6%"><col style="width:82%"><col style="width:12%"></colgroup>' +
+          '<thead><tr><th>م</th><th>التقييم الأدائي والكفايات الشخصية</th><th>التقييم</th></tr></thead><tbody>' +
           CRITERIA.map(function (c, i) {
             var r = o.ratings[i];
-            return '<tr><td class="n">' + (i + 1) + '</td><td>' + c + '</td>' +
-              '<td class="r">' + (r ? '<b>' + r + '</b>' : '—') + '</td></tr>';
-          }).join('') + '</table>' +
+            return '<tr><td class="c">' + (i + 1) + '</td><td>' + c + '</td><td class="c mark">' + (r || '—') + '</td></tr>';
+          }).join('') + '</tbody></table>' +
           '<div class="pe-legend">مفتاح الدرجات: ' + SCALE.map(function (x) { return '<span><b>' + x.v + '</b> = ' + x.label + '</span>'; }).join('') + '</div>'
         : '') +
       notes('ملاحظات المشرف', o.notes) +
       notes('ملاحظات الاعتماد', o.approver_notes) +
-      '<div class="pe-signs">' +
-        '<div><b>المشرف التربوي</b><span>الاسم: ' + esc(supervisor || dots) + '</span><span>التوقيع: ' + dots + '</span></div>' +
-        '<div><b>مدير/ة المدرسة</b><span>الاسم: ' + esc(principalName()) + '</span><span>التوقيع: ' + dots + '</span></div>' +
-      '</div>';
-
+      reportSigns([['المشرف التربوي', supervisor], ['مدير/ة الأكاديمية', principalName()]]);
     fitSheet();
   }
 
-  function currentResult() {
-    var m = location.hash.match(/^#\/r\/(.+)$/);
-    if (!m || !S.results) return null;
-    for (var i = 0; i < S.results.length; i++) if (S.results[i].id === m[1]) return S.results[i];
-    return null;
+  /* ----- إيصال سداد اشتراك المواصلات ----- */
+  function buildReceiptSheet(q) {
+    var g = q.g, x = findStudent(q.sid), rec = S.tPay[ui.tMonth][q.sid];
+    var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0];
+    var left = Math.max(0, shareOf(mem, g) - rec.amount);
+    sheet.className = 'rc';
+    sheet.style.fontSize = '';
+    sheet.innerHTML =
+      reportHead('إيصال سداد اشتراك المواصلات', [['رقم الإيصال', rec.receipt_no != null ? rec.receipt_no : '—'], ['تاريخ السداد', dmy(rec.paid_on || todayISO())]]) +
+      '<div class="rc-box">' +
+        '<div class="rc-line">استلمنا من ولي أمر الطالب/ـة: <b>' + esc(x.full_name) + '</b>' + (x.class_name ? ' الصف: <b>' + esc(x.class_name) + '</b>' : '') + '</div>' +
+        '<div class="rc-line">مبلغًا وقدره: <span class="rc-amount">' + money(rec.amount) + '</span></div>' +
+        '<div class="rc-line">وذلك عن: اشتراك المواصلات لشهر <b>' + monthLabel(ui.tMonth) + '</b> — نقطة التجمع: <b>' + esc(g.assembly_point) + '</b></div>' +
+        '<div class="rc-line">طريقة الدفع: <b>' + esc(payMethodLabel(rec)) + '</b></div>' +
+        '<div class="rc-line">' + (left > 0 ? 'المتبقي من اشتراك الشهر: <b class="warn">' + money(left) + '</b>' : '<span class="ok">تم سداد اشتراك الشهر كاملًا.</span>') + '</div>' +
+      '</div>' +
+      reportSigns([['المستلم', S.profile && S.profile.full_name]]);
+  }
+
+  /* ----- كشوف الطلاب -----
+     className: كشف شعبة بعينها (من صفحة الشعب)؛ بدونه يُطبع ما تعرضه شاشة التسجيل بتصفيتها الحالية.
+     الكشف قد يمتد لصفحات: الترويسة ورأس الجدول داخل thead فيتكرران في كل صفحة.
+     الصفوف 7 و8 و9: كشفان منفصلان (بنين / بنات)؛ ما دونها كشف واحد مختلط */
+  function buildStudentsSheet(className) {
+    var list = className ? classStudents(className) : filteredStudents();
+    var flag = className ? null : ST_FLAGS[ui.stFlag], groupOf = transportGroupOf();
+    var oneClass = className || (ui.stClass && ui.stClass !== '-' ? ui.stClass : '');
+    var info = [];
+    if (oneClass) info.push(['الشعبة', oneClass]);
+    if (!className) {
+      if (ui.stStatus) info.push(['الحالة', ST_STATUS[ui.stStatus]]);
+      if (ui.stClass === '-') info.push(['الصف', 'بدون صف']);
+      if (flag) info.push(['المعيار', flag.label]);
+      if (ui.stSearch.trim()) info.push(['بحث', ui.stSearch.trim()]);
+    }
+
+    var g = oneClass ? gradeOf(oneClass) : 0;
+    var parts = g >= 7 && g <= 9
+      ? [['كشف البنين', list.filter(function (x) { return x.gender === 'ذكر'; })],
+         ['كشف البنات', list.filter(function (x) { return x.gender === 'أنثى'; })],
+         ['طلاب لم يُحدَّد جنسهم', list.filter(function (x) { return x.gender !== 'ذكر' && x.gender !== 'أنثى'; })]]
+          .filter(function (p) { return p[1].length; })
+      : [['كشف الطلاب', list]];
+
+    var cols = 6 + (oneClass ? 0 : 1) + (flag && flag.extra ? 1 : 0);
+    sheet.className = 'ls';
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + parts.map(function (part, pi) {
+      var head = reportHead(part[0], info.concat([['عدد الطلاب', part[1].length]])).replace(/^<img class="wm"[^>]*>/, '');
+      return '<table class="rz' + (pi ? ' newpage' : '') + '"><thead>' +
+        '<tr><td class="ls-head" colspan="' + cols + '">' + head + '</td></tr>' +
+        '<tr><th>م</th><th>اسم الطالب</th><th>رقم الهوية</th>' + (oneClass ? '' : '<th>الصف</th>') +
+          '<th>الهاتف</th><th>ولي الأمر</th>' + (flag && flag.extra ? '<th>' + flag.extra[0] + '</th>' : '') + '<th>ملاحظات</th></tr></thead><tbody>' +
+        part[1].map(function (x, i) {
+          var extra = flag && flag.extra ? flag.extra[1](x, groupOf) : null;
+          return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(x.full_name) + '</td><td class="c">' + esc(x.national_id) + '</td>' +
+            (oneClass ? '' : '<td class="c">' + esc(x.class_name || '—') + '</td>') +
+            '<td class="c">' + esc(x.phone || x.whatsapp || '') + '</td><td>' + esc(x.guardian_name) + '</td>' +
+            (flag && flag.extra ? '<td class="c">' + esc(extra == null ? '' : extra) + '</td>' : '') + '<td style="width:16%"></td></tr>';
+        }).join('') + '</tbody></table>';
+    }).join('') +
+      reportSigns([['معلم المادة', ''], ['المرشد أو المنسق', ''], ['مدير/ة الأكاديمية', principalName()]]);
+  }
+
+  /* ----- ملف الطالب ----- */
+  function buildProfileSheet(x) {
+    var final = stStatus(x) === 'final', docs = x.documents || {};
+    var ride = findGroup(transportGroupOf()[x.id]);
+    var pair = function (label, value) { return '<th>' + label + '</th><td>' + esc(value == null ? '' : value) + '</td>'; };
+    var row2 = function (a, b) { return '<tr>' + pair(a[0], a[1]) + pair(b[0], b[1]) + '</tr>'; };
+    var row1 = function (label, value) { return '<tr><th>' + label + '</th><td colspan="3">' + esc(value == null ? '' : value) + '</td></tr>'; };
+    var table = function (rows) { return '<table class="rk"><colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' + rows + '</table>'; };
+    var rideText = ride ? 'نقطة التجمع: ' + ride.assembly_point + (ride.pickup_time ? ' — ' + ride.pickup_time : '')
+      : x.wants_transport === false ? 'لا يحتاج مواصلات' : x.wants_transport === true ? 'يحتاج مواصلات — لم تُحدَّد نقطة التجمع' : 'لم يُحدَّد';
+
+    sheet.className = 'pf';
+    sheet.innerHTML =
+      reportHead('ملف الطالب', [['حالة التسجيل', final ? 'تسجيل نهائي' + (x.finalized_at ? ' — ' + dmy(x.finalized_at) : '') : 'تسجيل مبدئي — غير نهائي'], ['الشعبة', x.class_name]]) +
+      '<div class="rsec">بيانات الطالب</div>' +
+      '<div class="pf-row">' + table(
+        row1('الاسم رباعي', x.full_name) +
+        row2(['رقم الهوية', x.national_id], ['الجنس', x.gender]) +
+        row2(['تاريخ الميلاد', dmy(x.birth_date)], ['الشعبة', x.class_name]) +
+        row1('عنوان السكن', x.address) +
+        row1('المواصلات', rideText) +
+        row2(['الهاتف الأساسي', x.phone], ['واتساب', x.whatsapp]) +
+        (x.email ? row1('البريد الإلكتروني', x.email) : '')) +
+        '<div class="pf-photo">صورة<br>شخصية</div></div>' +
+      '<div class="rsec">التحصيل السابق</div>' +
+      table(row2(['شهادة العام السابق', yesNo(x.has_prev_certificate)], ['التقدير', x.prev_grade])) +
+      '<div class="rsec">ولي الأمر</div>' +
+      table(row2(['الاسم', x.guardian_name], ['صلة القرابة', x.guardian_relation]) + row1('المهنة', x.guardian_job)) +
+      '<div class="rsec">الحالة الصحية والاجتماعية</div>' +
+      table(
+        row2(['حالة صحية', yesNo(x.has_health_condition)], ['أدوية منتظمة', yesNo(x.takes_medication)]) +
+        row2(['احتياجات تعليمية خاصة', yesNo(x.has_special_needs)], ['يتيم', yesNo(x.is_orphan) + (x.is_orphan && x.orphan_of ? ' (' + x.orphan_of + ')' : '')]) +
+        row2(['يحفظ من القرآن', yesNo(x.memorizes_quran)], ['عدد الأجزاء', x.memorizes_quran ? x.quran_parts : ''])) +
+      '<div class="rsec">المستندات المستلمة</div>' +
+      '<div class="rbox">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
+        (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</div>' +
+      reportSigns([['ولي الأمر', x.guardian_name], ['مسؤول التسجيل', S.profile && S.profile.full_name], ['مدير/ة الأكاديمية', principalName()]]);
+    fitSheet();
   }
 
   // يبني الورقة المناسبة للصفحة الحالية (إيصال، ملف طالب، كشف، تقرير زيارة، تقييم). يعيد false إن لم تكن للصفحة ورقة خاصة
@@ -3579,12 +3663,22 @@
     return true;
   }
 
+  // خطوط الهوية تُحمَّل قبل بناء الورقة حتى يكون قياس الصفحة الواحدة صحيحًا (مع مهلة قصوى)
+  function reportFontsReady(doc) {
+    var wanted = ['800 12pt Cairo', '700 12pt Cairo', '400 12pt "IBM Plex Sans Arabic"', '600 12pt "IBM Plex Sans Arabic"', '700 12pt Montserrat'];
+    var load = doc.fonts && doc.fonts.load
+      ? Promise.all(wanted.map(function (f) { return doc.fonts.load(f, 'أ A').catch(function () {}); }))
+      : Promise.resolve();
+    return Promise.race([load, new Promise(function (resolve) { setTimeout(resolve, 2500); })]);
+  }
+
   // أزرار الطباعة: تُطبع الورقة من إطار مستقل لا يحتوي إلا عليها وعلى تنسيقها،
   // فلا تتأثر الطباعة بحجم الصفحة الأصلية ولا بتخطيطها
-  function printNow() {
+  async function printNow() {
+    await reportFontsReady(document);
     if (!buildCurrentSheet()) return window.print();
-    var css = '@page{size:A4;margin:12.7mm}html,body{margin:0;background:#fff}';
-    var rules = document.styleSheets[0].cssRules;
+    var css = pageCss() + 'html,body{margin:0;background:#fff}';
+    var rules = document.getElementById('app-css').sheet.cssRules;
     for (var i = 0; i < rules.length; i++) {
       var sel = rules[i].selectorText || '';
       if (sel.indexOf('#print-sheet') > -1 && sel.indexOf('body.print-sheet') < 0) css += rules[i].cssText;
@@ -3600,15 +3694,33 @@
     document.body.appendChild(frame);
     var doc = frame.contentDocument;
     doc.open();
-    doc.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>' + esc(document.title) + '</title><style>' + css + '</style></head><body>' +
-      sheet.outerHTML + '</body></html>');
+    doc.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>' + esc(document.title) + '</title>' +
+      '<link rel="stylesheet" href="' + REPORT.fonts + '"><style>' + css + '</style></head><body>' + sheet.outerHTML + '</body></html>');
     doc.close();
     sheet.innerHTML = ''; // الورقة صارت في الإطار؛ لا تبقى نسخة مخفية تثقل الصفحة
-    setTimeout(function () {
-      frame.contentWindow.focus();
-      frame.contentWindow.print();
-    }, 100);
+
+    // يُنتظر تحميل الشعار والخطوط داخل الإطار (مع مهلة قصوى) قبل فتح نافذة الطباعة
+    var imgs = Array.prototype.map.call(doc.images, function (img) {
+      return img.complete ? null : new Promise(function (resolve) { img.addEventListener('load', resolve); img.addEventListener('error', resolve); });
+    });
+    await Promise.race([Promise.all(imgs.concat([reportFontsReady(doc)])), new Promise(function (resolve) { setTimeout(resolve, 3000); })]);
+    if (!frame.isConnected) return;
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
   }
+
+
+
+
+
+  function currentResult() {
+    var m = location.hash.match(/^#\/r\/(.+)$/);
+    if (!m || !S.results) return null;
+    for (var i = 0; i < S.results.length; i++) if (S.results[i].id === m[1]) return S.results[i];
+    return null;
+  }
+
+
 
   // Ctrl+P من المتصفح مباشرة
   window.addEventListener('beforeprint', function () {
