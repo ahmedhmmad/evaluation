@@ -387,16 +387,17 @@
   #print-sheet .pe-legend { display: flex; flex-wrap: wrap; gap: .2em 1.3em; margin-top: .45em; font-size: .9em; color: #555; }
   #print-sheet .pe-legend b { color: var(--navy); }
   /* إيصال المواصلات */
-  /* نسختان في ورقة واحدة: خط القص في منتصف A4 تمامًا (148.5mm = نسخة 144 تبدأ ترويستها من حافة الورقة + نصف شريط القص 4.5) */
-  #print-sheet.rc { font-size: 10pt; line-height: 1.35; }
+  /* نسختان في ورقة واحدة: خط القص في منتصف A4 تمامًا (148.5mm = نسخة 145 تبدأ ترويستها من حافة الورقة + نصف شريط القص 3.5) */
+  /* الهامش السفلي أصغر في الإيصال (6mm) ليتسع ما بين السطور */
+  #print-sheet.rc { font-size: 10pt; line-height: 1.35; padding-bottom: 6mm; }
   #print-sheet .rc-copy { position: relative; }
-  #print-sheet .rc-copy:first-child { min-height: 144mm; }
+  #print-sheet .rc-copy:first-child { min-height: 145mm; }
   #print-sheet .rc-copy .wm { position: absolute; width: 60mm; }
   /* الترويسة على عرض الورقة كله في النسختين، كما في بقية التقارير */
   #print-sheet .rc-2 .rh-banner { margin-top: 0; }
   /* كلمة «أصل» / «نسخة» في أعلى الإيصال، فوق طرف الترويسة */
   #print-sheet .rv-tag { position: absolute; z-index: 3; top: 5mm; inset-inline-start: 0; padding: .05em 1.3em .15em; border: 1pt solid var(--gold); border-radius: .4em; background: #fff; font-family: var(--font-head); font-size: 1.15em; font-weight: 800; color: var(--navy); }
-  #print-sheet .rc-cut { display: flex; align-items: center; gap: .7em; height: 9mm; margin: 0 calc(-1 * var(--pad-x)); color: #888; font-size: .8em; }
+  #print-sheet .rc-cut { display: flex; align-items: center; gap: .7em; height: 7mm; margin: 0 calc(-1 * var(--pad-x)); color: #888; font-size: .8em; }
   #print-sheet .rc-cut::before, #print-sheet .rc-cut::after { content: ""; flex: 1; border-top: .75pt dashed #999; }
   /* الترويسة هنا الصورة وحدها، وتحتها خط ذهبي رفيع */
   #print-sheet.rc .rh { margin-bottom: .6em; }
@@ -419,22 +420,23 @@
   #print-sheet .rv-amt i { font-style: normal; font-weight: 600; color: var(--navy); border-inline-start: .5pt solid var(--navy); }
   /* سطور البيان: العنوان، ثم القيمة فوق خط منقّط يمتد إلى آخر السطر، ثم المقابل الإنجليزي */
   #print-sheet .rv-body { padding: .1em .2em; }
-  #print-sheet .rv-line { display: flex; align-items: baseline; gap: .5em; margin: .4em 0; }
+  #print-sheet .rv-line { display: flex; align-items: baseline; gap: .5em; margin: .8em 0; }
+  #print-sheet .rv-line.ref .v { direction: ltr; text-align: right; font-family: var(--font-en); letter-spacing: .04em; }
   #print-sheet .rv-line .k { flex: none; color: var(--navy); font-weight: 600; }
   #print-sheet .rv-line .v { flex: 1; min-height: 1.35em; padding: 0 .5em; border-bottom: .75pt dotted #666; font-weight: 600; color: #000; }
   #print-sheet .rv-line .e { flex: none; direction: ltr; }
   #print-sheet .rv-two { display: flex; gap: 1.2em; }
-  #print-sheet .rv-two { margin: .4em 0; }
+  #print-sheet .rv-two { margin: .8em 0; }
   #print-sheet .rv-two .rv-line { flex: 1; margin: 0; }
   #print-sheet .rv-two .rv-line.short { flex: 0 0 34%; }
   #print-sheet .rv-ms { flex: 1; display: flex; flex-wrap: wrap; gap: 0 1.4em; padding: 0 .5em; }
   /* شريط الحساب: اشتراك الشهر، المدفوع، المتبقي */
-  #print-sheet .rv-sum { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: .55em; border: .75pt solid var(--navy); border-radius: .4em; overflow: hidden; }
+  #print-sheet .rv-sum { display: grid; grid-template-columns: repeat(3, 1fr); flex: 1; border: .75pt solid var(--navy); border-radius: .4em; overflow: hidden; }
+  #print-sheet .rv-end { display: flex; align-items: center; gap: 1.2em; margin-top: .7em; }
   #print-sheet .rv-sum > div { display: flex; justify-content: space-between; gap: .5em; padding: .22em .7em; }
   #print-sheet .rv-sum > div + div { border-inline-start: .5pt solid var(--navy); }
   #print-sheet .rv-sum span { color: var(--navy); }
-  #print-sheet.rc .rs { margin-top: .55em; }
-  #print-sheet.rc .rs .stamp { flex-basis: 5em; height: 5em; }
+  #print-sheet .rv-stamp { flex: none; width: 5em; height: 5em; display: grid; place-items: center; border: .75pt dashed var(--gold); border-radius: 50%; color: #999; font-size: .9em; }
   /* كشوف الطلاب */
   #print-sheet.ls table { table-layout: auto; }
   #print-sheet td.ls-head { border: 0; padding: 0 0 .3em; background: #fff; font-size: 1.087em; }
@@ -2193,7 +2195,7 @@
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
-        (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
+        payNoteInput(x.id, method, rec) + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
         '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
@@ -2317,7 +2319,7 @@
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
-        (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
+        payNoteInput(x.id, method, rec) + '</td>' +
         '<td>' + (r.paid ? dmy(rec.paid_on) : '—') + '</td>' +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
         '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
@@ -2516,8 +2518,20 @@
 
   var PAY_METHODS = { cash: 'نقدًا', instapay: 'إنستاباي', vodafone: 'فودافون كاش', other: 'أخرى' };
 
+  // الدفع الإلكتروني (إنستاباي، فودافون كاش) له رقم دفع يُسجَّل ويظهر في الإيصال
+  function hasPayRef(method) { return method === 'instapay' || method === 'vodafone'; }
+
   function payMethodLabel(rec) {
-    return rec.method === 'other' ? (rec.method_note || PAY_METHODS.other) : PAY_METHODS[rec.method || 'cash'];
+    if (rec.method === 'other') return rec.method_note || PAY_METHODS.other;
+    return PAY_METHODS[rec.method || 'cash'] + (hasPayRef(rec.method) && rec.method_note ? ' — ' + rec.method_note : '');
+  }
+
+  // الخانة التي تحت طريقة الدفع: رقم الدفع للإلكتروني، أو تحديد الطريقة عند «أخرى». method_note يحمل أيهما
+  function payNoteInput(id, method, rec) {
+    if (method !== 'other' && !hasPayRef(method)) return '';
+    var ref = hasPayRef(method);
+    return '<input type="text" class="mnote" data-mnote="' + id + '"' + (ref ? ' dir="ltr" inputmode="numeric" style="text-align:right"' : '') +
+      ' placeholder="' + (ref ? 'رقم الدفع' : 'حدّد طريقة الدفع') + '" aria-label="' + (ref ? 'رقم الدفع' : 'طريقة الدفع الأخرى') + '" value="' + esc(rec.method_note || '') + '">';
   }
 
   // patch: ما تغيّر في دفعة الطالب لهذا الشهر (المبلغ أو طريقة الدفع)
@@ -2530,7 +2544,8 @@
     };
     Object.assign(row, patch);
     row.amount = Math.max(0, Number(row.amount) || 0);
-    if (row.method !== 'other') row.method_note = '';
+    // الملاحظة تخص طريقة الدفع التي كُتبت لها: تُمسح عند تغيير الطريقة، ولا ملاحظة للنقد
+    if (row.method === 'cash' || ('method' in patch && patch.method !== (old.method || 'cash'))) row.method_note = '';
     if ('amount' in patch) row.paid_on = todayISO();
     var r = await sb.from('transport_payments').upsert(row, { onConflict: 'student_id,month' }).select().single();
     if (r.error) return fail(r.error);
@@ -4020,10 +4035,11 @@
           line('مبلغًا وقدره', 'The sum of', amountInWords(rec.amount)) +
           line('وذلك عن', 'Being for', 'اشتراك المواصلات لشهر ' + monthLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
           '<div class="rv-line"><span class="k">طريقة الدفع</span><span class="rv-ms">' + methods + '</span><span class="e">Payment</span></div>' +
+          (hasPayRef(method) ? line('رقم الدفع (' + PAY_METHODS[method] + ')', 'Ref. No.', rec.method_note, 'ref') : '') +
         '</div>' +
-        '<div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
+        '<div class="rv-end"><div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + (left > 0 ? money(left) : 'لا شيء — سُدِّد كاملًا') + '</b></div></div>' +
-        reportSigns([]) + '</div>'; // بلا توقيعات: خانة الختم فقط
+        '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
     };
     sheet.className = 'rc';
     sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
