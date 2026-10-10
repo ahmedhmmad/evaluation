@@ -386,17 +386,20 @@
   #print-sheet td.mark { font-family: var(--font-head); font-size: 1.35em; font-weight: 800; color: var(--navy-dark); padding: 0; }
   #print-sheet .pe-legend { display: flex; flex-wrap: wrap; gap: .2em 1.3em; margin-top: .45em; font-size: .9em; color: #555; }
   #print-sheet .pe-legend b { color: var(--navy); }
-  /* سند القبض */
-  /* نسختان في ورقة واحدة: خط القص في منتصف A4 تمامًا (148.5mm = نسخة 144 تبدأ ترويستها من حافة الورقة + نصف شريط القص 4.5) */
+  /* إيصال المواصلات */
+  /* نسختان في ورقة واحدة: خط القص في منتصف A4 تمامًا (148.5mm = هامش 12 + نسخة 132 + نصف شريط القص 4.5) */
   #print-sheet.rc { font-size: 10pt; line-height: 1.35; }
   #print-sheet .rc-copy { position: relative; }
-  #print-sheet .rc-copy:first-child { min-height: 144mm; }
+  #print-sheet .rc-copy:first-child { min-height: 132mm; }
   #print-sheet .rc-copy .wm { position: absolute; width: 60mm; }
-  #print-sheet .rc-2 .rh-banner { width: 100%; margin: 0; }
+  /* ترويسة الإيصال مخففة: الصورة صغيرة في الوسط داخل الهوامش، لا على عرض الورقة */
+  #print-sheet.rc .rh-banner { width: 46%; margin: 0 auto; border-radius: .4em; }
+  /* كلمة «أصل» / «نسخة» في أعلى الإيصال */
+  #print-sheet .rv-tag { position: absolute; top: 0; inset-inline-start: 0; padding: .1em 1.3em .2em; border: 1pt solid var(--navy); border-radius: .4em; font-family: var(--font-head); font-size: 1.15em; font-weight: 800; color: var(--navy); }
   #print-sheet .rc-cut { display: flex; align-items: center; gap: .7em; height: 9mm; margin: 0 calc(-1 * var(--pad-x)); color: #888; font-size: .8em; }
   #print-sheet .rc-cut::before, #print-sheet .rc-cut::after { content: ""; flex: 1; border-top: .75pt dashed #999; }
-  /* الترويسة هنا الصورة وحدها، وتحتها خط ذهبي */
-  #print-sheet.rc .rh { margin-bottom: .55em; border-bottom: 1.5pt solid var(--gold); }
+  /* الترويسة هنا الصورة وحدها، وتحتها خط ذهبي رفيع */
+  #print-sheet.rc .rh { margin-bottom: .7em; padding-bottom: .5em; border-bottom: .75pt solid var(--gold); }
   #print-sheet.rc .rh-line { display: none; }
   /* أعلى السند: الرقم والتاريخ يمينًا، العنوان في الوسط، خانة المبلغ يسارًا */
   #print-sheet .rv-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1em; margin-bottom: .55em; }
@@ -416,24 +419,23 @@
   #print-sheet .rv-amt i { font-style: normal; font-weight: 600; color: var(--navy); border-inline-start: .5pt solid var(--navy); }
   /* سطور البيان: العنوان، ثم القيمة فوق خط منقّط يمتد إلى آخر السطر، ثم المقابل الإنجليزي */
   #print-sheet .rv-body { padding: .1em .2em; }
-  #print-sheet .rv-line { display: flex; align-items: baseline; gap: .5em; margin: .34em 0; }
+  #print-sheet .rv-line { display: flex; align-items: baseline; gap: .5em; margin: .6em 0; }
   #print-sheet .rv-line .k { flex: none; color: var(--navy); font-weight: 600; }
   #print-sheet .rv-line .v { flex: 1; min-height: 1.35em; padding: 0 .5em; border-bottom: .75pt dotted #666; font-weight: 600; color: #000; }
   #print-sheet .rv-line .e { flex: none; direction: ltr; }
   #print-sheet .rv-two { display: flex; gap: 1.2em; }
+  #print-sheet .rv-two { margin: .6em 0; }
   #print-sheet .rv-two .rv-line { flex: 1; margin: 0; }
   #print-sheet .rv-two .rv-line.short { flex: 0 0 34%; }
   #print-sheet .rv-ms { flex: 1; display: flex; flex-wrap: wrap; gap: 0 1.4em; padding: 0 .5em; }
   /* شريط الحساب: اشتراك الشهر، المدفوع، المتبقي */
-  #print-sheet .rv-sum { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: .5em; border: .75pt solid var(--navy); border-radius: .4em; overflow: hidden; }
+  #print-sheet .rv-sum { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: .8em; border: .75pt solid var(--navy); border-radius: .4em; overflow: hidden; }
   #print-sheet .rv-sum > div { display: flex; justify-content: space-between; gap: .5em; padding: .22em .7em; }
   #print-sheet .rv-sum > div + div { border-inline-start: .5pt solid var(--navy); }
   #print-sheet .rv-sum span { color: var(--navy); }
-  #print-sheet.rc .rs { margin-top: .5em; }
-  #print-sheet.rc .rs .stamp { flex-basis: 4.8em; height: 4.8em; }
-  #print-sheet.rc .rs span { margin-top: .4em; }
-  #print-sheet .rv-foot { display: flex; justify-content: space-between; align-items: center; gap: 1em; margin-top: .4em; font-size: .78em; color: #666; }
-  #print-sheet .rv-foot b { padding: .05em .9em .15em; border-radius: 99em; background: var(--navy); color: #fff; }
+  #print-sheet.rc .rs { margin-top: .9em; }
+  #print-sheet.rc .rs > div:first-child { flex: 0 0 55%; }
+  #print-sheet.rc .rs .stamp { flex-basis: 5.6em; height: 5.6em; }
   /* كشوف الطلاب */
   #print-sheet.ls table { table-layout: auto; }
   #print-sheet td.ls-head { border: 0; padding: 0 0 .3em; background: #fff; font-size: 1.087em; }
@@ -2194,7 +2196,7 @@
         }).join('') + '</select>' +
         (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
-        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">سند قبض</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
     }).join('');
     return rows
@@ -2319,7 +2321,7 @@
         (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
         '<td>' + (r.paid ? dmy(rec.paid_on) : '—') + '</td>' +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
-        '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">سند قبض</button> ' : '') +
+        '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button>' : '') + '</td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
@@ -3990,9 +3992,9 @@
     return 'فقط ' + text + ' لا غير';
   }
 
-  /* ----- سند قبض اشتراك المواصلات -----
-     ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والصورة لسجل المدرسة.
-     على هيئة سندات القبض المتداولة: رقم السند، خانة المبلغ، المبلغ كتابةً، البيان، طريقة الدفع، التوقيعات والختم */
+  /* ----- إيصال اشتراك المواصلات -----
+     ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والنسخة لسجل المدرسة.
+     على هيئة الإيصالات المتداولة: رقم الإيصال، خانة المبلغ، المبلغ كتابةً، البيان، طريقة الدفع، التوقيعات والختم */
   function buildReceiptSheet(q) {
     var x = findStudent(q.sid), rec = S.tPay[ui.tMonth][q.sid];
     var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0], g = findGroup(mem.group_id);
@@ -4006,11 +4008,11 @@
       return '<span class="rv-m">' + (k === method ? '☑' : '☐') + ' ' + (k === 'other' && method === 'other' && rec.method_note ? 'أخرى: ' + esc(rec.method_note) : PAY_METHODS[k]) + '</span>';
     }).join('');
     var copy = function (tag, second) {
-      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt="">' + letterhead() +
+      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt=""><div class="rv-tag">' + tag + '</div>' + letterhead() +
         '<div class="rv-top">' +
-          '<div class="rv-no"><div><span>رقم السند <small>No.</small></span><b>' + no + '</b></div>' +
+          '<div class="rv-no"><div><span>رقم الإيصال <small>No.</small></span><b>' + no + '</b></div>' +
             '<div><span>التاريخ <small>Date</small></span><i>' + dmy(rec.paid_on || todayISO()) + '</i></div></div>' +
-          '<div class="rv-title"><h1>سند قبض</h1><span>RECEIPT VOUCHER</span></div>' +
+          '<div class="rv-title"><h1>إيصال</h1><span>RECEIPT</span></div>' +
           '<div class="rv-amt"><span>المبلغ <small>Amount</small></span><b>' + fixed(rec.amount) + '</b><i>ج.م <small>EGP</small></i></div>' +
         '</div>' +
         '<div class="rv-body">' +
@@ -4020,13 +4022,12 @@
           line('وذلك عن', 'Being for', 'اشتراك المواصلات لشهر ' + monthLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
           '<div class="rv-line"><span class="k">طريقة الدفع</span><span class="rv-ms">' + methods + '</span><span class="e">Payment</span></div>' +
         '</div>' +
-        '<div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع بهذا السند</span><b>' + money(rec.amount) + '</b></div>' +
+        '<div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + (left > 0 ? money(left) : 'لا شيء — سُدِّد كاملًا') + '</b></div></div>' +
-        reportSigns([['المستلم', S.profile && S.profile.full_name], ['المُسلِّم (ولي الأمر)', '']]) +
-        '<div class="rv-foot"><b>' + tag + '</b><span>لا يُعتد بهذا السند ما لم يحمل توقيع المستلم وختم الأكاديمية.</span></div></div>';
+        reportSigns([['المستلم', S.profile && S.profile.full_name]]) + '</div>';
     };
     sheet.className = 'rc';
-    sheet.innerHTML = copy('الأصل — نسخة ولي الأمر') + '<div class="rc-cut">✂ يُقص هنا</div>' + copy('صورة — نسخة سجل المدرسة', true);
+    sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
     fitSheet();
   }
 
