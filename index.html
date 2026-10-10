@@ -1404,8 +1404,19 @@
     var f = null;
     for (var i = 0; i < ST_FIELDS.length; i++) if (ST_FIELDS[i].k === k) f = ST_FIELDS[i];
     if (!st) return null;
+    if (k === 'address') return addressWithNeighborhood(st);
     var v = f && f.x ? (st.details || {})[k] : st[k];
     return v == null ? '' : v;
+  }
+
+  // رقم المجاورة كان حقلًا مستقلًا ثم أُلغي: من سُجّل له رقم يُضم إلى أول عنوانه التفصيلي
+  // (يظهر هكذا في الشاشة والمطبوع، ويُحفظ ضمن العنوان عند أول حفظ للطالب)
+  function addressWithNeighborhood(st) {
+    var address = st.address || '', n = String((st.details || {}).neighborhood || '').trim();
+    if (!n) return address;
+    var part = /مجاور/.test(n) ? n : 'المجاورة ' + n;
+    if (norm(address).indexOf(norm(part)) > -1) return address;
+    return part + (address ? ' - ' + address : '');
   }
 
   // إجابة تدل على وجود شيء: ليست فارغة ولا «لا» / «لا يوجد»
@@ -1632,6 +1643,7 @@
       if (f.x) data.details[f.k] = v; else data[f.k] = v;
     });
     if (data.details.housing !== 'يدفع') data.details.rent = '';
+    delete data.details.neighborhood; // صار جزءًا من العنوان التفصيلي المحفوظ الآن
     data.memorizes_quran = data.quran_parts == null ? null : data.quran_parts > 0;
     data.documents = {};
     Array.prototype.forEach.call(app.querySelectorAll('[name="sf-doc"]:checked'), function (c) { data.documents[c.value] = true; });
