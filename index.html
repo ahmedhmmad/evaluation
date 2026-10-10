@@ -4038,7 +4038,7 @@
           (hasPayRef(method) ? line('رقم الدفع (' + PAY_METHODS[method] + ')', 'Ref. No.', rec.method_note, 'ref') : '') +
         '</div>' +
         '<div class="rv-end"><div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
-          '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + (left > 0 ? money(left) : 'لا شيء — سُدِّد كاملًا') + '</b></div></div>' +
+          '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + money(left) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
     };
     sheet.className = 'rc';
