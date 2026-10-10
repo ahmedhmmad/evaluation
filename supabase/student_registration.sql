@@ -25,3 +25,7 @@ create index if not exists students_status_idx on public.students (status);
 
 -- Whether the student needs school transport: true, false, or null while not yet asked.
 alter table public.students add column if not exists wants_transport boolean;
+
+-- The fuller final-registration file (schooling, guardian, family, health, housing...).
+-- These answers are kept together as JSON so fields can be added later without another migration.
+alter table public.students add column if not exists details jsonb not null default '{}'::jsonb;

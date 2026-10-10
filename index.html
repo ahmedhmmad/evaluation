@@ -393,6 +393,15 @@
   #print-sheet table.newpage { break-before: page; }
   /* ملف الطالب */
   #print-sheet .pf-doc { display: inline-block; margin-inline-end: 1.6em; }
+  /* الملف كثير الحقول: مسافات أضيق ليبقى الخط مقروءًا في صفحة واحدة */
+  #print-sheet.pf .rsec { margin: .5em 0 .25em; font-size: 1.12em; }
+  #print-sheet.pf th, #print-sheet.pf td { padding: .17em .5em; line-height: 1.3; }
+  #print-sheet.pf .rt { margin-bottom: .5em; }
+  #print-sheet.pf .rt h1 { font-size: 1.5em; }
+  #print-sheet.pf .rh { margin-bottom: .5em; }
+  #print-sheet.pf .rbox { margin-top: 0; padding: .3em .7em; }
+  #print-sheet.pf .rs { margin-top: .7em; }
+  #print-sheet.pf .rs .stamp { flex-basis: 5.6em; height: 5.6em; }
 
   /* Transport */
   .tgroup { text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 6px; }
@@ -412,6 +421,10 @@
 
   table.grid td .mnote { display: block; margin-top: 6px; width: 150px; padding: 6px 8px; }
 
+  .form-sec { grid-column: 1 / -1; margin: 14px 0 0; padding: 6px 12px; font-size: 1rem; background: var(--primary-soft); color: var(--primary-dark); border-radius: 8px; }
+  .orig-answers { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px 16px; padding: 10px 0 4px; font-size: .9rem; }
+  .orig-answers b { display: block; color: var(--muted); font-weight: 600; font-size: .8rem; }
+  .orig-answers span { overflow-wrap: anywhere; }
   .formhint { margin-top: 4px; font-size: .85rem; color: var(--amber); background: var(--amber-soft); border-radius: 6px; padding: 2px 8px; overflow-wrap: anywhere; }
 
 
@@ -817,7 +830,7 @@
     S.studentsMissing = !all;
     S.students = all || [];
     // أعمدة التسجيل على مرحلتين غير موجودة إلى أن يُشغَّل الملف supabase/student_registration.sql
-    S.regMissing = !!all && !!(await sb.from('students').select('status').limit(1)).error;
+    S.regMissing = !!all && !!(await sb.from('students').select('status, details').limit(1)).error;
     // عمود «يحتاج مواصلات» أُضيف لاحقًا إلى الملف نفسه
     S.wantsMissing = !!all && !!(await sb.from('students').select('wants_transport').limit(1)).error;
   }
@@ -1265,8 +1278,8 @@
 
   /* ---------- الطلاب (مدير النظام) ---------- */
 
-  // حقول استمارة التسجيل. match: كلمات تُعرَف بها أعمدة ملف Excel (بعد توحيد الحروف)
-  var ST_FIELDS = [
+  // أعمدة استمارة التسجيل المبدئي كما تُستورد من Excel. match: كلمات تُعرَف بها الأعمدة (بعد توحيد الحروف)
+  var IMPORT_FIELDS = [
     { k: 'full_name', label: 'اسم الطالب رباعي', req: true, match: ['اسم الطالب'] },
     { k: 'national_id', label: 'رقم هوية الطالب', req: true, ltr: true, num: true, match: ['هويه'] },
     { k: 'gender', label: 'جنس الطالب', type: 'select', options: ['ذكر', 'أنثى'], req: true, match: ['جنس'] },
@@ -1290,7 +1303,7 @@
     { k: 'quran_parts', label: 'ما عدد الأجزاء التي يحفظها الطفل؟', type: 'number', dep: 'memorizes_quran', match: ['الاجزاء'] }
   ];
   // عند مطابقة عناوين الأعمدة: الحقول الأخص أولًا (عنوان «في حالة أن الطفل يتيم…» يحتوي كلمة «يتيم» أيضًا)
-  var ST_MATCH_ORDER = ['orphan_of', 'quran_parts', 'guardian_name'].concat(ST_FIELDS.map(function (f) { return f.k; }));
+  var ST_MATCH_ORDER = ['orphan_of', 'quran_parts', 'guardian_name'].concat(IMPORT_FIELDS.map(function (f) { return f.k; }));
 
   // المستندات التي يُحضرها ولي الأمر عند مراجعة التسجيل في المدرسة
   var ST_DOCS = [
@@ -1304,7 +1317,7 @@
   function stStatus(x) { return x.status === 'final' ? 'final' : 'pending'; }
 
   function stField(k) {
-    for (var i = 0; i < ST_FIELDS.length; i++) if (ST_FIELDS[i].k === k) return ST_FIELDS[i];
+    for (var i = 0; i < IMPORT_FIELDS.length; i++) if (IMPORT_FIELDS[i].k === k) return IMPORT_FIELDS[i];
   }
 
   function findStudent(id) {
@@ -1326,53 +1339,131 @@
 
   function yesNo(v) { return v === true ? 'نعم' : v === false ? 'لا' : ''; }
 
+
+
+  /* ----- حقول ملف الطالب (التسجيل النهائي) -----
+     x: يُحفظ في العمود details (JSON) لا في عمود مستقل.  p: العنوان المختصر في الملف المطبوع.
+     sec: يبدأ عنده قسم جديد.  dep: يظهر ويُطلب فقط عند قيمة معينة لحقل آخر.  from: إجابة الاستمارة المبدئية التي تقابله */
+  var GRADES_DONE = ['لم يتم أي مرحلة', 'KG1', 'KG2', 'أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن', 'تاسع', 'عاشر', '11 علمي', '11 أدبي'];
+  var GRADES_NEW = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن', 'تاسع', 'عاشر', '11 علمي', '11 أدبي', 'توجيهي علمي', 'توجيهي أدبي'];
+  var LEVELS = ['ممتاز', 'متوسط', 'ضعيف'];
+
+  var ST_FIELDS = [
+    { sec: 'بيانات الطالب', k: 'full_name', label: 'اسم الطالب رباعي', req: true, wide: true },
+    { k: 'national_id', label: 'رقم هوية الطالب', req: true, ltr: true, num: true },
+    { k: 'birth_date', label: 'تاريخ ميلاد الطالب', p: 'تاريخ الميلاد', type: 'date', req: true },
+    { k: 'gender', label: 'الجنس', type: 'select', options: ['ذكر', 'أنثى'], req: true },
+    { k: 'student_phone', x: true, label: 'رقم جوال الطالب', p: 'جوال الطالب', req: true, ltr: true, num: true },
+    { k: 'class_name', label: 'الشعبة', type: 'class', req: true },
+
+    { sec: 'الخلفية الدراسية', k: 'last_grade', x: true, label: 'آخر مرحلة دراسية اختبر فيها واجتازها الطالب', p: 'آخر مرحلة اجتازها', type: 'select', options: GRADES_DONE, req: true },
+    { k: 'enroll_grade', x: true, label: 'المرحلة التي سيسجل فيها الطالب في العام الجديد', p: 'مرحلة التسجيل', type: 'select', options: GRADES_NEW, req: true, from: 'class_name' },
+    { k: 'last_school', x: true, label: 'هل التحق الطالب بمدرسة العام الماضي، وما اسم المدرسة؟', p: 'مدرسة العام الماضي', wide: true },
+    { k: 'teams', x: true, label: 'هل الطالب متابع على التيمز أم عنده مشاكل في ذلك؟', p: 'المتابعة على التيمز', type: 'select', options: ['متابع', 'غير مسجل في التيمز', 'kg'], req: true },
+    { k: 'placement', x: true, label: 'نتيجة اختبار مستوى سريع', p: 'اختبار المستوى', type: 'select', options: LEVELS, req: true },
+    { k: 'talent', x: true, label: 'هل عند الطالب موهبة معينة وما هي؟', p: 'الموهبة', req: true, wide: true },
+    { k: 'quran_parts', label: 'كم جزءًا يحفظ الطالب من القرآن؟', p: 'أجزاء القرآن المحفوظة', type: 'number', max: 30, step: 0.5, req: true },
+    { k: 'quran_reading', x: true, label: 'مستوى الطالب في قراءة القرآن', p: 'مستوى قراءة القرآن', type: 'select', options: LEVELS, req: true },
+
+    { sec: 'بيانات ولي الأمر', k: 'guardian_name', label: 'اسم ولي الأمر الموجود في مصر رباعي (الأب ثم الأم ثم غيرهم)', p: 'اسم ولي الأمر', wide: true },
+    { k: 'guardian_id', x: true, label: 'رقم هوية ولي الأمر الموجود', p: 'هوية ولي الأمر', req: true, ltr: true, num: true },
+    { k: 'guardian_relation', label: 'صلة القرابة مع الطالب', p: 'صلة القرابة', req: true },
+    { k: 'father_status', x: true, label: 'وجود الأب', type: 'select', options: ['مصر', 'غزة', 'شهيد', 'متوفى', 'الخارج', 'مفقود'], req: true },
+    { k: 'gaza_exit', x: true, label: 'تاريخ الخروج من غزة', type: 'date', req: true },
+    { k: 'father_job', x: true, label: 'وظيفة الأب السابقة أو الحالية', p: 'وظيفة الأب', req: true, from: 'guardian_job' },
+    { k: 'mother_job', x: true, label: 'وظيفة الأم السابقة أو الحالية', p: 'وظيفة الأم', req: true },
+    { k: 'phone', label: 'رقم جوال ولي الأمر', p: 'جوال ولي الأمر', req: true, ltr: true, num: true },
+    { k: 'alt_phone', x: true, label: 'رقم جوال بديل', p: 'جوال بديل', req: true, ltr: true, num: true },
+    { k: 'whatsapp', label: 'رقم واتساب إذا كان مختلفًا عن رقم الجوال', p: 'واتساب', ltr: true, num: true },
+
+    { sec: 'الأسرة والوضع الاجتماعي', k: 'family_size', x: true, label: 'عدد أفراد أسرة الطالب في مصر', p: 'أفراد الأسرة في مصر', type: 'number', max: 40, step: 1, req: true },
+    { k: 'siblings_here', x: true, label: 'عدد الأبناء في نفس المركز', p: 'الأبناء في المركز', type: 'number', max: 20, step: 1, req: true },
+    { k: 'martyr', x: true, label: 'هل من أسرة الطالب شهيد درجة أولى؟', p: 'شهيد درجة أولى', type: 'select', options: ['لا', 'أب', 'أم', 'أخ', 'أخت'], req: true, from: 'orphan_of' },
+    { k: 'sponsorship', x: true, label: 'هل تستفيد الأسرة كفالة من أي مؤسسة في مصر؟', p: 'كفالة من مؤسسة', type: 'select', options: ['نعم', 'لا', 'أحيانا'], req: true },
+    { k: 'financial', x: true, label: 'الوضع المادي للأسرة في مصر', p: 'الوضع المادي', type: 'select', options: ['متيسر', 'متوسط', 'صعب', 'صعب جدا'], req: true },
+    { k: 'housing', x: true, label: 'حالة السكن', type: 'select', options: ['مكفول', 'يدفع'], req: true },
+    { k: 'rent', x: true, label: 'قيمة الإيجار', dep: { k: 'housing', v: 'يدفع' } },
+    { k: 'family_illness', x: true, label: 'هل أحد من أسرة الطالب مريض؟ وما المرض؟', p: 'مرض في الأسرة', req: true, wide: true },
+
+    { sec: 'الحالة الصحية', k: 'war_injury', x: true, label: 'هل لدى الطالب إصابة حرب؟ وما هي؟', p: 'إصابة حرب', req: true, wide: true },
+    { k: 'illness', x: true, label: 'هل يعاني الطالب من مشكلة مرضية؟', p: 'مشكلة مرضية', req: true, wide: true, from: 'has_health_condition' },
+    { k: 'disability', x: true, label: 'هل لدى الطالب إعاقة أو حالة خاصة؟', p: 'إعاقة أو حالة خاصة', req: true, wide: true, from: 'has_special_needs' },
+
+    { sec: 'السكن', k: 'neighborhood', x: true, label: 'العنوان (فقط رقم المجاورة)', p: 'رقم المجاورة', req: true },
+    { k: 'address', label: 'العنوان التفصيلي (مجاورة - شارع - أقرب معلم - عمارة)', p: 'العنوان التفصيلي', req: true, wide: true },
+
+    { sec: 'مُدخل البيانات', k: 'filled_by', x: true, label: 'اسم المعلم/ة الذي ملأ البيانات', p: 'مُدخل البيانات', req: true }
+  ];
+
+  function stVal(st, k) {
+    var f = null;
+    for (var i = 0; i < ST_FIELDS.length; i++) if (ST_FIELDS[i].k === k) f = ST_FIELDS[i];
+    if (!st) return null;
+    var v = f && f.x ? (st.details || {})[k] : st[k];
+    return v == null ? '' : v;
+  }
+
+  // إجابة تدل على وجود شيء: ليست فارغة ولا «لا» / «لا يوجد»
+  function saidYes(text) {
+    var n = norm(text);
+    return !!n && !/^(لا|لايوجد|لا يوجد|none|no)$/.test(n) && n.indexOf('لا يوجد') !== 0;
+  }
+
   function studentFieldHtml(f, st) {
-    var v = st ? st[f.k] : null, id = 'sf-' + f.k, inner;
-    var star = f.req || f.dep ? ' <span class="req">*</span>' : '';
-    if (f.type === 'yn') {
-      inner = '<div class="yn" role="radiogroup" aria-label="' + f.label + '">' +
-        [['yes', 'نعم', true], ['no', 'لا', false]].map(function (o) {
-          return '<label class="check"><input type="radio" name="' + id + '" value="' + o[0] + '"' + (v === o[2] ? ' checked' : '') + ' required>' + o[1] + '</label>';
-        }).join('') + '</div>';
-    } else if (f.type === 'class') {
+    var v = stVal(st, f.k), id = 'sf-' + f.k, inner;
+    if (f.k === 'filled_by' && !v) v = (S.profile && S.profile.full_name) || '';
+    var need = f.req || f.dep;
+    if (f.type === 'class') {
       inner = '<select id="' + id + '" required>' + optionsHtml(schoolClasses(), v || '') + '</select>' +
-        '<div class="day">' + (schoolClasses().length ? 'يُحدَّد عند اعتماد التسجيل النهائي.' : 'عرّف صفوف المدرسة أولًا من «الإعدادات والمستخدمون».') + '</div>';
+        '<div class="day">' + (schoolClasses().length ? 'تُحدَّد عند اعتماد التسجيل النهائي.' : 'عرّف صفوف المدرسة أولًا من «الإعدادات والمستخدمون».') + '</div>';
     } else if (f.type === 'select') {
       inner = '<select id="' + id + '"' + (f.req ? ' required' : '') + '>' + optionsHtml(f.options.slice(), v || '') + '</select>';
     } else {
       inner = '<input type="' + (f.type || 'text') + '" id="' + id + '"' + (f.req ? ' required' : '') +
         (f.ltr ? ' dir="ltr" style="text-align:right"' : '') + (f.num ? ' inputmode="numeric"' : '') +
-        (f.type === 'number' ? ' min="0" max="30" step="0.5"' : '') +
-        (f.list ? ' list="' + id + '-list"' : '') + ' value="' + esc(v == null ? '' : v) + '">' +
-        (f.list ? '<datalist id="' + id + '-list">' + f.list.map(function (o) { return '<option value="' + o + '">'; }).join('') + '</datalist>' : '');
+        (f.type === 'number' ? ' min="0" max="' + f.max + '" step="' + f.step + '"' : '') +
+        ' value="' + esc(v == null ? '' : v) + '">';
     }
-    // ما كتبه ولي الأمر في الاستمارة، إن اختلف عن القيمة الحالية (للمراجعة مع المستندات)
-    var raw = st && st.form_answers ? st.form_answers[f.k] : '';
-    var cur = f.type === 'yn' ? yesNo(v) : (v == null ? '' : String(v));
-    var hint = raw && norm(raw) !== norm(cur) ? '<div class="formhint">في الاستمارة: ' + esc(raw) + '</div>' : '';
-    return '<div' + (f.wide ? ' style="grid-column:1/-1"' : '') + (f.dep ? ' data-dep="' + f.dep + '"' : '') + '>' +
-      '<label class="field"' + (f.type === 'yn' ? '' : ' for="' + id + '"') + '>' + f.label + star + '</label>' + inner + hint + '</div>';
+    // ما كتبه ولي الأمر في الاستمارة المبدئية، إن اختلف عن القيمة الحالية (للمراجعة مع المستندات)
+    var raw = st && st.form_answers ? st.form_answers[f.from || f.k] : '';
+    var hint = raw && norm(raw) !== norm(v) ? '<div class="formhint">في الاستمارة: ' + esc(raw) + '</div>' : '';
+    return (f.sec ? '<h3 class="form-sec">' + f.sec + '</h3>' : '') +
+      '<div' + (f.wide ? ' style="grid-column:1/-1"' : '') + (f.dep ? ' data-dep="' + f.dep.k + '" data-depv="' + esc(f.dep.v) + '"' : '') + '>' +
+      '<label class="field" for="' + id + '">' + f.label + (need ? ' <span class="req">*</span>' : '') + '</label>' + inner + hint + '</div>';
   }
 
-  // الحقول التابعة (التقدير، نوع اليتم، عدد الأجزاء) تظهر وتصبح مطلوبة عند الإجابة بنعم
+  // الحقول التابعة (قيمة الإيجار) تظهر وتصبح مطلوبة عند القيمة المحددة للحقل الذي تتبعه
   function syncStudentDeps() {
     var deps = app.querySelectorAll('#student-form [data-dep]');
     for (var i = 0; i < deps.length; i++) {
-      var yes = app.querySelector('[name="sf-' + deps[i].getAttribute('data-dep') + '"][value="yes"]');
-      var on = !!(yes && yes.checked), input = deps[i].querySelector('input, select');
+      var src = document.getElementById('sf-' + deps[i].getAttribute('data-dep'));
+      var on = !!src && src.value === deps[i].getAttribute('data-depv'), input = deps[i].querySelector('input, select');
       deps[i].hidden = !on;
       input.required = on;
     }
   }
 
+  // كل ما ورد في استمارة التسجيل المبدئي كما كُتب، للرجوع إليه أثناء المراجعة
+  function originalAnswersHtml(st) {
+    var a = st && st.form_answers, keys = a ? Object.keys(a) : [];
+    if (!keys.length) return '';
+    return '<details class="bank" style="margin:8px 0 0"><summary>إجابات استمارة التسجيل المبدئي (' + keys.length + ')</summary>' +
+      '<div class="orig-answers">' + IMPORT_FIELDS.filter(function (f) { return a[f.k]; }).map(function (f) {
+        return '<div><b>' + f.label + '</b><span>' + esc(a[f.k]) + '</span></div>';
+      }).join('') + '</div></details>';
+  }
+
   // معايير إضافية لتصفية الطلاب (وللطباعة). extra: عمود إضافي يظهر في الكشف المطبوع
   var ST_FLAGS = {
-    orphan: { label: 'الأيتام', test: function (x) { return x.is_orphan === true; }, extra: ['يتيم', function (x) { return x.orphan_of; }] },
-    health: { label: 'لديهم حالة صحية', test: function (x) { return x.has_health_condition === true; } },
-    meds: { label: 'يتناولون أدوية بانتظام', test: function (x) { return x.takes_medication === true; } },
-    needs: { label: 'احتياجات تعليمية خاصة أو صعوبات تعلم', test: function (x) { return x.has_special_needs === true; } },
-    quran: { label: 'يحفظون من القرآن', test: function (x) { return x.memorizes_quran === true; }, extra: ['عدد الأجزاء', function (x) { return x.quran_parts; }] },
-    nocert: { label: 'بدون شهادة العام السابق', test: function (x) { return x.has_prev_certificate === false; } },
+    orphan: { label: 'أيتام الأب (شهيد أو متوفى)',
+      test: function (x) { var f = stVal(x, 'father_status'); return f === 'شهيد' || f === 'متوفى' || (!f && x.is_orphan === true); },
+      extra: ['وجود الأب', function (x) { return stVal(x, 'father_status') || x.orphan_of; }] },
+    martyr: { label: 'من أسرهم شهيد درجة أولى', test: function (x) { var m = stVal(x, 'martyr'); return !!m && m !== 'لا'; }, extra: ['الشهيد', function (x) { return stVal(x, 'martyr'); }] },
+    injury: { label: 'لديهم إصابة حرب', test: function (x) { return saidYes(stVal(x, 'war_injury')); }, extra: ['الإصابة', function (x) { return stVal(x, 'war_injury'); }] },
+    health: { label: 'لديهم مشكلة مرضية', test: function (x) { var t = stVal(x, 'illness'); return t ? saidYes(t) : x.has_health_condition === true; }, extra: ['المشكلة', function (x) { return stVal(x, 'illness'); }] },
+    needs: { label: 'إعاقة أو حالة خاصة', test: function (x) { var t = stVal(x, 'disability'); return t ? saidYes(t) : x.has_special_needs === true; }, extra: ['الحالة', function (x) { return stVal(x, 'disability'); }] },
+    hard: { label: 'وضع مادي صعب أو صعب جدًا', test: function (x) { var f = stVal(x, 'financial'); return f === 'صعب' || f === 'صعب جدا'; }, extra: ['الوضع المادي', function (x) { return stVal(x, 'financial'); }] },
+    quran: { label: 'يحفظون من القرآن', test: function (x) { return Number(x.quran_parts) > 0; }, extra: ['عدد الأجزاء', function (x) { return x.quran_parts; }] },
     transport: { label: 'مشتركون في المواصلات', test: function (x, groupOf) { return !!groupOf[x.id]; },
       extra: ['نقطة التجمع', function (x, groupOf) { var g = findGroup(groupOf[x.id]); return g ? g.assembly_point : ''; }] },
     notransport: { label: 'غير مشتركين في المواصلات', test: function (x, groupOf) { return !groupOf[x.id]; } },
@@ -1455,8 +1546,9 @@
     return '<form class="card" id="student-form">' +
       '<div class="toolbar" style="align-items:center;margin-bottom:4px"><h2 style="margin:0;flex:1">' + (st ? (final ? 'تعديل بيانات الطالب' : 'مراجعة تسجيل الطالب') : 'تسجيل طالب') + '</h2>' +
         '<span class="badge ' + (final ? 'published' : 'edit') + '">' + ST_STATUS[final ? 'final' : 'pending'] + '</span></div>' +
-      (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الصف واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
-      '<div class="grid2" style="margin-top:12px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' +
+      (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الشعبة واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
+      originalAnswersHtml(st) +
+      '<div class="grid2" style="margin-top:4px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' +
       (S.transportMissing ? '' :
         '<h2 style="margin-top:20px">المواصلات</h2>' +
         (S.wantsMissing ? '' :
@@ -1527,19 +1619,15 @@
   // mode: 'final' يعتمد التسجيل النهائي (بعد اكتمال البيانات والصف)، 'save' يحفظ فقط
   async function saveStudentForm(mode) {
     var st = ui.editStudent !== 'new' ? findStudent(ui.editStudent) : null, data = {};
+    // الحقول الجديدة تُحفظ معًا في details؛ ما ليس في النموذج من قيمها السابقة يبقى
+    data.details = Object.assign({}, st && st.details);
     ST_FIELDS.forEach(function (f) {
-      if (f.type === 'yn') {
-        var c = app.querySelector('[name="sf-' + f.k + '"]:checked');
-        data[f.k] = c ? c.value === 'yes' : null;
-      } else {
-        var v = document.getElementById('sf-' + f.k).value.trim();
-        data[f.k] = f.type === 'date' ? (v || null) : f.type === 'number' ? (v === '' ? null : Number(v)) : f.num ? latinDigits(v) : v;
-      }
+      var v = document.getElementById('sf-' + f.k).value.trim();
+      v = f.type === 'date' ? (v || null) : f.type === 'number' ? (v === '' ? null : Number(v)) : f.num ? latinDigits(v) : v;
+      if (f.x) data.details[f.k] = v; else data[f.k] = v;
     });
-    // الحقول التابعة تُفرَّغ عند الإجابة بلا
-    if (!data.has_prev_certificate) data.prev_grade = '';
-    if (!data.is_orphan) data.orphan_of = '';
-    if (!data.memorizes_quran) data.quran_parts = null;
+    if (data.details.housing !== 'يدفع') data.details.rent = '';
+    data.memorizes_quran = data.quran_parts == null ? null : data.quran_parts > 0;
     data.documents = {};
     Array.prototype.forEach.call(app.querySelectorAll('[name="sf-doc"]:checked'), function (c) { data.documents[c.value] = true; });
     data.documents_note = document.getElementById('sf-docnote').value.trim();
@@ -1682,7 +1770,7 @@
           return String(x).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim();
         };
         var answers = {};
-        ST_FIELDS.forEach(function (f) { var a = get(f.k); if (a) answers[f.k] = a; });
+        IMPORT_FIELDS.forEach(function (f) { var a = get(f.k); if (a) answers[f.k] = a; });
         // رقم الهوية: أرقام فقط إن أمكن، وإلا النص كما كُتب ليُصحَّح عند المراجعة
         var idDigits = latinDigits(get('national_id')).replace(/[\s-]/g, '');
         var validId = /^\d{5,20}$/.test(idDigits);
@@ -1728,7 +1816,7 @@
 
       ui.imp = {
         file: file.name, rows: rows, errors: errors, skipped: skipped, dupIds: dupIds, noId: noId,
-        mapped: ST_FIELDS.filter(function (f) { return col[f.k]; }).map(function (f) { return f.k; }),
+        mapped: IMPORT_FIELDS.filter(function (f) { return col[f.k]; }).map(function (f) { return f.k; }),
         unmapped: headers.filter(function (h) { return !used[h]; })
       };
       render();
@@ -1753,8 +1841,8 @@
   async function downloadTemplate() {
     try {
       await loadXlsx();
-      var ws = XLSX.utils.aoa_to_sheet([ST_FIELDS.map(function (f) { return f.label; })]);
-      ws['!cols'] = ST_FIELDS.map(function () { return { wch: 26 }; });
+      var ws = XLSX.utils.aoa_to_sheet([IMPORT_FIELDS.map(function (f) { return f.label; })]);
+      ws['!cols'] = IMPORT_FIELDS.map(function () { return { wch: 26 }; });
       var wb = XLSX.utils.book_new();
       wb.Workbook = { Views: [{ RTL: true }] };
       XLSX.utils.book_append_sheet(wb, ws, 'الطلاب');
@@ -1833,6 +1921,10 @@
       if (el.id === 'sf-wants' && w.value === 'no') g.value = '';
       if (el.id === 'sf-transport' && g.value && w) w.value = 'yes';
     }
+  });
+
+  app.addEventListener('change', function (e) {
+    if (e.target.closest && e.target.closest('#student-form')) syncStudentDeps();
   });
 
   app.addEventListener('input', function (e) {
@@ -3620,37 +3712,43 @@
       reportSigns([['معلم المادة', ''], ['المرشد أو المنسق', ''], ['مدير/ة الأكاديمية', principalName()]]);
   }
 
+
   /* ----- ملف الطالب ----- */
   function buildProfileSheet(x) {
     var final = stStatus(x) === 'final', docs = x.documents || {};
     var ride = findGroup(transportGroupOf()[x.id]);
-    var pair = function (label, value) { return '<th>' + label + '</th><td>' + esc(value == null ? '' : value) + '</td>'; };
-    var row2 = function (a, b) { return '<tr>' + pair(a[0], a[1]) + pair(b[0], b[1]) + '</tr>'; };
-    var row1 = function (label, value) { return '<tr><th>' + label + '</th><td colspan="3">' + esc(value == null ? '' : value) + '</td></tr>'; };
+    var label = function (k) { for (var i = 0; i < ST_FIELDS.length; i++) if (ST_FIELDS[i].k === k) return ST_FIELDS[i].p || ST_FIELDS[i].label; return k; };
+    var value = function (k) {
+      var v = stVal(x, k);
+      return k === 'birth_date' || k === 'gaza_exit' ? dmy(v) : v;
+    };
+    var cell = function (k) { return '<th>' + label(k) + '</th><td>' + esc(value(k)) + '</td>'; };
+    // صف بحقلين، أو بحقل واحد يمتد على العرض
+    var two = function (a, b) { return '<tr>' + cell(a) + cell(b) + '</tr>'; };
+    var one = function (k) { return '<tr><th>' + label(k) + '</th><td colspan="3">' + esc(value(k)) + '</td></tr>'; };
+    var free = function (title, text) { return '<tr><th>' + title + '</th><td colspan="3">' + esc(text) + '</td></tr>'; };
     var table = function (rows) { return '<table class="rk"><colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' + rows + '</table>'; };
     var rideText = ride ? 'نقطة التجمع: ' + ride.assembly_point + (ride.pickup_time ? ' — ' + ride.pickup_time : '')
       : x.wants_transport === false ? 'لا يحتاج مواصلات' : x.wants_transport === true ? 'يحتاج مواصلات — لم تُحدَّد نقطة التجمع' : 'لم يُحدَّد';
+    var paysRent = stVal(x, 'housing') === 'يدفع';
 
     sheet.className = 'pf';
     sheet.innerHTML =
       reportHead('ملف الطالب', [['حالة التسجيل', final ? 'تسجيل نهائي' + (x.finalized_at ? ' — ' + dmy(x.finalized_at) : '') : 'تسجيل مبدئي — غير نهائي'], ['الشعبة', x.class_name]]) +
       '<div class="rsec">بيانات الطالب</div>' +
-      table(
-        row1('الاسم رباعي', x.full_name) +
-        row2(['رقم الهوية', x.national_id], ['الجنس', x.gender]) +
-        row2(['تاريخ الميلاد', dmy(x.birth_date)], ['الشعبة', x.class_name]) +
-        row1('عنوان السكن', x.address) +
-        row1('المواصلات', rideText) +
-        row2(['الهاتف الأساسي', x.phone], ['واتساب', x.whatsapp]) +
-        (x.email ? row1('البريد الإلكتروني', x.email) : '')) +
+      table(one('full_name') + two('national_id', 'gender') + two('birth_date', 'class_name') + two('student_phone', 'enroll_grade')) +
       '<div class="rsec">الخلفية الدراسية</div>' +
-      table(row2(['شهادة العام السابق', yesNo(x.has_prev_certificate)], ['التقدير', x.prev_grade])) +
+      table(two('last_grade', 'placement') + two('teams', 'quran_reading') + two('quran_parts', 'talent') + one('last_school')) +
       '<div class="rsec">بيانات ولي الأمر</div>' +
-      table(row2(['الاسم', x.guardian_name], ['صلة القرابة', x.guardian_relation]) + row1('المهنة', x.guardian_job)) +
-      '<div class="rsec">الحالة الصحية والاجتماعية</div>' +
-      table(
-        row2(['حالة صحية', yesNo(x.has_health_condition)], ['أدوية منتظمة', yesNo(x.takes_medication)]) +
-        row2(['احتياجات تعليمية خاصة', yesNo(x.has_special_needs)], ['يتيم', yesNo(x.is_orphan) + (x.is_orphan && x.orphan_of ? ' (' + x.orphan_of + ')' : '')])) +
+      table(one('guardian_name') + two('guardian_id', 'guardian_relation') + two('phone', 'alt_phone') + two('whatsapp', 'father_status') +
+        two('father_job', 'mother_job') + two('gaza_exit', 'family_size')) +
+      '<div class="rsec">الأسرة والوضع الاجتماعي</div>' +
+      table(two('siblings_here', 'martyr') + two('financial', 'sponsorship') +
+        '<tr>' + cell('housing') + '<th>' + label('rent') + '</th><td>' + esc(paysRent ? value('rent') : '—') + '</td></tr>' + one('family_illness')) +
+      '<div class="rsec">الحالة الصحية</div>' +
+      table(one('war_injury') + one('illness') + one('disability')) +
+      '<div class="rsec">السكن والمواصلات</div>' +
+      table(two('neighborhood', 'filled_by') + one('address') + free('المواصلات', rideText)) +
       '<div class="rsec">المستندات المستلمة</div>' +
       '<div class="rbox">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
         (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</div>' +
