@@ -434,7 +434,6 @@
   #print-sheet .rv-sum > div + div { border-inline-start: .5pt solid var(--navy); }
   #print-sheet .rv-sum span { color: var(--navy); }
   #print-sheet.rc .rs { margin-top: .55em; }
-  #print-sheet.rc .rs > div:first-child { flex: 0 0 55%; }
   #print-sheet.rc .rs .stamp { flex-basis: 5em; height: 5em; }
   /* كشوف الطلاب */
   #print-sheet.ls table { table-layout: auto; }
@@ -4024,7 +4023,7 @@
         '</div>' +
         '<div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + (left > 0 ? money(left) : 'لا شيء — سُدِّد كاملًا') + '</b></div></div>' +
-        reportSigns([['المستلم', S.profile && S.profile.full_name]]) + '</div>';
+        reportSigns([]) + '</div>'; // بلا توقيعات: خانة الختم فقط
     };
     sheet.className = 'rc';
     sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
