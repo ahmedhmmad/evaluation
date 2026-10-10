@@ -386,26 +386,54 @@
   #print-sheet td.mark { font-family: var(--font-head); font-size: 1.35em; font-weight: 800; color: var(--navy-dark); padding: 0; }
   #print-sheet .pe-legend { display: flex; flex-wrap: wrap; gap: .2em 1.3em; margin-top: .45em; font-size: .9em; color: #555; }
   #print-sheet .pe-legend b { color: var(--navy); }
-  /* إيصال السداد */
+  /* سند القبض */
   /* نسختان في ورقة واحدة: خط القص في منتصف A4 تمامًا (148.5mm = نسخة 144 تبدأ ترويستها من حافة الورقة + نصف شريط القص 4.5) */
+  #print-sheet.rc { font-size: 10pt; line-height: 1.35; }
   #print-sheet .rc-copy { position: relative; }
   #print-sheet .rc-copy:first-child { min-height: 144mm; }
   #print-sheet .rc-copy .wm { position: absolute; width: 60mm; }
   #print-sheet .rc-2 .rh-banner { width: 100%; margin: 0; }
   #print-sheet .rc-cut { display: flex; align-items: center; gap: .7em; height: 9mm; margin: 0 calc(-1 * var(--pad-x)); color: #888; font-size: .8em; }
   #print-sheet .rc-cut::before, #print-sheet .rc-cut::after { content: ""; flex: 1; border-top: .75pt dashed #999; }
-  #print-sheet.rc .rh { margin-bottom: .5em; }
-  #print-sheet.rc .rt { position: relative; margin-bottom: .55em; }
-  #print-sheet.rc .rt h1 { font-size: 1.3em; }
-  /* وسم النسخة (أصل / صورة) في طرف سطر العنوان */
-  #print-sheet.rc .rt-lead { position: absolute; top: .15em; inset-inline-start: 0; margin: 0; padding: .1em .9em .2em; border: 0; border-radius: 99em; background: var(--navy); color: #fff; font-size: .85em; font-weight: 700; }
+  /* الترويسة هنا الصورة وحدها، وتحتها خط ذهبي */
+  #print-sheet.rc .rh { margin-bottom: .55em; border-bottom: 1.5pt solid var(--gold); }
+  #print-sheet.rc .rh-line { display: none; }
+  /* أعلى السند: الرقم والتاريخ يمينًا، العنوان في الوسط، خانة المبلغ يسارًا */
+  #print-sheet .rv-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1em; margin-bottom: .55em; }
+  #print-sheet .rv-top small, #print-sheet .rv-line .e { font-family: var(--font-en); font-size: .72em; font-weight: 600; color: #777; }
+  #print-sheet .rv-no > div { display: flex; align-items: baseline; gap: .5em; }
+  #print-sheet .rv-no span { color: var(--navy); font-weight: 600; }
+  #print-sheet .rv-no b { font-family: var(--font-en); font-size: 1.35em; letter-spacing: .08em; color: var(--bad); }
+  #print-sheet .rv-no i { font-style: normal; font-weight: 600; }
+  #print-sheet .rv-title { text-align: center; padding: .25em 1.6em .35em; border: 1pt solid var(--navy); border-radius: .5em; background: var(--navy); color: #fff; }
+  #print-sheet .rv-title h1 { margin: 0; font-family: var(--font-head); font-size: 1.5em; font-weight: 800; line-height: 1.25; }
+  #print-sheet .rv-title span { display: block; font-family: var(--font-en); font-size: .68em; font-weight: 700; letter-spacing: .14em; color: var(--gold); }
+  #print-sheet .rv-amt { justify-self: end; display: flex; align-items: stretch; border: 1pt solid var(--navy); border-radius: .4em; overflow: hidden; }
+  #print-sheet .rv-amt > * { display: flex; align-items: center; gap: .3em; padding: .25em .6em; }
+  #print-sheet .rv-amt span { background: var(--navy); color: #fff; font-weight: 600; }
+  #print-sheet .rv-amt span small { color: var(--gold); }
+  #print-sheet .rv-amt b { min-width: 5.5em; justify-content: center; background: var(--gold-soft); font-family: var(--font-en); font-size: 1.3em; color: var(--navy-dark); }
+  #print-sheet .rv-amt i { font-style: normal; font-weight: 600; color: var(--navy); border-inline-start: .5pt solid var(--navy); }
+  /* سطور البيان: العنوان، ثم القيمة فوق خط منقّط يمتد إلى آخر السطر، ثم المقابل الإنجليزي */
+  #print-sheet .rv-body { padding: .1em .2em; }
+  #print-sheet .rv-line { display: flex; align-items: baseline; gap: .5em; margin: .34em 0; }
+  #print-sheet .rv-line .k { flex: none; color: var(--navy); font-weight: 600; }
+  #print-sheet .rv-line .v { flex: 1; min-height: 1.35em; padding: 0 .5em; border-bottom: .75pt dotted #666; font-weight: 600; color: #000; }
+  #print-sheet .rv-line .e { flex: none; direction: ltr; }
+  #print-sheet .rv-two { display: flex; gap: 1.2em; }
+  #print-sheet .rv-two .rv-line { flex: 1; margin: 0; }
+  #print-sheet .rv-two .rv-line.short { flex: 0 0 34%; }
+  #print-sheet .rv-ms { flex: 1; display: flex; flex-wrap: wrap; gap: 0 1.4em; padding: 0 .5em; }
+  /* شريط الحساب: اشتراك الشهر، المدفوع، المتبقي */
+  #print-sheet .rv-sum { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: .5em; border: .75pt solid var(--navy); border-radius: .4em; overflow: hidden; }
+  #print-sheet .rv-sum > div { display: flex; justify-content: space-between; gap: .5em; padding: .22em .7em; }
+  #print-sheet .rv-sum > div + div { border-inline-start: .5pt solid var(--navy); }
+  #print-sheet .rv-sum span { color: var(--navy); }
   #print-sheet.rc .rs { margin-top: .5em; }
-  #print-sheet.rc .rs .stamp { flex-basis: 5em; height: 5em; }
-  #print-sheet .rc-box { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.5em; border: .75pt solid var(--navy); border-radius: .5em; padding: .45em 1.2em; }
-  #print-sheet .rc-line { margin: .28em 0; }
-  #print-sheet .rc-line.w { grid-column: 1 / -1; }
-  #print-sheet .rc-line b { padding: 0 .5em; border-bottom: .5pt dotted var(--body); }
-  #print-sheet .rc-amount { display: inline-block; padding: .1em 1em; border: 1pt solid var(--gold); background: var(--gold-soft); font-family: var(--font-head); font-size: 1.2em; font-weight: 800; color: var(--navy-dark); }
+  #print-sheet.rc .rs .stamp { flex-basis: 4.8em; height: 4.8em; }
+  #print-sheet.rc .rs span { margin-top: .4em; }
+  #print-sheet .rv-foot { display: flex; justify-content: space-between; align-items: center; gap: 1em; margin-top: .4em; font-size: .78em; color: #666; }
+  #print-sheet .rv-foot b { padding: .05em .9em .15em; border-radius: 99em; background: var(--navy); color: #fff; }
   /* كشوف الطلاب */
   #print-sheet.ls table { table-layout: auto; }
   #print-sheet td.ls-head { border: 0; padding: 0 0 .3em; background: #fff; font-size: 1.087em; }
@@ -2166,7 +2194,7 @@
         }).join('') + '</select>' +
         (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
-        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">سند قبض</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
     }).join('');
     return rows
@@ -2291,7 +2319,7 @@
         (method === 'other' ? '<input type="text" class="mnote" data-mnote="' + x.id + '" placeholder="حدّد طريقة الدفع" aria-label="طريقة الدفع الأخرى" value="' + esc(rec.method_note || '') + '">' : '') + '</td>' +
         '<td>' + (r.paid ? dmy(rec.paid_on) : '—') + '</td>' +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
-        '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
+        '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">سند قبض</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button>' : '') + '</td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
@@ -3927,24 +3955,75 @@
   }
 
 
-  /* ----- إيصال سداد اشتراك المواصلات -----
-     ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والصورة لسجل المدرسة */
+  // العدد بالحروف العربية (حتى أقل من مليار)
+  function arabicWords(n) {
+    var ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'أحد عشر', 'اثنا عشر',
+      'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+    var tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+    var hundreds = ['', 'مئة', 'مئتان', 'ثلاثمئة', 'أربعمئة', 'خمسمئة', 'ستمئة', 'سبعمئة', 'ثمانمئة', 'تسعمئة'];
+    var below1000 = function (v) {
+      var parts = [], rest = v % 100;
+      if (v >= 100) parts.push(hundreds[Math.floor(v / 100)]);
+      if (rest > 0 && rest < 20) parts.push(ones[rest]);
+      else if (rest >= 20) parts.push((rest % 10 ? ones[rest % 10] + ' و' : '') + tens[Math.floor(rest / 10)]);
+      return parts.join(' و');
+    };
+    // one: ألف، two: ألفان، few: آلاف (3–10)، many: ألف
+    var scale = function (v, one, two, few, many) {
+      return v === 1 ? one : v === 2 ? two : v >= 3 && v <= 10 ? below1000(v) + ' ' + few : below1000(v) + ' ' + many;
+    };
+    if (!n) return 'صفر';
+    var out = [], millions = Math.floor(n / 1e6), thousands = Math.floor(n % 1e6 / 1000), rest = n % 1000;
+    if (millions) out.push(scale(millions, 'مليون', 'مليونان', 'ملايين', 'مليون'));
+    if (thousands) out.push(scale(thousands, 'ألف', 'ألفان', 'آلاف', 'ألف'));
+    if (rest) out.push(below1000(rest));
+    return out.join(' و');
+  }
+
+  // المبلغ كتابةً كما في سندات القبض: «فقط خمسمئة جنيه مصري لا غير»
+  function amountInWords(amount) {
+    var total = Math.round((Number(amount) || 0) * 100), pounds = Math.floor(total / 100), piastres = total % 100, last = pounds % 100;
+    var text = pounds === 1 ? 'جنيه مصري واحد' : pounds === 2 ? 'جنيهان مصريان'
+      : arabicWords(pounds) + (last >= 3 && last <= 10 ? ' جنيهات مصرية' : last >= 11 ? ' جنيهًا مصريًا' : ' جنيه مصري');
+    if (!pounds && piastres) text = '';
+    if (piastres) text += (text ? ' و' : '') + arabicWords(piastres) + ' قرشًا';
+    return 'فقط ' + text + ' لا غير';
+  }
+
+  /* ----- سند قبض اشتراك المواصلات -----
+     ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والصورة لسجل المدرسة.
+     على هيئة سندات القبض المتداولة: رقم السند، خانة المبلغ، المبلغ كتابةً، البيان، طريقة الدفع، التوقيعات والختم */
   function buildReceiptSheet(q) {
     var x = findStudent(q.sid), rec = S.tPay[ui.tMonth][q.sid];
     var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0], g = findGroup(mem.group_id);
-    var left = Math.max(0, shareOf(mem, g) - rec.amount);
+    var share = shareOf(mem, g), left = Math.max(0, share - rec.amount), method = rec.method || 'cash';
+    var no = rec.receipt_no != null ? ('00000' + rec.receipt_no).slice(-Math.max(6, String(rec.receipt_no).length)) : '—';
+    var fixed = function (v) { return (Number(v) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var line = function (ar, en, value, cls) {
+      return '<div class="rv-line' + (cls ? ' ' + cls : '') + '"><span class="k">' + ar + '</span><span class="v">' + esc(value || '') + '</span><span class="e">' + en + '</span></div>';
+    };
+    var methods = Object.keys(PAY_METHODS).map(function (k) {
+      return '<span class="rv-m">' + (k === method ? '☑' : '☐') + ' ' + (k === 'other' && method === 'other' && rec.method_note ? 'أخرى: ' + esc(rec.method_note) : PAY_METHODS[k]) + '</span>';
+    }).join('');
     var copy = function (tag, second) {
-      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '">' +
-        reportHead('إيصال سداد اشتراك المواصلات', [['رقم الإيصال', rec.receipt_no != null ? rec.receipt_no : '—'], ['تاريخ السداد', dmy(rec.paid_on || todayISO())]],
-          { lead: tag, noIssueDate: true }) +
-        '<div class="rc-box">' +
-          '<div class="rc-line w">استلمنا من ولي أمر الطالب/ـة: <b>' + esc(x.full_name) + '</b>' + (x.class_name ? ' الشعبة: <b>' + esc(x.class_name) + '</b>' : '') + '</div>' +
-          '<div class="rc-line">مبلغًا وقدره: <span class="rc-amount">' + money(rec.amount) + '</span></div>' +
-          '<div class="rc-line">طريقة الدفع: <b>' + esc(payMethodLabel(rec)) + '</b></div>' +
-          '<div class="rc-line w">وذلك عن: اشتراك المواصلات لشهر <b>' + monthLabel(ui.tMonth) + '</b> — نقطة التجمع: <b>' + esc(g.assembly_point) + '</b></div>' +
-          '<div class="rc-line w">' + (left > 0 ? 'المتبقي من اشتراك الشهر: <b class="warn">' + money(left) + '</b>' : '<span class="ok">تم سداد اشتراك الشهر كاملًا.</span>') + '</div>' +
+      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt="">' + letterhead() +
+        '<div class="rv-top">' +
+          '<div class="rv-no"><div><span>رقم السند <small>No.</small></span><b>' + no + '</b></div>' +
+            '<div><span>التاريخ <small>Date</small></span><i>' + dmy(rec.paid_on || todayISO()) + '</i></div></div>' +
+          '<div class="rv-title"><h1>سند قبض</h1><span>RECEIPT VOUCHER</span></div>' +
+          '<div class="rv-amt"><span>المبلغ <small>Amount</small></span><b>' + fixed(rec.amount) + '</b><i>ج.م <small>EGP</small></i></div>' +
         '</div>' +
-        reportSigns([['المستلم', S.profile && S.profile.full_name], ['ولي الأمر', '']]) + '</div>';
+        '<div class="rv-body">' +
+          line('استلمنا من السيد/ة', 'Received from', x.guardian_name) +
+          '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', x.full_name) + line('الشعبة', 'Class', x.class_name, 'short') + '</div>' +
+          line('مبلغًا وقدره', 'The sum of', amountInWords(rec.amount)) +
+          line('وذلك عن', 'Being for', 'اشتراك المواصلات لشهر ' + monthLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
+          '<div class="rv-line"><span class="k">طريقة الدفع</span><span class="rv-ms">' + methods + '</span><span class="e">Payment</span></div>' +
+        '</div>' +
+        '<div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع بهذا السند</span><b>' + money(rec.amount) + '</b></div>' +
+          '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + (left > 0 ? money(left) : 'لا شيء — سُدِّد كاملًا') + '</b></div></div>' +
+        reportSigns([['المستلم', S.profile && S.profile.full_name], ['المُسلِّم (ولي الأمر)', '']]) +
+        '<div class="rv-foot"><b>' + tag + '</b><span>لا يُعتد بهذا السند ما لم يحمل توقيع المستلم وختم الأكاديمية.</span></div></div>';
     };
     sheet.className = 'rc';
     sheet.innerHTML = copy('الأصل — نسخة ولي الأمر') + '<div class="rc-cut">✂ يُقص هنا</div>' + copy('صورة — نسخة سجل المدرسة', true);
