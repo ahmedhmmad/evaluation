@@ -1313,7 +1313,8 @@
   var ST_DOCS = [
     ['birth', 'شهادة الميلاد / صورة جواز السفر'],
     ['guardian_id', 'صورة جواز سفر ولي الأمر'],
-    ['certificate', 'شهادة العام السابق']
+    ['certificate', 'شهادة العام السابق'],
+    ['conduct', 'توقيع مدونة السلوك']
   ];
 
   var ST_STATUS = { pending: 'تسجيل مبدئي', final: 'تسجيل نهائي' };
@@ -1393,8 +1394,8 @@
     { k: 'illness', x: true, label: 'هل يعاني الطالب من مشكلة مرضية؟', p: 'مشكلة مرضية', req: true, wide: true, from: 'has_health_condition' },
     { k: 'disability', x: true, label: 'هل لدى الطالب إعاقة أو حالة خاصة؟', p: 'إعاقة أو حالة خاصة', req: true, wide: true, from: 'has_special_needs' },
 
-    { sec: 'السكن', k: 'neighborhood', x: true, label: 'العنوان (فقط رقم المجاورة)', p: 'رقم المجاورة', req: true },
-    { k: 'address', label: 'العنوان التفصيلي (مجاورة - شارع - أقرب معلم - عمارة)', p: 'العنوان التفصيلي', req: true, wide: true },
+    { sec: 'السكن', k: 'city', x: true, label: 'المدينة', req: true },
+    { k: 'address', label: 'العنوان التفصيلي (الحي - الشارع - رقم العمارة)', p: 'العنوان التفصيلي', req: true, wide: true },
 
     { sec: 'مُدخل البيانات', k: 'filled_by', x: true, label: 'اسم المعلم/ة الذي ملأ البيانات', p: 'مُدخل البيانات', req: true }
   ];
@@ -3733,7 +3734,6 @@
     // صف بحقلين، أو بحقل واحد يمتد على العرض
     var two = function (a, b) { return '<tr>' + cell(a) + cell(b) + '</tr>'; };
     var one = function (k) { return '<tr><th>' + label(k) + '</th><td colspan="3">' + esc(value(k)) + '</td></tr>'; };
-    var free = function (title, text) { return '<tr><th>' + title + '</th><td colspan="3">' + esc(text) + '</td></tr>'; };
     var table = function (rows) { return '<table class="rk"><colgroup><col style="width:19%"><col style="width:31%"><col style="width:19%"><col style="width:31%"></colgroup>' + rows + '</table>'; };
     var rideText = ride ? 'نقطة التجمع: ' + ride.assembly_point + (ride.pickup_time ? ' — ' + ride.pickup_time : '')
       : x.wants_transport === false ? 'لا يحتاج مواصلات' : x.wants_transport === true ? 'يحتاج مواصلات — لم تُحدَّد نقطة التجمع' : 'لم يُحدَّد';
@@ -3757,7 +3757,7 @@
       '<div class="rsec">الحالة الصحية</div>' +
       table(one('war_injury') + one('illness') + one('disability')) +
       '<div class="rsec">السكن والمواصلات</div>' +
-      table(two('neighborhood', 'filled_by') + one('address') + free('المواصلات', rideText)) +
+      table('<tr>' + cell('city') + '<th>المواصلات</th><td>' + esc(rideText) + '</td></tr>' + one('address')) +
       '<div class="rsec">المستندات المستلمة</div>' +
       '<div class="rbox">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
         (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</div>' +
