@@ -309,6 +309,8 @@
     --font-head: "Cairo", "Tajawal", "Segoe UI", Tahoma, sans-serif;
     --font-body: "IBM Plex Sans Arabic", "Noto Naskh Arabic", "Segoe UI", Tahoma, sans-serif;
     --font-en: "Montserrat", "Poppins", "Segoe UI", Arial, sans-serif;
+    /* هوامش الصفحة التي تحملها الورقة عند الطباعة (صفر على الشاشة)؛ بها تمتد الترويسة إلى حافة الصفحة */
+    --pad-x: 0mm; --pad-y: 0mm;
   }
   /* الورقة: عرض A4 ناقص هامشين 15mm. الأحجام بوحدة em ليُصغَّر الخط عند الحاجة فتبقى في صفحة واحدة */
   #print-sheet {
@@ -322,18 +324,19 @@
   #print-sheet .wm { position: fixed; top: 50%; left: 50%; width: 115mm; height: auto; transform: translate(-50%, -50%); opacity: .055; z-index: 2; }
 
   /* الترويسة */
-  #print-sheet .rh, .page-lh .rh {
-    display: flex; align-items: center; justify-content: space-between; gap: 1em; direction: rtl;
-    padding-bottom: .6em; margin-bottom: .9em; border-bottom: 1pt solid var(--gold);
+  /* الصورة العريضة تمتد على عرض الورقة كله (تتجاوز هوامشها) وتحتها سطر باسم الأكاديمية والعام الدراسي */
+  #print-sheet .rh, .page-lh .rh { margin-bottom: .8em; direction: rtl; }
+  #print-sheet .rh-banner, .page-lh .rh-banner {
+    display: block; max-width: none; height: auto; aspect-ratio: auto 1600 / 330;
+    width: calc(100% + 2 * var(--pad-x)); margin: calc(-1 * var(--pad-y)) calc(-1 * var(--pad-x)) 0;
   }
-  #print-sheet .rh > div, .page-lh .rh > div { flex: 1; min-width: 0; }
-  #print-sheet .rh img, .page-lh .rh img { height: 5.9em; width: auto; flex: none; }
-  #print-sheet .rh b, .page-lh .rh b { display: block; color: var(--navy-dark); line-height: 1.3; }
-  #print-sheet .rh small, .page-lh .rh small { display: block; font-size: .85em; color: var(--navy); min-height: 1.2em; }
-  #print-sheet .rh-ar b, .page-lh .rh-ar b { font-family: var(--font-head); font-size: 1.55em; font-weight: 800; }
-  #print-sheet .rh-en, .page-lh .rh-en { direction: ltr; text-align: left; }
-  #print-sheet .rh-en b, .page-lh .rh-en b { font-family: var(--font-en); font-size: 1.15em; font-weight: 700; letter-spacing: .03em; }
-  #print-sheet .rh-en small, .page-lh .rh-en small { text-align: left; }
+  /* في الكشوف متعددة الصفحات تبقى الصورة داخل هوامش الصفحة لأنها تتكرر مع رأس الجدول */
+  #print-sheet.ls .rh-banner { width: 100%; margin: 0; }
+  #print-sheet .rh-line, .page-lh .rh-line {
+    display: flex; justify-content: space-between; gap: 1em; padding: .35em 0 .3em;
+    border-bottom: 1pt solid var(--gold); font-size: .9em; color: var(--navy);
+  }
+  #print-sheet .rh-line b, .page-lh .rh-line b { font-family: var(--font-head); color: var(--navy-dark); }
 
   /* كتلة عنوان التقرير وشريط معلوماته */
   #print-sheet .rt { text-align: center; margin-bottom: .9em; }
@@ -398,7 +401,7 @@
   #print-sheet.pf th, #print-sheet.pf td { padding: .17em .5em; line-height: 1.3; }
   #print-sheet.pf .rt { margin-bottom: .5em; }
   #print-sheet.pf .rt h1 { font-size: 1.5em; }
-  #print-sheet.pf .rh { margin-bottom: .5em; }
+  #print-sheet.pf .rh { margin-bottom: .4em; }
   #print-sheet.pf .rbox { margin-top: 0; padding: .3em .7em; }
   #print-sheet.pf .rs { margin-top: .7em; }
   #print-sheet.pf .rs .stamp { flex-basis: 5.6em; height: 5.6em; }
@@ -3486,7 +3489,8 @@
   var REPORT = {
     nameAr: 'أكاديمية الركيزة الثالثة',
     nameEn: 'Third Pillar Academy',
-    logo: 'logo.png',
+    logo: 'logo.png',     // الشعار الدائري: علامة مائية فقط
+    banner: 'banner.jpg', // الترويسة أعلى كل ملف مطبوع
     // A4 عمودي: 12mm أعلى وأسفل، 15mm من الجانبين
     page: { width: 210, height: 297, marginY: 12, marginX: 15 },
     fonts: 'https://fonts.googleapis.com/css2?family=Cairo:wght@700;800&family=IBM+Plex+Sans+Arabic:wght@400;600&family=Montserrat:wght@600;700&display=swap',
@@ -3516,12 +3520,12 @@
     return two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
   }
 
-  // الترويسة: الاسم العربي يمينًا، الشعار الدائري في الوسط، الاسم الإنجليزي والعام الدراسي يسارًا، وتحتها خط ذهبي
+  // الترويسة: الصورة العريضة أعلى الصفحة، وتحتها سطر صغير (اسم الأكاديمية والمرحلة يمينًا، العام الدراسي يسارًا) وخط ذهبي
   function letterhead() {
     var cfg = S.settings || {};
-    return '<div class="rh"><div class="rh-ar"><b>' + esc(schoolName()) + '</b><small>' + esc(cfg.report_subtitle || '') + '</small></div>' +
-      '<img src="' + REPORT.logo + '" alt="">' +
-      '<div class="rh-en"><b>' + REPORT.nameEn + '</b><small dir="rtl">العام الدراسي ' + esc(academicYear()) + '</small></div></div>';
+    return '<div class="rh"><img class="rh-banner" src="' + REPORT.banner + '" alt="' + REPORT.nameEn + '">' +
+      '<div class="rh-line"><span><b>' + esc(schoolName()) + '</b>' + (cfg.report_subtitle ? ' · ' + esc(cfg.report_subtitle) : '') + '</span>' +
+      '<span>العام الدراسي ' + esc(academicYear()) + '</span></div></div>';
   }
 
   // بداية كل تقرير: العلامة المائية، الترويسة، ثم اسم التقرير وشريط معلوماته. info: [[العنوان، القيمة]، …]
@@ -3549,7 +3553,7 @@
 
   function sheetPadCss(prefix) {
     var p = REPORT.page, y = p.marginY + 'mm', x = p.marginX + 'mm';
-    return prefix + '#print-sheet{box-sizing:content-box;padding:' + y + ' ' + x + '}' +
+    return prefix + '#print-sheet{box-sizing:content-box;--pad-x:' + x + ';--pad-y:' + y + ';padding:' + y + ' ' + x + '}' +
       // الكشوف متعددة الصفحات: الهامشان العلوي والسفلي صفّان فارغان في رأس الجدول وذيله يتكرران في كل صفحة
       prefix + '#print-sheet.ls{padding:0 ' + x + ' ' + y + '}' +
       prefix + '#print-sheet td.pg-space{height:' + y + '}';
