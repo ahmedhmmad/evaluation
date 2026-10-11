@@ -1610,8 +1610,17 @@
   }
 
   function importPreviewHtml() {
-    var p = ui.imp;
+    var p = ui.imp, rows = importRows();
+    var known = p.flags.filter(function (f) { return f.known; }).length;
+    var noId = rows.filter(function (r) { return !r.national_id; }).length;
+    var dupIds = p.flags.filter(function (f, i) { return rows.indexOf(p.rows[i]) > -1 && (f.dup || f.known); }).length;
+    p = Object.assign({}, p, { rows: rows, noId: noId, dupIds: dupIds, skipped: p.skipped + (p.skipKnown ? known : 0) });
     return '<div class="card"><h2>استيراد من ملف: ' + esc(p.file) + '</h2>' +
+      (known
+        ? '<label class="check" style="margin:8px 0 2px"><input type="checkbox" id="imp-skipknown"' + (ui.imp.skipKnown ? ' checked' : '') + '>' +
+          'تخطَّ الصفوف التي رقم هويتها موجود في البرنامج (' + known + ')</label>' +
+          '<p class="hint" style="margin:0 0 6px">مع التخطي لا يُنشأ سجل مكرر لمن أعاد تعبئة الاستمارة أو سُجّل يدويًا، لكن لا يدخل ما صحّحه في ردّه الجديد. بدون التخطي يُضاف ردّه سجلًا مبدئيًا جديدًا بعلامة «مكرر». في الحالتين لا يتغير السجل الموجود.</p>'
+        : '') +
       '<ul class="imp-list">' +
         '<li>طلاب جدد سيُضافون بحالة «تسجيل مبدئي»: <b>' + p.rows.length + '</b></li>' +
         (p.skipped ? '<li>مسجلون مسبقًا ولن تتغير بياناتهم: ' + p.skipped + '</li>' : '') +
@@ -1919,7 +1928,7 @@
       var haveKey = {}, haveId = {};
       S.students.forEach(function (x) { if (x.form_key) haveKey[x.form_key] = true; if (x.national_id) haveId[x.national_id] = true; });
 
-      var rows = [], errors = [], seenId = {}, skipped = 0, dupIds = 0, noId = 0;
+      var rows = [], flags = [], errors = [], seenId = {}, skipped = 0;
       raw.forEach(function (row, i) {
         var get = function (k) {
           var x = col[k] ? row[col[k]] : '';
@@ -1967,14 +1976,14 @@
         if (!d.full_name) return errors.push('الصف ' + (i + 2) + ': اسم الطالب ناقص');
         // لا تُعدَّل بيانات من سبق استيراده: يُعرَف برد الاستمارة، أو برقم الهوية في الملفات الأخرى
         if (d.form_key ? haveKey[d.form_key] : (d.national_id && haveId[d.national_id])) return skipped++;
-        if (!d.national_id) noId++;
-        else if (seenId[d.national_id] || haveId[d.national_id]) dupIds++;
-        seenId[d.national_id] = true;
+        // known: رقم هويته موجود في البرنامج (يُتخطى أو يُضاف بحسب خيار المعاينة). dup: تكرر رقمه داخل الملف نفسه
+        flags.push({ known: !!(d.national_id && haveId[d.national_id]), dup: !!(d.national_id && seenId[d.national_id]) });
+        if (d.national_id) seenId[d.national_id] = true;
         rows.push(d);
       });
 
       ui.imp = {
-        file: file.name, rows: rows, errors: errors, skipped: skipped, dupIds: dupIds, noId: noId,
+        file: file.name, rows: rows, flags: flags, skipKnown: true, errors: errors, skipped: skipped,
         mapped: IMPORT_FIELDS.filter(function (f) { return col[f.k]; }).map(function (f) { return f.k; }),
         unmapped: headers.filter(function (h) { return !used[h]; })
       };
@@ -1984,8 +1993,14 @@
     }
   }
 
+  // الصفوف التي ستُستورد فعلًا بحسب خيار «تخطي من رقم هويته موجود»
+  function importRows() {
+    var p = ui.imp;
+    return p.rows.filter(function (r, i) { return !(p.skipKnown && p.flags[i].known); });
+  }
+
   async function runImport() {
-    var rows = ui.imp.rows;
+    var rows = importRows();
     for (var i = 0; i < rows.length; i += 100) {
       var r = await sb.from('students').insert(rows.slice(i, i + 100));
       if (r.error) { await loadStudents(); render(); return fail(r.error); }
@@ -2070,7 +2085,10 @@
   app.addEventListener('change', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el = e.target;
-    if (el.id === 'imp-file') {
+    if (el.id === 'imp-skipknown' && ui.imp) {
+      ui.imp.skipKnown = el.checked;
+      render();
+    } else if (el.id === 'imp-file') {
       if (el.files[0]) readImportFile(el.files[0]);
     } else if (el.id === 'st-class' || el.id === 'st-flag') {
       ui[{ 'st-class': 'stClass', 'st-flag': 'stFlag' }[el.id]] = el.value;
