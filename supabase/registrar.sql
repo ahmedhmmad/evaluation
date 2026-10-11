@@ -86,3 +86,91 @@ begin
   );
 end;
 $$;
+
+-- ---------- Accounts created by the superadmin (registrars, supervisors, viewers) ----------
+
+-- Creates a ready-to-use login with the given role. The person must choose a new password at first sign-in.
+create or replace function public.create_user_account(p_name text, p_login text, p_password text, p_role text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_email text := lower(trim(p_login));
+  v_name text := trim(coalesce(p_name, ''));
+  v_uid uuid := gen_random_uuid();
+begin
+  if coalesce(public.my_role(), '') <> 'superadmin' then
+    raise exception 'غير مصرح';
+  end if;
+  if p_role not in ('viewer', 'registrar', 'supervisor') then
+    raise exception 'صلاحية غير مسموحة';
+  end if;
+  if v_name = '' or v_email = '' then
+    raise exception 'الاسم واسم المستخدم مطلوبان';
+  end if;
+  if length(coalesce(p_password, '')) < 6 then
+    raise exception 'كلمة المرور يجب ألا تقل عن 6 أحرف';
+  end if;
+  if exists (select 1 from auth.users where email = v_email) then
+    raise exception 'اسم المستخدم مستخدم لحساب آخر';
+  end if;
+
+  insert into auth.users (
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    confirmation_token, email_change, email_change_token_new, recovery_token
+  ) values (
+    '00000000-0000-0000-0000-000000000000', v_uid, 'authenticated', 'authenticated', v_email,
+    crypt(p_password, gen_salt('bf')), now(),
+    '{"provider":"email","providers":["email"]}'::jsonb, jsonb_build_object('full_name', v_name), now(), now(),
+    '', '', '', ''
+  );
+
+  insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  values (
+    gen_random_uuid(), v_uid, v_uid::text,
+    jsonb_build_object('sub', v_uid::text, 'email', v_email, 'email_verified', true),
+    'email', now(), now(), now()
+  );
+
+  -- the sign-up trigger has created the profile as 'pending'; give it its name and role
+  insert into public.profiles (id, email, full_name) values (v_uid, v_email, v_name)
+  on conflict (id) do nothing;
+  update public.profiles
+     set role = p_role, full_name = v_name, must_change_password = true
+   where id = v_uid;
+  return v_uid;
+end;
+$$;
+
+-- Sets a new temporary password for an account (not the superadmin's own); it must be changed at next sign-in.
+create or replace function public.reset_user_password(p_user uuid, p_password text)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if coalesce(public.my_role(), '') <> 'superadmin' then
+    raise exception 'غير مصرح';
+  end if;
+  if p_user = auth.uid() then
+    raise exception 'غيّر كلمة مرورك من حسابك';
+  end if;
+  if length(coalesce(p_password, '')) < 6 then
+    raise exception 'كلمة المرور يجب ألا تقل عن 6 أحرف';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_user) then
+    raise exception 'الحساب غير موجود';
+  end if;
+  update auth.users set encrypted_password = crypt(p_password, gen_salt('bf')), updated_at = now() where id = p_user;
+  update public.profiles set must_change_password = true where id = p_user;
+end;
+$$;
+
+revoke execute on function public.create_user_account(text, text, text, text) from public, anon;
+revoke execute on function public.reset_user_password(uuid, text) from public, anon;
+grant execute on function public.create_user_account(text, text, text, text) to authenticated;
+grant execute on function public.reset_user_password(uuid, text) to authenticated;

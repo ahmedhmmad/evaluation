@@ -443,7 +443,11 @@
   #print-sheet td.pg-space { border: 0; padding: 0; background: none; height: 0; }
   #print-sheet table.newpage { break-before: page; }
   /* الاستمارة الورقية الفارغة: خانات عالية للكتابة باليد */
-  #print-sheet table.bf th, #print-sheet table.bf td { height: 2.5em; }
+  /* ارتفاع الخانة ثابت بالمليمتر: تصغير الخط ليتسع الكل في صفحة لا يضيّق مكان الكتابة */
+  #print-sheet table.bf th, #print-sheet table.bf td { height: 5.8mm; padding: 0 .5em; line-height: 1.2; }
+  #print-sheet.bfp .rh { margin-bottom: .4em; }
+  #print-sheet.bfp .rt { margin-bottom: .5em; }
+  #print-sheet.bfp .rt h1 { font-size: 1.3em; margin-bottom: .1em; }
   #print-sheet table.bf th { width: auto; font-size: .92em; line-height: 1.25; }
   #print-sheet td.bf-sec { height: auto; padding: .2em .7em; background: var(--navy); color: #fff; font-family: var(--font-head); font-weight: 700; }
   #print-sheet .bf-o { display: inline-block; margin-inline-end: 1em; white-space: nowrap; }
@@ -3517,7 +3521,8 @@
         return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
       }).join('');
       return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
-        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td></tr>';
+        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td>' +
+        '<td>' + (self || isTeacher ? '' : '<button type="button" class="btn" data-resetpw="' + u.id + '">كلمة مرور جديدة</button>') + '</td></tr>';
     }).join('');
 
     app.innerHTML = tabs('admin') +
@@ -3549,7 +3554,16 @@
         '<p class="hint">أزل العلامة لإخفاء تقييم منشور عن المشاهدين.</p>' + vis + '</div>' +
       '<div class="card"><h2>المستخدمون والصلاحيات</h2>' +
         '<p class="hint">الحسابات الجديدة تبقى «بانتظار التفعيل» إلى أن تحدد صلاحيتها.</p>' +
-        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>البريد الإلكتروني</th><th>الصلاحية</th></tr></thead><tbody>' + users + '</tbody></table></div></div>';
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th><th></th></tr></thead><tbody>' + users + '</tbody></table></div>' +
+        // إنشاء حساب جاهز (يحتاج supabase/registrar.sql)
+        '<form id="user-form" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)"><h3 style="margin:0 0 4px">إنشاء حساب جديد</h3>' +
+          '<p class="hint">للمسجِّلين والمشرفين والمشاهدين. يدخل صاحب الحساب باسم المستخدم وكلمة المرور المؤقتة، ويُطلب منه اختيار كلمة مرور خاصة به عند أول دخول. حسابات المعلمين تُنشأ من «بيانات المعلمين».</p>' +
+          '<div class="grid2">' +
+            '<div><label class="field" for="nu-name">الاسم <span class="req">*</span></label><input type="text" id="nu-name" required></div>' +
+            '<div><label class="field" for="nu-login">اسم المستخدم <span class="req">*</span></label><input type="text" id="nu-login" required dir="ltr" style="text-align:right" autocomplete="off" placeholder="مثال: registrar1"></div>' +
+            '<div><label class="field" for="nu-pw">كلمة المرور المؤقتة <span class="req">*</span></label><input type="text" id="nu-pw" required minlength="6" dir="ltr" style="text-align:right" autocomplete="off" value="' + esc(S.defaultPw || '') + '"></div>' +
+            '<div><label class="field" for="nu-role">الصلاحية</label><select id="nu-role"><option value="registrar">' + ROLES.registrar + '</option><option value="supervisor">' + ROLES.supervisor + '</option><option value="viewer">' + ROLES.viewer + '</option></select></div>' +
+          '</div><div class="actions"><button type="submit" class="btn primary">إنشاء الحساب</button></div></form></div>';
   }
 
   /* ---------- النسخ الاحتياطي والاستعادة (مدير النظام) ----------
@@ -3660,6 +3674,26 @@
   document.addEventListener('change', function (e) {
     if (!isAdmin() || location.hash !== '#/admin' || e.target.id !== 'restore-file' || !e.target.files[0]) return;
     restoreBackup(e.target.files[0]);
+  });
+
+  // دوال إنشاء الحسابات تأتي من supabase/registrar.sql: إن لم يُشغَّل بعدُ تُعرض رسالة واضحة
+  function accountRpcFail(error) {
+    if (/could not find the function|schema cache|PGRST202/i.test((error.message || '') + (error.code || ''))) {
+      return toast('شغّل الملف supabase/registrar.sql في محرر SQL أولًا، ثم حدّث الصفحة', true);
+    }
+    fail(error);
+  }
+
+  document.addEventListener('click', async function (e) {
+    var el = e.target.closest('[data-resetpw]');
+    if (!el || !isAdmin() || location.hash !== '#/admin') return;
+    var u = S.users.filter(function (x) { return x.id === el.getAttribute('data-resetpw'); })[0];
+    var pw = prompt('كلمة مرور مؤقتة جديدة للحساب «' + (u.full_name || displayName(u.email)) + '» (6 أحرف على الأقل).\nسيُطلب منه تغييرها عند أول دخول.', S.defaultPw || '');
+    if (pw == null) return;
+    if (pw.length < 6) return toast('كلمة المرور يجب ألا تقل عن 6 أحرف.', true);
+    var r = await sb.rpc('reset_user_password', { p_user: u.id, p_password: pw });
+    if (r.error) return accountRpcFail(r.error);
+    toast('تم تعيين كلمة المرور المؤقتة');
   });
 
   /* ---------- التوجيه ---------- */
@@ -3858,6 +3892,14 @@
       saveStudentForm(e.submitter ? e.submitter.getAttribute('data-mode') : 'save');
     } else if (e.target.id === 'group-form') {
       saveGroupForm();
+    } else if (e.target.id === 'user-form' && isAdmin()) {
+      var nu = function (id) { return document.getElementById(id).value.trim(); };
+      var made = await sb.rpc('create_user_account', { p_name: nu('nu-name'), p_login: toEmail(nu('nu-login')), p_password: document.getElementById('nu-pw').value, p_role: nu('nu-role') });
+      if (made.error) return accountRpcFail(made.error);
+      var list = await sb.from('profiles').select('*').order('created_at');
+      if (!list.error) S.users = list.data || [];
+      render();
+      toast('أُنشئ الحساب — سلّم صاحبه اسم المستخدم وكلمة المرور المؤقتة');
     } else if (e.target.id === 'defaultpw-form') {
       var pw = document.getElementById('default-pw').value;
       if (pw.length < 6) return toast('كلمة المرور الافتراضية يجب ألا تقل عن 6 أحرف.', true);
@@ -4436,22 +4478,26 @@
   function buildBlankFormSheet() {
     var skip = { class_name: 1, placement: 1, filled_by: 1 };
     var rows = '', held = null;
+    // الخيارات القليلة مربعات تُؤشَّر؛ القوائم الطويلة (المرحلة، المقاس) تُكتب باليد
+    var boxes = function (f) { return f.type === 'select' && f.options.length <= 6; };
     var answer = function (f) {
-      return f.type === 'select' ? f.options.map(function (o) { return '<span class="bf-o">☐ ' + o + '</span>'; }).join('') : '';
+      return boxes(f) ? f.options.map(function (o) { return '<span class="bf-o">☐ ' + o + '</span>'; }).join('') : '';
     };
+    // عنوان الخانة المختصر، إلا الأسئلة التي لا يُفهم مختصرها
+    var title = function (f) { return f.p || f.label; };
     var flush = function () {
-      if (held) rows += '<tr><th>' + held.label + '</th><td colspan="3">' + answer(held) + '</td></tr>';
+      if (held) rows += '<tr><th>' + title(held) + '</th><td colspan="3">' + answer(held) + '</td></tr>';
       held = null;
     };
     ST_FIELDS.forEach(function (f) {
       if (f.sec) { flush(); if (f.sec !== 'مُدخل البيانات') rows += '<tr><td class="bf-sec" colspan="4">' + f.sec + '</td></tr>'; }
       if (skip[f.k]) return;
-      // الحقول الطويلة وذات الخيارات الكثيرة تأخذ الصف كله؛ البقية حقلان في الصف
-      if (f.wide || (f.type === 'select' && f.options.length > 4)) {
+      // الحقول الطويلة ومربعات الخيارات الكثيرة تأخذ الصف كله؛ البقية حقلان في الصف
+      if (f.wide || (boxes(f) && f.options.join(' ').length > 22)) {
         flush();
-        rows += '<tr><th>' + f.label + '</th><td colspan="3">' + answer(f) + '</td></tr>';
+        rows += '<tr><th>' + title(f) + '</th><td colspan="3">' + answer(f) + '</td></tr>';
       } else if (held) {
-        rows += '<tr><th>' + held.label + '</th><td>' + answer(held) + '</td><th>' + f.label + '</th><td>' + answer(f) + '</td></tr>';
+        rows += '<tr><th>' + title(held) + '</th><td>' + answer(held) + '</td><th>' + title(f) + '</th><td>' + answer(f) + '</td></tr>';
         held = null;
       } else {
         held = f;
@@ -4459,17 +4505,13 @@
     });
     flush();
     rows += '<tr><td class="bf-sec" colspan="4">المواصلات</td></tr>' +
-      '<tr><th>هل يحتاج الطالب مواصلات؟</th><td><span class="bf-o">☐ نعم</span><span class="bf-o">☐ لا</span></td><th>توقيع ولي الأمر</th><td></td></tr>';
+      '<tr><th>يحتاج الطالب مواصلات؟</th><td><span class="bf-o">☐ نعم</span><span class="bf-o">☐ لا</span></td><th>توقيع ولي الأمر</th><td></td></tr>';
 
-    var head = reportHead('استمارة تسجيل طالب', [['العام الدراسي', academicYear()], ['ملاحظة', 'تُعبأ بخط واضح وتُسلَّم لموظف التسجيل مع المستندات']], { noIssueDate: true })
-      .replace(/^<img class="wm"[^>]*>/, '');
-    sheet.className = 'ls';
-    sheet.removeAttribute('data-fit');
-    sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<table class="rk bf" style="table-layout:fixed"><colgroup><col style="width:23%"><col style="width:27%"><col style="width:23%"><col style="width:27%"></colgroup><thead>' +
-      '<tr><td class="pg-space" colspan="4"></td></tr><tr><td class="ls-head" colspan="4">' + head + '</td></tr></thead><tbody>' + rows +
-      '</tbody><tfoot><tr><td class="pg-space" colspan="4"></td></tr></tfoot></table>';
+    sheet.className = 'bfp';
+    sheet.innerHTML =
+      reportHead('استمارة تسجيل طالب', [['العام الدراسي', academicYear()], ['ملاحظة', 'تُعبأ بخط واضح وتُسلَّم لموظف التسجيل مع المستندات']], { noIssueDate: true }) +
+      '<table class="rk bf"><colgroup><col style="width:21%"><col style="width:29%"><col style="width:21%"><col style="width:29%"></colgroup><tbody>' + rows + '</tbody></table>';
+    fitSheet(); // صفحة واحدة
   }
 
   /* ----- ملف الطالب ----- */
