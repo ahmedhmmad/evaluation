@@ -2198,6 +2198,7 @@
     var all = classes.concat(Object.keys(counts).filter(function (c) { return c && classes.indexOf(c) < 0; }));
     var pending = S.students.length - finals.length;
     app.innerHTML = tabs('classes') +
+      '<div class="toolbar"><button type="button" class="btn" data-regbook' + (finals.length ? '' : ' disabled') + '>تصدير كشوف التسجيل (Excel)</button></div>' +
       '<p class="st-count">المسجلون نهائيًا: ' + finals.length + ' في ' + all.length + ' شعبة' +
         (pending ? ' · <a href="#/students">تسجيلات مبدئية بانتظار الاعتماد: ' + pending + '</a>' : '') + '</p>' +
       (all.length
@@ -2223,6 +2224,8 @@
       go('#/students');
     } else if (e.target.closest('[data-cprint]')) {
       printNow();
+    } else if ((el = e.target.closest('[data-regbook]'))) {
+      exportRegistrationWorkbook(el);
     }
   });
 
@@ -3745,6 +3748,182 @@
       }) });
     }
   });
+
+  /* ---------- تصدير «كشوف تسجيل الطلاب» في ملف الأكاديمية الجاهز ----------
+     القالب registration-template.xlsx (تعليمات، ملخص، وورقة لكل صف: الأول–السادس مختلطة، والسابع–التاسع بنات/ذكور)
+     يُملأ ببيانات المسجلين نهائيًا مع بقاء تصميمه ومعادلاته وشعاره كما هي: تُعدَّل ملفات XML داخل الملف مباشرة.
+     في كل ورقة: الطلاب في الصفوف من 10، وعددها في القالب = القدرة الاستيعابية؛ إن زاد المسجلون تُضاف صفوف وتُزاح التواقيع */
+
+  function loadFflate() {
+    if (window.fflate) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js';
+      sc.onload = resolve;
+      sc.onerror = function () { reject(new Error('تعذر تحميل مكتبة ضغط الملفات')); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  function xmlEsc(v) {
+    return String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/g, '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function reEsc(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // يغيّر القيمة المحفوظة لخلية (رقم أو ناتج معادلة) دون المساس بمعادلتها وتنسيقها
+  function setCellValue(xml, ref, value) {
+    return xml.replace(new RegExp('(<c r="' + ref + '"[^>]*>(?:<f[^>]*>[^<]*</f>)?<v>)[^<]*(</v>)'), function (all, a, b) { return a + value + b; });
+  }
+
+  // وسم فتح الصف وتنسيق كل عمود فيه، كما في القالب
+  function rowPattern(xml, r) {
+    var a = xml.indexOf('<row r="' + r + '"'), b = xml.indexOf('</row>', a);
+    var text = xml.slice(a, b), styles = {};
+    text.replace(/<c r="([A-Z]+)\d+" s="(\d+)"/g, function (all, col, s) { styles[col] = s; });
+    return { open: text.slice(0, text.indexOf('>') + 1), styles: styles };
+  }
+
+  // تاريخ ISO إلى الرقم التسلسلي الذي يخزنه Excel
+  function excelDate(iso) {
+    var p = String(iso || '').slice(0, 10).split('-');
+    return p.length === 3 ? Math.round(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])) / 864e5) + 25569 : null;
+  }
+
+  // list: طلاب الورقة. capacity: القدرة الاستيعابية من «إعداد الفصول» (null: تبقى قيمة القالب). note: دالة ملاحظة الطالب
+  function fillRegistrationSheet(xml, list, capacity, note) {
+    var m = xml.match(/COUNTA\(B10:B(\d+)\)/);
+    if (!m) return null;
+    var last = Number(m[1]), slots = last - 9, need = Math.max(slots, list.length), k = need - slots, newLast = last + k;
+    var a = xml.indexOf('<row r="10"'), lastAt = xml.indexOf('<row r="' + last + '"'), b = xml.indexOf('</row>', lastAt) + 6;
+    var patterns = [rowPattern(xml, 10), rowPattern(xml, 11)];
+    var rows = '';
+    for (var i = 0; i < need; i++) {
+      var p = patterns[i % 2], r = 10 + i, x = list[i];
+      var text = function (col, v) {
+        return v === '' || v == null ? '<c r="' + col + r + '" s="' + p.styles[col] + '"/>'
+          : '<c r="' + col + r + '" s="' + p.styles[col] + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(v) + '</t></is></c>';
+      };
+      var birth = x ? excelDate(x.birth_date) : null;
+      rows += p.open.replace(/r="\d+"/, 'r="' + r + '"') + '<c r="A' + r + '" s="' + p.styles.A + '" t="n"><v>' + (i + 1) + '</v></c>' +
+        (x
+          ? text('B', x.full_name) + text('C', x.gender === 'ذكر' || x.gender === 'أنثى' ? x.gender : '') +
+            (birth == null ? text('D', '') : '<c r="D' + r + '" s="' + p.styles.D + '" t="n"><v>' + birth + '</v></c>') +
+            text('E', x.national_id) + text('F', x.guardian_name) + text('G', x.guardian_relation) + text('H', x.phone) + text('I', x.whatsapp) +
+            text('J', residenceOf(x)) + text('K', note(x))
+          : 'BCDEFGHIJK'.split('').map(function (col) { return text(col, ''); }).join('')) + '</row>';
+    }
+    var head = xml.slice(0, a), tail = xml.slice(b);
+    if (k) {
+      // ما بعد جدول الطلاب (التواقيع) ينزل k صفًا، ومعه الدمج ونطاقات المعادلات والقوائم المنسدلة
+      var cut = tail.indexOf('</sheetData>');
+      var shifted = tail.slice(0, cut).replace(/<row r="(\d+)"/g, function (all, n) { return '<row r="' + (Number(n) + k) + '"'; })
+        .replace(/<c r="([A-Z]+)(\d+)"/g, function (all, col, n) { return '<c r="' + col + (Number(n) + k) + '"'; });
+      var rest = tail.slice(cut).replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/g, function (all, c1, r1, c2, r2) {
+        return Number(r1) > last ? '<mergeCell ref="' + c1 + (Number(r1) + k) + ':' + c2 + (Number(r2) + k) + '"' : all;
+      });
+      var range = new RegExp('([A-K])10:(?:\\1)' + last + '(?!\\d)', 'g'), grow = function (all, col) { return col + '10:' + col + newLast; };
+      head = head.replace(range, grow).replace(/(<dimension ref="A1:K)(\d+)"/, function (all, pre, n) { return pre + (Number(n) + k) + '"'; });
+      tail = shifted + rest.replace(range, grow);
+    }
+    var boys = list.filter(function (x) { return x.gender === 'ذكر'; }).length, girls = list.filter(function (x) { return x.gender === 'أنثى'; }).length;
+    var cap = capacity == null ? slots : capacity;
+    head = setCellValue(setCellValue(setCellValue(setCellValue(setCellValue(head, 'F6', cap), 'C7', list.length), 'F7', cap - list.length), 'I6', boys), 'I7', girls);
+    return { xml: head + rows + tail, added: k, capacity: cap, count: list.length };
+  }
+
+  async function exportRegistrationWorkbook(btn) {
+    btn.disabled = true;
+    try {
+      await loadFflate();
+      var res = await fetch('registration-template.xlsx');
+      if (!res.ok) throw new Error('تعذر تحميل قالب الكشوف');
+      var files = fflate.unzipSync(new Uint8Array(await res.arrayBuffer()));
+      var read = function (name) { return fflate.strFromU8(files[name]); };
+      var write = function (name, text) { files[name] = fflate.strToU8(text); };
+
+      // اسم كل ورقة وملفها داخل القالب
+      var parse = function (name) { return new DOMParser().parseFromString(read(name), 'application/xml'); };
+      var target = {}, sheetFile = {};
+      Array.prototype.forEach.call(parse('xl/_rels/workbook.xml.rels').getElementsByTagName('Relationship'), function (r) { target[r.getAttribute('Id')] = r.getAttribute('Target'); });
+      Array.prototype.forEach.call(parse('xl/workbook.xml').getElementsByTagName('sheet'), function (sh) {
+        var id = sh.getAttribute('r:id') || sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
+        sheetFile[sh.getAttribute('name')] = 'xl/' + String(target[id]).replace(/^\/?xl\//, '');
+      });
+
+      var finals = S.students.filter(function (x) { return stStatus(x) === 'final' && x.class_name; });
+      // صف الشعبة من اسمها؛ الروضة (KG2…) ليست صفًّا من صفوف الملف ولو كان في اسمها رقم
+      var gradeIn = function (name) { return /kg|روض|تمهيد/i.test(name) ? 0 : gradeOf(name); };
+      var placed = {}, stats = {}, workbook = read('xl/workbook.xml'), total = 0, extra = 0;
+      Object.keys(sheetFile).forEach(function (name) {
+        var grade = gradeIn(name), side = /بنات|إناث/.test(name) ? 'girls' : /ذكور|بنين/.test(name) ? 'boys' : '';
+        if (!grade || !/COUNTA\(B10:B\d+\)/.test(read(sheetFile[name]))) return; // ليست ورقة صف
+        // أين يقع الطالب في الأوراق المقسومة: جنس شعبته إن حُدِّد (ذكور/إناث)، وإلا جنسه هو
+        var sideOf = function (x) {
+          var info = classInfo(x.class_name);
+          return info && (info.gender === 'boys' || info.gender === 'girls') ? info.gender : x.gender === 'ذكر' ? 'boys' : x.gender === 'أنثى' ? 'girls' : '';
+        };
+        var list = finals.filter(function (x) { return gradeIn(x.class_name) === grade && (!side || sideOf(x) === side); });
+        var sections = {};
+        list.forEach(function (x) { placed[x.id] = true; sections[x.class_name] = true; });
+        // القدرة من «إعداد الفصول»: مجموع سعات شعب هذا الصف (وهذا الجنس)، إن حُدِّدت كلها
+        var mine = classConfig().list.filter(function (c) { return gradeIn(c.name) === grade && (!side || c.gender === side); });
+        var cap = mine.length && mine.every(function (c) { return c.capacity != null; }) ? mine.reduce(function (sum, c) { return sum + c.capacity; }, 0) : null;
+        var many = Object.keys(sections).length > 1;
+        var out = fillRegistrationSheet(read(sheetFile[name]), list, cap, function (x) { return many ? x.class_name : ''; });
+        write(sheetFile[name], out.xml);
+        stats[name] = out;
+        total += out.count;
+        if (out.added) {
+          extra += out.added;
+          workbook = workbook.replace(new RegExp('((?:&apos;|\')?' + reEsc(name) + '(?:&apos;|\')?!\\$A\\$1:\\$K\\$)(\\d+)'), function (all, pre, n) { return pre + (Number(n) + out.added); });
+        }
+      });
+      if (!Object.keys(stats).length) throw new Error('القالب لا يحتوي على أوراق الصفوف المتوقعة');
+
+      // ورقة الملخص: القيم المحفوظة لمعادلاتها، ليظهر الملف صحيحًا حتى في برامج لا تعيد الحساب
+      var sumFile = sheetFile['الملخص'];
+      if (sumFile) {
+        var sum = read(sumFile), all = { cap: 0, n: 0 };
+        sum.replace(/<c r="E(\d+)"[^>]*><f[^>]*>(?:&apos;|')?([^!<]+?)(?:&apos;|')?!F6<\/f>/g, function (m0, row, name) {
+          var st = stats[name];
+          if (!st) return m0;
+          all.cap += st.capacity; all.n += st.count;
+          sum = setCellValue(setCellValue(setCellValue(setCellValue(sum, 'E' + row, st.capacity), 'F' + row, st.count), 'G' + row, st.capacity - st.count),
+            'H' + row, st.capacity ? st.count / st.capacity : 0);
+          return m0;
+        });
+        var tot = sum.match(/<c r="E(\d+)"[^>]*><f[^>]*>SUM\(/);
+        if (tot) {
+          sum = setCellValue(setCellValue(setCellValue(setCellValue(sum, 'E' + tot[1], all.cap), 'F' + tot[1], all.n), 'G' + tot[1], all.cap - all.n),
+            'H' + tot[1], all.cap ? all.n / all.cap : 0);
+        }
+        write(sumFile, sum);
+      }
+      // Excel يعيد حساب المعادلات كلها عند فتح الملف
+      workbook = /<calcPr\b/.test(workbook)
+        ? workbook.replace(/<calcPr\b(?![^>]*fullCalcOnLoad)/, '<calcPr fullCalcOnLoad="true"')
+        : workbook.replace('</definedNames>', '</definedNames><calcPr fullCalcOnLoad="true"/>');
+      write('xl/workbook.xml', workbook);
+
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([fflate.zipSync(files)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = 'كشوف-تسجيل-الطلاب-' + todayISO() + '.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      var left = finals.filter(function (x) { return !placed[x.id]; }).length;
+      toast('صُدّرت الكشوف — الطلاب المدرجون: ' + total + (extra ? ' · صفوف أُضيفت فوق القدرة: ' + extra : '') +
+        (left ? ' · لم يُدرج: ' + left + ' (شعبتهم خارج صفوف الملف أو جنسهم غير محدد)' : ''), !!left);
+    } catch (err) {
+      toast(err.message, true);
+    }
+    btn.disabled = false;
+  }
 
   /* ---------- النسخ الاحتياطي والاستعادة (مدير النظام) ----------
      النسخة ملف JSON واحد فيه جداول البرنامج كلها. الاستعادة تعيد كل سجل في الملف إلى ما كان عليه
