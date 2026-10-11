@@ -778,10 +778,6 @@
   }
 
   // صفوف المدرسة وشعبها كما عرّفها مدير النظام
-  function schoolClasses() {
-    return S.settings && Array.isArray(S.settings.classes) ? S.settings.classes : [];
-  }
-
   function optionsHtml(list, current) {
     if (current && list.indexOf(current) < 0) list = list.concat([current]);
     return '<option value="">— اختر —</option>' + list.map(function (x) {
@@ -1022,7 +1018,8 @@
     students: 'M2 9l10-5 10 5-10 5zM6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5',
     transport: 'M5 4h14a1 1 0 011 1v11H4V5a1 1 0 011-1zM4 11h16M7 16v3M17 16v3M8 14h.01M16 14h.01',
     classes: 'M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z',
-    admin: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4'
+    admin: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
+    rooms: 'M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8 9h2M14 9h2M8 12h2M14 12h2'
   };
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
@@ -1037,7 +1034,7 @@
       groups[1].items.push(['#/staff', 'staff', 'بيانات المعلمين']);
       groups.push(
         { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/transport', 'transport', 'المواصلات']] },
-        { title: 'الإدارة', items: [['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
+        { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
       );
     }
     return groups;
@@ -1053,7 +1050,7 @@
     if (h === '#/results' || /^#\/r\//.test(h)) return 'results';
     if (/^#\/transport/.test(h)) return 'transport';
     if (/^#\/classes/.test(h) && isAdmin()) return 'classes';
-    var m = h.match(/^#\/(staff|students|admin)$/);
+    var m = h.match(/^#\/(staff|students|admin|rooms)$/);
     return m && isAdmin() ? m[1] : 'home';
   }
 
@@ -1131,7 +1128,7 @@
       var riding = transportGroupOf();
       add(count(S.students, function (x) { return x.wants_transport === true && !riding[x.id]; }), 'طلاب يحتاجون مواصلات بلا نقطة تجمع', '#/transport');
       add(count(S.users, function (u) { return u.role === 'pending'; }), 'حسابات بانتظار التفعيل', '#/admin');
-      if (!schoolClasses().length) todo.push('<a href="#/admin"><span>لم تُعرَّف صفوف المدرسة بعد</span><span class="n">!</span></a>');
+      if (!schoolClasses().length) todo.push('<a href="#/rooms"><span>لم تُعرَّف شعب المدرسة بعد</span><span class="n">!</span></a>');
     }
 
     app.innerHTML =
@@ -1298,34 +1295,9 @@
     toast('تم الحفظ');
   }
 
-  async function saveClasses(list) {
-    var r = await sb.from('settings').update({ classes: list }).eq('id', 1);
-    if (r.error) return fail(r.error);
-    (S.settings || (S.settings = {})).classes = list;
-    render();
-    var box = document.getElementById('new-class');
-    if (box) box.focus();
-  }
-
-  function addClass() {
-    var name = document.getElementById('new-class').value.trim();
-    if (!name) return;
-    if (schoolClasses().indexOf(name) > -1) return toast('هذا الصف موجود مسبقًا.', true);
-    saveClasses(schoolClasses().concat([name]));
-  }
-
-  app.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && e.target.id === 'new-class' && isAdmin()) { e.preventDefault(); addClass(); }
-  });
-
   document.addEventListener('click', async function (e) {
     if (!isAdmin()) return;
     var el, t;
-    if (e.target.closest('[data-addclass]')) return addClass();
-    if ((el = e.target.closest('[data-delclass]'))) {
-      var gone = el.getAttribute('data-delclass');
-      return saveClasses(schoolClasses().filter(function (c) { return c !== gone; }));
-    }
     if ((el = e.target.closest('[data-tedit]'))) {
       ui.editTeacher = el.getAttribute('data-tedit') || null;
       render();
@@ -1506,8 +1478,8 @@
     if (f.k === 'filled_by' && !v) v = (S.profile && S.profile.full_name) || '';
     var need = f.req || f.dep;
     if (f.type === 'class') {
-      inner = '<select id="' + id + '" required>' + optionsHtml(schoolClasses(), v || '') + '</select>' +
-        '<div class="day">' + (schoolClasses().length ? 'تُحدَّد عند اعتماد التسجيل النهائي.' : 'عرّف صفوف المدرسة أولًا من «الإعدادات والمستخدمون».') + '</div>';
+      inner = '<select id="' + id + '" required>' + classOptionsHtml(v || '') + '</select>' +
+        '<div class="day" id="sf-class-hint">' + classHintHtml(v || '', st, stVal(st, 'gender')) + '</div>';
     } else if (f.type === 'select') {
       inner = '<select id="' + id + '"' + (f.req ? ' required' : '') + '>' + optionsHtml(f.options.slice(), v || '') + '</select>';
     } else {
@@ -1838,6 +1810,8 @@
 
     if (!data.full_name) return toast('اكتب اسم الطالب.', true);
     var wasFinal = st && stStatus(st) === 'final';
+    // شعبة ممتلئة أو لجنس آخر: تنبيه، والمتابعة ممكنة
+    if (mode === 'final' && data.class_name && !confirmClass(data.class_name, st, data.gender)) return;
     if (mode === 'final' && !wasFinal) {
       var missing = ST_DOCS.filter(function (d) { return !data.documents[d[0]]; }).map(function (d) { return d[1]; });
       if (missing.length && !confirm('لم تُسجَّل هذه المستندات: ' + missing.join('، ') + '.\nهل تريد اعتماد التسجيل النهائي مع ذلك؟')) return;
@@ -2129,6 +2103,7 @@
     } else if (el.hasAttribute('data-stclass')) {
       var st = findStudent(el.getAttribute('data-stclass'));
       if (!el.value) { el.value = st.class_name; return toast('الطالب المسجل نهائيًا يجب أن يكون في صف.', true); }
+      if (!confirmClass(el.value, st, st.gender)) { el.value = st.class_name; return; }
       var r = await sb.from('students').update({ class_name: el.value }).eq('id', st.id);
       if (r.error) { el.value = st.class_name; return fail(r.error); }
       st.class_name = el.value;
@@ -2144,7 +2119,12 @@
   });
 
   app.addEventListener('change', function (e) {
-    if (e.target.closest && e.target.closest('#student-form')) syncStudentDeps();
+    if (!e.target.closest || !e.target.closest('#student-form')) return;
+    syncStudentDeps();
+    if (e.target.id === 'sf-class_name' || e.target.id === 'sf-gender') {
+      var cur = ui.editStudent && ui.editStudent !== 'new' ? findStudent(ui.editStudent) : null;
+      document.getElementById('sf-class-hint').innerHTML = classHintHtml(document.getElementById('sf-class_name').value, cur, document.getElementById('sf-gender').value);
+    }
   });
 
   app.addEventListener('input', function (e) {
@@ -2222,10 +2202,13 @@
         (pending ? ' · <a href="#/students">تسجيلات مبدئية بانتظار الاعتماد: ' + pending + '</a>' : '') + '</p>' +
       (all.length
         ? '<div class="stats">' + all.map(function (c) {
+            var info = classInfo(c), n = counts[c] || 0, cap = info ? info.capacity : null;
             return '<a class="card stat" href="#/classes/' + encodeURIComponent(c) + '"><span class="lbl">' + esc(c) + '</span>' +
-              '<span class="num">' + (counts[c] || 0) + '</span><span class="sub">مسجلون نهائيًا</span></a>';
+              '<span class="num"' + (cap != null && n > cap ? ' style="color:var(--red)"' : '') + '>' + n + (cap != null ? ' <small>/ ' + cap + '</small>' : '') + '</span>' +
+              '<span class="sub">' + (info && info.gender ? CLASS_GENDERS[info.gender] + ' · ' : '') +
+                (cap == null ? 'مسجلون نهائيًا' : n > cap ? 'تجاوز السعة بـ ' + (n - cap) : n === cap ? 'ممتلئة' : 'المتاح ' + (cap - n)) + '</span></a>';
           }).join('') + '</div>'
-        : '<div class="card empty">لم تُعرَّف صفوف المدرسة وشعبها بعد. عرّفها من «الإعدادات والمستخدمون».</div>');
+        : '<div class="card empty">لم تُعرَّف شعب المدرسة بعد. يعرّفها مدير النظام من «إعداد الفصول».</div>');
   }
 
   document.addEventListener('click', function (e) {
@@ -2247,7 +2230,7 @@
     var el = e.target, name = currentClass();
     if (!canStudents() || !name || !el.hasAttribute('data-cmove')) return;
     var st = findStudent(el.getAttribute('data-cmove'));
-    if (!confirm('نقل «' + st.full_name + '» من «' + name + '» إلى «' + el.value + '»؟')) { el.value = name; return; }
+    if (!confirm('نقل «' + st.full_name + '» من «' + name + '» إلى «' + el.value + '»؟') || !confirmClass(el.value, st, st.gender)) { el.value = name; return; }
     var r = await sb.from('students').update({ class_name: el.value }).eq('id', st.id);
     if (r.error) { el.value = name; return fail(r.error); }
     st.class_name = el.value;
@@ -3569,14 +3552,8 @@
         '<label class="field" for="principal-name" style="margin-top:14px">اسم مدير/ة الأكاديمية</label>' +
         '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
         '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p>' +
-        '<label class="field" for="new-class" style="margin-top:16px">الصفوف والشعب</label>' +
-        '<p class="hint" style="margin:0 0 6px">تظهر كقائمة اختيار في بيانات المعلمين وتقارير الزيارات.</p>' +
-        '<div class="chips" style="margin:0 0 4px">' + (schoolClasses().map(function (c) {
-          return '<span class="chip-wrap"><span class="chip" style="cursor:default">' + esc(c) + '</span>' +
-            '<button type="button" class="chip-del" data-delclass="' + esc(c) + '" aria-label="حذف ' + esc(c) + '">×</button></span>';
-        }).join('') || '<span class="hint">لا توجد صفوف بعد.</span>') + '</div>' +
-        '<div class="addstmt"><input type="text" id="new-class" placeholder="مثال: السابع (أ)" aria-label="صف جديد">' +
-        '<button type="button" class="btn" data-addclass>إضافة</button></div></div>' +
+        '<label class="field" style="margin-top:16px">الصفوف والشعب</label>' +
+        '<p class="hint" style="margin:0">الشعب: ' + (schoolClasses().map(esc).join('، ') || 'لا توجد بعد') + '. تُدار من <a href="#/rooms">إعداد الفصول</a>.</p></div>' +
       '<div class="card"><h2>ما يراه المشاهدون</h2>' +
         '<p class="hint">يُطبَّق على جميع حسابات «مشاهد» في التقييمات المنشورة.</p>' + checks + '</div>' +
       '<div class="card"><h2>التقييمات الظاهرة للمشاهدين</h2>' +
@@ -3594,6 +3571,173 @@
             '<div><label class="field" for="nu-role">الصلاحية</label><select id="nu-role"><option value="registrar">' + ROLES.registrar + '</option><option value="supervisor">' + ROLES.supervisor + '</option><option value="viewer">' + ROLES.viewer + '</option></select></div>' +
           '</div><div class="actions"><button type="submit" class="btn primary">إنشاء الحساب</button></div></form></div>';
   }
+
+  /* ---------- إعداد الفصول الدراسية (مدير النظام) ----------
+     تُحفظ في settings.classes بهذا الشكل: { rooms: عدد الغرف, list: [{ name, gender, capacity }] }.
+     الصيغة القديمة (قائمة أسماء فقط) تُقرأ كما هي: شعب بلا جنس ولا سعة */
+
+  var CLASS_GENDERS = { boys: 'ذكور', girls: 'إناث', mixed: 'مختلط' };
+  var classCache = { src: null, cfg: null };
+
+  function classConfig() {
+    var c = S.settings ? S.settings.classes : null;
+    if (classCache && classCache.cfg && classCache.src === c) return classCache.cfg;
+    var list = Array.isArray(c) ? c : c && Array.isArray(c.list) ? c.list : [];
+    var cfg = {
+      rooms: c && !Array.isArray(c) ? Number(c.rooms) || 0 : 0,
+      list: list.map(function (x) {
+        if (typeof x === 'string') return { name: x, gender: '', capacity: null };
+        var cap = x.capacity == null || x.capacity === '' ? null : Number(x.capacity);
+        return { name: String(x.name || ''), gender: CLASS_GENDERS[x.gender] ? x.gender : '', capacity: cap > 0 ? cap : null };
+      }).filter(function (x) { return x.name; })
+    };
+    cfg.names = cfg.list.map(function (x) { return x.name; });
+    classCache = { src: c, cfg: cfg };
+    return cfg;
+  }
+
+  function schoolClasses() {
+    return classConfig().names;
+  }
+
+  function classInfo(name) {
+    var list = classConfig().list;
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return null;
+  }
+
+  // عدد المسجلين نهائيًا في كل شعبة { الاسم: العدد }
+  function classCounts() {
+    var counts = {};
+    S.students.forEach(function (x) { if (stStatus(x) === 'final' && x.class_name) counts[x.class_name] = (counts[x.class_name] || 0) + 1; });
+    return counts;
+  }
+
+  // حال الشعبة لو أُضيف إليها هذا الطالب: st الطالب إن كان مسجلًا (لا يُعدّ مرتين إن كان فيها أصلًا)، gender جنسه
+  function classStatus(name, st, gender) {
+    var info = classInfo(name), n = classCounts()[name] || 0;
+    if (st && stStatus(st) === 'final' && st.class_name === name) n--;
+    var cap = info ? info.capacity : null, warn = [];
+    if (cap != null && n >= cap) warn.push('الشعبة «' + name + '» ممتلئة: المسجلون ' + n + ' والسعة القصوى ' + cap + '.');
+    if (info && gender && ((info.gender === 'boys' && gender === 'أنثى') || (info.gender === 'girls' && gender === 'ذكر'))) {
+      warn.push('الشعبة «' + name + '» لل' + CLASS_GENDERS[info.gender] + ' والطالب ' + gender + '.');
+    }
+    return { info: info, count: n, capacity: cap, left: cap == null ? null : cap - n, warn: warn };
+  }
+
+  // يُسأل المستخدم قبل وضع طالب في شعبة ممتلئة أو لجنس آخر؛ التجاوز مسموح بعد التأكيد
+  function confirmClass(name, st, gender) {
+    var warn = name ? classStatus(name, st, gender).warn : [];
+    return !warn.length || confirm('تنبيه:\n' + warn.join('\n') + '\n\nهل تريد المتابعة مع ذلك؟');
+  }
+
+  // سطر تحت قائمة الشعبة في نموذج الطالب
+  function classHintHtml(name, st, gender) {
+    if (!schoolClasses().length) return 'عرّف الشعب أولًا من «إعداد الفصول».';
+    if (!name) return 'تُحدَّد عند اعتماد التسجيل النهائي.';
+    var s = classStatus(name, st, gender);
+    var text = s.capacity == null ? 'المسجلون: ' + s.count + ' (لم تُحدَّد سعة)'
+      : 'المسجلون ' + s.count + ' من ' + s.capacity + ' — ' + (s.left > 0 ? 'المتاح ' + s.left : 'لا مقاعد متاحة');
+    return (s.info && s.info.gender ? CLASS_GENDERS[s.info.gender] + ' · ' : '') + text +
+      s.warn.map(function (w) { return '<div class="formhint">' + esc(w) + ' يمكن المتابعة مع التجاوز.</div>'; }).join('');
+  }
+
+  // خيارات قائمة الشعبة في نموذج الطالب: الاسم ثم الجنس والمسجلون/السعة
+  function classOptionsHtml(current) {
+    var counts = classCounts(), names = schoolClasses().slice();
+    if (current && names.indexOf(current) < 0) names.push(current);
+    return '<option value="">— اختر —</option>' + names.map(function (name) {
+      var info = classInfo(name), n = counts[name] || 0, extra = [];
+      if (info && info.gender) extra.push(CLASS_GENDERS[info.gender]);
+      extra.push(info && info.capacity != null ? n + '/' + info.capacity + (n >= info.capacity ? ' ممتلئة' : '') : String(n));
+      return '<option value="' + esc(name) + '"' + (name === current ? ' selected' : '') + '>' + esc(name) + ' — ' + extra.join(' · ') + '</option>';
+    }).join('');
+  }
+
+  async function saveClassConfig(cfg, focusId) {
+    var value = { rooms: cfg.rooms, list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity }; }) };
+    var r = await sb.from('settings').update({ classes: value }).eq('id', 1);
+    if (r.error) { render(); return fail(r.error); }
+    (S.settings || (S.settings = {})).classes = value;
+    render();
+    var box = focusId && document.getElementById(focusId);
+    if (box) box.focus();
+    toast('تم الحفظ');
+  }
+
+  function renderRooms() {
+    var cfg = classConfig(), counts = classCounts(), sum = { cap: 0, n: 0 };
+    var genderSelect = function (attrs, current) {
+      return '<select ' + attrs + '><option value="">— لم يُحدَّد —</option>' + Object.keys(CLASS_GENDERS).map(function (k) {
+        return '<option value="' + k + '"' + (k === current ? ' selected' : '') + '>' + CLASS_GENDERS[k] + '</option>';
+      }).join('') + '</select>';
+    };
+    var rows = cfg.list.map(function (c, i) {
+      var n = counts[c.name] || 0, left = c.capacity == null ? null : c.capacity - n;
+      sum.cap += c.capacity || 0; sum.n += n;
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(c.name) + '</b></td>' +
+        '<td>' + genderSelect('data-rgender="' + esc(c.name) + '" aria-label="جنس ' + esc(c.name) + '"', c.gender) + '</td>' +
+        '<td><input type="number" min="1" step="1" data-rcap="' + esc(c.name) + '" aria-label="سعة ' + esc(c.name) + '" value="' + (c.capacity == null ? '' : c.capacity) + '"></td>' +
+        '<td><a href="#/classes/' + encodeURIComponent(c.name) + '">' + n + '</a></td>' +
+        '<td>' + (left == null ? '—' : left < 0 ? '<span class="badge unpaid">تجاوز بـ ' + (-left) + '</span>' : left === 0 ? '<span class="badge part">ممتلئة</span>' : '<span class="badge paid">' + left + '</span>') + '</td>' +
+        '<td><button type="button" class="btn danger" data-rdel="' + esc(c.name) + '">حذف</button></td></tr>';
+    }).join('');
+    var free = cfg.rooms - cfg.list.length;
+
+    app.innerHTML = tabs('rooms') +
+      '<div class="card"><h2>الغرف المدرسية</h2>' +
+        '<div class="toolbar" style="align-items:center;margin-top:8px"><label class="field" for="rooms-count" style="margin:0">عدد الغرف المتاحة للتدريس</label>' +
+        '<input type="number" id="rooms-count" min="0" step="1" style="width:110px" value="' + (cfg.rooms || '') + '">' +
+        '<span class="st-count" style="margin:0">' + (cfg.rooms
+          ? 'الشعب المعرّفة: ' + cfg.list.length + ' من ' + cfg.rooms + ' غرفة' + (free > 0 ? ' — غرف بلا شعبة: ' + free : '')
+          : 'اكتب عدد الغرف أولًا، ثم عرّف شعبة لكل غرفة.') + '</span></div>' +
+        (cfg.rooms && free < 0 ? '<div class="formhint" style="margin-top:8px">عدد الشعب (' + cfg.list.length + ') أكبر من عدد الغرف (' + cfg.rooms + ').</div>' : '') + '</div>' +
+      '<div class="card"><h2>الشعب</h2>' +
+        '<p class="hint">لكل شعبة جنسها وسعتها القصوى. يظهر العدد المسجَّل والمتاح عند اختيار الشعبة في تسجيل الطلاب، وينبّه البرنامج عند تجاوز السعة أو اختلاف الجنس دون أن يمنع التسجيل.</p>' +
+        (rows
+          ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الشعبة</th><th>الجنس</th><th>السعة القصوى</th><th>المسجلون نهائيًا</th><th>المتاح</th><th></th></tr></thead>' +
+            '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + (sum.cap || '—') + '</td><td>' + sum.n + '</td><td colspan="2">' + (sum.cap ? 'المتاح: ' + Math.max(0, sum.cap - sum.n) : '') + '</td></tr></tfoot></table></div>'
+          : '<div class="empty">لا توجد شعب بعد.</div>') +
+        '<form id="room-form" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)"><h3 style="margin:0 0 8px">إضافة شعبة</h3><div class="grid2">' +
+          '<div><label class="field" for="nr-name">اسم الشعبة <span class="req">*</span></label><input type="text" id="nr-name" required placeholder="مثال: السابع (أ)"></div>' +
+          '<div><label class="field" for="nr-gender">الجنس</label>' + genderSelect('id="nr-gender"', '') + '</div>' +
+          '<div><label class="field" for="nr-cap">السعة القصوى</label><input type="number" id="nr-cap" min="1" step="1" placeholder="مثال: 30"></div>' +
+          '</div><div class="actions"><button type="submit" class="btn primary">إضافة الشعبة</button></div></form></div>';
+  }
+
+  function addRoomClass() {
+    var cfg = classConfig(), name = document.getElementById('nr-name').value.replace(/\s+/g, ' ').trim();
+    if (!name) return;
+    if (cfg.names.indexOf(name) > -1) return toast('هذه الشعبة موجودة مسبقًا.', true);
+    var cap = Number(document.getElementById('nr-cap').value);
+    if (cfg.rooms && cfg.list.length >= cfg.rooms && !confirm('كل الغرف (' + cfg.rooms + ') لها شعب. هل تريد إضافة شعبة أخرى مع ذلك؟')) return;
+    saveClassConfig({ rooms: cfg.rooms, list: cfg.list.concat([{ name: name, gender: document.getElementById('nr-gender').value, capacity: cap > 0 ? Math.floor(cap) : null }]) }, 'nr-name');
+  }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-rdel]');
+    if (!el || !isAdmin() || location.hash !== '#/rooms') return;
+    var name = el.getAttribute('data-rdel'), cfg = classConfig(), n = classCounts()[name] || 0;
+    if (!confirm(n ? 'في الشعبة «' + name + '» ' + n + ' طالبًا مسجلًا. حذفها من القائمة لا يحذف الطلاب، لكنهم يبقون على اسمها إلى أن تنقلهم. هل تريد الحذف؟'
+      : 'حذف الشعبة «' + name + '»؟')) return;
+    saveClassConfig({ rooms: cfg.rooms, list: cfg.list.filter(function (c) { return c.name !== name; }) });
+  });
+
+  app.addEventListener('change', function (e) {
+    var el = e.target;
+    if (!isAdmin() || location.hash !== '#/rooms') return;
+    var cfg = classConfig();
+    if (el.id === 'rooms-count') {
+      saveClassConfig({ rooms: Math.max(0, Math.floor(Number(el.value) || 0)), list: cfg.list });
+    } else if (el.hasAttribute('data-rgender') || el.hasAttribute('data-rcap')) {
+      var name = el.getAttribute('data-rgender') || el.getAttribute('data-rcap'), cap = Number(el.value);
+      saveClassConfig({ rooms: cfg.rooms, list: cfg.list.map(function (c) {
+        if (c.name !== name) return c;
+        return el.hasAttribute('data-rgender') ? { name: c.name, gender: el.value, capacity: c.capacity }
+          : { name: c.name, gender: c.gender, capacity: cap > 0 ? Math.floor(cap) : null };
+      }) });
+    }
+  });
 
   /* ---------- النسخ الاحتياطي والاستعادة (مدير النظام) ----------
      النسخة ملف JSON واحد فيه جداول البرنامج كلها. الاستعادة تعيد كل سجل في الملف إلى ما كان عليه
@@ -3763,6 +3907,7 @@
     if (/^#\/classes/.test(h) && isAdmin()) return renderClasses();
     if (/^#\/transport/.test(h) && isAdmin()) return renderTransport();
     if (h === '#/admin' && isAdmin()) return renderAdmin();
+    if (h === '#/rooms' && isAdmin()) return renderRooms();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     if (h === '#/teachers') return renderList();
     renderHome();
@@ -3919,6 +4064,8 @@
       saveTeacherForm();
     } else if (e.target.id === 'student-form') {
       saveStudentForm(e.submitter ? e.submitter.getAttribute('data-mode') : 'save');
+    } else if (e.target.id === 'room-form' && isAdmin()) {
+      addRoomClass();
     } else if (e.target.id === 'group-form') {
       saveGroupForm();
     } else if (e.target.id === 'user-form' && isAdmin()) {
