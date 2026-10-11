@@ -1679,7 +1679,8 @@
           schoolClasses().map(function (c) { return opt(c, esc(c) + ' (' + (counts[c] || 0) + ')', ui.stClass); }).join('') + '</select>' +
         '<select id="st-flag" aria-label="معيار إضافي">' + opt('', 'كل الطلاب', ui.stFlag) +
           Object.keys(ST_FLAGS).map(function (k) { return opt(k, ST_FLAGS[k].label, ui.stFlag); }).join('') + '</select>' +
-        '<button type="button" class="btn" data-stprint>طباعة الكشف</button>' +
+        '<button type="button" class="btn" data-stxlsx>تصدير Excel</button>' +
+        '<button type="button" class="btn" data-stprint>تصدير PDF / طباعة</button>' +
       '</div><div id="st-table">' + studentsTableHtml() + '</div></div>';
     syncStudentDeps();
   }
@@ -1950,6 +1951,8 @@
       S.students = S.students.filter(function (x) { return x.id !== st.id; });
       S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
       render();
+    } else if (e.target.closest('[data-stxlsx]')) {
+      exportStudentsXlsx();
     } else if (e.target.closest('[data-stprint]')) {
       if (!filteredStudents().length) return toast('لا يوجد طلاب مطابقون للطباعة.', true);
       printNow();
@@ -4096,6 +4099,44 @@
       reportSigns([['المسؤول المالي', S.profile && S.profile.full_name], ['مدير/ة الأكاديمية', principalName()]]);
   }
 
+  // مكان السكن: المدينة ثم العنوان التفصيلي
+  function residenceOf(x) {
+    return [stVal(x, 'city'), stVal(x, 'address')].filter(Boolean).join(' — ');
+  }
+
+  // المواصلات: نقطة التجمع إن كان مشتركًا، وإلا ما سُجّل عن حاجته
+  function rideOf(x, groupOf) {
+    var g = findGroup(groupOf[x.id]);
+    return g ? g.assembly_point : x.wants_transport === true ? 'يحتاج — بلا نقطة تجمع' : x.wants_transport === false ? 'لا يحتاج' : '';
+  }
+
+  // ملف Excel بما تعرضه شاشة التسجيل بتصفيتها الحالية، وفيه السكن والمواصلات (ملف المواصلات)
+  async function exportStudentsXlsx() {
+    var list = filteredStudents(), groupOf = transportGroupOf();
+    if (!list.length) return toast('لا يوجد طلاب للتصدير', true);
+    var parts = [ui.stStatus ? ST_STATUS[ui.stStatus] : 'كل الطلاب'];
+    if (ui.stClass) parts.push(ui.stClass === '-' ? 'بدون صف' : ui.stClass);
+    if (ST_FLAGS[ui.stFlag]) parts.push(ST_FLAGS[ui.stFlag].label);
+    try {
+      await loadXlsx();
+      var aoa = [[schoolName()], ['كشف الطلاب — ' + parts.join(' — ') + ' — ' + dmy(todayISO())], [],
+        ['م', 'اسم الطالب', 'رقم الهوية', 'الشعبة', 'الجنس', 'حالة التسجيل', 'ولي الأمر', 'هاتف ولي الأمر', 'واتساب', 'المدينة', 'العنوان التفصيلي', 'يحتاج مواصلات', 'نقطة التجمع']];
+      list.forEach(function (x, i) {
+        var g = findGroup(groupOf[x.id]);
+        aoa.push([i + 1, x.full_name, String(x.national_id || ''), x.class_name || '', x.gender || '', ST_STATUS[stStatus(x)], x.guardian_name || '',
+          String(x.phone || ''), String(x.whatsapp || ''), stVal(x, 'city'), stVal(x, 'address'),
+          g || x.wants_transport === true ? 'نعم' : x.wants_transport === false ? 'لا' : '', g ? g.assembly_point : '']);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new();
+      ws['!cols'] = [5, 32, 14, 14, 8, 14, 28, 15, 15, 16, 44, 13, 24].map(function (w) { return { wch: w }; });
+      wb.Workbook = { Views: [{ RTL: true }] };
+      XLSX.utils.book_append_sheet(wb, ws, 'الطلاب');
+      XLSX.writeFile(wb, ('كشف-الطلاب-' + parts.join('-') + '-' + todayISO()).replace(/[\\\/:*?"<>|]/g, ' ').replace(/\s+/g, '-') + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
   /* ----- كشوف الطلاب -----
      className: كشف شعبة بعينها (من صفحة الشعب)؛ بدونه يُطبع ما تعرضه شاشة التسجيل بتصفيتها الحالية.
      الكشف قد يمتد لصفحات: الترويسة ورأس الجدول داخل thead فيتكرران في كل صفحة.
@@ -4121,7 +4162,16 @@
           .filter(function (p) { return p[1].length; })
       : [['كشف الطلاب', list]];
 
-    var cols = 6 + (oneClass ? 0 : 1) + (flag && flag.extra ? 1 : 0);
+    // الأعمدة: [العنوان، القيمة، في الوسط؟، نمط]. كشف الشعبة للمعلمين: ولي الأمر وخانة ملاحظات.
+    // كشف التسجيل (لملف المواصلات): مكان السكن والمواصلات بدلًا منهما
+    var columns = [['اسم الطالب', function (x) { return x.full_name; }], ['رقم الهوية', function (x) { return x.national_id; }, true]];
+    if (!oneClass) columns.push(['الصف', function (x) { return x.class_name || '—'; }, true]);
+    columns.push(['الهاتف', function (x) { return x.phone || x.whatsapp || ''; }, true]);
+    if (className) columns.push(['ولي الأمر', function (x) { return x.guardian_name; }]);
+    else columns.push(['مكان السكن', residenceOf, false, 'width:27%'], ['المواصلات', function (x) { return rideOf(x, groupOf); }, false, 'width:14%']);
+    if (flag && flag.extra && ui.stFlag !== 'transport') columns.push([flag.extra[0], function (x) { var v = flag.extra[1](x, groupOf); return v == null ? '' : v; }, true]);
+    if (className) columns.push(['ملاحظات', function () { return ''; }, false, 'width:16%']);
+    var cols = columns.length + 1;
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
@@ -4130,14 +4180,11 @@
       return '<table class="rz' + (pi ? ' newpage' : '') + '"><thead>' +
         '<tr><td class="pg-space" colspan="' + cols + '"></td></tr>' +
         '<tr><td class="ls-head" colspan="' + cols + '">' + head + '</td></tr>' +
-        '<tr><th>م</th><th>اسم الطالب</th><th>رقم الهوية</th>' + (oneClass ? '' : '<th>الصف</th>') +
-          '<th>الهاتف</th><th>ولي الأمر</th>' + (flag && flag.extra ? '<th>' + flag.extra[0] + '</th>' : '') + '<th>ملاحظات</th></tr></thead><tbody>' +
+        '<tr><th>م</th>' + columns.map(function (c) { return '<th>' + c[0] + '</th>'; }).join('') + '</tr></thead><tbody>' +
         part[1].map(function (x, i) {
-          var extra = flag && flag.extra ? flag.extra[1](x, groupOf) : null;
-          return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(x.full_name) + '</td><td class="c">' + esc(x.national_id) + '</td>' +
-            (oneClass ? '' : '<td class="c">' + esc(x.class_name || '—') + '</td>') +
-            '<td class="c">' + esc(x.phone || x.whatsapp || '') + '</td><td>' + esc(x.guardian_name) + '</td>' +
-            (flag && flag.extra ? '<td class="c">' + esc(extra == null ? '' : extra) + '</td>' : '') + '<td style="width:16%"></td></tr>';
+          return '<tr><td class="c">' + (i + 1) + '</td>' + columns.map(function (c) {
+            return '<td' + (c[2] ? ' class="c"' : '') + (c[3] ? ' style="' + c[3] + '"' : '') + '>' + esc(c[1](x)) + '</td>';
+          }).join('') + '</tr>';
         }).join('') + '</tbody><tfoot><tr><td class="pg-space" colspan="' + cols + '"></td></tr></tfoot></table>';
     }).join('') +
       reportSigns([['معلم المادة', ''], ['المرشد أو المنسق', ''], ['مدير/ة الأكاديمية', principalName()]]);
