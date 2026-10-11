@@ -3503,6 +3503,7 @@
     }).join('');
 
     app.innerHTML = tabs('admin') +
+      backupCardHtml() +
       '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
         '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
@@ -3532,6 +3533,116 @@
         '<p class="hint">الحسابات الجديدة تبقى «بانتظار التفعيل» إلى أن تحدد صلاحيتها.</p>' +
         '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>البريد الإلكتروني</th><th>الصلاحية</th></tr></thead><tbody>' + users + '</tbody></table></div></div>';
   }
+
+  /* ---------- النسخ الاحتياطي والاستعادة (مدير النظام) ----------
+     النسخة ملف JSON واحد فيه جداول البرنامج كلها. الاستعادة تعيد كل سجل في الملف إلى ما كان عليه
+     (تُرجع المحذوف وتُصحّح المعدَّل) ولا تحذف ما أُضيف بعد أخذ النسخة.
+     الحسابات وكلمات المرور ليست في النسخة: تديرها خدمة الدخول */
+
+  // بترتيب يحترم الارتباطات: المعلمون قبل زياراتهم، والطلاب والمجموعات قبل الاشتراكات والدفعات.
+  // key: ما يُعرَف به السجل عند الاستعادة. insertOnly: جدول لا يُسمح بتعديل صفوفه، فتُضاف الناقصة فقط
+  var BACKUP_TABLES = [
+    { name: 'teachers', label: 'المعلمون', key: 'id' },
+    { name: 'visits', label: 'الزيارات الإشرافية', key: 'id' },
+    { name: 'statements', label: 'عبارات التقارير المضافة', key: 'id', insertOnly: true },
+    { name: 'students', label: 'الطلاب', key: 'id' },
+    { name: 'transport_groups', label: 'مجموعات المواصلات', key: 'id' },
+    { name: 'transport_members', label: 'اشتراكات المواصلات', key: 'student_id' },
+    { name: 'transport_payments', label: 'دفعات المواصلات', key: 'student_id,month', drop: ['id'] }
+  ];
+  var BACKUP_MARK = 'third-pillar-backup';
+
+  function backupSummary(tables) {
+    return BACKUP_TABLES.map(function (t) { return t.label + ': ' + ((tables[t.name] || []).length); }).join(' · ');
+  }
+
+  async function downloadBackup(btn) {
+    btn.disabled = true;
+    var tables = {};
+    for (var i = 0; i < BACKUP_TABLES.length; i++) {
+      var t = BACKUP_TABLES[i], rows = await fetchAll(function () { return sb.from(t.name).select('*').order(t.key.split(',')[0]); });
+      // جدول لم يُنشأ بعد يُتخطى
+      if (rows) tables[t.name] = rows;
+    }
+    var cfg = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
+    btn.disabled = false;
+    if (!tables.students && !tables.teachers) return toast('تعذر قراءة البيانات؛ لم تُنشأ النسخة', true);
+    var d = new Date(), two = function (n) { return ('0' + n).slice(-2); };
+    var file = { app: BACKUP_MARK, version: 1, created_at: d.toISOString(), school: schoolName(), settings: cfg.data || null, tables: tables };
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(file)], { type: 'application/json' }));
+    a.download = 'نسخة-احتياطية-' + todayISO() + '-' + two(d.getHours()) + two(d.getMinutes()) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    try { localStorage.setItem('last-backup', d.toISOString()); } catch (err) { /* التخزين المحلي غير متاح */ }
+    toast('نُزّلت النسخة الاحتياطية — ' + backupSummary(tables));
+    render();
+  }
+
+  async function restoreBackup(fileObj) {
+    var data;
+    try { data = JSON.parse(await fileObj.text()); } catch (err) { data = null; }
+    if (!data || data.app !== BACKUP_MARK || !data.tables) return toast('هذا الملف ليس نسخة احتياطية من البرنامج', true);
+    var when = new Date(data.created_at).toLocaleString('ar-u-nu-latn', { dateStyle: 'long', timeStyle: 'short' });
+    if (!confirm('استعادة النسخة المأخوذة في ' + when + '؟\n\n' + backupSummary(data.tables) +
+      '\n\nكل سجل في النسخة يعود إلى ما كان عليه وقتها، فيضيع أي تعديل أُجري عليه بعدها. ما أُضيف بعد النسخة يبقى كما هو.')) return;
+    if (!confirm('تأكيد أخير: يُنصح بتنزيل نسخة احتياطية من الوضع الحالي أولًا. هل تريد المتابعة بالاستعادة الآن؟')) return;
+
+    app.innerHTML = tabs('admin') + '<div class="card empty" id="restore-progress">جارٍ الاستعادة…</div>';
+    var box = document.getElementById('restore-progress'), errors = [], done = 0;
+    for (var i = 0; i < BACKUP_TABLES.length; i++) {
+      var t = BACKUP_TABLES[i], rows = data.tables[t.name] || [];
+      if (t.drop) rows = rows.map(function (r) { var c = Object.assign({}, r); t.drop.forEach(function (k) { delete c[k]; }); return c; });
+      for (var from = 0; from < rows.length; from += 200) {
+        box.textContent = 'جارٍ الاستعادة… ' + t.label + ' (' + Math.min(from + 200, rows.length) + ' من ' + rows.length + ')';
+        var opts = { onConflict: t.key };
+        if (t.insertOnly) opts.ignoreDuplicates = true;
+        var r = await sb.from(t.name).upsert(rows.slice(from, from + 200), opts);
+        if (r.error) { errors.push(t.label + ': ' + r.error.message); break; }
+        done += Math.min(200, rows.length - from);
+      }
+    }
+    if (data.settings) {
+      var cfg = Object.assign({}, data.settings);
+      delete cfg.id;
+      var up = await sb.from('settings').update(cfg).eq('id', 1);
+      if (up.error) errors.push('الإعدادات: ' + up.error.message);
+    }
+    await loadAll();
+    if (errors.length) alert('اكتملت الاستعادة مع أخطاء:\n\n' + errors.join('\n'));
+    toast(errors.length ? 'اكتملت الاستعادة مع أخطاء' : 'تمت الاستعادة — سجلات: ' + done, !!errors.length);
+  }
+
+  function backupCardHtml() {
+    var last = '';
+    try { last = localStorage.getItem('last-backup') || ''; } catch (err) { /* التخزين المحلي غير متاح */ }
+    var days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 864e5) : null;
+    return '<div class="card"><h2>النسخ الاحتياطي</h2>' +
+      '<p class="hint">تنزّل النسخة ملفًا واحدًا فيه كل بيانات البرنامج (الطلاب، المواصلات والدفعات، المعلمون، الزيارات، الإعدادات). احفظه في مكان آمن خارج هذا الجهاز؛ فيه بيانات شخصية.</p>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<button type="button" class="btn primary" data-backup>تنزيل نسخة احتياطية الآن</button>' +
+        '<button type="button" class="btn" data-restore>استعادة من ملف…</button>' +
+        '<input type="file" id="restore-file" accept=".json,application/json" hidden>' +
+        '<span class="st-count" style="margin:0">' + (last
+          ? 'آخر نسخة من هذا المتصفح: ' + dmy(last) + (days ? ' (منذ ' + days + ' يومًا)' : ' (اليوم)')
+          : 'لم تؤخذ نسخة من هذا المتصفح بعد.') + '</span>' +
+      '</div>' +
+      '<p class="hint" style="margin:10px 0 0">الاستعادة تعيد كل سجل في الملف إلى ما كان عليه وقت النسخ (تُرجع المحذوف وتُصحّح المعدَّل)، ولا تحذف ما أُضيف بعدها. حسابات الدخول وكلمات المرور ليست ضمن النسخة.</p></div>';
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!isAdmin() || location.hash !== '#/admin') return;
+    var el;
+    if ((el = e.target.closest('[data-backup]'))) downloadBackup(el);
+    else if (e.target.closest('[data-restore]')) document.getElementById('restore-file').click();
+  });
+
+  document.addEventListener('change', function (e) {
+    if (!isAdmin() || location.hash !== '#/admin' || e.target.id !== 'restore-file' || !e.target.files[0]) return;
+    restoreBackup(e.target.files[0]);
+  });
 
   /* ---------- التوجيه ---------- */
 
