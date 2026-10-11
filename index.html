@@ -3591,6 +3591,12 @@
         return { name: String(x.name || ''), gender: CLASS_GENDERS[x.gender] ? x.gender : '', capacity: cap > 0 ? cap : null };
       }).filter(function (x) { return x.name; })
     };
+    // الترتيب بالصف ثم الشعبة أيًّا كان ترتيب الإدخال: الأول (أ)، الأول (ب)، الثاني (أ)… والروضة أولًا، وما لا يُعرف صفه آخرًا
+    var rank = function (name) {
+      if (/kg|روض|تمهيد/i.test(name)) return 0;
+      return gradeOf(name) || 999;
+    };
+    cfg.list.sort(function (a, b) { return rank(a.name) - rank(b.name) || a.name.localeCompare(b.name, 'ar', { numeric: true }); });
     cfg.names = cfg.list.map(function (x) { return x.name; });
     classCache = { src: c, cfg: cfg };
     return cfg;
@@ -4347,7 +4353,8 @@
   function gradeOf(className) {
     var n = norm(latinDigits(className)), m = n.match(/\d+/);
     if (m) return Number(m[0]);
-    var words = ['الاول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+    // بلا «ال» ليُعرف «سابع (أ)» كما يُعرف «السابع (أ)»
+    var words = ['اول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن', 'تاسع', 'عاشر'];
     for (var i = words.length - 1; i >= 0; i--) if (n.indexOf(words[i]) > -1) return i + 1;
     return 0;
   }
