@@ -1399,6 +1399,7 @@
   var GRADES_DONE = ['لم يتم أي مرحلة', 'KG1', 'KG2', 'أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن', 'تاسع', 'عاشر', '11 علمي', '11 أدبي'];
   var GRADES_NEW = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن', 'تاسع', 'عاشر', '11 علمي', '11 أدبي', 'توجيهي علمي', 'توجيهي أدبي'];
   var LEVELS = ['ممتاز', 'متوسط', 'ضعيف'];
+  var UNIFORM_SIZES = ['6', '8', '10', '12', '14', '16', 'S', 'M', 'L', 'XL', 'XXL'];
 
   var ST_FIELDS = [
     { sec: 'بيانات الطالب', k: 'full_name', label: 'اسم الطالب رباعي', req: true, wide: true },
@@ -1443,6 +1444,10 @@
 
     { sec: 'السكن', k: 'city', x: true, label: 'المدينة', req: true },
     { k: 'address', label: 'العنوان التفصيلي (الحي - الشارع - رقم العمارة)', p: 'العنوان التفصيلي', req: true, wide: true },
+
+    { sec: 'الزي والكتب المدرسية', k: 'shirt_size', x: true, label: 'مقاس الزي: التيشيرت', p: 'مقاس التيشيرت', type: 'select', options: UNIFORM_SIZES },
+    { k: 'pants_size', x: true, label: 'مقاس الزي: البنطلون', p: 'مقاس البنطلون', type: 'select', options: UNIFORM_SIZES },
+    { k: 'has_books', x: true, label: 'هل لديك كتب مدرسية مسبقًا؟', p: 'لديه كتب مدرسية مسبقًا', type: 'select', options: ['نعم', 'لا'] },
 
     { sec: 'مُدخل البيانات', k: 'filled_by', x: true, label: 'اسم المعلم/ة الذي ملأ البيانات', p: 'مُدخل البيانات', req: true }
   ];
@@ -4176,6 +4181,11 @@
       table(one('war_injury') + one('illness') + one('disability')) +
       '<div class="rsec">السكن والمواصلات</div>' +
       table('<tr>' + cell('city') + '<th>المواصلات</th><td>' + esc(rideText) + '</td></tr>' + one('address')) +
+      '<div class="rsec">الزي والكتب المدرسية</div>' +
+      // ثلاثة حقول قصيرة في صف واحد
+      '<table class="rk"><tr>' + ['shirt_size', 'pants_size', 'has_books'].map(function (k) {
+        return '<th style="width:' + (k === 'has_books' ? 24 : 17) + '%">' + label(k) + '</th><td>' + esc(value(k)) + '</td>';
+      }).join('') + '</tr></table>' +
       '<div class="rsec">المستندات المستلمة</div>' +
       '<div class="rbox">' + ST_DOCS.map(function (d) { return '<span class="pf-doc">' + (docs[d[0]] ? '☑' : '☐') + ' ' + d[1] + '</span>'; }).join('') +
         (x.documents_note ? '<div>ملاحظات: ' + esc(x.documents_note) + '</div>' : '') + '</div>' +
