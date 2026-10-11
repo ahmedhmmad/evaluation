@@ -1436,7 +1436,7 @@
     { sec: 'الخلفية الدراسية', k: 'last_grade', x: true, label: 'آخر مرحلة دراسية اختبر فيها واجتازها الطالب', p: 'آخر مرحلة اجتازها', type: 'select', options: GRADES_DONE, req: true },
     { k: 'enroll_grade', x: true, label: 'المرحلة التي سيسجل فيها الطالب في العام الجديد', p: 'مرحلة التسجيل', type: 'select', options: GRADES_NEW, req: true, from: 'class_name' },
     { k: 'last_school', x: true, sug: ['لا'], label: 'هل التحق الطالب بمدرسة العام الماضي، وما اسم المدرسة؟', p: 'مدرسة العام الماضي', wide: true },
-    { k: 'teams', x: true, label: 'هل الطالب متابع على التيمز أم عنده مشاكل في ذلك؟', p: 'المتابعة على التيمز', type: 'select', options: ['متابع', 'غير مسجل في التيمز', 'kg'], req: true },
+    { k: 'teams', x: true, label: 'هل الطالب متابع على التيمز أم عنده مشاكل في ذلك؟', p: 'المتابعة على التيمز', type: 'select', options: ['متابع', 'غير متابع', 'الوكالة', 'غير ذلك'], req: true },
     { k: 'placement', x: true, label: 'نتيجة اختبار مستوى سريع', p: 'اختبار المستوى', type: 'select', options: LEVELS, req: true },
     { k: 'talent', x: true, none: true, sug: ['رسم', 'خط', 'إنشاد', 'كرة قدم', 'إلقاء', 'حفظ القرآن'], label: 'هل عند الطالب موهبة معينة وما هي؟', p: 'الموهبة', req: true, wide: true },
     { k: 'quran_parts', label: 'كم جزءًا يحفظ الطالب من القرآن؟', p: 'أجزاء القرآن المحفوظة', type: 'number', max: 30, step: 0.5, req: true },
