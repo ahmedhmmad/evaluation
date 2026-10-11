@@ -3691,6 +3691,7 @@
     var free = cfg.rooms - cfg.list.length;
 
     app.innerHTML = tabs('rooms') +
+      '<div class="toolbar"><button type="button" class="btn" data-act="print"' + (cfg.list.length ? '' : ' disabled') + '>طباعة / تصدير PDF</button></div>' +
       '<div class="card"><h2>الغرف المدرسية</h2>' +
         '<div class="toolbar" style="align-items:center;margin-top:8px"><label class="field" for="rooms-count" style="margin:0">عدد الغرف المتاحة للتدريس</label>' +
         '<input type="number" id="rooms-count" min="0" step="1" style="width:110px" value="' + (cfg.rooms || '') + '">' +
@@ -4697,6 +4698,26 @@
     fitSheet(); // صفحة واحدة
   }
 
+  /* ----- كشف الفصول الدراسية: الشعب وسعتها والمسجلون والمتاح (بلا جنس الشعبة) ----- */
+  function buildRoomsSheet() {
+    var cfg = classConfig(), counts = classCounts(), sum = { cap: 0, n: 0 };
+    var c = function (v, cls) { return '<td class="c' + (cls ? ' ' + cls : '') + '">' + v + '</td>'; };
+    var rows = cfg.list.map(function (k, i) {
+      var n = counts[k.name] || 0, left = k.capacity == null ? null : k.capacity - n;
+      sum.cap += k.capacity || 0; sum.n += n;
+      return '<tr>' + c(i + 1) + '<td>' + esc(k.name) + '</td>' + c(k.capacity == null ? '—' : k.capacity) + c(n) +
+        (left == null ? c('—') : left < 0 ? c('تجاوز بـ ' + (-left), 'bad') : left === 0 ? c('ممتلئة', 'warn') : c(left)) + '</tr>';
+    }).join('');
+    sheet.className = 'rm';
+    sheet.innerHTML =
+      reportHead('كشف الفصول الدراسية', [['عدد الغرف', cfg.rooms || ''], ['عدد الشعب', cfg.list.length], ['المسجلون نهائيًا', sum.n]]) +
+      '<table class="rz"><colgroup><col style="width:8%"><col style="width:38%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup>' +
+      '<thead><tr><th>م</th><th>الشعبة</th><th>السعة القصوى</th><th>المسجلون نهائيًا</th><th>المتاح</th></tr></thead><tbody>' + rows +
+      '<tr class="total"><td colspan="2">المجموع</td>' + c(sum.cap || '—') + c(sum.n) + c(sum.cap ? Math.max(0, sum.cap - sum.n) : '—') + '</tr></tbody></table>' +
+      reportSigns([['مدير/ة الأكاديمية', principalName()]]);
+    fitSheet();
+  }
+
   /* ----- ملف الطالب ----- */
   function buildProfileSheet(x) {
     var final = stStatus(x) === 'final', docs = x.documents || {};
@@ -4755,6 +4776,7 @@
     else if (location.hash === '#/students' && canStudents() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (currentClass() && canStudents()) buildStudentsSheet(currentClass());
     else if (isAdmin() && S.tPay[ui.tMonth] && (currentGroup() || /^#\/transport\/(payments|classes)$/.test(location.hash))) buildPaymentsSheet(payScope());
+    else if (location.hash === '#/rooms' && isAdmin() && classConfig().list.length) buildRoomsSheet();
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
     else return false;
