@@ -3751,7 +3751,7 @@
 
   /* ---------- تصدير «كشوف تسجيل الطلاب» في ملف الأكاديمية الجاهز ----------
      القالب registration-template.xlsx (تعليمات، ملخص، وورقة لكل صف: الأول–السادس مختلطة، والسابع–التاسع بنات/ذكور)
-     يُملأ ببيانات المسجلين نهائيًا مع بقاء تصميمه ومعادلاته وشعاره كما هي: تُعدَّل ملفات XML داخل الملف مباشرة.
+     يُملأ ببيانات المسجلين نهائيًا مع بقاء تصميمه ومعادلاته كما هي: تُعدَّل ملفات XML داخل الملف مباشرة.
      في كل ورقة: الطلاب في الصفوف من 10، وعددها في القالب = القدرة الاستيعابية؛ إن زاد المسجلون تُضاف صفوف ويُزاح ما بعدها */
 
   function loadFflate() {
@@ -3787,6 +3787,11 @@
     return { open: text.slice(0, text.indexOf('>') + 1), styles: styles };
   }
 
+  // رقم الهاتف بلا علامة «+» في أوله
+  function plainPhone(v) {
+    return String(v == null ? '' : v).replace(/^[\s\u200e\u200f]*\+\s*/, '');
+  }
+
   // تاريخ ISO إلى الرقم التسلسلي الذي يخزنه Excel
   function excelDate(iso) {
     var p = String(iso || '').slice(0, 10).split('-');
@@ -3812,8 +3817,8 @@
         (x
           ? text('B', x.full_name) + text('C', x.gender === 'ذكر' || x.gender === 'أنثى' ? x.gender : '') +
             (birth == null ? text('D', '') : '<c r="D' + r + '" s="' + p.styles.D + '" t="n"><v>' + birth + '</v></c>') +
-            text('E', x.national_id) + text('F', x.guardian_name) + text('G', x.guardian_relation) + text('H', x.phone) + text('I', x.whatsapp) +
-            text('J', residenceOf(x)) + text('K', note(x))
+            text('E', x.national_id) + text('F', x.guardian_name) + text('G', x.guardian_relation) + text('H', plainPhone(x.phone)) + text('I', plainPhone(x.whatsapp)) +
+            text('J', stVal(x, 'city') || stVal(x, 'address')) + text('K', note(x))
           : 'BCDEFGHIJK'.split('').map(function (col) { return text(col, ''); }).join('')) + '</row>';
     }
     var head = xml.slice(0, a), tail = xml.slice(b);
