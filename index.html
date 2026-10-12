@@ -1826,6 +1826,10 @@
     try { return localStorage.getItem('scan-model') || ''; } catch (err) { return ''; }
   }
 
+  function setScanModel(value) {
+    try { localStorage.setItem('scan-model', value.trim()); } catch (err) { /* التخزين المحلي غير متاح */ }
+  }
+
   // ما قُرئ من استمارة، خانة خانة (للمقارنة بين النماذج وللتحقق قبل فتح السجل)
   function scanReadingHtml(form) {
     var unsure = Array.isArray(form.unsure) ? form.unsure : [], rows = scanFields().filter(function (f) { return String(form[f.k] == null ? '' : form[f.k]).trim(); });
@@ -2077,9 +2081,14 @@
           '<li>صورة الاستمارة ببياناتها تُرسل إلى خدمة قراءة خارجية (نموذج ذكاء اصطناعي على DeepInfra) عبر حساب الأكاديمية. لا تُحفظ الصورة في البرنامج.</li>' +
           '<li>من له تسجيل مبدئي برقم الهوية نفسه لا يُضاف ثانية: تُملأ خاناته الفارغة من الورقة، وما يختلف يُعرض عند المراجعة دون استبدال. المسجَّل نهائيًا لا يُغيَّر.</li></ul>' +
         (isAdmin() ? '<div class="grid2" style="margin-bottom:10px"><div><label class="field" for="scan-model">نموذج القراءة (DeepInfra)</label>' +
-          '<input type="text" id="scan-model" dir="ltr" list="dl-scan-models" autocomplete="off" placeholder="الافتراضي للخدمة" value="' + esc(scanModel()) + '">' +
-          '<datalist id="dl-scan-models">' + SCAN_MODELS.map(function (m) { return '<option value="' + m + '">'; }).join('') + '</datalist>' +
-          '<div class="day">اختر من القائمة أو اكتب اسم أي نموذج يقبل الصور كما يظهر في DeepInfra. اتركه فارغًا لاستخدام افتراضي الخدمة. يُحفظ اختيارك في هذا المتصفح.</div></div>' +
+          (function () {
+            var cur = scanModel(), other = scan.otherModel || (!!cur && SCAN_MODELS.indexOf(cur) < 0);
+            return '<select id="scan-model" dir="ltr"><option value="">افتراضي الخدمة</option>' + SCAN_MODELS.map(function (m) {
+              return '<option value="' + m + '"' + (!other && m === cur ? ' selected' : '') + '>' + m + '</option>';
+            }).join('') + '<option value="__other"' + (other ? ' selected' : '') + '>نموذج آخر…</option></select>' +
+              (other ? '<input type="text" id="scan-model-other" dir="ltr" autocomplete="off" style="margin-top:6px" placeholder="اسم النموذج كما في DeepInfra" value="' + esc(SCAN_MODELS.indexOf(cur) < 0 ? cur : '') + '">' : '');
+          })() +
+          '<div class="day">يُحفظ اختيارك في هذا المتصفح.</div></div>' +
           '<div style="align-self:center"><label class="check"><input type="checkbox" id="scan-dry"' + (scan.dry ? ' checked' : '') + '>قراءة تجريبية للمقارنة: اعرض الناتج ولا تحفظ شيئًا</label></div></div>' : '') +
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-scanpick' + (scan.running ? ' disabled' : '') + '>' + (scan.running ? 'جارٍ القراءة…' : 'اختيار الصور أو ملفات PDF') + '</button>' +
           '<input type="file" id="scan-files" accept="image/*,.pdf,application/pdf" multiple hidden>' +
@@ -2137,6 +2146,31 @@
         '<button type="button" class="btn" data-stprint>تصدير PDF / طباعة</button>' +
       '</div><div id="st-table">' + studentsTableHtml() + '</div></div>';
     syncStudentDeps();
+  }
+
+  // إخوة الطالب بين كل المسجلين: هوية ولي الأمر نفسها، أو هاتفه، أو اسم الأب والجد والعائلة
+  function siblingsOf(st) {
+    var digits = function (v) { return String(v || '').replace(/\D/g, '').slice(-10); };
+    var gid = String((st.details || {}).guardian_id || '').trim(), phone = digits(st.phone), fam = familyName(st);
+    return S.students.filter(function (x) {
+      if (x.id === st.id) return false;
+      return (gid.length >= 5 && String((x.details || {}).guardian_id || '').trim() === gid) ||
+        (phone.length >= 8 && digits(x.phone) === phone) || (fam.split(' ').length >= 3 && familyName(x) === fam);
+    });
+  }
+
+  // «عدد الأبناء في المركز» يخص الأسرة لا الطالب: ما يُكتب في سجل أحد الإخوة يُعمَّم على سجلات إخوته،
+  // فلا يبقى سجل الأخ الأول على «1» بعد تسجيل أخيه. يعيد عدد السجلات التي حُدِّثت
+  async function syncSiblingCount(st) {
+    var count = (st.details || {}).siblings_here;
+    if (count == null || count === '') return 0;
+    var changed = 0, list = siblingsOf(st).filter(function (x) { return Number((x.details || {}).siblings_here) !== Number(count); });
+    for (var i = 0; i < list.length; i++) {
+      var details = Object.assign({}, list[i].details, { siblings_here: count });
+      var r = await sb.from('students').update({ details: details }).eq('id', list[i].id);
+      if (!r.error) { list[i].details = details; changed++; }
+    }
+    return changed;
   }
 
   // mode: 'final' يعتمد التسجيل النهائي (بعد اكتمال البيانات والصف)، 'save' يحفظ فقط
@@ -2201,9 +2235,10 @@
         if (want) S.tMembers.push({ student_id: st.id, group_id: want, share: null });
       }
     }
+    var synced = await syncSiblingCount(st);
     ui.editStudent = null;
     render();
-    toast(data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : 'تم الحفظ');
+    toast((data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : 'تم الحفظ') + (synced ? ' — حُدِّث «عدد الأبناء في المركز» في سجلات إخوته (' + synced + ')' : ''));
   }
 
   /* ----- الاستيراد من Excel ----- */
@@ -2460,8 +2495,14 @@
   app.addEventListener('change', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el = e.target;
-    if (el.id === 'scan-model') {
-      try { localStorage.setItem('scan-model', el.value.trim()); } catch (err) { /* التخزين المحلي غير متاح */ }
+    if (el.id === 'scan-model' && ui.scan) {
+      ui.scan.otherModel = el.value === '__other';
+      setScanModel(ui.scan.otherModel ? '' : el.value);
+      render();
+      var otherBox = document.getElementById('scan-model-other');
+      if (otherBox) otherBox.focus();
+    } else if (el.id === 'scan-model-other') {
+      setScanModel(el.value);
     } else if (el.id === 'scan-dry' && ui.scan) {
       ui.scan.dry = el.checked;
     } else if (el.id === 'scan-files') {
