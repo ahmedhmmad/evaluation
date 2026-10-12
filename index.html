@@ -85,6 +85,13 @@
   .stat .num { font-size: 2rem; font-weight: 800; color: var(--primary); line-height: 1.2; }
   .stat .sub { color: var(--muted); font-size: .85rem; }
   .stat .num small { font-size: .5em; font-weight: 700; }
+  .method-strip { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: -6px 0 16px; font-size: .92rem; }
+  .method-strip > b { color: var(--muted); font-weight: 700; }
+  .method-strip span { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+  .method-strip span b { color: var(--primary); }
+  .method-strip span.zero { color: var(--muted); }
+  .method-strip span.zero b { color: inherit; font-weight: 600; }
+  #t-members .method-strip { margin: 12px 0 0; }
   div.stat:hover { border-color: var(--line); box-shadow: none; }
   .quick { display: flex; flex-wrap: wrap; gap: 10px; }
   a.btn { text-decoration: none; display: inline-block; }
@@ -2485,8 +2492,13 @@
     return rows
       ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
         '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + money(due) + '</td><td>' + money(paid) + '</td>' +
-        '<td colspan="3">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>'
+        '<td colspan="3">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>' + groupMethodsHtml(g)
       : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
+  }
+
+  // تفصيل وسائل الدفع لنقطة تجمع
+  function groupMethodsHtml(g) {
+    return methodStripHtml(payTotals(payRows().filter(function (r) { return r.g === g; })));
   }
 
 
@@ -2529,9 +2541,27 @@
   }
 
   function payTotals(rows) {
-    var t = { n: rows.length, due: 0, paid: 0, left: 0, owing: 0 };
-    rows.forEach(function (r) { t.due += r.share; t.paid += r.paid; t.left += r.left; if (r.left > 0) t.owing++; });
+    // by / byCount: المحصَّل وعدد الدفعات لكل وسيلة دفع
+    var t = { n: rows.length, due: 0, paid: 0, left: 0, owing: 0, by: {}, byCount: {} };
+    Object.keys(PAY_METHODS).forEach(function (k) { t.by[k] = 0; t.byCount[k] = 0; });
+    rows.forEach(function (r) {
+      t.due += r.share; t.paid += r.paid; t.left += r.left;
+      if (r.left > 0) t.owing++;
+      if (r.paid > 0) { var k = PAY_METHODS[r.rec.method] ? r.rec.method : 'cash'; t.by[k] += r.paid; t.byCount[k]++; }
+    });
     return t;
+  }
+
+  // شريط تفصيل المحصَّل حسب وسيلة الدفع (للشاشات)
+  function methodStripHtml(t) {
+    return '<div class="method-strip"><b>تفصيل المحصَّل:</b>' + Object.keys(PAY_METHODS).map(function (k) {
+      return '<span' + (t.by[k] ? '' : ' class="zero"') + '>' + PAY_METHODS[k] + ' <b>' + plainNum(t.by[k]) + '</b> ج.م' + (t.byCount[k] ? ' (' + t.byCount[k] + ')' : '') + '</span>';
+    }).join('') + '</div>';
+  }
+
+  // النص نفسه للتقارير المطبوعة
+  function methodLine(t) {
+    return Object.keys(PAY_METHODS).map(function (k) { return PAY_METHODS[k] + ': ' + plainNum(t.by[k]) + (t.byCount[k] ? ' (' + t.byCount[k] + ')' : ''); }).join(' · ');
   }
 
   // مجموع كل شعبة، بترتيب الشعب
@@ -2580,7 +2610,8 @@
       card('الطلاب المشتركون', t.n, firstSub || monthLabel(ui.tMonth)) +
       card('المطلوب', cash(t.due), 'مجموع اشتراكات الشهر') +
       card('المحصَّل', cash(t.paid), (t.due ? Math.round(t.paid / t.due * 100) : 0) + '% من المطلوب', 'var(--green)') +
-      card('المتبقي', cash(t.left), t.owing ? 'لم يسددوا كامل الاشتراك: ' + t.owing : 'لا متأخرات', t.left ? 'var(--red)' : '') + '</div>';
+      card('المتبقي', cash(t.left), t.owing ? 'لم يسددوا كامل الاشتراك: ' + t.owing : 'لا متأخرات', t.left ? 'var(--red)' : '') + '</div>' +
+      (t.by ? methodStripHtml(t) : '');
   }
 
   var EXPORT_BTNS = '<button type="button" class="btn" data-tpx="xlsx">تصدير Excel</button>' +
@@ -2909,12 +2940,16 @@
         (list.length
           ? '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">دفعات ' + monthLabel(ui.tMonth) + ' حسب الشعبة</h2>' + EXPORT_BTNS + '</div>' +
             '<p class="st-count">التصدير من هنا يشمل المدرسة كلها. لتصدير شعبة واحدة اضغط اسمها.</p>' +
-            '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الشعبة</th><th>المشتركون</th><th>المطلوب (ج.م)</th><th>المحصَّل (ج.م)</th><th>المتبقي (ج.م)</th><th>نسبة التحصيل</th><th>لم يسددوا</th></tr></thead><tbody>' +
+            '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الشعبة</th><th>المشتركون</th><th>المطلوب (ج.م)</th><th>المحصَّل (ج.م)</th>' +
+            Object.keys(PAY_METHODS).map(function (k) { return '<th>' + PAY_METHODS[k] + '</th>'; }).join('') +
+            '<th>المتبقي (ج.م)</th><th>نسبة التحصيل</th><th>لم يسددوا</th></tr></thead><tbody>' +
             list.map(function (c, i) {
               return '<tr><td>' + (i + 1) + '</td><td><button type="button" class="btn link" data-tpclass="' + esc(c.name || '-') + '">' + esc(c.name || 'بدون شعبة') + '</button></td>' +
-                '<td>' + c.t.n + '</td><td>' + plainNum(c.t.due) + '</td><td>' + plainNum(c.t.paid) + '</td><td>' + plainNum(c.t.left) + '</td>' +
+                '<td>' + c.t.n + '</td><td>' + plainNum(c.t.due) + '</td><td><b>' + plainNum(c.t.paid) + '</b></td>' +
+                Object.keys(PAY_METHODS).map(function (k) { return '<td>' + (c.t.by[k] ? plainNum(c.t.by[k]) : '—') + '</td>'; }).join('') + '<td>' + plainNum(c.t.left) + '</td>' +
                 '<td>' + (c.t.due ? Math.round(c.t.paid / c.t.due * 100) : 0) + '%</td><td>' + c.t.owing + '</td></tr>';
             }).join('') + '</tbody><tfoot><tr><td colspan="2">المجموع</td><td>' + sum.n + '</td><td>' + plainNum(sum.due) + '</td><td>' + plainNum(sum.paid) + '</td>' +
+            Object.keys(PAY_METHODS).map(function (k) { return '<td>' + plainNum(sum.by[k]) + '</td>'; }).join('') +
             '<td>' + plainNum(sum.left) + '</td><td>' + (sum.due ? Math.round(sum.paid / sum.due * 100) : 0) + '%</td><td>' + sum.owing + '</td></tr></tfoot></table></div></div>'
           : '<div class="card empty">لا يوجد طلاب مشتركون في المواصلات بعد.</div>');
       return;
@@ -2965,6 +3000,8 @@
         ws['!cols'] = widths.map(function (w) { return { wch: w }; });
         XLSX.utils.book_append_sheet(wb, ws, sheetName(title));
       };
+      var methodNames = Object.keys(PAY_METHODS).map(function (k) { return PAY_METHODS[k] + ' (ج.م)'; });
+      var methodAmounts = function (t) { return Object.keys(PAY_METHODS).map(function (k) { return t.by[k]; }); };
       var top = function (title) { return [[schoolName()], ['دفعات المواصلات — ' + monthLabel(ui.tMonth) + ' — ' + title], []]; };
       var detail = function (title, rows) {
         var t = payTotals(rows);
@@ -2974,15 +3011,17 @@
             return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, String(r.x.whatsapp || r.x.phone || ''), r.share, r.paid, r.left,
               PAY_STATUS[r.status] || '', r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : ''];
           }),
-          [['', 'المجموع', '', '', '', t.due, t.paid, t.left, '', '', '', '']]), [5, 32, 14, 24, 16, 12, 13, 13, 12, 14, 13, 11]);
+          [['', 'المجموع', '', '', '', t.due, t.paid, t.left, '', '', '', '']], [[]], [['', 'تفصيل المحصَّل حسب وسيلة الدفع']],
+          Object.keys(PAY_METHODS).map(function (k) { return ['', PAY_METHODS[k], '', '', '', '', t.by[k], '', t.byCount[k] ? 'عدد الدفعات: ' + t.byCount[k] : '']; })),
+          [5, 32, 14, 24, 16, 12, 13, 13, 16, 14, 13, 11]);
       };
       if (sc.whole) {
         var list = payByClass(sc.rows), sum = payTotals(sc.rows);
         var pct = function (t) { return t.due ? Math.round(t.paid / t.due * 100) + '%' : ''; };
         add('ملخص الشعب', top('ملخص الشعب').concat(
-          [['م', 'الشعبة', 'المشتركون', 'المطلوب (ج.م)', 'المحصَّل (ج.م)', 'المتبقي (ج.م)', 'نسبة التحصيل', 'لم يسددوا']],
-          list.map(function (c, i) { return [i + 1, c.name || 'بدون شعبة', c.t.n, c.t.due, c.t.paid, c.t.left, pct(c.t), c.t.owing]; }),
-          [['', 'المجموع', sum.n, sum.due, sum.paid, sum.left, pct(sum), sum.owing]]), [5, 22, 12, 14, 14, 14, 13, 12]);
+          [['م', 'الشعبة', 'المشتركون', 'المطلوب (ج.م)', 'المحصَّل (ج.م)'].concat(methodNames, ['المتبقي (ج.م)', 'نسبة التحصيل', 'لم يسددوا'])],
+          list.map(function (c, i) { return [i + 1, c.name || 'بدون شعبة', c.t.n, c.t.due, c.t.paid].concat(methodAmounts(c.t), [c.t.left, pct(c.t), c.t.owing]); }),
+          [['', 'المجموع', sum.n, sum.due, sum.paid].concat(methodAmounts(sum), [sum.left, pct(sum), sum.owing])]), [5, 22, 12, 14, 14, 12, 12, 14, 12, 14, 13, 12]);
         detail('كل المدرسة', sc.rows);
         list.forEach(function (c) { detail(c.name || 'بدون شعبة', c.rows); });
       } else {
@@ -5255,12 +5294,14 @@
     var html = '';
 
     if (list.length > 1) {
-      html += table('ملخص دفعات المواصلات', sc.info.concat([['عدد المشتركين', t.n]]), 8,
-        '<th>م</th><th>الشعبة</th><th>المشتركون</th><th>المطلوب (ج.م)</th><th>المحصَّل (ج.م)</th><th>المتبقي (ج.م)</th><th>نسبة التحصيل</th><th>لم يسددوا</th>',
+      var keys = Object.keys(PAY_METHODS), byCells = function (x) { return keys.map(function (k) { return c(x.by[k] ? plainNum(x.by[k]) : '—'); }).join(''); };
+      html += table('ملخص دفعات المواصلات', sc.info.concat([['عدد المشتركين', t.n]]), 8 + keys.length,
+        '<th>م</th><th>الشعبة</th><th>المشتركون</th><th>المطلوب</th><th>المحصَّل</th>' + keys.map(function (k) { return '<th>' + PAY_METHODS[k] + '</th>'; }).join('') +
+        '<th>المتبقي</th><th>نسبة التحصيل</th><th>لم يسددوا</th>',
         list.map(function (k, i) {
-          return '<tr>' + c(i + 1) + '<td>' + esc(k.name || 'بدون شعبة') + '</td>' + c(k.t.n) + c(plainNum(k.t.due)) + c(plainNum(k.t.paid)) + c(plainNum(k.t.left)) + c(pct(k.t)) + c(k.t.owing) + '</tr>';
+          return '<tr>' + c(i + 1) + '<td>' + esc(k.name || 'بدون شعبة') + '</td>' + c(k.t.n) + c(plainNum(k.t.due)) + c('<b>' + plainNum(k.t.paid) + '</b>') + byCells(k.t) + c(plainNum(k.t.left)) + c(pct(k.t)) + c(k.t.owing) + '</tr>';
         }).join('') +
-        '<tr class="total"><td colspan="2">المجموع</td>' + c(t.n) + c(plainNum(t.due)) + c(plainNum(t.paid)) + c(plainNum(t.left)) + c(pct(t)) + c(t.owing) + '</tr>');
+        '<tr class="total"><td colspan="2">المجموع (ج.م)</td>' + c(t.n) + c(plainNum(t.due)) + c(plainNum(t.paid)) + byCells(t) + c(plainNum(t.left)) + c(pct(t)) + c(t.owing) + '</tr>');
     }
 
     var cols = 8 + (showClass ? 1 : 0) + (showPoint ? 1 : 0);
@@ -5273,7 +5314,8 @@
           '<td class="c ' + (r.status === 'paid' ? 'ok' : r.status === 'unpaid' ? 'bad' : r.status === 'part' ? 'warn' : '') + '">' + (PAY_STATUS[r.status] || '—') + '</td>' +
           c(r.paid ? esc(payMethodLabel(r.rec)) : '') + c(r.paid ? dmy(r.rec.paid_on) : '') + '</tr>';
       }).join('') +
-      '<tr class="total"><td colspan="' + (cols - 6) + '">المجموع بالجنيه المصري</td>' + c(plainNum(t.due)) + c(plainNum(t.paid)) + c(plainNum(t.left)) + '<td colspan="3">نسبة التحصيل: ' + pct(t) + '</td></tr>',
+      '<tr class="total"><td colspan="' + (cols - 6) + '">المجموع بالجنيه المصري</td>' + c(plainNum(t.due)) + c(plainNum(t.paid)) + c(plainNum(t.left)) + '<td colspan="3">نسبة التحصيل: ' + pct(t) + '</td></tr>' +
+      '<tr class="total"><td colspan="' + cols + '">تفصيل المحصَّل حسب وسيلة الدفع — ' + methodLine(t) + '</td></tr>',
       list.length > 1);
 
     sheet.className = 'ls';
