@@ -1524,6 +1524,9 @@
     var raw = st && st.form_answers ? st.form_answers[f.from || f.k] : '';
     var hint = raw && norm(raw) !== norm(v) ? '<div class="formhint">في الاستمارة: ' + esc(raw) + '</div>' : '';
     var scanned = st && st.details && st.details.scan;
+    if (scanned && scanned.read && scanned.read[f.k] != null && norm(String(scanned.read[f.k])) !== norm(String(v == null ? '' : v))) {
+      hint += '<div class="formhint">في الاستمارة المصوّرة: ' + esc(scanned.read[f.k]) + '</div>';
+    }
     if (scanned && (scanned.unsure || []).indexOf(f.k) > -1) hint += '<div class="formhint">قراءة غير مؤكدة من الاستمارة المصوّرة — تحقّق من الورقة</div>';
     return (f.sec ? '<h3 class="form-sec">' + f.sec + '</h3>' : '') +
       '<div' + (f.wide ? ' style="grid-column:1/-1"' : '') + (f.dep ? ' data-dep="' + f.dep.k + '" data-depv="' + esc(f.dep.v) + '"' : '') + '>' +
@@ -1898,10 +1901,11 @@
     });
     var name = data.full_name || '';
     if (!name) return { state: 'error', name: '(بلا اسم)', note: 'لم يُقرأ اسم الطالب' };
-    if (data.national_id && S.students.some(function (x) { return x.national_id === data.national_id; })) {
-      var same = S.students.filter(function (x) { return x.national_id === data.national_id; })[0];
-      return { state: 'dup', name: name, note: 'رقم الهوية ' + data.national_id + ' مسجَّل مسبقًا باسم «' + same.full_name + '» — لم يُضف', id: same.id };
+    var same = data.national_id ? S.students.filter(function (x) { return x.national_id === data.national_id; })[0] : null;
+    if (same && stStatus(same) === 'final') {
+      return { state: 'dup', name: same.full_name, note: 'رقم الهوية ' + data.national_id + ' مسجَّل نهائيًا — لم يُغيَّر سجله', id: same.id };
     }
+    if (same) return mergeScannedForm(same, data, form, fileName);
     data.requested_class = text('enroll_grade');
     data.memorizes_quran = data.quran_parts == null ? null : data.quran_parts > 0;
     if (!S.wantsMissing) { var w = text('wants_transport'); data.wants_transport = w === 'نعم' ? true : w === 'لا' ? false : null; }
@@ -1917,6 +1921,36 @@
     S.students.push(r.data);
     S.students.sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
     return { state: 'saved', name: name, id: r.data.id, note: data.details.scan.unsure.length ? 'حقول غير مؤكدة القراءة: ' + data.details.scan.unsure.length : '' };
+  }
+
+  // الاستمارة لطالب له تسجيل مبدئي (من الاستمارة الإلكترونية مثلًا): لا يُنشأ سجل ثانٍ، بل يُكمَّل سجله.
+  // الخانات الفارغة عنده تُملأ من الورقة. ما له قيمة مسجَّلة لا يُستبدل (قد تكون قراءة الخط خاطئة)،
+  // وتُحفظ قراءة الورقة المختلفة في scan.read لتظهر بجانب الحقل عند المراجعة
+  async function mergeScannedForm(same, data, form, fileName) {
+    var patch = {}, details = Object.assign({}, same.details), read = {}, filled = 0, differ = 0;
+    var empty = function (v) { return v == null || v === ''; };
+    ST_FIELDS.forEach(function (f) {
+      if (SCAN_SKIP[f.k]) return;
+      var v = f.x ? data.details[f.k] : data[f.k], cur = f.x ? (same.details || {})[f.k] : same[f.k];
+      if (empty(v)) return;
+      if (empty(cur)) { if (f.x) details[f.k] = v; else patch[f.k] = v; filled++; }
+      else if (norm(String(cur)) !== norm(String(v))) { read[f.k] = v; differ++; }
+    });
+    var wants = String(form.wants_transport || '').trim();
+    if (!S.wantsMissing && same.wants_transport == null && (wants === 'نعم' || wants === 'لا')) patch.wants_transport = wants === 'نعم';
+    if ('quran_parts' in patch) patch.memorizes_quran = patch.quran_parts > 0;
+    var known = {};
+    ST_FIELDS.forEach(function (f) { known[f.k] = true; });
+    details.scan = {
+      at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || displayName(S.email), file: fileName, read: read,
+      unsure: (Array.isArray(form.unsure) ? form.unsure : []).filter(function (k) { return known[k]; })
+    };
+    patch.details = details;
+    var r = await sb.from('students').update(patch).eq('id', same.id);
+    if (r.error) return { state: 'error', name: same.full_name, note: r.error.message, id: same.id };
+    Object.assign(same, patch);
+    return { state: 'merged', name: same.full_name, id: same.id,
+      note: 'له تسجيل مبدئي سابق: مُلئت ' + filled + ' خانة فارغة من الورقة' + (differ ? '، و' + differ + ' خانة قراءتها تختلف عن المسجَّل (تظهر عند المراجعة ولم تُستبدل)' : '') };
   }
 
   async function saveScannedForms(item, forms) {
@@ -1995,17 +2029,17 @@
 
   function scanScreenHtml() {
     var scan = ui.scan, saved = 0;
-    scan.items.forEach(function (it) { it.results.forEach(function (r) { if (r.state === 'saved') saved++; }); });
+    scan.items.forEach(function (it) { it.results.forEach(function (r) { if (r.state === 'saved' || r.state === 'merged') saved++; }); });
     var STATE = { wait: ['pending', 'بانتظار الدور'], busy: ['edit', 'تُقرأ الآن…'], done: ['published', 'تمت القراءة'], error: ['unpaid', 'تعذّرت'] };
     var items = scan.items.map(function (it) {
       return '<div class="scan-item"><div class="toolbar" style="align-items:center;margin:0"><b style="flex:1;overflow-wrap:anywhere">' + esc(it.name) + '</b>' +
         '<span class="badge ' + STATE[it.status][0] + '">' + STATE[it.status][1] + '</span></div>' +
         (it.msg ? '<div class="formhint">' + esc(it.msg) + '</div>' : '') +
         it.results.map(function (r) {
-          return '<div class="cand"><span><b>' + esc(r.name) + '</b> <span class="badge ' + (r.state === 'saved' ? 'paid' : r.state === 'dup' ? 'part' : 'unpaid') + '">' +
-            (r.state === 'saved' ? 'أُضيف تسجيلًا مبدئيًا' : r.state === 'dup' ? 'موجود مسبقًا' : 'لم يُضف') + '</span>' +
+          return '<div class="cand"><span><b>' + esc(r.name) + '</b> <span class="badge ' + (r.state === 'saved' || r.state === 'merged' ? 'paid' : r.state === 'dup' ? 'part' : 'unpaid') + '">' +
+            (r.state === 'saved' ? 'أُضيف تسجيلًا مبدئيًا' : r.state === 'merged' ? 'أُكمل تسجيله المبدئي' : r.state === 'dup' ? 'مسجَّل نهائيًا' : 'لم يُضف') + '</span>' +
             (r.note ? '<br><span class="meta">' + esc(r.note) + '</span>' : '') + '</span>' +
-            (r.id ? '<button type="button" class="btn' + (r.state === 'saved' ? ' primary' : '') + '" data-stedit="' + r.id + '">' + (r.state === 'saved' ? 'مراجعة' : 'فتح السجل') + '</button>' : '') + '</div>';
+            (r.id ? '<button type="button" class="btn' + (r.state === 'saved' || r.state === 'merged' ? ' primary' : '') + '" data-stedit="' + r.id + '">' + (r.state === 'dup' || r.state === 'error' ? 'فتح السجل' : 'مراجعة') + '</button>' : '') + '</div>';
         }).join('') + '</div>';
     }).join('');
     return '<button type="button" class="btn link" data-scanclose>→ العودة إلى تسجيل الطلاب</button>' +
@@ -2013,10 +2047,10 @@
         '<p class="hint">صوّر الاستمارة الورقية المعبأة (أو امسحها بالماسح) وارفعها. تُقرأ الخانات آليًا ويُنشأ لكل استمارة <b>تسجيل مبدئي</b> موسوم «مصوّرة» يحتاج مراجعة على الورقة، ولا يُعتمد شيء نهائيًا. الحقول التي لم يُقرأ خطها بثقة تُعلَّم عند المراجعة.</p>' +
         '<ul class="imp-list" style="margin-bottom:12px"><li>صورة واضحة مستقيمة للورقة كاملة، بإضاءة جيدة. صورة لكل استمارة، أو ملف PDF من الماسح كل صفحة فيه استمارة (حتى 60 صفحة).</li>' +
           '<li>صورة الاستمارة ببياناتها تُرسل إلى خدمة قراءة خارجية (نموذج ذكاء اصطناعي على DeepInfra) عبر حساب الأكاديمية. لا تُحفظ الصورة في البرنامج.</li>' +
-          '<li>من رقم هويته مسجَّل مسبقًا لا يُضاف مرة ثانية.</li></ul>' +
+          '<li>من له تسجيل مبدئي برقم الهوية نفسه لا يُضاف ثانية: تُملأ خاناته الفارغة من الورقة، وما يختلف يُعرض عند المراجعة دون استبدال. المسجَّل نهائيًا لا يُغيَّر.</li></ul>' +
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-scanpick' + (scan.running ? ' disabled' : '') + '>' + (scan.running ? 'جارٍ القراءة…' : 'اختيار الصور أو ملفات PDF') + '</button>' +
           '<input type="file" id="scan-files" accept="image/*,.pdf,application/pdf" multiple hidden>' +
-          (saved ? '<span class="st-count" style="margin:0">أُضيف في هذه الجلسة: ' + saved + ' — تجدهم في «تسجيل مبدئي» بمعيار «من استمارة مصوّرة».</span>' : '') + '</div>' +
+          (saved ? '<span class="st-count" style="margin:0">أُدخل في هذه الجلسة: ' + saved + ' — تجدهم في «تسجيل مبدئي» بمعيار «من استمارة مصوّرة».</span>' : '') + '</div>' +
         (items ? '<div style="margin-top:14px">' + items + '</div>' : '') + '</div>' +
       '<details class="card bank"' + (scan.manual ? ' open' : '') + '><summary>الطريقة اليدوية (إن لم تكن خدمة القراءة الآلية مفعّلة)</summary>' +
         '<p class="hint" style="margin:10px 0">افتح محادثة مع مساعد ذكاء اصطناعي يقرأ الصور، أرفق صورة الاستمارة، والصق التعليمات التالية. ثم انسخ إجابته كاملة والصقها هنا.</p>' +
