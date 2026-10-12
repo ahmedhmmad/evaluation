@@ -1681,25 +1681,50 @@
 
   function siblingBoxHtml(st) {
     var auto = siblingMatches(st, '').length;
-    return '<details class="bank" style="margin:8px 0 0"' + (auto ? ' open' : '') + '><summary>نسخ بيانات الأسرة من أخ مسجَّل' + (auto ? ' — إخوة محتملون: ' + auto : '') + '</summary>' +
+    return '<details class="bank" id="sib-box" style="margin:8px 0 0"' + (auto ? ' open' : '') + '><summary>نسخ بيانات الأسرة من أخ مسجَّل<span id="sib-count">' + (auto ? ' — إخوة محتملون: ' + auto : '') + '</span></summary>' +
       '<p class="hint" style="margin:8px 0">ينسخ إلى هذا النموذج بيانات ولي الأمر والأسرة والسكن والمواصلات من أخيه. لا يُحفظ شيء قبل الضغط على «حفظ».</p>' +
       '<input type="search" id="sib-search" placeholder="ابحث عن الأخ بالاسم أو رقم الهوية أو هاتف ولي الأمر" aria-label="بحث عن أخ" value="' + esc(ui.sibSearch) + '">' +
       '<div id="sib-results">' + siblingListHtml(st) + '</div></details>';
+  }
+
+  // الطالب كما هو مكتوب في النموذج الآن (للطالب الجديد الذي لم يُحفظ بعد): يكفي لاقتراح إخوته أثناء الكتابة
+  function draftStudent() {
+    var cur = ui.editStudent && ui.editStudent !== 'new' ? findStudent(ui.editStudent) : null;
+    var val = function (k) { var el = document.getElementById('sf-' + k); return el ? el.value.trim() : ''; };
+    return { id: cur ? cur.id : '', full_name: val('full_name'), phone: latinDigits(val('phone')), details: { guardian_id: latinDigits(val('guardian_id')) } };
+  }
+
+  // يُحدَّث صندوق الإخوة بحسب ما كُتب في النموذج (الاسم، هاتف ولي الأمر، هويته) ما دام البحث فارغًا
+  function refreshSiblingBox() {
+    var box = document.getElementById('sib-box');
+    if (!box || ui.sibSearch.trim()) return;
+    var draft = draftStudent(), n = siblingMatches(draft, '').length;
+    document.getElementById('sib-results').innerHTML = siblingListHtml(draft);
+    document.getElementById('sib-count').textContent = n ? ' — إخوة محتملون: ' + n : '';
+    if (n) box.open = true;
   }
 
   function copyFromSibling(id) {
     var sib = findStudent(id);
     if (!sib) return;
     // الحقل الفارغ عند الأخ لا يمسح ما كُتب هنا
+    var copied = 0;
     familyFields().forEach(function (f) {
       var el = document.getElementById('sf-' + f.k), v = stVal(sib, f.k);
-      if (el && v !== '' && v != null) el.value = v;
+      if (!el || v === '' || v == null) return;
+      // قيمة ليست بين خيارات القائمة (خيار أُلغي لاحقًا) تُضاف خيارًا حتى لا تضيع
+      if (el.tagName === 'SELECT' && !Array.prototype.some.call(el.options, function (o) { return o.value === String(v); })) el.add(new Option(v, v));
+      el.value = v;
+      copied++;
     });
     var wants = document.getElementById('sf-wants'), ride = document.getElementById('sf-transport'), gid = transportGroupOf()[sib.id];
     if (ride && gid) ride.value = gid;
     if (wants && (gid || sib.wants_transport != null)) wants.value = gid || sib.wants_transport ? 'yes' : 'no';
     syncStudentDeps();
-    toast('نُسخت بيانات الأسرة من «' + sib.full_name + '» — راجعها ثم احفظ');
+    if (!copied) return toast('ملف «' + sib.full_name + '» ليس فيه بيانات أسرة مُدخلة بعد، فلا شيء يُنسخ.', true);
+    toast('نُسخ ' + copied + ' حقلًا من بيانات أسرة «' + sib.full_name + '» — راجعها ثم احفظ');
+    var firstCopied = document.getElementById('sf-guardian_name');
+    if (firstCopied) firstCopied.scrollIntoView({ block: 'center' });
   }
 
   function studentFormHtml(st) {
@@ -2127,13 +2152,20 @@
     }
   });
 
+  app.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.target.id !== 'sib-search') return;
+    e.preventDefault();
+    var only = document.querySelectorAll('#sib-results [data-sibcopy]');
+    if (only.length === 1) copyFromSibling(only[0].getAttribute('data-sibcopy'));
+  });
+
   app.addEventListener('input', function (e) {
     if (e.target.id === 'sib-search' && canStudents()) {
       ui.sibSearch = e.target.value;
-      var cur = ui.editStudent && ui.editStudent !== 'new' ? findStudent(ui.editStudent) : null;
-      document.getElementById('sib-results').innerHTML = siblingListHtml(cur);
+      document.getElementById('sib-results').innerHTML = siblingListHtml(draftStudent());
       return;
     }
+    if ((e.target.id === 'sf-full_name' || e.target.id === 'sf-phone' || e.target.id === 'sf-guardian_id') && canStudents()) return refreshSiblingBox();
     if (e.target.id !== 'st-search' || !canStudents()) return;
     ui.stSearch = e.target.value;
     document.getElementById('st-table').innerHTML = studentsTableHtml();
