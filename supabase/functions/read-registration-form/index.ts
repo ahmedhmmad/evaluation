@@ -1,12 +1,17 @@
-// Reads a scanned or photographed registration form that a guardian filled in by hand, using Claude,
-// and returns its fields so the registrar only has to check them instead of typing everything.
+// Reads a scanned or photographed registration form that a guardian filled in by hand, using a vision
+// model hosted on DeepInfra, and returns its fields so the registrar only has to check them instead of
+// typing everything.
 //
-// Called from the student registration page by the superadmin or a registrar. The page sends one file
-// (an image, or a PDF that may hold several forms) and the list of fields on the form. The Anthropic API
-// key stays here on the server as the ANTHROPIC_API_KEY secret and never reaches the browser.
-// Nothing is stored by this function: the file is passed to the model and the answer is returned.
-import Anthropic from "npm:@anthropic-ai/sdk";
+// Called from the student registration page by the superadmin or a registrar. The page sends one image
+// (one page of a form) and the list of fields on the form. The DeepInfra API key stays here on the server
+// as the DEEPINFRA_API_KEY secret and never reaches the browser.
+// Nothing is stored by this function: the image is passed to the model and the answer is returned.
+//
+// Secrets: DEEPINFRA_API_KEY (required), DEEPINFRA_MODEL (optional; any DeepInfra model that accepts images).
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+const ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions";
+const DEFAULT_MODEL = "mistralai/Mistral-Small-3.2-24B-Instruct-2506";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -19,12 +24,11 @@ const json = (body: unknown, status = 200) =>
 
 type Field = { k: string; label: string; type?: string; options?: string[] };
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
-type ImageType = (typeof IMAGE_TYPES)[number];
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const SYSTEM = `You transcribe paper registration forms of a school. Each form is a printed Arabic table that a guardian filled in by hand, then it was scanned or photographed. Your transcription is checked by a person against the paper afterwards, so the goal is to save them typing while never hiding doubt.
 
-For every filled form in the file, return one entry with the value written next to each printed label.
+Return the value written next to each printed label of the form in the image.
 
 - Copy what is written. Do not correct, complete, translate or guess a value from other fields. Names stay exactly as written, in Arabic.
 - A field that is empty on the paper is an empty string. A dash or "لا يوجد" written by the guardian is kept as "لا يوجد".
@@ -32,8 +36,12 @@ For every filled form in the file, return one entry with the value written next 
 - Dates are returned as YYYY-MM-DD. The guardian writes day/month/year. If part of the date is unreadable, return an empty string.
 - A field with printed choices (tick boxes) returns exactly one of the listed choices: the ticked, circled or underlined one. If none or several are marked, return an empty string.
 - A field whose choices are not printed as boxes (the guardian wrote the answer) but that lists allowed choices here: return the listed choice that matches what was written, or an empty string if none matches.
-- "unsure" lists the keys of the fields in that form whose handwriting you could not read with confidence: a digit that could be another digit, a name with an ambiguous letter, a smudged or cut-off cell, a tick between two boxes. Still give your best reading for such a field. Be generous with this list: a field you list costs the checker a glance, a wrong value you did not list can end up in a child's record.
-- A page that is not this form, or a form with no handwriting at all, produces no entry.`;
+- "unsure" lists the keys of the fields whose handwriting you could not read with confidence: a digit that could be another digit, a name with an ambiguous letter, a smudged or cut-off cell, a tick between two boxes. Still give your best reading for such a field. Be generous with this list: a field you list costs the checker a glance, a wrong value you did not list can end up in a child's record.
+- If the image is not this form, or the form has no handwriting at all, return an empty "forms" list.
+
+Answer with one JSON object and nothing else, in this shape:
+{"forms": [{"<key>": "<value>", ..., "unsure": ["<key>", ...]}]}
+Every key from the field list appears in the form object, each with a string value.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -47,8 +55,8 @@ Deno.serve(async (req) => {
   const { data: role, error: roleError } = await supabase.rpc("my_role");
   if (roleError || (role !== "superadmin" && role !== "registrar")) return json({ error: "forbidden" }, 403);
 
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) return json({ error: "ANTHROPIC_API_KEY is not set for this function" }, 500);
+  const apiKey = Deno.env.get("DEEPINFRA_API_KEY");
+  if (!apiKey) return json({ error: "DEEPINFRA_API_KEY is not set for this function" }, 500);
 
   let body: { file?: { media_type?: string; data?: string }; fields?: Field[] };
   try {
@@ -58,34 +66,11 @@ Deno.serve(async (req) => {
   }
   const mediaType = body.file?.media_type ?? "";
   const data = body.file?.data ?? "";
-  const isPdf = mediaType === "application/pdf";
-  if (!data || (!isPdf && !IMAGE_TYPES.includes(mediaType as ImageType))) {
-    return json({ error: "send one image (JPEG, PNG, WebP) or one PDF" }, 400);
-  }
+  if (!data || !IMAGE_TYPES.includes(mediaType)) return json({ error: "send one image (JPEG, PNG or WebP)" }, 400);
   const fields = (body.fields ?? []).filter(
     (f) => typeof f?.k === "string" && /^[a-z_]{1,40}$/.test(f.k) && typeof f?.label === "string",
   );
   if (!fields.length || fields.length > 80) return json({ error: "the list of form fields is missing" }, 400);
-
-  // One object per form: every field is a string (one of its choices, or empty, for fields with choices),
-  // plus the keys the model was not sure about.
-  const properties: Record<string, unknown> = {};
-  for (const f of fields) {
-    const options = (f.options ?? []).filter((o) => typeof o === "string" && o);
-    properties[f.k] = options.length ? { type: "string", enum: [...options, ""] } : { type: "string" };
-  }
-  properties.unsure = { type: "array", items: { type: "string", enum: fields.map((f) => f.k) } };
-  const schema = {
-    type: "object",
-    properties: {
-      forms: {
-        type: "array",
-        items: { type: "object", properties, required: Object.keys(properties), additionalProperties: false },
-      },
-    },
-    required: ["forms"],
-    additionalProperties: false,
-  };
 
   const fieldList = fields
     .map((f) => {
@@ -95,44 +80,77 @@ Deno.serve(async (req) => {
     })
     .join("\n");
 
-  const source = isPdf
-    ? { type: "document" as const, source: { type: "base64" as const, media_type: "application/pdf" as const, data } }
-    : { type: "image" as const, source: { type: "base64" as const, media_type: mediaType as ImageType, data } };
-
-  const client = new Anthropic({ apiKey });
+  let response: Response;
   try {
-    const response = await client.beta.messages.create({
-      model: "claude-opus-5-5",
-      max_tokens: 16000,
-      // If a safety classifier declines the request, the API re-runs it on Anthropic's recommended fallback model.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      // Handwriting is the hard part of this job, so the model is given room to look carefully.
-      output_config: { effort: "high", format: { type: "json_schema", schema } },
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            source,
-            { type: "text", text: `The fields of the form (key: printed label):\n${fieldList}` },
-          ],
-        },
-      ],
+    response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: Deno.env.get("DEEPINFRA_MODEL") || DEFAULT_MODEL,
+        max_tokens: 4092,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `The fields of the form (key: printed label):\n${fieldList}` },
+              { type: "image_url", image_url: { url: `data:${mediaType};base64,${data}` } },
+            ],
+          },
+        ],
+      }),
+    });
+  } catch (err) {
+    return json({ error: `could not reach DeepInfra: ${String(err)}` }, 502);
+  }
+
+  if (response.status === 401 || response.status === 403) return json({ error: "the DeepInfra API key was rejected" }, 502);
+  if (response.status === 429) return json({ error: "rate limited by DeepInfra; try again shortly" }, 429);
+  if (!response.ok) {
+    const detail = (await response.text()).slice(0, 300);
+    return json({ error: `DeepInfra error ${response.status}: ${detail}` }, 502);
+  }
+
+  let answer: { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+  try {
+    answer = await response.json();
+  } catch {
+    return json({ error: "unreadable answer from DeepInfra" }, 502);
+  }
+  const choice = answer.choices?.[0];
+  if (choice?.finish_reason === "length") return json({ error: "the answer was cut off; photograph one form per image" }, 502);
+  const text = choice?.message?.content ?? "";
+
+  // The model is asked for JSON only; take the outermost object in case it wrapped it in anything.
+  let parsed: { forms?: unknown } | null = null;
+  try {
+    parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  } catch {
+    return json({ error: "the model did not return valid JSON" }, 502);
+  }
+  const rawForms = Array.isArray(parsed?.forms) ? parsed!.forms : [];
+
+  // Keep only the known fields, as strings. A value outside a field's choices is dropped and the field
+  // is marked unsure, so the checker looks at it rather than trusting a made-up choice.
+  const forms = rawForms
+    .filter((f): f is Record<string, unknown> => !!f && typeof f === "object")
+    .map((f) => {
+      const out: Record<string, unknown> = {};
+      const unsure = new Set(Array.isArray(f.unsure) ? f.unsure.filter((k): k is string => typeof k === "string") : []);
+      for (const field of fields) {
+        let value = f[field.k] == null ? "" : String(f[field.k]).trim();
+        const options = (field.options ?? []).filter(Boolean);
+        if (value && options.length && !options.includes(value)) {
+          value = "";
+          unsure.add(field.k);
+        }
+        out[field.k] = value;
+      }
+      out.unsure = [...unsure].filter((k) => fields.some((field) => field.k === k));
+      return out;
     });
 
-    if (response.stop_reason === "refusal") return json({ error: "the model declined this request" }, 502);
-    if (response.stop_reason === "max_tokens") {
-      return json({ error: "the answer was cut off; send fewer pages in one file" }, 502);
-    }
-
-    const text = response.content.find((block) => block.type === "text");
-    if (!text || text.type !== "text") return json({ error: "empty answer from the model" }, 502);
-    return json(JSON.parse(text.text));
-  } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) return json({ error: "the Anthropic API key was rejected" }, 502);
-    if (err instanceof Anthropic.RateLimitError) return json({ error: "rate limited by the Anthropic API; try again shortly" }, 429);
-    if (err instanceof Anthropic.APIError) return json({ error: `Anthropic API error ${err.status}: ${err.message}` }, 502);
-    return json({ error: String(err) }, 500);
-  }
+  return json({ forms });
 });

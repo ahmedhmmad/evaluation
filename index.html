@@ -1809,7 +1809,7 @@
 
   /* ---------- إدخال الطلاب من استمارات ورقية مصوّرة ----------
      تُرفع صورة الاستمارة المعبأة بخط اليد (أو ملف PDF فيه عدة استمارات)، فتقرؤها خدمة read-registration-form
-     (Supabase Edge Function تستخدم Claude)، ويُنشأ لكل استمارة تسجيل مبدئي موسوم «من استمارة مصوّرة» ليُراجَع على الورقة.
+     (Supabase Edge Function تستدعي نموذجًا يقرأ الصور على DeepInfra)، ويُنشأ لكل استمارة تسجيل مبدئي موسوم «من استمارة مصوّرة» ليُراجَع على الورقة.
      لا يُعتمد شيء نهائيًا من هنا. إن لم تكن الخدمة مفعّلة يمكن نسخ التعليمات ولصق الناتج يدويًا */
 
   var SCAN_SKIP = { class_name: 1, placement: 1, filled_by: 1 };
@@ -1826,35 +1826,62 @@
     return list;
   }
 
-  // الصورة تُصغَّر قبل الإرسال (صور الهواتف كبيرة) وتُحوَّل إلى JPEG؛ ملف PDF يُرسل كما هو
-  function scanFilePayload(file) {
-    var toBase64 = function (blob) {
-      return new Promise(function (resolve, reject) {
-        var fr = new FileReader();
-        fr.onload = function () { resolve(String(fr.result).split(',')[1]); };
-        fr.onerror = function () { reject(new Error('تعذرت قراءة الملف')); };
-        fr.readAsDataURL(blob);
-      });
-    };
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-      if (file.size > 4 * 1024 * 1024) return Promise.reject(new Error('ملف PDF أكبر من 4 ميغابايت؛ قسّمه إلى ملفات أصغر'));
-      return toBase64(file).then(function (data) { return { media_type: 'application/pdf', data: data }; });
-    }
-    if (!/^image\//.test(file.type)) return Promise.reject(new Error('نوع الملف غير مدعوم (صورة أو PDF فقط)'));
+  // مكتبة عرض صفحات PDF تُحمَّل عند الحاجة فقط
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
     return new Promise(function (resolve, reject) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      sc.onload = function () {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve();
+      };
+      sc.onerror = function () { reject(new Error('تعذر تحميل مكتبة قراءة PDF')); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  var SCAN_MAX_SIDE = 2200; // أطول ضلع للصورة المرسلة (بكسل): يكفي لقراءة الخط ولا يثقل الإرسال
+
+  function canvasPayload(canvas) {
+    return { media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] };
+  }
+
+  // صور الملف المرسلة للقراءة، صورة لكل صفحة: الصورة تُصغَّر (صور الهواتف كبيرة) وتُحوَّل إلى JPEG،
+  // وملف PDF تُرسم صفحاته صورًا هنا في المتصفح لأن خدمة القراءة تقبل الصور فقط
+  async function scanFilePages(file) {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      if (file.size > 40 * 1024 * 1024) throw new Error('ملف PDF أكبر من 40 ميغابايت؛ قسّمه إلى ملفات أصغر');
+      await loadPdfJs();
+      var doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+      if (doc.numPages > 60) throw new Error('في الملف ' + doc.numPages + ' صفحة؛ الحد 60 صفحة في الملف الواحد');
+      var pages = [];
+      for (var n = 1; n <= doc.numPages; n++) {
+        var page = await doc.getPage(n), base = page.getViewport({ scale: 1 });
+        var view = page.getViewport({ scale: SCAN_MAX_SIDE / Math.max(base.width, base.height) });
+        var pc = document.createElement('canvas');
+        pc.width = Math.round(view.width);
+        pc.height = Math.round(view.height);
+        await page.render({ canvasContext: pc.getContext('2d'), viewport: view }).promise;
+        pages.push(canvasPayload(pc));
+      }
+      return pages;
+    }
+    if (!/^image\//.test(file.type)) throw new Error('نوع الملف غير مدعوم (صورة أو PDF فقط)');
+    return [await new Promise(function (resolve, reject) {
       var img = new Image(), url = URL.createObjectURL(file);
       img.onload = function () {
-        var max = 2200, scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        var scale = Math.min(1, SCAN_MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
         var canvas = document.createElement('canvas');
         canvas.width = Math.round(img.naturalWidth * scale);
         canvas.height = Math.round(img.naturalHeight * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         URL.revokeObjectURL(url);
-        resolve({ media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] });
+        resolve(canvasPayload(canvas));
       };
       img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('تعذر فتح الصورة')); };
       img.src = url;
-    });
+    })];
   }
 
   // سجل طالب مبدئي من استمارة مقروءة. يعيد { state: saved | dup | error, name, note, id }
@@ -1893,10 +1920,7 @@
   }
 
   async function saveScannedForms(item, forms) {
-    item.results = [];
     for (var i = 0; i < forms.length; i++) item.results.push(await saveScannedForm(forms[i] || {}, item.name));
-    item.status = 'done';
-    item.msg = forms.length ? '' : 'لم يُعثر في الملف على استمارة معبأة';
   }
 
   async function runScanQueue(files) {
@@ -1912,15 +1936,21 @@
       item.status = 'busy';
       render();
       try {
-        var payload = await scanFilePayload(item.file);
-        var r = await sb.functions.invoke('read-registration-form', { body: { file: payload, fields: scanFields() } });
-        if (r.error || !r.data || r.data.error) {
-          var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
-          // الخدمة غير منشورة أو بلا مفتاح: تُعرض الطريقة اليدوية
-          if (!r.data || /not found|404|ANTHROPIC_API_KEY|Failed to send/i.test(why)) scan.manual = true;
-          throw new Error(why || 'تعذر الاتصال بخدمة القراءة');
+        var pages = await scanFilePages(item.file);
+        for (var p = 0; p < pages.length; p++) {
+          if (ui.scan !== scan) return;
+          if (pages.length > 1) { item.msg = 'الصفحة ' + (p + 1) + ' من ' + pages.length; render(); }
+          var r = await sb.functions.invoke('read-registration-form', { body: { file: pages[p], fields: scanFields() } });
+          if (r.error || !r.data || r.data.error) {
+            var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
+            // الخدمة غير منشورة أو بلا مفتاح: تُعرض الطريقة اليدوية
+            if (!r.data || /not found|404|API_KEY|Failed to send/i.test(why)) scan.manual = true;
+            throw new Error((pages.length > 1 ? 'الصفحة ' + (p + 1) + ': ' : '') + (why || 'تعذر الاتصال بخدمة القراءة'));
+          }
+          await saveScannedForms(item, Array.isArray(r.data.forms) ? r.data.forms : []);
         }
-        await saveScannedForms(item, Array.isArray(r.data.forms) ? r.data.forms : []);
+        item.status = 'done';
+        item.msg = item.results.length ? '' : 'لم يُعثر في الملف على استمارة معبأة';
       } catch (err) {
         item.status = 'error';
         item.msg = err.message;
@@ -1932,7 +1962,7 @@
     render();
   }
 
-  // تعليمات تُنسخ إلى محادثة مع Claude مع إرفاق صورة الاستمارة، عند عدم توفر خدمة القراءة الآلية
+  // تعليمات تُنسخ إلى محادثة مع مساعد ذكاء اصطناعي يقرأ الصور، مع إرفاق صورة الاستمارة، عند عدم توفر خدمة القراءة الآلية
   function scanPromptText() {
     var fields = scanFields();
     return 'في المرفق استمارة تسجيل مدرسية عربية مطبوعة عبّأها ولي الأمر بخط اليد. انسخ ما كُتب بجانب كل عنوان مطبوع.\n' +
@@ -1951,10 +1981,12 @@
     var box = document.getElementById('scan-paste'), raw = box.value, a = raw.indexOf('{'), b = raw.lastIndexOf('}'), parsed = null;
     try { parsed = JSON.parse(raw.slice(a, b + 1)); } catch (err) { parsed = null; }
     var forms = parsed && (Array.isArray(parsed.forms) ? parsed.forms : parsed.full_name != null ? [parsed] : null);
-    if (!forms) return toast('النص الملصوق ليس ناتجًا صالحًا. الصق إجابة Claude كاملة (تبدأ بـ { وتنتهي بـ }).', true);
+    if (!forms) return toast('النص الملصوق ليس ناتجًا صالحًا. الصق إجابة المساعد كاملة (تبدأ بـ { وتنتهي بـ }).', true);
     var item = { name: 'لصق يدوي', status: 'busy', msg: '', results: [] };
     ui.scan.items.push(item);
     await saveScannedForms(item, forms);
+    item.status = 'done';
+    item.msg = item.results.length ? '' : 'لا استمارات في النص الملصوق';
     render();
   }
 
@@ -1976,17 +2008,17 @@
     return '<button type="button" class="btn link" data-scanclose>→ العودة إلى تسجيل الطلاب</button>' +
       '<div class="card"><h2>إدخال من استمارات مصوّرة</h2>' +
         '<p class="hint">صوّر الاستمارة الورقية المعبأة (أو امسحها بالماسح) وارفعها. تُقرأ الخانات آليًا ويُنشأ لكل استمارة <b>تسجيل مبدئي</b> موسوم «مصوّرة» يحتاج مراجعة على الورقة، ولا يُعتمد شيء نهائيًا. الحقول التي لم يُقرأ خطها بثقة تُعلَّم عند المراجعة.</p>' +
-        '<ul class="imp-list" style="margin-bottom:12px"><li>صورة واضحة مستقيمة للورقة كاملة، بإضاءة جيدة. صورة لكل استمارة، أو ملف PDF فيه عدة استمارات (حتى 4 ميغابايت).</li>' +
-          '<li>صورة الاستمارة ببياناتها تُرسل إلى خدمة Claude من Anthropic لقراءتها، عبر حساب الأكاديمية. لا تُحفظ الصورة في البرنامج.</li>' +
+        '<ul class="imp-list" style="margin-bottom:12px"><li>صورة واضحة مستقيمة للورقة كاملة، بإضاءة جيدة. صورة لكل استمارة، أو ملف PDF من الماسح كل صفحة فيه استمارة (حتى 60 صفحة).</li>' +
+          '<li>صورة الاستمارة ببياناتها تُرسل إلى خدمة قراءة خارجية (نموذج ذكاء اصطناعي على DeepInfra) عبر حساب الأكاديمية. لا تُحفظ الصورة في البرنامج.</li>' +
           '<li>من رقم هويته مسجَّل مسبقًا لا يُضاف مرة ثانية.</li></ul>' +
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-scanpick' + (scan.running ? ' disabled' : '') + '>' + (scan.running ? 'جارٍ القراءة…' : 'اختيار الصور أو ملفات PDF') + '</button>' +
           '<input type="file" id="scan-files" accept="image/*,.pdf,application/pdf" multiple hidden>' +
           (saved ? '<span class="st-count" style="margin:0">أُضيف في هذه الجلسة: ' + saved + ' — تجدهم في «تسجيل مبدئي» بمعيار «من استمارة مصوّرة».</span>' : '') + '</div>' +
         (items ? '<div style="margin-top:14px">' + items + '</div>' : '') + '</div>' +
       '<details class="card bank"' + (scan.manual ? ' open' : '') + '><summary>الطريقة اليدوية (إن لم تكن خدمة القراءة الآلية مفعّلة)</summary>' +
-        '<p class="hint" style="margin:10px 0">افتح محادثة مع Claude، أرفق صورة الاستمارة، والصق التعليمات التالية. ثم انسخ إجابته كاملة والصقها هنا.</p>' +
+        '<p class="hint" style="margin:10px 0">افتح محادثة مع مساعد ذكاء اصطناعي يقرأ الصور، أرفق صورة الاستمارة، والصق التعليمات التالية. ثم انسخ إجابته كاملة والصقها هنا.</p>' +
         '<div class="actions" style="margin:0 0 10px"><button type="button" class="btn" data-scancopy>نسخ التعليمات</button></div>' +
-        '<label class="field" for="scan-paste">إجابة Claude</label><textarea id="scan-paste" rows="6" dir="ltr" placeholder=\'{"forms":[…]}\'></textarea>' +
+        '<label class="field" for="scan-paste">إجابة المساعد</label><textarea id="scan-paste" rows="6" dir="ltr" placeholder=\'{"forms":[…]}\'></textarea>' +
         '<div class="actions"><button type="button" class="btn primary" data-scanpaste>إضافة من الإجابة الملصوقة</button></div></details>';
   }
 
