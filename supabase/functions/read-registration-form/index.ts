@@ -11,7 +11,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions";
-const DEFAULT_MODEL = "mistralai/Mistral-Small-3.2-24B-Instruct-2506";
+const DEFAULT_MODEL = "google/gemini-3.1-pro";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -80,28 +80,34 @@ Deno.serve(async (req) => {
     })
     .join("\n");
 
-  let response: Response;
-  try {
-    response = await fetch(ENDPOINT, {
+  // max_tokens leaves room for a reasoning model's own thinking before the JSON answer.
+  const request = {
+    model: Deno.env.get("DEEPINFRA_MODEL") || DEFAULT_MODEL,
+    max_tokens: 16000,
+    messages: [
+      { role: "system", content: SYSTEM },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: `The fields of the form (key: printed label):\n${fieldList}` },
+          { type: "image_url", image_url: { url: `data:${mediaType};base64,${data}` } },
+        ],
+      },
+    ],
+  };
+  const call = (extra: Record<string, unknown>) =>
+    fetch(ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: Deno.env.get("DEEPINFRA_MODEL") || DEFAULT_MODEL,
-        max_tokens: 4092,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `The fields of the form (key: printed label):\n${fieldList}` },
-              { type: "image_url", image_url: { url: `data:${mediaType};base64,${data}` } },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify({ ...request, ...extra }),
     });
+
+  let response: Response;
+  try {
+    // JSON mode and a fixed temperature are asked for first. Not every model on DeepInfra accepts both,
+    // so a request rejected as invalid is sent once more without them (the prompt already asks for JSON only).
+    response = await call({ temperature: 0, response_format: { type: "json_object" } });
+    if (response.status === 400 || response.status === 422) response = await call({});
   } catch (err) {
     return json({ error: `could not reach DeepInfra: ${String(err)}` }, 502);
   }
