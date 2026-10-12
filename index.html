@@ -915,6 +915,8 @@
     S.tPay = {};
     // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
     S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
+    // عمود إيقاف الاشتراك يأتي من supabase/transport_unsubscribe.sql
+    S.leaveMissing = !!m && !!(await sb.from('transport_members').select('left_from').limit(1)).error;
     S.tVoided = null;
   }
 
@@ -1862,7 +1864,7 @@
     if (pick) {
       var was = transportGroupOf()[st.id] || '', want = pick.value, tr = null;
       if (want && want !== was) {
-        tr = await sb.from('transport_members').upsert({ student_id: st.id, group_id: want, share: null }, { onConflict: 'student_id' });
+        tr = await sb.from('transport_members').upsert(memberRow(st.id, want), { onConflict: 'student_id' });
       } else if (!want && was) {
         tr = await sb.from('transport_members').delete().eq('student_id', st.id);
       }
@@ -2299,6 +2301,41 @@
     return S.tMembers.filter(function (m) { return m.group_id === gid && findStudent(m.student_id); });
   }
 
+  // left_from: أول شهر لا يشترك فيه الطالب (أُوقف اشتراكه ابتداءً منه). قبله يبقى في كشوف الأشهر ودفعاتها
+  // صف العضوية عند الإضافة إلى مجموعة أو النقل إليها: مشترك من جديد (إن كان عمود الإيقاف موجودًا)
+  function memberRow(studentId, groupId) {
+    var row = { student_id: studentId, group_id: groupId, share: null };
+    if (!S.leaveMissing) row.left_from = null;
+    return row;
+  }
+
+  function subscribedIn(m, month) {
+    return !m.left_from || month < m.left_from;
+  }
+
+  // من يُطلب منه اشتراك الشهر المعروض: المشترك فيه، ومن أُوقف لكن له دفعة مسجلة عن هذا الشهر (حتى لا تختفي)
+  function owesThisMonth(m) {
+    return subscribedIn(m, ui.tMonth) || ((S.tPay[ui.tMonth] || {})[m.student_id] || {}).amount > 0;
+  }
+
+  async function setSubscription(sid, stop) {
+    if (S.leaveMissing) return toast('شغّل الملف supabase/transport_unsubscribe.sql في محرر SQL أولًا، ثم حدّث الصفحة', true);
+    var x = findStudent(sid), m = S.tMembers.filter(function (k) { return k.student_id === sid; })[0];
+    if (!x || !m) return;
+    if (stop) {
+      if (((S.tPay[ui.tMonth] || {})[sid] || {}).amount > 0) {
+        return alert('للطالب «' + x.full_name + '» دفعة مسجلة عن ' + monthLabel(ui.tMonth) + '.\nاحذف إيصالها أولًا إن كان لن يشترك هذا الشهر، أو اختر الشهر التالي من أعلى الصفحة ثم أوقف الاشتراك ابتداءً منه.');
+      }
+      if (!confirm('إيقاف اشتراك «' + x.full_name + '» في المواصلات ابتداءً من ' + monthLabel(ui.tMonth) + '؟\n\nلن يُطلب منه اشتراك هذا الشهر وما بعده. الأشهر السابقة ودفعاتها تبقى كما هي.')) return;
+    }
+    var value = stop ? ui.tMonth : null;
+    var r = await sb.from('transport_members').update({ left_from: value }).eq('student_id', sid);
+    if (r.error) return fail(r.error);
+    m.left_from = value;
+    render();
+    toast(stop ? 'أُوقف الاشتراك ابتداءً من ' + monthLabel(ui.tMonth) : 'أُعيد الاشتراك');
+  }
+
   // حصة الطالب: المحددة له، وإلا اشتراك المجموعة
   // رسوم المواصلات الشهرية تُحسب للأسرة: الطالب الأول بمبلغ، وكل أخ بعده بمبلغ أقل
   var DEFAULT_FEES = { first: 700, next: 600 };
@@ -2318,7 +2355,7 @@
     var byId = {}, parent = {}, keyOwner = {};
     S.students.forEach(function (x) { byId[x.id] = x; });
     var ids = [];
-    S.tMembers.forEach(function (m) { if (byId[m.student_id] && !parent[m.student_id]) { parent[m.student_id] = m.student_id; ids.push(m.student_id); } });
+    S.tMembers.forEach(function (m) { if (byId[m.student_id] && !parent[m.student_id] && owesThisMonth(m)) { parent[m.student_id] = m.student_id; ids.push(m.student_id); } });
     var root = function (id) { while (parent[id] !== id) { parent[id] = parent[parent[id]]; id = parent[id]; } return id; };
     ids.forEach(function (id) {
       var x = byId[id], keys = [], gid = String((x.details || {}).guardian_id || '').trim(), phone = String(x.phone || '').replace(/\D/g, ''), fam = familyName(x);
@@ -2374,7 +2411,7 @@
   // المطلوب والمحصَّل لمجموعة في الشهر المعروض
   function groupTotals(g) {
     var pay = S.tPay[ui.tMonth] || {}, due = 0, paid = 0, n = 0;
-    membersOf(g.id).forEach(function (m) { n++; due += shareOf(m, g); paid += pay[m.student_id] ? pay[m.student_id].amount : 0; });
+    membersOf(g.id).filter(owesThisMonth).forEach(function (m) { n++; due += shareOf(m, g); paid += pay[m.student_id] ? pay[m.student_id].amount : 0; });
     return { n: n, due: due, paid: paid };
   }
 
@@ -2419,7 +2456,15 @@
     var pay = S.tPay[ui.tMonth] || {}, members = membersOf(g.id), due = 0, paid = 0;
     members.sort(function (a, b) { return findStudent(a.student_id).full_name.localeCompare(findStudent(b.student_id).full_name, 'ar'); });
     var rows = members.map(function (m, i) {
-      var x = findStudent(m.student_id), sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0;
+      var x = findStudent(m.student_id);
+      if (!owesThisMonth(m)) {
+        return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
+          '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + monthLabel(m.left_from) + '</td>' +
+          '<td><span class="badge pending">متوقف</span></td>' +
+          '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '">إعادة الاشتراك</button> ' +
+          '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
+      }
+      var sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0;
       var method = rec.method || 'cash';
       due += sh; paid += p;
       var badge = sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
@@ -2434,6 +2479,7 @@
         payNoteInput(x.id, method, rec) + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
         '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button> ') +
         '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
     }).join('');
     return rows
@@ -2462,7 +2508,7 @@
     var pay = S.tPay[ui.tMonth] || {};
     return S.tMembers.map(function (m) {
       var x = findStudent(m.student_id), g = findGroup(m.group_id);
-      if (!x || !g) return null;
+      if (!x || !g || !owesThisMonth(m)) return null;
       var rec = pay[x.id] || {}, share = shareOf(m, g), paid = rec.amount || 0;
       return { x: x, g: g, rec: rec, share: share, paid: paid, left: Math.max(0, share - paid),
         status: share > 0 && paid >= share ? 'paid' : paid > 0 ? 'part' : share > 0 ? 'unpaid' : 'none' };
@@ -2561,7 +2607,7 @@
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
         '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        (r.paid > 0 ? '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '') + '</td></tr>';
+        (r.paid > 0 ? '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button>') + '</td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
       '<nav class="pills">' + pills.map(function (p) {
@@ -2612,6 +2658,10 @@
         '<button type="button" class="btn primary" data-rcjoin="' + x.id + '">إضافة إلى المواصلات</button></div></div>';
     }
 
+    if (!owesThisMonth(m)) {
+      return head + '<p class="formhint" style="margin-top:10px">اشتراك هذا الطالب في المواصلات متوقف منذ ' + monthLabel(m.left_from) + '، فلا يُطلب منه اشتراك ' + monthLabel(ui.tMonth) + '.</p>' +
+        '<div class="actions"><button type="button" class="btn primary" data-mresume="' + x.id + '">إعادة الاشتراك</button></div></div>';
+    }
     var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, share = shareOf(m), paid = rec.amount || 0, left = Math.max(0, share - paid);
     var method = ui.rcMethod || rec.method || 'cash', ref = method === 'instapay' || method === 'vodafone';
     // إخوته المشتركون: للانتقال إلى إيصال كلٍّ منهم
@@ -2640,7 +2690,7 @@
       '<div class="actions"><button type="button" class="btn primary" data-rcsave="print">تسجيل الدفعة وطباعة الإيصال</button>' +
         '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
         (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
-          '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '') + '</div>' +
+          '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
       (sibs.length ? '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)"><b>إخوته المشتركون</b>' + sibs.map(function (o) {
         var om = S.tMembers.filter(function (k) { return k.student_id === o.id; })[0], op = ((S.tPay[ui.tMonth] || {})[o.id] || {}).amount || 0, os = shareOf(om);
         return '<div class="cand"><span><b>' + esc(o.full_name) + '</b><br><span class="meta">' + esc(o.class_name || 'بدون شعبة') + ' · الاشتراك ' + plainNum(os) + ' · المدفوع ' + plainNum(op) + '</span></span>' +
@@ -3023,6 +3073,8 @@
     if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
     if (e.target.closest('[data-rcfind]')) return deskSearch();
     if ((el = e.target.closest('[data-mvoid]'))) return voidReceipt(el.getAttribute('data-mvoid'));
+    if ((el = e.target.closest('[data-mstop]'))) return setSubscription(el.getAttribute('data-mstop'), true);
+    if ((el = e.target.closest('[data-mresume]'))) return setSubscription(el.getAttribute('data-mresume'), false);
     if (e.target.closest('[data-voidxlsx]')) return exportVoidedXlsx();
     if ((el = e.target.closest('[data-rcpick]'))) {
       ui.rcStudent = el.getAttribute('data-rcpick');
@@ -3036,7 +3088,7 @@
     if ((el = e.target.closest('[data-rcjoin]'))) {
       var joinId = el.getAttribute('data-rcjoin'), groupId = document.getElementById('rc-group').value;
       if (!groupId) return toast('اختر نقطة التجمع أولًا.', true);
-      r = await sb.from('transport_members').upsert({ student_id: joinId, group_id: groupId, share: null }, { onConflict: 'student_id' });
+      r = await sb.from('transport_members').upsert(memberRow(joinId, groupId), { onConflict: 'student_id' });
       if (r.error) return fail(r.error);
       S.tMembers = S.tMembers.filter(function (k) { return k.student_id !== joinId; });
       S.tMembers.push({ student_id: joinId, group_id: groupId, share: null });
@@ -3068,7 +3120,7 @@
     } else if (g && (el = e.target.closest('[data-madd]'))) {
       var sid = el.getAttribute('data-madd');
       // الطالب في مجموعة واحدة: إن كان في غيرها يُنقل إلى هذه
-      r = await sb.from('transport_members').upsert({ student_id: sid, group_id: g.id, share: null }, { onConflict: 'student_id' });
+      r = await sb.from('transport_members').upsert(memberRow(sid, g.id), { onConflict: 'student_id' });
       if (r.error) return fail(r.error);
       S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== sid; });
       S.tMembers.push({ student_id: sid, group_id: g.id, share: null });
