@@ -7,7 +7,8 @@
 // as the DEEPINFRA_API_KEY secret and never reaches the browser.
 // Nothing is stored by this function: the image is passed to the model and the answer is returned.
 //
-// Secrets: DEEPINFRA_API_KEY (required), DEEPINFRA_MODEL (optional; any DeepInfra model that accepts images).
+// Secrets: DEEPINFRA_API_KEY (required), DEEPINFRA_MODEL (optional default; any DeepInfra model that accepts images).
+// The superadmin can also name the model in the request ("model"), to compare models without redeploying.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions";
@@ -58,7 +59,7 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get("DEEPINFRA_API_KEY");
   if (!apiKey) return json({ error: "DEEPINFRA_API_KEY is not set for this function" }, 500);
 
-  let body: { file?: { media_type?: string; data?: string }; fields?: Field[] };
+  let body: { file?: { media_type?: string; data?: string }; fields?: Field[]; model?: string };
   try {
     body = await req.json();
   } catch {
@@ -80,9 +81,16 @@ Deno.serve(async (req) => {
     })
     .join("\n");
 
+  // Which model reads the form: the one the superadmin asked for, else the configured default.
+  // Registrars always get the default, so the choice (and its cost) stays with the superadmin.
+  const asked = typeof body.model === "string" ? body.model.trim() : "";
+  const model = role === "superadmin" && /^[A-Za-z0-9][A-Za-z0-9._\/-]{2,99}$/.test(asked)
+    ? asked
+    : Deno.env.get("DEEPINFRA_MODEL") || DEFAULT_MODEL;
+
   // max_tokens leaves room for a reasoning model's own thinking before the JSON answer.
   const request = {
-    model: Deno.env.get("DEEPINFRA_MODEL") || DEFAULT_MODEL,
+    model,
     max_tokens: 16000,
     messages: [
       { role: "system", content: SYSTEM },
@@ -116,7 +124,7 @@ Deno.serve(async (req) => {
   if (response.status === 429) return json({ error: "rate limited by DeepInfra; try again shortly" }, 429);
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 300);
-    return json({ error: `DeepInfra error ${response.status}: ${detail}` }, 502);
+    return json({ error: `DeepInfra error ${response.status} (${model}): ${detail}` }, 502);
   }
 
   let answer: { choices?: { message?: { content?: string }; finish_reason?: string }[] };
@@ -158,5 +166,5 @@ Deno.serve(async (req) => {
       return out;
     });
 
-  return json({ forms });
+  return json({ forms, model });
 });

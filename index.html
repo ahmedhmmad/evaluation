@@ -1773,7 +1773,7 @@
       '<div class="toolbar" style="align-items:center;margin-bottom:4px"><h2 style="margin:0;flex:1">' + (st ? (final ? 'تعديل بيانات الطالب' : 'مراجعة تسجيل الطالب') : 'تسجيل طالب') + '</h2>' +
         '<span class="badge ' + (final ? 'published' : 'edit') + '">' + ST_STATUS[final ? 'final' : 'pending'] + '</span></div>' +
       (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الشعبة واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
-      (st && st.details && st.details.scan ? '<p class="formhint" style="margin:8px 0">أُدخل هذا السجل من استمارة مصوّرة (' + esc(st.details.scan.file || '') + ') ولم يُراجَع بعد. طابق كل خانة مع الورقة، وخصوصًا الحقول المعلَّمة «قراءة غير مؤكدة»' +
+      (st && st.details && st.details.scan ? '<p class="formhint" style="margin:8px 0">أُدخل هذا السجل من استمارة مصوّرة (' + esc(st.details.scan.file || '') + (st.details.scan.model ? ' · قرأها ' + esc(st.details.scan.model) : '') + ') ولم يُراجَع بعد. طابق كل خانة مع الورقة، وخصوصًا الحقول المعلَّمة «قراءة غير مؤكدة»' +
         ((st.details.scan.unsure || []).length ? ' (' + st.details.scan.unsure.length + ')' : '') + '.</p>' : '') +
       originalAnswersHtml(st) + siblingBoxHtml(st) +
       '<div class="grid2" style="margin-top:4px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' + suggestionListsHtml() +
@@ -1816,6 +1816,22 @@
      لا يُعتمد شيء نهائيًا من هنا. إن لم تكن الخدمة مفعّلة يمكن نسخ التعليمات ولصق الناتج يدويًا */
 
   var SCAN_SKIP = { class_name: 1, placement: 1, filled_by: 1 };
+
+  // نماذج القراءة المقترحة على DeepInfra (يمكن كتابة اسم أي نموذج آخر يقبل الصور). الاختيار لمدير النظام، ويُحفظ في هذا المتصفح
+  var SCAN_MODELS = ['google/gemini-3.1-pro', 'google/gemma-3-27b-it', 'mistralai/Mistral-Small-3.2-24B-Instruct-2506'];
+
+  function scanModel() {
+    if (!isAdmin()) return '';
+    try { return localStorage.getItem('scan-model') || ''; } catch (err) { return ''; }
+  }
+
+  // ما قُرئ من استمارة، خانة خانة (للمقارنة بين النماذج وللتحقق قبل فتح السجل)
+  function scanReadingHtml(form) {
+    var unsure = Array.isArray(form.unsure) ? form.unsure : [], rows = scanFields().filter(function (f) { return String(form[f.k] == null ? '' : form[f.k]).trim(); });
+    return '<details class="bank" style="margin:6px 0 0"><summary>عرض القراءة (' + rows.length + ' خانة)</summary><div class="orig-answers">' + rows.map(function (f) {
+      return '<div><b>' + f.label + (unsure.indexOf(f.k) > -1 ? ' <span class="badge part">غير مؤكدة</span>' : '') + '</b><span>' + esc(form[f.k]) + '</span></div>';
+    }).join('') + '</div></details>';
+  }
 
   // حقول الاستمارة الورقية كما تُرسل للقراءة: المفتاح، العنوان المطبوع، النوع، الخيارات
   function scanFields() {
@@ -1888,7 +1904,7 @@
   }
 
   // سجل طالب مبدئي من استمارة مقروءة. يعيد { state: saved | dup | error, name, note, id }
-  async function saveScannedForm(form, fileName) {
+  async function saveScannedForm(form, fileName, model) {
     var text = function (k) { return String(form[k] == null ? '' : form[k]).replace(/\s+/g, ' ').trim(); };
     var data = { status: 'pending', class_name: '', details: {} };
     ST_FIELDS.forEach(function (f) {
@@ -1905,7 +1921,7 @@
     if (same && stStatus(same) === 'final') {
       return { state: 'dup', name: same.full_name, note: 'رقم الهوية ' + data.national_id + ' مسجَّل نهائيًا — لم يُغيَّر سجله', id: same.id };
     }
-    if (same) return mergeScannedForm(same, data, form, fileName);
+    if (same) return mergeScannedForm(same, data, form, fileName, model);
     data.requested_class = text('enroll_grade');
     data.memorizes_quran = data.quran_parts == null ? null : data.quran_parts > 0;
     if (!S.wantsMissing) { var w = text('wants_transport'); data.wants_transport = w === 'نعم' ? true : w === 'لا' ? false : null; }
@@ -1913,7 +1929,7 @@
     ST_FIELDS.forEach(function (f) { keys[f.k] = true; });
     // scan: علامة أن السجل من استمارة مصوّرة ولم يُراجَع، مع الحقول التي لم تُقرأ بثقة
     data.details.scan = {
-      at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || displayName(S.email), file: fileName,
+      at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || displayName(S.email), file: fileName, model: model || '',
       unsure: (Array.isArray(form.unsure) ? form.unsure : []).filter(function (k) { return keys[k]; })
     };
     var r = await sb.from('students').insert(data).select().single();
@@ -1926,7 +1942,7 @@
   // الاستمارة لطالب له تسجيل مبدئي (من الاستمارة الإلكترونية مثلًا): لا يُنشأ سجل ثانٍ، بل يُكمَّل سجله.
   // الخانات الفارغة عنده تُملأ من الورقة. ما له قيمة مسجَّلة لا يُستبدل (قد تكون قراءة الخط خاطئة)،
   // وتُحفظ قراءة الورقة المختلفة في scan.read لتظهر بجانب الحقل عند المراجعة
-  async function mergeScannedForm(same, data, form, fileName) {
+  async function mergeScannedForm(same, data, form, fileName, model) {
     var patch = {}, details = Object.assign({}, same.details), read = {}, filled = 0, differ = 0;
     var empty = function (v) { return v == null || v === ''; };
     ST_FIELDS.forEach(function (f) {
@@ -1942,7 +1958,7 @@
     var known = {};
     ST_FIELDS.forEach(function (f) { known[f.k] = true; });
     details.scan = {
-      at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || displayName(S.email), file: fileName, read: read,
+      at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || displayName(S.email), file: fileName, model: model || '', read: read,
       unsure: (Array.isArray(form.unsure) ? form.unsure : []).filter(function (k) { return known[k]; })
     };
     patch.details = details;
@@ -1953,14 +1969,21 @@
       note: 'له تسجيل مبدئي سابق: مُلئت ' + filled + ' خانة فارغة من الورقة' + (differ ? '، و' + differ + ' خانة قراءتها تختلف عن المسجَّل (تظهر عند المراجعة ولم تُستبدل)' : '') };
   }
 
-  async function saveScannedForms(item, forms) {
-    for (var i = 0; i < forms.length; i++) item.results.push(await saveScannedForm(forms[i] || {}, item.name));
+  // dry: قراءة تجريبية تُعرض ولا تُحفظ
+  async function saveScannedForms(item, forms, dry) {
+    for (var i = 0; i < forms.length; i++) {
+      var form = forms[i] || {};
+      var res = dry ? { state: 'preview', name: String(form.full_name || '(بلا اسم)'), note: 'قراءة تجريبية — لم يُحفظ شيء' } : await saveScannedForm(form, item.name, item.model);
+      res.form = form;
+      item.results.push(res);
+    }
   }
 
   async function runScanQueue(files) {
     var scan = ui.scan;
     if (!scan || scan.running) return;
-    var items = Array.prototype.map.call(files, function (f) { return { file: f, name: f.name, status: 'wait', msg: '', results: [] }; });
+    var chosen = scanModel(), dry = !!scan.dry;
+    var items = Array.prototype.map.call(files, function (f) { return { file: f, name: f.name, status: 'wait', msg: '', results: [], model: '' }; });
     scan.items = scan.items.concat(items);
     scan.running = true;
     render();
@@ -1974,7 +1997,9 @@
         for (var p = 0; p < pages.length; p++) {
           if (ui.scan !== scan) return;
           if (pages.length > 1) { item.msg = 'الصفحة ' + (p + 1) + ' من ' + pages.length; render(); }
-          var r = await sb.functions.invoke('read-registration-form', { body: { file: pages[p], fields: scanFields() } });
+          var request = { file: pages[p], fields: scanFields() };
+          if (chosen) request.model = chosen;
+          var r = await sb.functions.invoke('read-registration-form', { body: request });
           if (r.error || !r.data || r.data.error) {
             var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
             // الخدمة غير منشورة أو بلا مفتاح: تُعرض الطريقة اليدوية
@@ -1984,7 +2009,8 @@
             else if (/API_KEY is not set/i.test(why)) why = 'خدمة القراءة منشورة لكن مفتاح DeepInfra لم يصلها. أعد تشغيل «Deploy Supabase functions» من تبويب Actions.';
             throw new Error((pages.length > 1 ? 'الصفحة ' + (p + 1) + ': ' : '') + (why || 'تعذر الاتصال بخدمة القراءة'));
           }
-          await saveScannedForms(item, Array.isArray(r.data.forms) ? r.data.forms : []);
+          item.model = r.data.model || chosen || '';
+          await saveScannedForms(item, Array.isArray(r.data.forms) ? r.data.forms : [], dry);
         }
         item.status = 'done';
         item.msg = item.results.length ? '' : 'لم يُعثر في الملف على استمارة معبأة';
@@ -2019,9 +2045,9 @@
     try { parsed = JSON.parse(raw.slice(a, b + 1)); } catch (err) { parsed = null; }
     var forms = parsed && (Array.isArray(parsed.forms) ? parsed.forms : parsed.full_name != null ? [parsed] : null);
     if (!forms) return toast('النص الملصوق ليس ناتجًا صالحًا. الصق إجابة المساعد كاملة (تبدأ بـ { وتنتهي بـ }).', true);
-    var item = { name: 'لصق يدوي', status: 'busy', msg: '', results: [] };
+    var item = { name: 'لصق يدوي', status: 'busy', msg: '', results: [], model: '' };
     ui.scan.items.push(item);
-    await saveScannedForms(item, forms);
+    await saveScannedForms(item, forms, !!ui.scan.dry);
     item.status = 'done';
     item.msg = item.results.length ? '' : 'لا استمارات في النص الملصوق';
     render();
@@ -2032,13 +2058,14 @@
     scan.items.forEach(function (it) { it.results.forEach(function (r) { if (r.state === 'saved' || r.state === 'merged') saved++; }); });
     var STATE = { wait: ['pending', 'بانتظار الدور'], busy: ['edit', 'تُقرأ الآن…'], done: ['published', 'تمت القراءة'], error: ['unpaid', 'تعذّرت'] };
     var items = scan.items.map(function (it) {
-      return '<div class="scan-item"><div class="toolbar" style="align-items:center;margin:0"><b style="flex:1;overflow-wrap:anywhere">' + esc(it.name) + '</b>' +
+      return '<div class="scan-item"><div class="toolbar" style="align-items:center;margin:0"><b style="flex:1;overflow-wrap:anywhere">' + esc(it.name) +
+        (it.model ? ' <span dir="ltr" style="font-weight:400;color:var(--muted);font-size:.85rem">' + esc(it.model) + '</span>' : '') + '</b>' +
         '<span class="badge ' + STATE[it.status][0] + '">' + STATE[it.status][1] + '</span></div>' +
         (it.msg ? '<div class="formhint">' + esc(it.msg) + '</div>' : '') +
         it.results.map(function (r) {
-          return '<div class="cand"><span><b>' + esc(r.name) + '</b> <span class="badge ' + (r.state === 'saved' || r.state === 'merged' ? 'paid' : r.state === 'dup' ? 'part' : 'unpaid') + '">' +
-            (r.state === 'saved' ? 'أُضيف تسجيلًا مبدئيًا' : r.state === 'merged' ? 'أُكمل تسجيله المبدئي' : r.state === 'dup' ? 'مسجَّل نهائيًا' : 'لم يُضف') + '</span>' +
-            (r.note ? '<br><span class="meta">' + esc(r.note) + '</span>' : '') + '</span>' +
+          return '<div class="cand"><span><b>' + esc(r.name) + '</b> <span class="badge ' + (r.state === 'saved' || r.state === 'merged' ? 'paid' : r.state === 'dup' ? 'part' : r.state === 'preview' ? 'pending' : 'unpaid') + '">' +
+            (r.state === 'saved' ? 'أُضيف تسجيلًا مبدئيًا' : r.state === 'merged' ? 'أُكمل تسجيله المبدئي' : r.state === 'dup' ? 'مسجَّل نهائيًا' : r.state === 'preview' ? 'تجربة' : 'لم يُضف') + '</span>' +
+            (r.note ? '<br><span class="meta">' + esc(r.note) + '</span>' : '') + (r.form ? scanReadingHtml(r.form) : '') + '</span>' +
             (r.id ? '<button type="button" class="btn' + (r.state === 'saved' || r.state === 'merged' ? ' primary' : '') + '" data-stedit="' + r.id + '">' + (r.state === 'dup' || r.state === 'error' ? 'فتح السجل' : 'مراجعة') + '</button>' : '') + '</div>';
         }).join('') + '</div>';
     }).join('');
@@ -2048,6 +2075,11 @@
         '<ul class="imp-list" style="margin-bottom:12px"><li>صورة واضحة مستقيمة للورقة كاملة، بإضاءة جيدة. صورة لكل استمارة، أو ملف PDF من الماسح كل صفحة فيه استمارة (حتى 60 صفحة).</li>' +
           '<li>صورة الاستمارة ببياناتها تُرسل إلى خدمة قراءة خارجية (نموذج ذكاء اصطناعي على DeepInfra) عبر حساب الأكاديمية. لا تُحفظ الصورة في البرنامج.</li>' +
           '<li>من له تسجيل مبدئي برقم الهوية نفسه لا يُضاف ثانية: تُملأ خاناته الفارغة من الورقة، وما يختلف يُعرض عند المراجعة دون استبدال. المسجَّل نهائيًا لا يُغيَّر.</li></ul>' +
+        (isAdmin() ? '<div class="grid2" style="margin-bottom:10px"><div><label class="field" for="scan-model">نموذج القراءة (DeepInfra)</label>' +
+          '<input type="text" id="scan-model" dir="ltr" list="dl-scan-models" autocomplete="off" placeholder="الافتراضي للخدمة" value="' + esc(scanModel()) + '">' +
+          '<datalist id="dl-scan-models">' + SCAN_MODELS.map(function (m) { return '<option value="' + m + '">'; }).join('') + '</datalist>' +
+          '<div class="day">اختر من القائمة أو اكتب اسم أي نموذج يقبل الصور كما يظهر في DeepInfra. اتركه فارغًا لاستخدام افتراضي الخدمة. يُحفظ اختيارك في هذا المتصفح.</div></div>' +
+          '<div style="align-self:center"><label class="check"><input type="checkbox" id="scan-dry"' + (scan.dry ? ' checked' : '') + '>قراءة تجريبية للمقارنة: اعرض الناتج ولا تحفظ شيئًا</label></div></div>' : '') +
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-scanpick' + (scan.running ? ' disabled' : '') + '>' + (scan.running ? 'جارٍ القراءة…' : 'اختيار الصور أو ملفات PDF') + '</button>' +
           '<input type="file" id="scan-files" accept="image/*,.pdf,application/pdf" multiple hidden>' +
           (saved ? '<span class="st-count" style="margin:0">أُدخل في هذه الجلسة: ' + saved + ' — تجدهم في «تسجيل مبدئي» بمعيار «من استمارة مصوّرة».</span>' : '') + '</div>' +
@@ -2427,7 +2459,11 @@
   app.addEventListener('change', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el = e.target;
-    if (el.id === 'scan-files') {
+    if (el.id === 'scan-model') {
+      try { localStorage.setItem('scan-model', el.value.trim()); } catch (err) { /* التخزين المحلي غير متاح */ }
+    } else if (el.id === 'scan-dry' && ui.scan) {
+      ui.scan.dry = el.checked;
+    } else if (el.id === 'scan-files') {
       if (el.files.length) runScanQueue(el.files);
     } else if (el.id === 'imp-skipknown' && ui.imp) {
       ui.imp.skipKnown = el.checked;
