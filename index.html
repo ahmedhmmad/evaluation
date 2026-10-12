@@ -92,6 +92,10 @@
   .method-strip span.zero { color: var(--muted); }
   .method-strip span.zero b { color: inherit; font-weight: 600; }
   #t-members .method-strip { margin: 12px 0 0; }
+  .method-strip span.refunded { border-color: var(--red); color: var(--red); }
+  .method-strip span.refunded b { color: inherit; }
+  .refund-box { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--red); border-radius: 10px; background: var(--red-soft); }
+  .refund-box .hint { margin: 0 0 10px; color: inherit; }
   div.stat:hover { border-color: var(--line); box-shadow: none; }
   .quick { display: flex; flex-wrap: wrap; gap: 10px; }
   a.btn { text-decoration: none; display: inline-block; }
@@ -752,7 +756,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -922,6 +926,10 @@
     S.tPay = {};
     // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
     S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
+    // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
+    var refunds = m ? await fetchAll(function () { return sb.from('transport_refunds').select('*').order('created_at', { ascending: false }); }) : null;
+    S.refundMissing = !!m && !refunds;
+    S.tRefunds = (refunds || []).sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
     // عمود إيقاف الاشتراك يأتي من supabase/transport_unsubscribe.sql
     S.leaveMissing = !!m && !!(await sb.from('transport_members').select('left_from').limit(1)).error;
     S.tVoided = null;
@@ -2556,7 +2564,10 @@
   function methodStripHtml(t) {
     return '<div class="method-strip"><b>تفصيل المحصَّل:</b>' + Object.keys(PAY_METHODS).map(function (k) {
       return '<span' + (t.by[k] ? '' : ' class="zero"') + '>' + PAY_METHODS[k] + ' <b>' + plainNum(t.by[k]) + '</b> ج.م' + (t.byCount[k] ? ' (' + t.byCount[k] + ')' : '') + '</span>';
-    }).join('') + '</div>';
+    }).join('') + (function () {
+      var back = (S.tRefunds || []).filter(function (v) { return v.month === ui.tMonth; });
+      return back.length ? '<span class="refunded">مستردات الشهر <b>' + plainNum(refundTotal(back)) + '</b> ج.م (' + back.length + ')</span>' : '';
+    })() + '</div>';
   }
 
   // النص نفسه للتقارير المطبوعة
@@ -2597,7 +2608,7 @@
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + '</button>';
     };
     return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + item('groups', '#/transport', 'نقاط التجمع') +
-      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
+      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('refunds', '#/transport/refunds', 'المستردات') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
   }
 
   function payStatsHtml(t, firstSub) {
@@ -2638,7 +2649,7 @@
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
         '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        (r.paid > 0 ? '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button>') + '</td></tr>';
+        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button>') + '</td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
       '<nav class="pills">' + pills.map(function (p) {
@@ -2694,6 +2705,7 @@
         '<div class="actions"><button type="button" class="btn primary" data-mresume="' + x.id + '">إعادة الاشتراك</button></div></div>';
     }
     var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, share = shareOf(m), paid = rec.amount || 0, left = Math.max(0, share - paid);
+    if (!paid) ui.rcRefund = false;
     var method = ui.rcMethod || rec.method || 'cash', ref = method === 'instapay' || method === 'vodafone';
     // إخوته المشتركون: للانتقال إلى إيصال كلٍّ منهم
     var info = familyInfo(), mine = info[x.id], sibs = [];
@@ -2721,7 +2733,13 @@
       '<div class="actions"><button type="button" class="btn primary" data-rcsave="print">تسجيل الدفعة وطباعة الإيصال</button>' +
         '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
         (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
+          '<button type="button" class="btn" data-rcrefund>استرداد مبلغ</button>' +
           '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
+      (function () {
+        var back = refundsOf(x.id, ui.tMonth);
+        return back.length ? '<p class="st-count" style="margin:10px 0 0">رُدّ له عن هذا الشهر: ' + money(refundTotal(back)) + ' (' + back.length + ') — التفاصيل في «المستردات».</p>' : '';
+      })() +
+      (ui.rcRefund && paid ? refundFormHtml(x, paid) : '') +
       (sibs.length ? '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)"><b>إخوته المشتركون</b>' + sibs.map(function (o) {
         var om = S.tMembers.filter(function (k) { return k.student_id === o.id; })[0], op = ((S.tPay[ui.tMonth] || {})[o.id] || {}).amount || 0, os = shareOf(om);
         return '<div class="cand"><span><b>' + esc(o.full_name) + '</b><br><span class="meta">' + esc(o.class_name || 'بدون شعبة') + ' · الاشتراك ' + plainNum(os) + ' · المدفوع ' + plainNum(op) + '</span></span>' +
@@ -2746,6 +2764,7 @@
     var box = document.getElementById('rc-id');
     ui.rcQuery = box.value;
     ui.rcMethod = '';
+    ui.rcRefund = false;
     var list = deskMatches(ui.rcQuery);
     ui.rcStudent = list.length === 1 ? list[0].id : null;
     document.getElementById('rc-body').innerHTML = deskBodyHtml();
@@ -2857,6 +2876,125 @@
     }
   }
 
+  /* ----- استرداد مبالغ المواصلات -----
+     الاسترداد يُنقص دفعة الشهر بالمبلغ المردود (فيظهر المحصَّل صافيًا)، ويُسجَّل في جدول transport_refunds
+     بسند له رقمه، مع من ردّه ومتى وكيف ولماذا (supabase/transport_refunds.sql) */
+
+  var REFUND_SQL_MSG = 'شغّل الملف supabase/transport_refunds.sql في محرر SQL أولًا، ثم حدّث الصفحة';
+  var pendingRefund = null;
+
+  function refundsOf(studentId, month) {
+    return (S.tRefunds || []).filter(function (v) { return v.student_id === studentId && v.month === month; });
+  }
+
+  function refundTotal(list) {
+    return list.reduce(function (sum, v) { return sum + (Number(v.amount) || 0); }, 0);
+  }
+
+  // نموذج الاسترداد داخل شاشة «إصدار إيصال»
+  function refundFormHtml(x, paid) {
+    var opts = Object.keys(PAY_METHODS).map(function (k) { return '<option value="' + k + '">' + PAY_METHODS[k] + '</option>'; }).join('');
+    return '<div class="refund-box"><h3 style="margin:0 0 4px">استرداد مبلغ</h3>' +
+      '<p class="hint">يُردّ المبلغ من المدفوع عن ' + monthLabel(ui.tMonth) + ' (' + plainNum(paid) + ' ج.م)، فينقص المحصَّل بقدره، ويُحفظ الاسترداد في سجل المستردات بسند مستقل.</p>' +
+      '<div class="grid2">' +
+        '<div><label class="field" for="rf-amount">المبلغ المسترد (ج.م) <span class="req">*</span></label><input type="number" id="rf-amount" min="0" max="' + paid + '" step="any" value="' + paid + '"></div>' +
+        '<div><label class="field" for="rf-method">طريقة الرد</label><select id="rf-method">' + opts + '</select></div>' +
+        '<div><label class="field" for="rf-note">رقم التحويل أو ملاحظة على طريقة الرد</label><input type="text" id="rf-note"></div>' +
+        '<div><label class="field" for="rf-reason">سبب الاسترداد <span class="req">*</span></label><input type="text" id="rf-reason" list="dl-refund" autocomplete="off">' +
+          '<datalist id="dl-refund"><option value="انسحاب من المواصلات"><option value="دفع زائد عن المطلوب"><option value="دفعة مكررة"><option value="تغيير مكان السكن"><option value="انسحاب من الأكاديمية"></datalist></div>' +
+      '</div>' +
+      (S.leaveMissing ? '' : '<label class="check" style="margin-top:10px"><input type="checkbox" id="rf-stop">عند استرداد المبلغ كاملًا: أوقف اشتراكه في المواصلات ابتداءً من هذا الشهر</label>') +
+      '<div class="actions"><button type="button" class="btn primary" data-rfsave="print">تسجيل الاسترداد وطباعة السند</button>' +
+        '<button type="button" class="btn" data-rfsave="save">تسجيل دون طباعة</button>' +
+        '<button type="button" class="btn" data-rfcancel>إلغاء</button></div></div>';
+  }
+
+  async function saveRefund(print) {
+    if (S.refundMissing) return toast(REFUND_SQL_MSG, true);
+    var x = findStudent(ui.rcStudent), rec = x && (S.tPay[ui.tMonth] || {})[x.id];
+    if (!rec || !(rec.amount > 0)) return;
+    var amount = Math.round((Number(document.getElementById('rf-amount').value) || 0) * 100) / 100;
+    var reason = document.getElementById('rf-reason').value.trim(), method = document.getElementById('rf-method').value;
+    var stopBox = document.getElementById('rf-stop'), stop = !!(stopBox && stopBox.checked);
+    if (!(amount > 0)) return toast('اكتب المبلغ المسترد.', true);
+    if (amount > rec.amount) return toast('المبلغ المسترد أكبر من المدفوع عن الشهر (' + plainNum(rec.amount) + ' ج.م).', true);
+    if (!reason) return toast('اكتب سبب الاسترداد.', true);
+    var net = Math.round((rec.amount - amount) * 100) / 100;
+    if (!confirm('استرداد ' + money(amount) + ' للطالب «' + x.full_name + '» من المدفوع عن ' + monthLabel(ui.tMonth) + '؟\n\nالمدفوع الآن: ' + money(rec.amount) + '\nالصافي بعد الاسترداد: ' + money(net) +
+      (stop && net === 0 ? '\n\nوسيُوقف اشتراكه في المواصلات ابتداءً من هذا الشهر.' : ''))) return;
+
+    var m = S.tMembers.filter(function (k) { return k.student_id === x.id; })[0], g = m && findGroup(m.group_id);
+    var row = {
+      student_id: x.id, student_name: x.full_name, guardian_name: x.guardian_name || '', class_name: x.class_name || '', assembly_point: g ? g.assembly_point : '',
+      month: ui.tMonth, receipt_no: rec.receipt_no != null ? rec.receipt_no : null, paid_before: rec.amount, amount: amount,
+      method: method, method_note: document.getElementById('rf-note').value.trim(), reason: reason,
+      refunded_by: (S.profile && S.profile.full_name) || displayName(S.email), refunded_on: todayISO()
+    };
+    // السند أولًا ثم تعديل الدفعة: إن تعذّر التعديل يُسحب السند فلا يُسجَّل استرداد بلا أثر
+    var ins = await sb.from('transport_refunds').insert(row).select().single();
+    if (ins.error) return fail(ins.error);
+    // دفعة رُدّت كاملة تُحذف (كإيصال ملغى)، فإن دفع لاحقًا صدر له إيصال جديد
+    var change = net > 0
+      ? await sb.from('transport_payments').update({ amount: net, updated_at: new Date().toISOString() }).eq('student_id', x.id).eq('month', ui.tMonth)
+      : await sb.from('transport_payments').delete().eq('student_id', x.id).eq('month', ui.tMonth);
+    if (change.error) {
+      if (ins.data) await sb.from('transport_refunds').delete().eq('id', ins.data.id);
+      return fail(change.error);
+    }
+    var saved = Object.assign({}, row, ins.data || {});
+    (S.tRefunds || (S.tRefunds = [])).unshift(saved);
+    if (net > 0) rec.amount = net; else delete S.tPay[ui.tMonth][x.id];
+    if (stop && net === 0 && m) {
+      var left = await sb.from('transport_members').update({ left_from: ui.tMonth }).eq('student_id', x.id);
+      if (left.error) fail(left.error); else m.left_from = ui.tMonth;
+    }
+    ui.rcRefund = false;
+    document.getElementById('rc-body').innerHTML = deskBodyHtml();
+    toast('سُجّل استرداد ' + money(amount));
+    if (print) { pendingRefund = saved; printNow(); }
+  }
+
+  function refundsHtml() {
+    if (S.refundMissing) return '<div class="card empty">' + REFUND_SQL_MSG + '.</div>';
+    var list = S.tRefunds || [];
+    if (!list.length) return '<div class="card empty">لا توجد مبالغ مستردة. الاسترداد يُسجَّل من «إصدار إيصال» بعد اختيار الطالب.</div>';
+    var month = list.filter(function (v) { return v.month === ui.tMonth; });
+    var rows = list.map(function (v, i) {
+      return '<tr><td>' + (i + 1) + '</td><td>' + (v.refund_no != null ? v.refund_no : '—') + '</td><td><b>' + esc(v.student_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' +
+        esc(v.class_name || 'بدون شعبة') + (v.assembly_point ? ' · ' + esc(v.assembly_point) : '') + '</span></td>' +
+        '<td>' + monthLabel(v.month) + '</td><td>' + plainNum(Number(v.paid_before) || 0) + '</td><td><b>' + plainNum(Number(v.amount) || 0) + '</b></td><td>' + esc(payMethodLabel(v)) + '</td>' +
+        '<td>' + dmy(v.refunded_on) + '</td><td>' + esc(v.reason) + '</td><td>' + esc(v.refunded_by) + '</td>' +
+        '<td><button type="button" class="btn" data-rfprint="' + v.id + '">طباعة السند</button></td></tr>';
+    }).join('');
+    return '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">سجل المستردات (' + list.length + ')</h2>' +
+      '<button type="button" class="btn" data-rfxlsx>تصدير Excel</button></div>' +
+      '<p class="st-count">مستردات عن ' + monthLabel(ui.tMonth) + ': ' + money(refundTotal(month)) + ' (' + month.length + ') · مجموع كل المستردات: ' + money(refundTotal(list)) + '</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>رقم السند</th><th>الطالب</th><th>عن شهر</th><th>المدفوع قبله</th><th>المسترد (ج.م)</th><th>طريقة الرد</th>' +
+      '<th>التاريخ</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+
+  async function exportRefundsXlsx() {
+    var list = S.tRefunds || [];
+    if (!list.length) return toast('لا توجد مستردات للتصدير', true);
+    try {
+      await loadXlsx();
+      var aoa = [[schoolName()], ['سجل مستردات المواصلات — ' + dmy(todayISO())], [],
+        ['م', 'رقم السند', 'اسم الطالب', 'الشعبة', 'نقطة التجمع', 'عن شهر', 'رقم الإيصال', 'المدفوع قبله (ج.م)', 'المسترد (ج.م)', 'الصافي بعده (ج.م)', 'طريقة الرد', 'التاريخ', 'السبب', 'سجّله']];
+      list.forEach(function (v, i) {
+        aoa.push([i + 1, v.refund_no != null ? v.refund_no : '', v.student_name, v.class_name, v.assembly_point, v.month, v.receipt_no != null ? v.receipt_no : '',
+          Number(v.paid_before) || 0, Number(v.amount) || 0, (Number(v.paid_before) || 0) - (Number(v.amount) || 0), payMethodLabel(v), dmy(v.refunded_on), v.reason, v.refunded_by]);
+      });
+      aoa.push(['', 'المجموع', '', '', '', '', '', '', refundTotal(list)]);
+      var ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new();
+      ws['!cols'] = [5, 11, 32, 14, 22, 10, 12, 16, 14, 16, 20, 13, 34, 20].map(function (w) { return { wch: w }; });
+      wb.Workbook = { Views: [{ RTL: true }] };
+      XLSX.utils.book_append_sheet(wb, ws, 'المستردات');
+      XLSX.writeFile(wb, 'مستردات-المواصلات-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
   function renderTransport() {
     if (S.studentsMissing || S.transportMissing) {
       app.innerHTML = tabs('transport') + '<div class="card empty">لم تُجهَّز قاعدة البيانات للمواصلات بعد.<br>' +
@@ -2894,10 +3032,15 @@
       return;
     }
 
-    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : 'groups';
+    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : 'groups';
     var all = payRows();
     var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
       '<span style="flex:1"></span>' + monthPick + '</div>';
+
+    if (view === 'refunds') {
+      app.innerHTML = head + refundsHtml();
+      return;
+    }
 
     if (view === 'archive') {
       if (!S.archiveMissing && S.tVoided == null) {
@@ -3111,6 +3254,28 @@
     var el, g = currentGroup(), r;
     if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
     if (e.target.closest('[data-rcfind]')) return deskSearch();
+    if ((el = e.target.closest('[data-mrefund]'))) {
+      // الاسترداد يُسجَّل من شاشة الإيصال: تُفتح على هذا الطالب ونموذج الاسترداد ظاهر
+      ui.rcStudent = el.getAttribute('data-mrefund');
+      ui.rcQuery = findStudent(ui.rcStudent).national_id || '';
+      ui.rcRefund = true;
+      return go('#/transport/receipt');
+    }
+    if (e.target.closest('[data-rcrefund]') || e.target.closest('[data-rfcancel]')) {
+      if (S.refundMissing) return toast(REFUND_SQL_MSG, true);
+      ui.rcRefund = !e.target.closest('[data-rfcancel]');
+      document.getElementById('rc-body').innerHTML = deskBodyHtml();
+      var rfBox = document.getElementById('rf-reason');
+      if (rfBox) { rfBox.scrollIntoView({ block: 'center' }); rfBox.focus(); }
+      return;
+    }
+    if ((el = e.target.closest('[data-rfsave]'))) return saveRefund(el.getAttribute('data-rfsave') === 'print');
+    if ((el = e.target.closest('[data-rfprint]'))) {
+      pendingRefund = (S.tRefunds || []).filter(function (v) { return v.id === el.getAttribute('data-rfprint'); })[0] || null;
+      if (pendingRefund) printNow();
+      return;
+    }
+    if (e.target.closest('[data-rfxlsx]')) return exportRefundsXlsx();
     if ((el = e.target.closest('[data-mvoid]'))) return voidReceipt(el.getAttribute('data-mvoid'));
     if ((el = e.target.closest('[data-mstop]'))) return setSubscription(el.getAttribute('data-mstop'), true);
     if ((el = e.target.closest('[data-mresume]'))) return setSubscription(el.getAttribute('data-mresume'), false);
@@ -3118,6 +3283,7 @@
     if ((el = e.target.closest('[data-rcpick]'))) {
       ui.rcStudent = el.getAttribute('data-rcpick');
       ui.rcMethod = '';
+      ui.rcRefund = false;
       document.getElementById('rc-body').innerHTML = deskBodyHtml();
       var amountBox = document.getElementById('rc-amount');
       if (amountBox) { amountBox.focus(); amountBox.select(); }
@@ -4520,7 +4686,8 @@
     { name: 'transport_groups', label: 'مجموعات المواصلات', key: 'id' },
     { name: 'transport_members', label: 'اشتراكات المواصلات', key: 'student_id' },
     { name: 'transport_payments', label: 'دفعات المواصلات', key: 'student_id,month', drop: ['id'] },
-    { name: 'transport_voided', label: 'أرشيف الإيصالات المحذوفة', key: 'id' }
+    { name: 'transport_voided', label: 'أرشيف الإيصالات المحذوفة', key: 'id' },
+    { name: 'transport_refunds', label: 'مستردات المواصلات', key: 'id' }
   ];
   var BACKUP_MARK = 'third-pillar-backup';
 
@@ -5231,7 +5398,9 @@
   function amountInWords(amount) {
     var total = Math.round((Number(amount) || 0) * 100), pounds = Math.floor(total / 100), piastres = total % 100, last = pounds % 100;
     var text = pounds === 1 ? 'جنيه مصري واحد' : pounds === 2 ? 'جنيهان مصريان'
-      : arabicWords(pounds) + (last >= 3 && last <= 10 ? ' جنيهات مصرية' : last >= 11 ? ' جنيهًا مصريًا' : ' جنيه مصري');
+      // المثنى قبل «جنيه» مضاف تُحذف نونه: «مئتا جنيه»، «ألفا جنيه»
+      : last >= 3 && last <= 10 ? arabicWords(pounds) + ' جنيهات مصرية' : last >= 11 ? arabicWords(pounds) + ' جنيهًا مصريًا'
+        : arabicWords(pounds).replace(/(مئت|ألف|مليون)ان$/, '$1ا') + ' جنيه مصري';
     if (!pounds && piastres) text = '';
     if (piastres) text += (text ? ' و' : '') + arabicWords(piastres) + ' قرشًا';
     return 'فقط ' + text + ' لا غير';
@@ -5271,6 +5440,44 @@
         '<div class="rv-end"><div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + money(left) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
+    };
+    sheet.className = 'rc';
+    sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
+    fitSheet();
+  }
+
+  /* ----- سند استرداد اشتراك المواصلات -----
+     بهيئة الإيصال نفسها (أصل ونسخة في ورقة واحدة)، مع توقيع ولي الأمر باستلام المبلغ. v: سجل الاسترداد كما حُفظ */
+  function buildRefundSheet(v) {
+    var paid = Number(v.paid_before) || 0, amount = Number(v.amount) || 0;
+    var no = v.refund_no != null ? ('00000' + v.refund_no).slice(-Math.max(6, String(v.refund_no).length)) : '—';
+    var fixed = function (n) { return (Number(n) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var line = function (ar, en, value) {
+      return '<div class="rv-line"><span class="k">' + ar + '</span><span class="v">' + esc(value || '') + '</span><span class="e">' + en + '</span></div>';
+    };
+    var method = PAY_METHODS[v.method] ? v.method : 'cash';
+    var methods = Object.keys(PAY_METHODS).map(function (k) {
+      return '<span class="rv-m">' + (k === method ? '☑' : '☐') + ' ' + PAY_METHODS[k] + (k === method && v.method_note ? ': ' + esc(v.method_note) : '') + '</span>';
+    }).join('');
+    var copy = function (tag, second) {
+      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt=""><div class="rv-tag">' + tag + '</div>' + letterhead() +
+        '<div class="rv-top">' +
+          '<div class="rv-no"><div><span>رقم السند <small>No.</small></span><b>' + no + '</b></div>' +
+            '<div><span>التاريخ <small>Date</small></span><i>' + dmy(v.refunded_on || todayISO()) + '</i></div></div>' +
+          '<div class="rv-title"><h1>سند استرداد</h1><span>REFUND</span></div>' +
+          '<div class="rv-amt"><span>المبلغ <small>Amount</small></span><b>' + fixed(amount) + '</b><i>ج.م <small>EGP</small></i></div>' +
+        '</div>' +
+        '<div class="rv-body">' +
+          line('رُدّ إلى السيد/ة', 'Refunded to', v.guardian_name) +
+          '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', v.student_name) + '<div class="rv-line short"><span class="k">الشعبة</span><span class="v">' + esc(v.class_name) + '</span><span class="e">Class</span></div></div>' +
+          line('مبلغ وقدره', 'The sum of', amountInWords(amount)) +
+          line('وذلك عن', 'Being for', 'استرداد من اشتراك المواصلات لشهر ' + monthLabel(v.month) + (v.reason ? ' — ' + v.reason : '')) +
+          '<div class="rv-line"><span class="k">طريقة الرد</span><span class="rv-ms">' + methods + '</span><span class="e">Method</span></div>' +
+          line('توقيع المستلم (ولي الأمر)', 'Received by', '') +
+        '</div>' +
+        '<div class="rv-end"><div class="rv-sum"><div><span>المدفوع عن الشهر</span><b>' + money(paid) + '</b></div><div><span>المسترد</span><b class="bad">' + money(amount) + '</b></div>' +
+          '<div><span>الصافي بعد الاسترداد</span><b>' + money(paid - amount) + '</b></div></div>' +
+        '<div class="rv-stamp">الختم</div></div></div>';
     };
     sheet.className = 'rc';
     sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
@@ -5533,7 +5740,8 @@
   // يبني الورقة المناسبة للصفحة الحالية (إيصال، ملف طالب، كشف، تقرير زيارة، تقييم). يعيد false إن لم تكن للصفحة ورقة خاصة
   function buildCurrentSheet() {
     var v = currentVisit(), o = currentTeacher() || currentResult();
-    if (pendingBlank) buildBlankFormSheet();
+    if (pendingRefund) buildRefundSheet(pendingRefund);
+    else if (pendingBlank) buildBlankFormSheet();
     else if (pendingReceipt) buildReceiptSheet(pendingReceipt);
     else if (pendingProfile) buildProfileSheet(pendingProfile);
     else if (location.hash === '#/students' && canStudents() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
@@ -5546,6 +5754,7 @@
     pendingReceipt = null;
     pendingProfile = null;
     pendingBlank = false;
+    pendingRefund = null;
     return true;
   }
 
