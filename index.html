@@ -758,7 +758,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -2118,6 +2118,10 @@
       app.innerHTML = tabs('students') + scanScreenHtml();
       return;
     }
+    if (ui.sibFix && isAdmin() && !ui.imp) {
+      app.innerHTML = tabs('students') + siblingFixHtml();
+      return;
+    }
     var counts = {}, byStatus = { pending: 0, final: 0 };
     S.students.forEach(function (x) { counts[x.class_name || ''] = (counts[x.class_name || ''] || 0) + 1; byStatus[stStatus(x)]++; });
     var opt = function (value, label, current) { return '<option value="' + esc(value) + '"' + (current === value ? ' selected' : '') + '>' + label + '</option>'; };
@@ -2128,7 +2132,8 @@
           '<button type="button" class="btn primary" data-stedit="new">+ تسجيل طالب</button>' +
           (isAdmin() ? '<button type="button" class="btn" data-impopen>استيراد من Excel</button>' +
           '<button type="button" class="btn" data-imptemplate>تنزيل قالب Excel</button>' +
-          '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' : '') +
+          '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' +
+          '<button type="button" class="btn" data-sibfixopen>تصحيح عدد الأبناء في المركز</button>' : '') +
           '<button type="button" class="btn" data-stblank>طباعة استمارة ورقية فارغة</button>' +
           '<button type="button" class="btn" data-scanopen>إدخال من استمارات مصوّرة</button>' +
         '</div>') +
@@ -2171,6 +2176,70 @@
       if (!r.error) { list[i].details = details; changed++; }
     }
     return changed;
+  }
+
+  /* ----- تصحيح «عدد الأبناء في المركز» للسجلات القديمة (مدير النظام) -----
+     يُجمع الطلاب برقم هوية ولي الأمر، ويُجعل العدد في سجل كل واحد منهم عدد أبناء ولي أمره المسجلين */
+
+  // finalOnly: يُحتسب المسجلون نهائيًا فقط. يعيد السجلات التي سيتغير عددها، وعدد من لا هوية ولي أمر لهم
+  function siblingFixPlan(finalOnly) {
+    var groups = {}, missing = 0, changes = [], families = 0;
+    S.students.forEach(function (x) {
+      var gid = latinDigits(String((x.details || {}).guardian_id || '')).replace(/\D/g, '');
+      if (gid.length < 5) { missing++; return; }
+      (groups[gid] || (groups[gid] = [])).push(x);
+    });
+    Object.keys(groups).forEach(function (gid) {
+      var list = groups[gid], n = finalOnly ? list.filter(function (x) { return stStatus(x) === 'final'; }).length : list.length;
+      families++;
+      if (!n) return; // لا أحد من أبنائه مسجَّل نهائيًا بعد
+      list.forEach(function (x) {
+        var cur = (x.details || {}).siblings_here;
+        if (cur == null || cur === '' || Number(cur) !== n) changes.push({ x: x, gid: gid, from: cur, to: n });
+      });
+    });
+    changes.sort(function (a, b) { return a.gid.localeCompare(b.gid) || a.x.full_name.localeCompare(b.x.full_name, 'ar'); });
+    return { changes: changes, missing: missing, families: families };
+  }
+
+  function siblingFixHtml() {
+    var fix = ui.sibFix, plan = siblingFixPlan(fix.finalOnly), prev = '';
+    var rows = plan.changes.map(function (c, i) {
+      var first = c.gid !== prev;
+      prev = c.gid;
+      return '<tr' + (first && i ? ' style="border-top:2px solid var(--line)"' : '') + '><td>' + (i + 1) + '</td><td dir="ltr" style="text-align:right">' + (first ? esc(c.gid) : '') + '</td>' +
+        '<td><b>' + esc(c.x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + ST_STATUS[stStatus(c.x)] + (c.x.class_name ? ' · ' + esc(c.x.class_name) : '') + '</span></td>' +
+        '<td>' + (c.from == null || c.from === '' ? '—' : esc(c.from)) + '</td><td><b>' + c.to + '</b></td></tr>';
+    }).join('');
+    return '<button type="button" class="btn link" data-sibfixclose>→ العودة إلى تسجيل الطلاب</button>' +
+      '<div class="card"><h2>تصحيح «عدد الأبناء في المركز»</h2>' +
+        '<p class="hint">يُجمع الطلاب برقم هوية ولي الأمر، ويُكتب في سجل كل طالب عدد أبناء ولي أمره المسجلين في البرنامج. لا يتغير أي حقل آخر. يُستحسن تنزيل نسخة احتياطية قبل التطبيق.</p>' +
+        '<label class="check"><input type="checkbox" id="sibfix-final"' + (fix.finalOnly ? ' checked' : '') + (fix.busy ? ' disabled' : '') + '>احتسب المسجَّلين نهائيًا فقط (بدونه يُحتسب المبدئيون أيضًا)</label>' +
+        '<p class="st-count" style="margin:10px 0">أولياء الأمور: ' + plan.families + ' · سجلات سيتغير عددها: <b>' + plan.changes.length + '</b>' +
+          (plan.missing ? ' · طلاب بلا رقم هوية ولي أمر (لا يشملهم التصحيح): ' + plan.missing : '') + '</p>' +
+        (fix.msg ? '<p class="formhint">' + esc(fix.msg) + '</p>' : '') +
+        (rows
+          ? '<div class="actions" style="margin:0 0 12px"><button type="button" class="btn primary" data-sibfixapply' + (fix.busy ? ' disabled' : '') + '>' + (fix.busy ? 'جارٍ التحديث…' : 'تطبيق التصحيح على ' + plan.changes.length + ' سجلًا') + '</button></div>' +
+            '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>هوية ولي الأمر</th><th>الطالب</th><th>العدد الحالي</th><th>العدد الجديد</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+          : '<div class="empty">كل السجلات التي لها رقم هوية ولي أمر عددها صحيح.</div>') + '</div>';
+  }
+
+  async function applySiblingFix() {
+    var fix = ui.sibFix, plan = siblingFixPlan(fix.finalOnly);
+    if (!plan.changes.length) return;
+    if (!confirm('تحديث «عدد الأبناء في المركز» في ' + plan.changes.length + ' سجلًا؟')) return;
+    fix.busy = true; fix.msg = '';
+    render();
+    var done = 0, failed = 0;
+    for (var i = 0; i < plan.changes.length; i++) {
+      var c = plan.changes[i], details = Object.assign({}, c.x.details, { siblings_here: c.to });
+      var r = await sb.from('students').update({ details: details }).eq('id', c.x.id);
+      if (r.error) failed++; else { c.x.details = details; done++; }
+    }
+    fix.busy = false;
+    fix.msg = 'حُدِّث ' + done + ' سجلًا' + (failed ? '، وتعذّر تحديث ' + failed + ' (تظهر في الجدول؛ أعد المحاولة)' : '') + '.';
+    render();
+    toast('حُدِّث ' + done + ' سجلًا', !!failed);
   }
 
   // mode: 'final' يعتمد التسجيل النهائي (بعد اكتمال البيانات والصف)، 'save' يحفظ فقط
@@ -2423,7 +2492,16 @@
   document.addEventListener('click', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el, st, r;
-    if (e.target.closest('[data-scanopen]')) {
+    if (isAdmin() && e.target.closest('[data-sibfixopen]')) {
+      ui.sibFix = { finalOnly: false, busy: false, msg: '' };
+      render();
+    } else if (e.target.closest('[data-sibfixclose]')) {
+      if (ui.sibFix && ui.sibFix.busy) return;
+      ui.sibFix = null;
+      render();
+    } else if (isAdmin() && e.target.closest('[data-sibfixapply]')) {
+      applySiblingFix();
+    } else if (e.target.closest('[data-scanopen]')) {
       ui.scan = ui.scan || { items: [], manual: false, running: false };
       render();
     } else if (e.target.closest('[data-scanclose]')) {
@@ -2495,7 +2573,11 @@
   app.addEventListener('change', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el = e.target;
-    if (el.id === 'scan-model' && ui.scan) {
+    if (el.id === 'sibfix-final' && ui.sibFix) {
+      ui.sibFix.finalOnly = el.checked;
+      ui.sibFix.msg = '';
+      render();
+    } else if (el.id === 'scan-model' && ui.scan) {
       ui.scan.otherModel = el.value === '__other';
       setScanModel(ui.scan.otherModel ? '' : el.value);
       render();
