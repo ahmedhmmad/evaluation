@@ -926,6 +926,8 @@
     S.tPay = {};
     // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
     S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
+    // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
+    S.issuerMissing = !!m && !!(await sb.from('transport_payments').select('issued_by').limit(1)).error;
     // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
     var refunds = m ? await fetchAll(function () { return sb.from('transport_refunds').select('*').order('created_at', { ascending: false }); }) : null;
     S.refundMissing = !!m && !refunds;
@@ -2492,7 +2494,7 @@
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
         payNoteInput(x.id, method, rec) + '</td>' +
-        '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
+        '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
         '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button> ') +
         '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
@@ -2645,7 +2647,7 @@
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
         payNoteInput(x.id, method, rec) + '</td>' +
-        '<td>' + (r.paid ? dmy(rec.paid_on) : '—') + '</td>' +
+        '<td>' + (r.paid ? '<span dir="ltr">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span><br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by || '—') + '</span>' : '—') + '</td>' +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
         '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
@@ -2657,7 +2659,7 @@
       }).join('') + '</nav>' +
       (body
         ? '<div class="card"><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>نقطة التجمع</th><th>الحصة (ج.م)</th>' +
-          '<th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>تاريخ السداد</th><th>الحالة</th><th></th></tr></thead><tbody>' + body + '</tbody>' +
+          '<th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>وقت التسجيل والمسجِّل</th><th>الحالة</th><th></th></tr></thead><tbody>' + body + '</tbody>' +
           '<tfoot><tr><td colspan="4">المجموع (' + t.n + ')</td><td>' + plainNum(t.due) + '</td><td>' + plainNum(t.paid) + '</td>' +
           '<td colspan="4">المتبقي: ' + money(t.left) + '</td></tr></tfoot></table></div></div>'
         : '<div class="card empty">لا توجد دفعات مطابقة لهذه التصفية.</div>');
@@ -2718,7 +2720,7 @@
     return head +
       '<div class="stats" style="margin:14px 0 6px">' +
         '<div class="card stat"><span class="lbl">اشتراك ' + monthLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
-        '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? 'إيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' · ' + dmy(rec.paid_on) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
+        '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? 'إيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' · ' + esc(issuedNote(rec)) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
         '<div class="card stat"><span class="lbl">المتبقي</span><span class="num"' + (left ? ' style="color:var(--red)"' : '') + '>' + plainNum(left) + ' <small>ج.م</small></span><span class="sub">' + (left ? 'يُسدَّد بتسجيل المبلغ كاملًا' : 'مسدَّد') + '</span></div>' +
       '</div>' +
       '<div class="grid2">' +
@@ -3149,14 +3151,14 @@
       var detail = function (title, rows) {
         var t = payTotals(rows);
         add(title, top(title).concat(
-          [['م', 'اسم الطالب', 'الشعبة', 'نقطة التجمع', 'هاتف ولي الأمر', 'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'طريقة الدفع', 'تاريخ السداد', 'رقم الإيصال']],
+          [['م', 'اسم الطالب', 'الشعبة', 'نقطة التجمع', 'هاتف ولي الأمر', 'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'طريقة الدفع', 'تاريخ السداد', 'رقم الإيصال', 'وقت التسجيل', 'المسجِّل']],
           rows.map(function (r, i) {
             return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, String(r.x.whatsapp || r.x.phone || ''), r.share, r.paid, r.left,
-              PAY_STATUS[r.status] || '', r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : ''];
+              PAY_STATUS[r.status] || '', r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : '', r.paid ? issuedWhen(r.rec) : '', r.paid ? r.rec.issued_by || '' : ''];
           }),
           [['', 'المجموع', '', '', '', t.due, t.paid, t.left, '', '', '', '']], [[]], [['', 'تفصيل المحصَّل حسب وسيلة الدفع']],
           Object.keys(PAY_METHODS).map(function (k) { return ['', PAY_METHODS[k], '', '', '', '', t.by[k], '', t.byCount[k] ? 'عدد الدفعات: ' + t.byCount[k] : '']; })),
-          [5, 32, 14, 24, 16, 12, 13, 13, 16, 14, 13, 11]);
+          [5, 32, 14, 24, 16, 12, 13, 13, 16, 14, 13, 11, 18, 20]);
       };
       if (sc.whole) {
         var list = payByClass(sc.rows), sum = payTotals(sc.rows);
@@ -3224,6 +3226,20 @@
       ' placeholder="' + (ref ? 'رقم الدفع' : 'حدّد طريقة الدفع') + '" aria-label="' + (ref ? 'رقم الدفع' : 'طريقة الدفع الأخرى') + '" value="' + esc(rec.method_note || '') + '">';
   }
 
+  // وقت تسجيل الدفعة بتوقيت الجهاز: «12/10/2026 14:35». للدفعات الأقدم من هذه الخاصية: وقت آخر تعديل
+  function issuedWhen(rec) {
+    var at = rec.issued_at || rec.updated_at, d = at ? new Date(at) : null;
+    if (!d || isNaN(d)) return '';
+    var two = function (n) { return ('0' + n).slice(-2); };
+    return two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + two(d.getHours()) + ':' + two(d.getMinutes());
+  }
+
+  // «سجّله فلان · 12/10/2026 14:35»
+  function issuedNote(rec) {
+    var when = issuedWhen(rec);
+    return (rec.issued_by ? 'سجّله ' + rec.issued_by : 'المسجِّل غير معروف') + (when ? ' · ' + when : '');
+  }
+
   // patch: ما تغيّر في دفعة الطالب لهذا الشهر (المبلغ أو طريقة الدفع)
   async function setPayment(studentId, patch) {
     var old = S.tPay[ui.tMonth][studentId] || {};
@@ -3237,6 +3253,12 @@
     // الملاحظة تخص طريقة الدفع التي كُتبت لها: تُمسح عند تغيير الطريقة، ولا ملاحظة للنقد
     if (row.method === 'cash' || ('method' in patch && !('method_note' in patch) && patch.method !== (old.method || 'cash'))) row.method_note = '';
     if ('amount' in patch) row.paid_on = todayISO();
+    // من سجّل المبلغ ومتى (يتجدد عند تغيير المبلغ، لا عند تعديل طريقة الدفع)
+    if (!S.issuerMissing) {
+      var stamp = 'amount' in patch && row.amount !== (old.amount || 0);
+      row.issued_by = stamp || !old.issued_by ? (S.profile && S.profile.full_name) || displayName(S.email) : old.issued_by;
+      row.issued_at = stamp || !old.issued_at ? row.updated_at : old.issued_at;
+    }
     var r = await sb.from('transport_payments').upsert(row, { onConflict: 'student_id,month' }).select().single();
     if (r.error) return fail(r.error);
     row.receipt_no = r.data ? r.data.receipt_no : old.receipt_no;
