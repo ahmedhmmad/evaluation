@@ -1945,6 +1945,9 @@
             var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
             // الخدمة غير منشورة أو بلا مفتاح: تُعرض الطريقة اليدوية
             if (!r.data || /not found|404|API_KEY|Failed to send/i.test(why)) scan.manual = true;
+            // رسالة المتصفح عند غياب الخدمة عن الخادم غامضة، فتُشرح
+            if (/Failed to send|not found/i.test(why)) why = 'خدمة القراءة غير منشورة على الخادم بعد. شغّل «Deploy Supabase functions» من تبويب Actions في GitHub بعد إضافة السرّين، أو استخدم الطريقة اليدوية أدناه.';
+            else if (/API_KEY is not set/i.test(why)) why = 'خدمة القراءة منشورة لكن مفتاح DeepInfra لم يصلها. أعد تشغيل «Deploy Supabase functions» من تبويب Actions.';
             throw new Error((pages.length > 1 ? 'الصفحة ' + (p + 1) + ': ' : '') + (why || 'تعذر الاتصال بخدمة القراءة'));
           }
           await saveScannedForms(item, Array.isArray(r.data.forms) ? r.data.forms : []);

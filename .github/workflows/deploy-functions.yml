@@ -49,3 +49,13 @@ jobs:
       - name: Deploy the function
         if: steps.check.outputs.ready == 'true'
         run: supabase functions deploy read-registration-form --project-ref "$PROJECT_REF"
+
+      - name: Confirm the function is reachable
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS "https://$PROJECT_REF.supabase.co/functions/v1/read-registration-form")
+          echo "The function endpoint answered with HTTP $code"
+          if [ "$code" = "404" ]; then
+            echo "::error::The function was not found after deploying."
+            exit 1
+          fi
