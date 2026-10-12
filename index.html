@@ -745,7 +745,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1138,7 +1138,7 @@
       '<div class="card"><h2>إجراءات سريعة</h2><div class="quick" style="margin-top:10px">' +
         '<a class="btn primary" href="#/visits">+ تقرير زيارة إشرافية</a>' +
         '<a class="btn" href="#/teachers">تقييم معلم</a>' +
-        (isAdmin() ? '<a class="btn" href="#/students">تسجيل طالب أو استيراد Excel</a><a class="btn" href="#/transport/payments">مدفوعات المواصلات</a><a class="btn" href="#/staff">إضافة معلم</a>' : '') +
+        (isAdmin() ? '<a class="btn" href="#/students">تسجيل طالب أو استيراد Excel</a><a class="btn" href="#/transport/receipt">إيصال مواصلات</a><a class="btn" href="#/transport/payments">مدفوعات المواصلات</a><a class="btn" href="#/staff">إضافة معلم</a>' : '') +
       '</div></div>' +
       '<div class="card"><h2>يحتاج متابعة</h2><div class="todo" style="margin-top:6px">' +
         (todo.join('') || '<div class="empty" style="padding:20px">لا توجد مهام معلّقة.</div>') + '</div></div>';
@@ -2274,7 +2274,7 @@
     return { first: num(f.first, DEFAULT_FEES.first), next: num(f.next, DEFAULT_FEES.next) };
   }
 
-  // ترتيب كل مشترك في المواصلات بين إخوته المشتركين: { studentId: { rank, size } }.
+  // ترتيب كل مشترك في المواصلات بين إخوته المشتركين: { studentId: { rank, size, family } } (family: معرّف الأسرة).
   // الإخوة: من يشتركون في هوية ولي الأمر، أو هاتفه، أو اسم الأب والجد والعائلة. الأول هو الأكبر سنًّا.
   // تُحسب مرة لكل رسم للشاشة ثم تُنسى، لأن بيانات الطلاب قد تتغير
   var famCache = null;
@@ -2301,7 +2301,7 @@
       var list = families[r].sort(function (a, b) {
         return String(a.birth_date || '9999').localeCompare(String(b.birth_date || '9999')) || a.full_name.localeCompare(b.full_name, 'ar');
       });
-      list.forEach(function (x, i) { info[x.id] = { rank: i + 1, size: list.length }; });
+      list.forEach(function (x, i) { info[x.id] = { rank: i + 1, size: list.length, family: r }; });
     });
     famCache = info;
     Promise.resolve().then(function () { famCache = null; });
@@ -2486,7 +2486,7 @@
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + '</button>';
     };
     return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + item('groups', '#/transport', 'نقاط التجمع') +
-      item('pay', '#/transport/payments', 'دفعات الطلاب') + item('classes', '#/transport/classes', 'ملخص الشعب') + '</nav>';
+      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('classes', '#/transport/classes', 'ملخص الشعب') + '</nav>';
   }
 
   function payStatsHtml(t, firstSub) {
@@ -2547,6 +2547,110 @@
     if (box) box.innerHTML = payBodyHtml();
   }
 
+  /* ----- إصدار إيصال: يُكتب رقم هوية الطالب فتظهر بياناته ومبلغ اشتراكه، ثم تُسجَّل الدفعة ويُطبع الإيصال ----- */
+
+  // برقم الهوية كاملًا يُعثر على الطالب مباشرة؛ وإلا فبجزء من الرقم أو من الاسم
+  function deskMatches(query) {
+    var digits = latinDigits(query).replace(/[\s-]/g, ''), n = norm(query);
+    if (!n) return [];
+    var exact = S.students.filter(function (x) { return x.national_id && x.national_id === digits; });
+    if (exact.length) return exact;
+    var numeric = /^\d+$/.test(digits);
+    return S.students.filter(function (x) {
+      return numeric ? digits.length >= 4 && String(x.national_id || '').indexOf(digits) > -1 : norm(x.full_name).indexOf(n) > -1;
+    }).slice(0, 8);
+  }
+
+  function deskStudentHtml(x) {
+    var m = S.tMembers.filter(function (k) { return k.student_id === x.id; })[0], g = m && findGroup(m.group_id);
+    var row = function (label, value) { return '<div><b>' + label + '</b><span>' + esc(value || '—') + '</span></div>'; };
+    var head = '<div class="card"><div class="toolbar" style="align-items:center;margin-bottom:6px"><h2 style="margin:0;flex:1">' + esc(x.full_name) + '</h2>' +
+      '<span class="badge ' + (stStatus(x) === 'final' ? 'published' : 'edit') + '">' + ST_STATUS[stStatus(x)] + '</span></div>' +
+      '<div class="orig-answers">' + row('رقم الهوية', x.national_id) + row('الشعبة', x.class_name) + row('ولي الأمر', x.guardian_name) +
+        row('هاتف ولي الأمر', x.phone || x.whatsapp) + row('نقطة التجمع', g ? g.assembly_point : 'غير مشترك في المواصلات') + row('الأسرة', familyNote(x.id) || 'لا إخوة مشتركون') + '</div>';
+
+    if (!g) {
+      return head + '<p class="formhint" style="margin-top:10px">هذا الطالب غير مشترك في المواصلات. اختر نقطة تجمع لإضافته ثم سجّل الدفعة.</p>' +
+        '<div class="toolbar" style="align-items:center;margin-top:8px"><select id="rc-group" aria-label="نقطة التجمع" style="width:auto;min-width:220px"><option value="">— اختر نقطة التجمع —</option>' +
+        S.tGroups.map(function (k) { return '<option value="' + k.id + '">' + esc(k.assembly_point) + '</option>'; }).join('') + '</select>' +
+        '<button type="button" class="btn primary" data-rcjoin="' + x.id + '">إضافة إلى المواصلات</button></div></div>';
+    }
+
+    var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, share = shareOf(m), paid = rec.amount || 0, left = Math.max(0, share - paid);
+    var method = ui.rcMethod || rec.method || 'cash', ref = method === 'instapay' || method === 'vodafone';
+    // إخوته المشتركون: للانتقال إلى إيصال كلٍّ منهم
+    var info = familyInfo(), mine = info[x.id], sibs = [];
+    if (mine && mine.size > 1) {
+      S.tMembers.forEach(function (k) {
+        var other = k.student_id !== x.id && info[k.student_id] && info[k.student_id].family === mine.family ? findStudent(k.student_id) : null;
+        if (other) sibs.push(other);
+      });
+    }
+    return head +
+      '<div class="stats" style="margin:14px 0 6px">' +
+        '<div class="card stat"><span class="lbl">اشتراك ' + monthLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
+        '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? 'إيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' · ' + dmy(rec.paid_on) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
+        '<div class="card stat"><span class="lbl">المتبقي</span><span class="num"' + (left ? ' style="color:var(--red)"' : '') + '>' + plainNum(left) + ' <small>ج.م</small></span><span class="sub">' + (left ? 'يُسدَّد بتسجيل المبلغ كاملًا' : 'مسدَّد') + '</span></div>' +
+      '</div>' +
+      '<div class="grid2">' +
+        '<div><label class="field" for="rc-amount">إجمالي المدفوع عن الشهر (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + Math.max(share, paid) + '">' +
+          (paid && left ? '<div class="day">سبق تسجيل ' + plainNum(paid) + ' ج.م. اكتب الإجمالي بعد إضافة ما يدفعه الآن.</div>' : '') + '</div>' +
+        '<div><label class="field" for="rc-method">طريقة الدفع</label><select id="rc-method">' + Object.keys(PAY_METHODS).map(function (k) {
+          return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
+        }).join('') + '</select></div>' +
+        (method === 'cash' ? '' : '<div style="grid-column:1/-1"><label class="field" for="rc-note">' + (ref ? 'رقم الدفع (' + PAY_METHODS[method] + ')' : 'حدّد طريقة الدفع') + '</label>' +
+          '<input type="text" id="rc-note"' + (ref ? ' dir="ltr" inputmode="numeric" style="text-align:right"' : '') + ' value="' + esc(method === rec.method ? rec.method_note || '' : '') + '"></div>') +
+      '</div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-rcsave="print">تسجيل الدفعة وطباعة الإيصال</button>' +
+        '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
+        (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' : '') + '</div>' +
+      (sibs.length ? '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)"><b>إخوته المشتركون</b>' + sibs.map(function (o) {
+        var om = S.tMembers.filter(function (k) { return k.student_id === o.id; })[0], op = ((S.tPay[ui.tMonth] || {})[o.id] || {}).amount || 0, os = shareOf(om);
+        return '<div class="cand"><span><b>' + esc(o.full_name) + '</b><br><span class="meta">' + esc(o.class_name || 'بدون شعبة') + ' · الاشتراك ' + plainNum(os) + ' · المدفوع ' + plainNum(op) + '</span></span>' +
+          '<button type="button" class="btn" data-rcpick="' + o.id + '">فتح إيصاله</button></div>';
+      }).join('') + '</div>' : '') + '</div>';
+  }
+
+  // ما تحت خانة البحث: الطالب المختار، أو قائمة المطابقين، أو رسالة
+  function deskBodyHtml() {
+    var x = ui.rcStudent && findStudent(ui.rcStudent);
+    if (x) return deskStudentHtml(x);
+    if (!ui.rcQuery.trim()) return '<div class="card empty">اكتب رقم هوية الطالب ثم اضغط Enter.</div>';
+    var list = deskMatches(ui.rcQuery);
+    if (!list.length) return '<div class="card empty">لا يوجد طالب بهذا الرقم أو الاسم.</div>';
+    return '<div class="card"><h2>اختر الطالب</h2>' + list.map(function (o) {
+      return '<div class="cand"><span><b>' + esc(o.full_name) + '</b><br><span class="meta" dir="ltr">' + esc(o.national_id || '') + '</span><span class="meta"> · ' + esc(o.class_name || 'بدون شعبة') + '</span></span>' +
+        '<button type="button" class="btn" data-rcpick="' + o.id + '">اختيار</button></div>';
+    }).join('') + '</div>';
+  }
+
+  function deskSearch() {
+    var box = document.getElementById('rc-id');
+    ui.rcQuery = box.value;
+    ui.rcMethod = '';
+    var list = deskMatches(ui.rcQuery);
+    ui.rcStudent = list.length === 1 ? list[0].id : null;
+    document.getElementById('rc-body').innerHTML = deskBodyHtml();
+    var amount = document.getElementById('rc-amount');
+    if (amount) { amount.focus(); amount.select(); }
+  }
+
+  async function deskSave(print) {
+    var x = findStudent(ui.rcStudent), amount = Number(document.getElementById('rc-amount').value);
+    if (!x) return;
+    if (!(amount > 0)) return toast('اكتب مبلغًا أكبر من صفر.', true);
+    var method = document.getElementById('rc-method').value, note = document.getElementById('rc-note');
+    await setPayment(x.id, { amount: amount, method: method, method_note: note ? note.value.trim() : '' });
+    var rec = (S.tPay[ui.tMonth] || {})[x.id];
+    if (!rec || rec.amount !== amount) return; // لم يُحفظ: ظهرت رسالة الخطأ
+    ui.rcMethod = '';
+    document.getElementById('rc-body').innerHTML = deskBodyHtml();
+    if (print) { pendingReceipt = { sid: x.id }; printNow(); }
+    // جاهز للطالب التالي
+    var box = document.getElementById('rc-id');
+    box.focus(); box.select();
+  }
+
   function renderTransport() {
     if (S.studentsMissing || S.transportMissing) {
       app.innerHTML = tabs('transport') + '<div class="card empty">لم تُجهَّز قاعدة البيانات للمواصلات بعد.<br>' +
@@ -2584,10 +2688,21 @@
       return;
     }
 
-    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : 'groups';
+    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : 'groups';
     var all = payRows();
     var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
       '<span style="flex:1"></span>' + monthPick + '</div>';
+
+    if (view === 'desk') {
+      app.innerHTML = head +
+        '<div class="card"><label class="field" for="rc-id">رقم هوية الطالب (أو جزء من اسمه)</label>' +
+          '<div class="addstmt"><input type="search" id="rc-id" dir="auto" inputmode="search" autocomplete="off" placeholder="اكتب رقم الهوية ثم Enter" value="' + esc(ui.rcQuery) + '">' +
+          '<button type="button" class="btn primary" data-rcfind>بحث</button></div></div>' +
+        '<div id="rc-body">' + deskBodyHtml() + '</div>';
+      var idBox = document.getElementById('rc-id');
+      if (!ui.rcStudent) idBox.focus();
+      return;
+    }
 
     if (view === 'pay') {
       var names = schoolClasses().slice();
@@ -2753,7 +2868,7 @@
     Object.assign(row, patch);
     row.amount = Math.max(0, Number(row.amount) || 0);
     // الملاحظة تخص طريقة الدفع التي كُتبت لها: تُمسح عند تغيير الطريقة، ولا ملاحظة للنقد
-    if (row.method === 'cash' || ('method' in patch && patch.method !== (old.method || 'cash'))) row.method_note = '';
+    if (row.method === 'cash' || ('method' in patch && !('method_note' in patch) && patch.method !== (old.method || 'cash'))) row.method_note = '';
     if ('amount' in patch) row.paid_on = todayISO();
     var r = await sb.from('transport_payments').upsert(row, { onConflict: 'student_id,month' }).select().single();
     if (r.error) return fail(r.error);
@@ -2771,6 +2886,26 @@
     if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
     var el, g = currentGroup(), r;
     if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
+    if (e.target.closest('[data-rcfind]')) return deskSearch();
+    if ((el = e.target.closest('[data-rcpick]'))) {
+      ui.rcStudent = el.getAttribute('data-rcpick');
+      ui.rcMethod = '';
+      document.getElementById('rc-body').innerHTML = deskBodyHtml();
+      var amountBox = document.getElementById('rc-amount');
+      if (amountBox) { amountBox.focus(); amountBox.select(); }
+      return;
+    }
+    if ((el = e.target.closest('[data-rcsave]'))) return deskSave(el.getAttribute('data-rcsave') === 'print');
+    if ((el = e.target.closest('[data-rcjoin]'))) {
+      var joinId = el.getAttribute('data-rcjoin'), groupId = document.getElementById('rc-group').value;
+      if (!groupId) return toast('اختر نقطة التجمع أولًا.', true);
+      r = await sb.from('transport_members').upsert({ student_id: joinId, group_id: groupId, share: null }, { onConflict: 'student_id' });
+      if (r.error) return fail(r.error);
+      S.tMembers = S.tMembers.filter(function (k) { return k.student_id !== joinId; });
+      S.tMembers.push({ student_id: joinId, group_id: groupId, share: null });
+      document.getElementById('rc-body').innerHTML = deskBodyHtml();
+      return;
+    }
     if ((el = e.target.closest('[data-tpx]'))) return el.getAttribute('data-tpx') === 'xlsx' ? exportPayXlsx() : exportPayPdf();
     if ((el = e.target.closest('[data-tpstatus]'))) {
       ui.tpStatus = el.getAttribute('data-tpstatus');
@@ -2823,7 +2958,15 @@
   app.addEventListener('change', async function (e) {
     if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
     var el = e.target, g = currentGroup();
-    if (el.id === 'fee-first' || el.id === 'fee-next') {
+    if (el.id === 'rc-method') {
+      // خانة رقم الدفع تظهر وتختفي بحسب الطريقة، مع بقاء المبلغ المكتوب
+      var typed = document.getElementById('rc-amount').value;
+      ui.rcMethod = el.value;
+      document.getElementById('rc-body').innerHTML = deskBodyHtml();
+      document.getElementById('rc-amount').value = typed;
+      var noteBox = document.getElementById('rc-note');
+      if (noteBox) noteBox.focus();
+    } else if (el.id === 'fee-first' || el.id === 'fee-next') {
       var cfgNow = classConfig();
       saveClassConfig({ rooms: cfgNow.rooms, list: cfgNow.list, fees: {
         first: Math.max(0, Number(document.getElementById('fee-first').value) || 0),
@@ -2851,6 +2994,12 @@
       document.getElementById('t-members').innerHTML = membersTableHtml(g);
       toast('تم الحفظ');
     }
+  });
+
+  app.addEventListener('keydown', function (e) {
+    if (!isAdmin() || location.hash !== '#/transport/receipt' || e.key !== 'Enter') return;
+    if (e.target.id === 'rc-id') { e.preventDefault(); deskSearch(); }
+    else if (e.target.id === 'rc-amount' || e.target.id === 'rc-note') { e.preventDefault(); deskSave(true); }
   });
 
   app.addEventListener('input', function (e) {
