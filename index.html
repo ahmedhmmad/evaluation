@@ -2265,8 +2265,62 @@
   }
 
   // حصة الطالب: المحددة له، وإلا اشتراك المجموعة
-  function shareOf(m, g) {
-    return m.share != null && m.share !== '' ? Number(m.share) : Number(g.fee) || 0;
+  // رسوم المواصلات الشهرية تُحسب للأسرة: الطالب الأول بمبلغ، وكل أخ بعده بمبلغ أقل
+  var DEFAULT_FEES = { first: 700, next: 600 };
+
+  function transportFees() {
+    var f = classConfig().fees || {};
+    var num = function (v, d) { return v == null || v === '' || isNaN(Number(v)) ? d : Number(v); };
+    return { first: num(f.first, DEFAULT_FEES.first), next: num(f.next, DEFAULT_FEES.next) };
+  }
+
+  // ترتيب كل مشترك في المواصلات بين إخوته المشتركين: { studentId: { rank, size } }.
+  // الإخوة: من يشتركون في هوية ولي الأمر، أو هاتفه، أو اسم الأب والجد والعائلة. الأول هو الأكبر سنًّا.
+  // تُحسب مرة لكل رسم للشاشة ثم تُنسى، لأن بيانات الطلاب قد تتغير
+  var famCache = null;
+  function familyInfo() {
+    if (famCache) return famCache;
+    var byId = {}, parent = {}, keyOwner = {};
+    S.students.forEach(function (x) { byId[x.id] = x; });
+    var ids = [];
+    S.tMembers.forEach(function (m) { if (byId[m.student_id] && !parent[m.student_id]) { parent[m.student_id] = m.student_id; ids.push(m.student_id); } });
+    var root = function (id) { while (parent[id] !== id) { parent[id] = parent[parent[id]]; id = parent[id]; } return id; };
+    ids.forEach(function (id) {
+      var x = byId[id], keys = [], gid = String((x.details || {}).guardian_id || '').trim(), phone = String(x.phone || '').replace(/\D/g, ''), fam = familyName(x);
+      if (gid.length >= 5) keys.push('g:' + gid);
+      if (phone.length >= 8) keys.push('p:' + phone.slice(-10));
+      if (fam.split(' ').length >= 3) keys.push('n:' + fam);
+      keys.forEach(function (k) {
+        if (keyOwner[k]) parent[root(id)] = root(keyOwner[k]); else keyOwner[k] = id;
+      });
+    });
+    var families = {};
+    ids.forEach(function (id) { var r = root(id); (families[r] || (families[r] = [])).push(byId[id]); });
+    var info = {};
+    Object.keys(families).forEach(function (r) {
+      var list = families[r].sort(function (a, b) {
+        return String(a.birth_date || '9999').localeCompare(String(b.birth_date || '9999')) || a.full_name.localeCompare(b.full_name, 'ar');
+      });
+      list.forEach(function (x, i) { info[x.id] = { rank: i + 1, size: list.length }; });
+    });
+    famCache = info;
+    Promise.resolve().then(function () { famCache = null; });
+    return info;
+  }
+
+  // حصة الطالب الشهرية: المحددة له يدويًا، وإلا رسوم الأسرة بحسب ترتيبه بين إخوته المشتركين
+  function shareOf(m) {
+    if (m.share != null && m.share !== '') return Number(m.share);
+    var fees = transportFees(), fam = familyInfo()[m.student_id];
+    return fam && fam.rank > 1 ? fees.next : fees.first;
+  }
+
+  // «الأخ الثاني من 3» لمن له إخوة مشتركون
+  function familyNote(studentId) {
+    var fam = familyInfo()[studentId];
+    if (!fam || fam.size < 2) return '';
+    var words = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس'];
+    return 'أسرة من ' + fam.size + ' مشتركين — ' + (words[fam.rank - 1] || fam.rank);
   }
 
   // المبالغ بالجنيه المصري
@@ -2301,8 +2355,6 @@
         f('gf-sup', 'المشرف المرافق', '<input type="text" id="gf-sup" list="gf-sup-list" value="' + val('supervisor_name') + '">' +
           '<datalist id="gf-sup-list">' + S.teachers.map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist>') +
         f('gf-phone', 'هاتف المشرف', '<input type="text" id="gf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('supervisor_phone') + '">') +
-        f('gf-fee', 'اشتراك الطالب الشهري (بالجنيه المصري)', '<input type="number" id="gf-fee" min="0" step="any" value="' + val('fee') + '">' +
-          '<div class="day">حصة كل طالب من أجرة المواصلات شهريًا؛ يمكن تعديلها لطالب بعينه داخل المجموعة.</div>') +
         f('gf-notes', 'ملاحظات', '<input type="text" id="gf-notes" value="' + val('notes') + '">') +
       '</div><div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
       '<button type="button" class="btn" data-gedit="">إلغاء</button></div></form>';
@@ -2336,9 +2388,10 @@
       var method = rec.method || 'cash';
       due += sh; paid += p;
       var badge = sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
-      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
+      var famNote = familyNote(x.id);
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
-        '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + (Number(g.fee) || 0) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
+        '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + shareOf({ student_id: x.id, share: null }) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (p || '') + '"></td>' +
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
@@ -2461,7 +2514,8 @@
     var t = payTotals(rows);
     var body = rows.map(function (r, i) {
       var x = r.x, rec = r.rec, method = rec.method || 'cash';
-      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td>' +
+      var famNote = familyNote(x.id);
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + (famNote ? '<br><span style="color:var(--muted);font-size:.85rem">' + famNote + '</span>' : '') + '</td><td>' + esc(x.class_name || '—') + '</td>' +
         '<td><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + plainNum(r.share) + '</td>' +
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (r.paid || '') + '"></td>' +
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
@@ -2571,7 +2625,7 @@
       return '<a class="card tgroup" href="#/transport/' + x.id + '">' +
         '<span class="name">' + esc(x.assembly_point) + '</span>' +
         '<span class="meta">المشرف: ' + esc(x.supervisor_name || '—') + (x.pickup_time ? ' · ' + esc(x.pickup_time) : '') + '</span>' +
-        '<span class="meta">عدد الطلاب: ' + t.n + ' · الاشتراك ' + money(Number(x.fee) || 0) + '</span>' +
+        '<span class="meta">عدد الطلاب: ' + t.n + '</span>' +
         '<span class="money"><span>المحصَّل: <b>' + money(t.paid) + '</b></span><span>المطلوب: ' + money(t.due) + '</span></span>' +
         '<span class="progress"><span style="display:block;height:100%;background:var(--primary);width:' + (t.due ? Math.min(100, t.paid / t.due * 100) : 0) + '%"></span></span></a>';
     }).join('');
@@ -2580,6 +2634,12 @@
       (ui.editGroup === 'new' ? groupFormHtml(null) :
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-gedit="new">+ مجموعة جديدة</button>' +
         '<button type="button" class="btn" data-clopen>اقتراح نقاط التجمع من العناوين</button></div>') +
+      '<div class="card"><h2>رسوم المواصلات الشهرية للأسرة</h2>' +
+        '<div class="toolbar" style="align-items:center;margin-top:8px">' +
+          '<label class="field" for="fee-first" style="margin:0">الطالب الأول</label><input type="number" id="fee-first" min="0" step="any" style="width:110px" value="' + transportFees().first + '">' +
+          '<label class="field" for="fee-next" style="margin:0">كل أخ بعده</label><input type="number" id="fee-next" min="0" step="any" style="width:110px" value="' + transportFees().next + '">' +
+          '<span class="st-count" style="margin:0">ج.م لكل طالب شهريًا</span></div>' +
+        '<p class="hint" style="margin:8px 0 0">يُعرف الإخوة بهوية ولي الأمر أو هاتفه أو اسم الأب والجد والعائلة، والأول هو الأكبر سنًّا. يمكن تحديد مبلغ خاص لطالب بعينه من صفحة نقطة التجمع.</p></div>' +
       (cards ? '<div class="teachers">' + cards + '</div>'
         : '<div class="card empty">لا توجد مجموعات مواصلات بعد. أنشئ مجموعة لكل نقطة تجمع.</div>');
   }
@@ -2646,7 +2706,7 @@
     var v = function (id) { return document.getElementById(id).value.trim(); };
     var data = {
       assembly_point: v('gf-point'), pickup_time: v('gf-time'), supervisor_name: v('gf-sup'),
-      supervisor_phone: latinDigits(v('gf-phone')), fee: Number(v('gf-fee')) || 0, notes: v('gf-notes')
+      supervisor_phone: latinDigits(v('gf-phone')), notes: v('gf-notes')
     };
     if (g) {
       var up = await sb.from('transport_groups').update(data).eq('id', g.id);
@@ -2763,7 +2823,12 @@
   app.addEventListener('change', async function (e) {
     if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
     var el = e.target, g = currentGroup();
-    if (el.id === 't-month') {
+    if (el.id === 'fee-first' || el.id === 'fee-next') {
+      var cfgNow = classConfig();
+      saveClassConfig({ rooms: cfgNow.rooms, list: cfgNow.list, fees: {
+        first: Math.max(0, Number(document.getElementById('fee-first').value) || 0),
+        next: Math.max(0, Number(document.getElementById('fee-next').value) || 0) } });
+    } else if (el.id === 't-month') {
       if (!el.value) return;
       ui.tMonth = el.value;
       render();
@@ -3588,6 +3653,7 @@
     var list = Array.isArray(c) ? c : c && Array.isArray(c.list) ? c.list : [];
     var cfg = {
       rooms: c && !Array.isArray(c) ? Number(c.rooms) || 0 : 0,
+      fees: c && !Array.isArray(c) && c.fees ? c.fees : null, // رسوم المواصلات للأسرة: { first, next }
       list: list.map(function (x) {
         if (typeof x === 'string') return { name: x, gender: '', capacity: null, teacher: '' };
         var cap = x.capacity == null || x.capacity === '' ? null : Number(x.capacity);
@@ -3664,7 +3730,7 @@
   }
 
   async function saveClassConfig(cfg, focusId) {
-    var value = { rooms: cfg.rooms, list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity, teacher: x.teacher || '' }; }) };
+    var value = { rooms: cfg.rooms, fees: cfg.fees || classConfig().fees || undefined, list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity, teacher: x.teacher || '' }; }) };
     var r = await sb.from('settings').update({ classes: value }).eq('id', 1);
     if (r.error) { render(); return fail(r.error); }
     (S.settings || (S.settings = {})).classes = value;
