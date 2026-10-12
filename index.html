@@ -926,6 +926,12 @@
     S.tPay = {};
     // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
     S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
+    // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
+    S.tFirstPaid = {};
+    var paidRows = m ? await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month'); }) : null;
+    (paidRows || []).forEach(function (p) {
+      if (Number(p.amount) > 0 && (!S.tFirstPaid[p.student_id] || p.month < S.tFirstPaid[p.student_id])) S.tFirstPaid[p.student_id] = p.month;
+    });
     // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
     S.issuerMissing = !!m && !!(await sb.from('transport_payments').select('issued_by').limit(1)).error;
     // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
@@ -1774,7 +1780,7 @@
             (g.pickup_time ? ' — ' + esc(g.pickup_time) : '') + '</option>';
         }).join('') + '</select>' +
         '<div class="day">' + (S.tGroups.length
-          ? 'اختر أقرب نقطة تجمع لعنوان السكن مع ولي الأمر؛ يُضاف الطالب إلى مجموعتها عند الحفظ.'
+          ? 'اختر أقرب نقطة تجمع لعنوان السكن مع ولي الأمر. هذا يسجّل حاجته ومكانه فقط: لا يُنشئ إيصالًا ولا مطالبة مالية. يبدأ اشتراكه عند إصدار أول إيصال له من «المواصلات ← إصدار إيصال».'
           : 'لا توجد مجموعات مواصلات بعد؛ أنشئها من صفحة «المواصلات».') + '</div>') +
       '<h2 style="margin-top:20px">المستندات المستلمة</h2>' +
       '<div class="classes-pick" style="margin-top:6px">' + ST_DOCS.map(function (d) {
@@ -2330,9 +2336,40 @@
     return !m.left_from || month < m.left_from;
   }
 
-  // من يُطلب منه اشتراك الشهر المعروض: المشترك فيه، ومن أُوقف لكن له دفعة مسجلة عن هذا الشهر (حتى لا تختفي)
+  // بدأ اشتراكه: صدر له إيصال عن الشهر المعروض أو عن شهر قبله.
+  // من اختيرت له نقطة تجمع فقط (في التسجيل مثلًا) ليس مشتركًا بعد، فلا يُطالَب بشيء حتى يصدر له أول إيصال
+  function startedBy(m, month) {
+    var first = (S.tFirstPaid || {})[m.student_id];
+    return !!first && first <= month;
+  }
+
+  // من يُطلب منه اشتراك الشهر المعروض: من بدأ اشتراكه ولم يُوقَف، ومن له دفعة مسجلة عن هذا الشهر (حتى لا تختفي)
   function owesThisMonth(m) {
-    return subscribedIn(m, ui.tMonth) || ((S.tPay[ui.tMonth] || {})[m.student_id] || {}).amount > 0;
+    return (startedBy(m, ui.tMonth) && subscribedIn(m, ui.tMonth)) || ((S.tPay[ui.tMonth] || {})[m.student_id] || {}).amount > 0;
+  }
+
+  // اختيرت له نقطة تجمع ولم يبدأ اشتراكه بعد
+  function awaitingStart(m) {
+    return !owesThisMonth(m) && subscribedIn(m, ui.tMonth);
+  }
+
+  // بعد تسجيل دفعة أو حذفها أو ردّها: يُعاد حساب أول شهر دفع عنه الطالب
+  async function refreshFirstPaid(studentId) {
+    var r = await sb.from('transport_payments').select('student_id, month, amount').eq('student_id', studentId);
+    if (r.error) return;
+    var first = '';
+    (r.data || []).forEach(function (p) { if (Number(p.amount) > 0 && (!first || p.month < first)) first = p.month; });
+    if (first) S.tFirstPaid[studentId] = first; else delete S.tFirstPaid[studentId];
+  }
+
+  // فتح شاشة «إصدار إيصال» على طالب بعينه
+  function openDesk(studentId) {
+    var x = findStudent(studentId);
+    ui.rcStudent = studentId;
+    ui.rcQuery = (x && x.national_id) || '';
+    ui.rcMethod = '';
+    ui.rcRefund = false;
+    go('#/transport/receipt');
   }
 
   async function setSubscription(sid, stop) {
@@ -2372,7 +2409,11 @@
     var byId = {}, parent = {}, keyOwner = {};
     S.students.forEach(function (x) { byId[x.id] = x; });
     var ids = [];
-    S.tMembers.forEach(function (m) { if (byId[m.student_id] && !parent[m.student_id] && owesThisMonth(m)) { parent[m.student_id] = m.student_id; ids.push(m.student_id); } });
+    var atDesk = location.hash === '#/transport/receipt' ? ui.rcStudent : null;
+    S.tMembers.forEach(function (m) {
+      // الطالب المفتوح في شاشة الإيصال يُحسب مع إخوته وإن لم يبدأ اشتراكه، ليُعرف مبلغه قبل الدفع
+      if (byId[m.student_id] && !parent[m.student_id] && (owesThisMonth(m) || (m.student_id === atDesk && subscribedIn(m, ui.tMonth)))) { parent[m.student_id] = m.student_id; ids.push(m.student_id); }
+    });
     var root = function (id) { while (parent[id] !== id) { parent[id] = parent[parent[id]]; id = parent[id]; } return id; };
     ids.forEach(function (id) {
       var x = byId[id], keys = [], gid = String((x.details || {}).guardian_id || '').trim(), phone = String(x.phone || '').replace(/\D/g, ''), fam = familyName(x);
@@ -2387,8 +2428,10 @@
     ids.forEach(function (id) { var r = root(id); (families[r] || (families[r] = [])).push(byId[id]); });
     var info = {};
     Object.keys(families).forEach(function (r) {
+      // الأول من بدأ اشتراكه أولًا (فلا يتغير مبلغ من سبق أن دفع)، ثم الأكبر سنًّا
       var list = families[r].sort(function (a, b) {
-        return String(a.birth_date || '9999').localeCompare(String(b.birth_date || '9999')) || a.full_name.localeCompare(b.full_name, 'ar');
+        return String(S.tFirstPaid[a.id] || '9999').localeCompare(String(S.tFirstPaid[b.id] || '9999')) ||
+          String(a.birth_date || '9999').localeCompare(String(b.birth_date || '9999')) || a.full_name.localeCompare(b.full_name, 'ar');
       });
       list.forEach(function (x, i) { info[x.id] = { rank: i + 1, size: list.length, family: r }; });
     });
@@ -2474,6 +2517,13 @@
     members.sort(function (a, b) { return findStudent(a.student_id).full_name.localeCompare(findStudent(b.student_id).full_name, 'ar'); });
     var rows = members.map(function (m, i) {
       var x = findStudent(m.student_id);
+      if (awaitingStart(m)) {
+        return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
+          '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اختيرت له نقطة التجمع ولم يبدأ اشتراكه (لم يصدر له إيصال)</td>' +
+          '<td><span class="badge pending">بانتظار الاشتراك</span></td>' +
+          '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button> ' +
+          '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
+      }
       if (!owesThisMonth(m)) {
         return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
           '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + monthLabel(m.left_from) + '</td>' +
@@ -2662,7 +2712,22 @@
           '<th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>وقت التسجيل والمسجِّل</th><th>الحالة</th><th></th></tr></thead><tbody>' + body + '</tbody>' +
           '<tfoot><tr><td colspan="4">المجموع (' + t.n + ')</td><td>' + plainNum(t.due) + '</td><td>' + plainNum(t.paid) + '</td>' +
           '<td colspan="4">المتبقي: ' + money(t.left) + '</td></tr></tfoot></table></div></div>'
-        : '<div class="card empty">لا توجد دفعات مطابقة لهذه التصفية.</div>');
+        : '<div class="card empty">لا توجد دفعات مطابقة لهذه التصفية.</div>') + awaitingListHtml();
+  }
+
+  // من اختيرت لهم نقطة تجمع ولم يبدأ اشتراكهم: خارج الدفعات والمطلوب، ويبدأ اشتراك كلٍّ منهم بإصدار أول إيصال له
+  function awaitingListHtml() {
+    var cls = ui.tpClass, list = S.tMembers.filter(function (m) {
+      var x = findStudent(m.student_id);
+      return x && findGroup(m.group_id) && awaitingStart(m) && (cls === '-' ? !x.class_name : !cls || x.class_name === cls);
+    }).map(function (m) { return { x: findStudent(m.student_id), g: findGroup(m.group_id) }; })
+      .sort(function (a, b) { return a.x.full_name.localeCompare(b.x.full_name, 'ar'); });
+    if (!list.length) return '';
+    return '<details class="card bank" style="margin-top:16px"><summary>اختاروا نقطة تجمع ولم يبدأ اشتراكهم (' + list.length + ') — لا يُطالَبون بشيء حتى يصدر لهم إيصال</summary>' +
+      list.map(function (r) {
+        return '<div class="cand"><span><b>' + esc(r.x.full_name) + '</b><br><span class="meta">' + esc(r.x.class_name || 'بدون شعبة') + ' · ' + esc(r.g.assembly_point) + '</span></span>' +
+          '<button type="button" class="btn" data-mdesk="' + r.x.id + '">إصدار إيصال</button></div>';
+      }).join('') + '</details>';
   }
 
   // بعد حفظ دفعة: يُحدَّث الجدول المعروض (جدول المجموعة أو شاشة الدفعات) دون إعادة رسم الصفحة
@@ -2702,13 +2767,14 @@
         '<button type="button" class="btn primary" data-rcjoin="' + x.id + '">إضافة إلى المواصلات</button></div></div>';
     }
 
-    if (!owesThisMonth(m)) {
+    if (!owesThisMonth(m) && !subscribedIn(m, ui.tMonth)) {
       return head + '<p class="formhint" style="margin-top:10px">اشتراك هذا الطالب في المواصلات متوقف منذ ' + monthLabel(m.left_from) + '، فلا يُطلب منه اشتراك ' + monthLabel(ui.tMonth) + '.</p>' +
         '<div class="actions"><button type="button" class="btn primary" data-mresume="' + x.id + '">إعادة الاشتراك</button></div></div>';
     }
     var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, share = shareOf(m), paid = rec.amount || 0, left = Math.max(0, share - paid);
     if (!paid) ui.rcRefund = false;
     var method = ui.rcMethod || rec.method || 'cash', ref = method === 'instapay' || method === 'vodafone';
+    var notStarted = awaitingStart(m);
     // إخوته المشتركون: للانتقال إلى إيصال كلٍّ منهم
     var info = familyInfo(), mine = info[x.id], sibs = [];
     if (mine && mine.size > 1) {
@@ -2718,6 +2784,7 @@
       });
     }
     return head +
+      (notStarted ? '<p class="formhint" style="margin-top:10px">لم يبدأ اشتراك هذا الطالب بعد: اختيرت له نقطة التجمع فقط. يبدأ اشتراكه من ' + monthLabel(ui.tMonth) + ' عند تسجيل هذه الدفعة.</p>' : '') +
       '<div class="stats" style="margin:14px 0 6px">' +
         '<div class="card stat"><span class="lbl">اشتراك ' + monthLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
         '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? 'إيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' · ' + esc(issuedNote(rec)) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
@@ -2736,7 +2803,7 @@
         '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
         (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
           '<button type="button" class="btn" data-rcrefund>استرداد مبلغ</button>' +
-          '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
+          '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : notStarted ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
       (function () {
         var back = refundsOf(x.id, ui.tMonth);
         return back.length ? '<p class="st-count" style="margin:10px 0 0">رُدّ له عن هذا الشهر: ' + money(refundTotal(back)) + ' (' + back.length + ') — التفاصيل في «المستردات».</p>' : '';
@@ -2820,6 +2887,7 @@
       return fail(del.error);
     }
     delete S.tPay[ui.tMonth][sid];
+    await refreshFirstPaid(sid);
     S.tVoided = null;
     refreshPay();
     var desk = document.getElementById('rc-body');
@@ -2946,6 +3014,7 @@
     var saved = Object.assign({}, row, ins.data || {});
     (S.tRefunds || (S.tRefunds = [])).unshift(saved);
     if (net > 0) rec.amount = net; else delete S.tPay[ui.tMonth][x.id];
+    await refreshFirstPaid(x.id);
     if (stop && net === 0 && m) {
       var left = await sb.from('transport_members').update({ left_from: ui.tMonth }).eq('student_id', x.id);
       if (left.error) fail(left.error); else m.left_from = ui.tMonth;
@@ -3105,7 +3174,10 @@
       return '<a class="card tgroup" href="#/transport/' + x.id + '">' +
         '<span class="name">' + esc(x.assembly_point) + '</span>' +
         '<span class="meta">المشرف: ' + esc(x.supervisor_name || '—') + (x.pickup_time ? ' · ' + esc(x.pickup_time) : '') + '</span>' +
-        '<span class="meta">عدد الطلاب: ' + t.n + '</span>' +
+        '<span class="meta">المشتركون: ' + t.n + (function () {
+          var waiting = membersOf(x.id).filter(awaitingStart).length;
+          return waiting ? ' · بانتظار الاشتراك: ' + waiting : '';
+        })() + '</span>' +
         '<span class="money"><span>المحصَّل: <b>' + money(t.paid) + '</b></span><span>المطلوب: ' + money(t.due) + '</span></span>' +
         '<span class="progress"><span style="display:block;height:100%;background:var(--primary);width:' + (t.due ? Math.min(100, t.paid / t.due * 100) : 0) + '%"></span></span></a>';
     }).join('');
@@ -3263,7 +3335,8 @@
     if (r.error) return fail(r.error);
     row.receipt_no = r.data ? r.data.receipt_no : old.receipt_no;
     S.tPay[ui.tMonth][studentId] = row;
-    refreshPay();
+    await refreshFirstPaid(studentId);
+    if (currentGroup()) render(); else refreshPay();
     toast('تم الحفظ');
   }
 
@@ -3299,6 +3372,7 @@
     }
     if (e.target.closest('[data-rfxlsx]')) return exportRefundsXlsx();
     if ((el = e.target.closest('[data-mvoid]'))) return voidReceipt(el.getAttribute('data-mvoid'));
+    if ((el = e.target.closest('[data-mdesk]'))) return openDesk(el.getAttribute('data-mdesk'));
     if ((el = e.target.closest('[data-mstop]'))) return setSubscription(el.getAttribute('data-mstop'), true);
     if ((el = e.target.closest('[data-mresume]'))) return setSubscription(el.getAttribute('data-mresume'), false);
     if (e.target.closest('[data-voidxlsx]')) return exportVoidedXlsx();
