@@ -913,6 +913,9 @@
     S.tGroups = g.data || [];
     S.tMembers = m || [];
     S.tPay = {};
+    // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
+    S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
+    S.tVoided = null;
   }
 
   // مدفوعات الشهر تُجلب عند أول عرض له ثم تُحفظ: { studentId: صف الدفعة }
@@ -2430,8 +2433,8 @@
         }).join('') + '</select>' +
         payNoteInput(x.id, method, rec) + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span></td>' +
-        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        '<button type="button" class="btn danger" data-mdel="' + x.id + '">إزالة</button></td></tr>';
+        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
     }).join('');
     return rows
       ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
@@ -2518,7 +2521,7 @@
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + '</button>';
     };
     return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + item('groups', '#/transport', 'نقاط التجمع') +
-      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('classes', '#/transport/classes', 'ملخص الشعب') + '</nav>';
+      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
   }
 
   function payStatsHtml(t, firstSub) {
@@ -2557,7 +2560,8 @@
         '<td>' + (r.paid ? dmy(rec.paid_on) : '—') + '</td>' +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
         '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
-        (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button>' : '') + '</td></tr>';
+        (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        (r.paid > 0 ? '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '') + '</td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
       '<nav class="pills">' + pills.map(function (p) {
@@ -2635,7 +2639,8 @@
       '</div>' +
       '<div class="actions"><button type="button" class="btn primary" data-rcsave="print">تسجيل الدفعة وطباعة الإيصال</button>' +
         '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
-        (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' : '') + '</div>' +
+        (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
+          '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '') + '</div>' +
       (sibs.length ? '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)"><b>إخوته المشتركون</b>' + sibs.map(function (o) {
         var om = S.tMembers.filter(function (k) { return k.student_id === o.id; })[0], op = ((S.tPay[ui.tMonth] || {})[o.id] || {}).amount || 0, os = shareOf(om);
         return '<div class="cand"><span><b>' + esc(o.full_name) + '</b><br><span class="meta">' + esc(o.class_name || 'بدون شعبة') + ' · الاشتراك ' + plainNum(os) + ' · المدفوع ' + plainNum(op) + '</span></span>' +
@@ -2683,6 +2688,94 @@
     box.focus(); box.select();
   }
 
+  /* ----- حذف إيصال وأرشيف الإيصالات المحذوفة -----
+     الحذف يلغي أثر الدفعة (يعود اشتراك الشهر مستحقًّا) ويحفظ نسخة من الإيصال في جدول transport_voided
+     مع من حذفه ومتى ولماذا (supabase/receipt_archive.sql) */
+
+  var ARCHIVE_SQL_MSG = 'شغّل الملف supabase/receipt_archive.sql في محرر SQL أولًا، ثم حدّث الصفحة';
+
+  async function voidReceipt(sid) {
+    if (S.archiveMissing) return toast(ARCHIVE_SQL_MSG, true);
+    var x = findStudent(sid), rec = (S.tPay[ui.tMonth] || {})[sid];
+    if (!x || !rec || !(rec.amount > 0)) return;
+    var reason = prompt('حذف الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' للطالب «' + x.full_name + '» بمبلغ ' + money(rec.amount) + ' عن ' + monthLabel(ui.tMonth) + '.\n' +
+      'يُلغى أثر الدفعة ويُحفظ الإيصال في أرشيف الإيصالات.\n\nاكتب سبب الحذف:', '');
+    if (reason == null) return;
+    reason = reason.trim();
+    if (!reason) return toast('لا يُحذف الإيصال دون كتابة السبب.', true);
+    var m = S.tMembers.filter(function (k) { return k.student_id === sid; })[0], g = m && findGroup(m.group_id);
+    var copy = {
+      receipt_no: rec.receipt_no != null ? rec.receipt_no : null, student_id: sid, student_name: x.full_name, class_name: x.class_name || '',
+      assembly_point: g ? g.assembly_point : '', month: ui.tMonth, amount: rec.amount, method: rec.method || 'cash', method_note: rec.method_note || '',
+      paid_on: rec.paid_on || null, reason: reason, voided_by: (S.profile && S.profile.full_name) || displayName(S.email), voided_at: new Date().toISOString()
+    };
+    // النسخة أولًا ثم حذف الدفعة: إن تعذّر الحذف تُسحب النسخة فلا يبقى إيصال في المكانين
+    var ins = await sb.from('transport_voided').insert(copy).select().single();
+    if (ins.error) return fail(ins.error);
+    var del = await sb.from('transport_payments').delete().eq('student_id', sid).eq('month', ui.tMonth);
+    if (del.error) {
+      if (ins.data) await sb.from('transport_voided').delete().eq('id', ins.data.id);
+      return fail(del.error);
+    }
+    delete S.tPay[ui.tMonth][sid];
+    S.tVoided = null;
+    refreshPay();
+    var desk = document.getElementById('rc-body');
+    if (desk) desk.innerHTML = deskBodyHtml();
+    toast('حُذف الإيصال وحُفظ في أرشيف الإيصالات');
+  }
+
+  var loadingVoided = false;
+  async function loadVoided() {
+    if (loadingVoided) return;
+    loadingVoided = true;
+    var rows = await fetchAll(function () { return sb.from('transport_voided').select('*').order('voided_at', { ascending: false }); });
+    loadingVoided = false;
+    S.archiveMissing = !rows;
+    S.tVoided = (rows || []).sort(function (a, b) { return String(b.voided_at).localeCompare(String(a.voided_at)); });
+    render();
+  }
+
+  function archiveHtml() {
+    if (S.archiveMissing) return '<div class="card empty">' + ARCHIVE_SQL_MSG + '.</div>';
+    var list = S.tVoided || [], total = 0;
+    if (!list.length) return '<div class="card empty">لا توجد إيصالات محذوفة.</div>';
+    var rows = list.map(function (v, i) {
+      total += Number(v.amount) || 0;
+      return '<tr><td>' + (i + 1) + '</td><td>' + (v.receipt_no != null ? v.receipt_no : '—') + '</td><td><b>' + esc(v.student_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' +
+        esc(v.class_name || 'بدون شعبة') + (v.assembly_point ? ' · ' + esc(v.assembly_point) : '') + '</span></td>' +
+        '<td>' + monthLabel(v.month) + '</td><td>' + plainNum(Number(v.amount) || 0) + '</td><td>' + esc(payMethodLabel(v)) + '</td><td>' + dmy(v.paid_on) + '</td>' +
+        '<td>' + dmy(v.voided_at) + '</td><td>' + esc(v.voided_by) + '</td><td>' + esc(v.reason) + '</td></tr>';
+    }).join('');
+    return '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الإيصالات المحذوفة (' + list.length + ')</h2>' +
+      '<button type="button" class="btn" data-voidxlsx>تصدير Excel</button></div>' +
+      '<p class="hint">هذه الإيصالات أُلغي أثرها: لا تدخل في المحصَّل ولا في كشوف الدفعات، وتبقى هنا للمراجعة.</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>رقم الإيصال</th><th>الطالب</th><th>عن شهر</th><th>المبلغ (ج.م)</th><th>طريقة الدفع</th><th>تاريخ السداد</th>' +
+      '<th>تاريخ الحذف</th><th>حذفه</th><th>السبب</th></tr></thead><tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><td colspan="4">مجموع المبالغ المحذوفة</td><td>' + plainNum(total) + '</td><td colspan="5"></td></tr></tfoot></table></div></div>';
+  }
+
+  async function exportVoidedXlsx() {
+    var list = S.tVoided || [];
+    if (!list.length) return toast('لا توجد إيصالات محذوفة للتصدير', true);
+    try {
+      await loadXlsx();
+      var aoa = [[schoolName()], ['أرشيف الإيصالات المحذوفة — ' + dmy(todayISO())], [],
+        ['م', 'رقم الإيصال', 'اسم الطالب', 'الشعبة', 'نقطة التجمع', 'عن شهر', 'المبلغ (ج.م)', 'طريقة الدفع', 'تاريخ السداد', 'تاريخ الحذف', 'حذفه', 'السبب']];
+      list.forEach(function (v, i) {
+        aoa.push([i + 1, v.receipt_no != null ? v.receipt_no : '', v.student_name, v.class_name, v.assembly_point, v.month, Number(v.amount) || 0,
+          payMethodLabel(v), dmy(v.paid_on), dmy(v.voided_at), v.voided_by, v.reason]);
+      });
+      var ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new();
+      ws['!cols'] = [5, 12, 32, 14, 22, 10, 13, 20, 13, 13, 20, 40].map(function (w) { return { wch: w }; });
+      wb.Workbook = { Views: [{ RTL: true }] };
+      XLSX.utils.book_append_sheet(wb, ws, 'الإيصالات المحذوفة');
+      XLSX.writeFile(wb, 'أرشيف-الإيصالات-المحذوفة-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
   function renderTransport() {
     if (S.studentsMissing || S.transportMissing) {
       app.innerHTML = tabs('transport') + '<div class="card empty">لم تُجهَّز قاعدة البيانات للمواصلات بعد.<br>' +
@@ -2720,10 +2813,20 @@
       return;
     }
 
-    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : 'groups';
+    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : 'groups';
     var all = payRows();
     var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
       '<span style="flex:1"></span>' + monthPick + '</div>';
+
+    if (view === 'archive') {
+      if (!S.archiveMissing && S.tVoided == null) {
+        app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>';
+        loadVoided();
+        return;
+      }
+      app.innerHTML = head + archiveHtml();
+      return;
+    }
 
     if (view === 'desk') {
       app.innerHTML = head +
@@ -2919,6 +3022,8 @@
     var el, g = currentGroup(), r;
     if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
     if (e.target.closest('[data-rcfind]')) return deskSearch();
+    if ((el = e.target.closest('[data-mvoid]'))) return voidReceipt(el.getAttribute('data-mvoid'));
+    if (e.target.closest('[data-voidxlsx]')) return exportVoidedXlsx();
     if ((el = e.target.closest('[data-rcpick]'))) {
       ui.rcStudent = el.getAttribute('data-rcpick');
       ui.rcMethod = '';
@@ -4323,7 +4428,8 @@
     { name: 'students', label: 'الطلاب', key: 'id' },
     { name: 'transport_groups', label: 'مجموعات المواصلات', key: 'id' },
     { name: 'transport_members', label: 'اشتراكات المواصلات', key: 'student_id' },
-    { name: 'transport_payments', label: 'دفعات المواصلات', key: 'student_id,month', drop: ['id'] }
+    { name: 'transport_payments', label: 'دفعات المواصلات', key: 'student_id,month', drop: ['id'] },
+    { name: 'transport_voided', label: 'أرشيف الإيصالات المحذوفة', key: 'id' }
   ];
   var BACKUP_MARK = 'third-pillar-backup';
 
