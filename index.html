@@ -1818,7 +1818,8 @@
   var SCAN_SKIP = { class_name: 1, placement: 1, filled_by: 1 };
 
   // نماذج القراءة المقترحة على DeepInfra (يمكن كتابة اسم أي نموذج آخر يقبل الصور). الاختيار لمدير النظام، ويُحفظ في هذا المتصفح
-  var SCAN_MODELS = ['google/gemini-3.1-pro', 'google/gemma-3-27b-it', 'mistralai/Mistral-Small-3.2-24B-Instruct-2506'];
+  var SCAN_MODELS = ['google/gemini-3.1-pro', 'anthropic/claude-opus-5-5', 'anthropic/claude-sonnet-5-5', 'anthropic/claude-haiku-4-5',
+    'Qwen/Qwen3-VL-30B-A3B-Instruct', 'meta-llama/Llama-4-Scout-17B-16E-Instruct', 'google/gemma-3-27b-it', 'mistralai/Mistral-Small-3.2-24B-Instruct-2506'];
 
   function scanModel() {
     if (!isAdmin()) return '';
