@@ -496,6 +496,8 @@
   .orig-answers { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px 16px; padding: 10px 0 4px; font-size: .9rem; }
   .orig-answers b { display: block; color: var(--muted); font-weight: 600; font-size: .8rem; }
   .orig-answers span { overflow-wrap: anywhere; }
+  .scan-item { padding: 10px 0; border-top: 1px solid var(--line); }
+  .scan-item:first-child { border-top: 0; }
   .with-none { display: flex; gap: 6px; }
   .with-none input { flex: 1; min-width: 0; }
   .with-none .btn { white-space: nowrap; }
@@ -756,7 +758,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1521,6 +1523,8 @@
     // ما كتبه ولي الأمر في الاستمارة المبدئية، إن اختلف عن القيمة الحالية (للمراجعة مع المستندات)
     var raw = st && st.form_answers ? st.form_answers[f.from || f.k] : '';
     var hint = raw && norm(raw) !== norm(v) ? '<div class="formhint">في الاستمارة: ' + esc(raw) + '</div>' : '';
+    var scanned = st && st.details && st.details.scan;
+    if (scanned && (scanned.unsure || []).indexOf(f.k) > -1) hint += '<div class="formhint">قراءة غير مؤكدة من الاستمارة المصوّرة — تحقّق من الورقة</div>';
     return (f.sec ? '<h3 class="form-sec">' + f.sec + '</h3>' : '') +
       '<div' + (f.wide ? ' style="grid-column:1/-1"' : '') + (f.dep ? ' data-dep="' + f.dep.k + '" data-depv="' + esc(f.dep.v) + '"' : '') + '>' +
       '<label class="field" for="' + id + '">' + f.label + (need ? ' <span class="req">*</span>' : '') + '</label>' + inner + hint + '</div>';
@@ -1585,6 +1589,8 @@
     notransport: { label: 'غير مشتركين في المواصلات', test: function (x, groupOf) { return !groupOf[x.id]; } },
     wantsride: { label: 'يحتاجون مواصلات بلا نقطة تجمع', test: function (x, groupOf) { return x.wants_transport === true && !groupOf[x.id]; } },
     noride: { label: 'لا يحتاجون مواصلات', test: function (x) { return x.wants_transport === false; } },
+    scanned: { label: 'من استمارة مصوّرة (تحتاج مراجعة)', test: function (x) { return !!(x.details || {}).scan; },
+      extra: ['غير مؤكد', function (x) { return ((x.details || {}).scan.unsure || []).length; }] },
     rideunknown: { label: 'لم يُحدَّد احتياجهم للمواصلات', test: function (x, groupOf) { return x.wants_transport == null && !groupOf[x.id]; } }
   };
 
@@ -1620,7 +1626,7 @@
       var st = stStatus(x);
       return '<tr><td>' + (++rowNo) + '</td><td><b>' + esc(x.full_name) + '</b></td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.national_id || '—') + (idCount[x.national_id] > 1 ? ' <span class="badge unpaid" dir="rtl">مكرر</span>' : '') + '</td>' +
-        '<td><span class="badge ' + (st === 'final' ? 'published' : 'edit') + '">' + ST_STATUS[st] + '</span></td>' +
+        '<td><span class="badge ' + (st === 'final' ? 'published' : 'edit') + '">' + ST_STATUS[st] + '</span>' + ((x.details || {}).scan ? ' <span class="badge part">مصوّرة</span>' : '') + '</td>' +
         '<td>' + (st === 'final'
           ? '<select data-stclass="' + x.id + '" aria-label="صف ' + esc(x.full_name) + '">' + optionsHtml(schoolClasses(), x.class_name) + '</select>'
           : '<span style="color:var(--muted);font-size:.9rem">' + esc(x.class_name || x.requested_class || '—') + '</span>') + '</td>' +
@@ -1764,6 +1770,8 @@
       '<div class="toolbar" style="align-items:center;margin-bottom:4px"><h2 style="margin:0;flex:1">' + (st ? (final ? 'تعديل بيانات الطالب' : 'مراجعة تسجيل الطالب') : 'تسجيل طالب') + '</h2>' +
         '<span class="badge ' + (final ? 'published' : 'edit') + '">' + ST_STATUS[final ? 'final' : 'pending'] + '</span></div>' +
       (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الشعبة واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
+      (st && st.details && st.details.scan ? '<p class="formhint" style="margin:8px 0">أُدخل هذا السجل من استمارة مصوّرة (' + esc(st.details.scan.file || '') + ') ولم يُراجَع بعد. طابق كل خانة مع الورقة، وخصوصًا الحقول المعلَّمة «قراءة غير مؤكدة»' +
+        ((st.details.scan.unsure || []).length ? ' (' + st.details.scan.unsure.length + ')' : '') + '.</p>' : '') +
       originalAnswersHtml(st) + siblingBoxHtml(st) +
       '<div class="grid2" style="margin-top:4px">' + ST_FIELDS.map(function (f) { return studentFieldHtml(f, st); }).join('') + '</div>' + suggestionListsHtml() +
       (S.transportMissing ? '' :
@@ -1799,6 +1807,189 @@
       '</div></form>';
   }
 
+  /* ---------- إدخال الطلاب من استمارات ورقية مصوّرة ----------
+     تُرفع صورة الاستمارة المعبأة بخط اليد (أو ملف PDF فيه عدة استمارات)، فتقرؤها خدمة read-registration-form
+     (Supabase Edge Function تستخدم Claude)، ويُنشأ لكل استمارة تسجيل مبدئي موسوم «من استمارة مصوّرة» ليُراجَع على الورقة.
+     لا يُعتمد شيء نهائيًا من هنا. إن لم تكن الخدمة مفعّلة يمكن نسخ التعليمات ولصق الناتج يدويًا */
+
+  var SCAN_SKIP = { class_name: 1, placement: 1, filled_by: 1 };
+
+  // حقول الاستمارة الورقية كما تُرسل للقراءة: المفتاح، العنوان المطبوع، النوع، الخيارات
+  function scanFields() {
+    var list = ST_FIELDS.filter(function (f) { return !SCAN_SKIP[f.k]; }).map(function (f) {
+      var o = { k: f.k, label: f.p || f.label };
+      if (f.type === 'date' || f.type === 'number') o.type = f.type;
+      if (f.type === 'select') o.options = f.options.slice();
+      return o;
+    });
+    list.push({ k: 'wants_transport', label: 'يحتاج الطالب مواصلات؟', options: ['نعم', 'لا'] });
+    return list;
+  }
+
+  // الصورة تُصغَّر قبل الإرسال (صور الهواتف كبيرة) وتُحوَّل إلى JPEG؛ ملف PDF يُرسل كما هو
+  function scanFilePayload(file) {
+    var toBase64 = function (blob) {
+      return new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(String(fr.result).split(',')[1]); };
+        fr.onerror = function () { reject(new Error('تعذرت قراءة الملف')); };
+        fr.readAsDataURL(blob);
+      });
+    };
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      if (file.size > 4 * 1024 * 1024) return Promise.reject(new Error('ملف PDF أكبر من 4 ميغابايت؛ قسّمه إلى ملفات أصغر'));
+      return toBase64(file).then(function (data) { return { media_type: 'application/pdf', data: data }; });
+    }
+    if (!/^image\//.test(file.type)) return Promise.reject(new Error('نوع الملف غير مدعوم (صورة أو PDF فقط)'));
+    return new Promise(function (resolve, reject) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var max = 2200, scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve({ media_type: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('تعذر فتح الصورة')); };
+      img.src = url;
+    });
+  }
+
+  // سجل طالب مبدئي من استمارة مقروءة. يعيد { state: saved | dup | error, name, note, id }
+  async function saveScannedForm(form, fileName) {
+    var text = function (k) { return String(form[k] == null ? '' : form[k]).replace(/\s+/g, ' ').trim(); };
+    var data = { status: 'pending', class_name: '', details: {} };
+    ST_FIELDS.forEach(function (f) {
+      if (SCAN_SKIP[f.k]) return;
+      var v = text(f.k);
+      if (f.type === 'date') v = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+      else if (f.type === 'number') { v = parseFloat(latinDigits(v)); v = isNaN(v) ? null : v; }
+      else if (f.num) v = latinDigits(v).replace(/[\s-]/g, '');
+      if (f.x) data.details[f.k] = v; else data[f.k] = v;
+    });
+    var name = data.full_name || '';
+    if (!name) return { state: 'error', name: '(بلا اسم)', note: 'لم يُقرأ اسم الطالب' };
+    if (data.national_id && S.students.some(function (x) { return x.national_id === data.national_id; })) {
+      var same = S.students.filter(function (x) { return x.national_id === data.national_id; })[0];
+      return { state: 'dup', name: name, note: 'رقم الهوية ' + data.national_id + ' مسجَّل مسبقًا باسم «' + same.full_name + '» — لم يُضف', id: same.id };
+    }
+    data.requested_class = text('enroll_grade');
+    data.memorizes_quran = data.quran_parts == null ? null : data.quran_parts > 0;
+    if (!S.wantsMissing) { var w = text('wants_transport'); data.wants_transport = w === 'نعم' ? true : w === 'لا' ? false : null; }
+    var keys = {};
+    ST_FIELDS.forEach(function (f) { keys[f.k] = true; });
+    // scan: علامة أن السجل من استمارة مصوّرة ولم يُراجَع، مع الحقول التي لم تُقرأ بثقة
+    data.details.scan = {
+      at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || displayName(S.email), file: fileName,
+      unsure: (Array.isArray(form.unsure) ? form.unsure : []).filter(function (k) { return keys[k]; })
+    };
+    var r = await sb.from('students').insert(data).select().single();
+    if (r.error) return { state: 'error', name: name, note: r.error.message };
+    S.students.push(r.data);
+    S.students.sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
+    return { state: 'saved', name: name, id: r.data.id, note: data.details.scan.unsure.length ? 'حقول غير مؤكدة القراءة: ' + data.details.scan.unsure.length : '' };
+  }
+
+  async function saveScannedForms(item, forms) {
+    item.results = [];
+    for (var i = 0; i < forms.length; i++) item.results.push(await saveScannedForm(forms[i] || {}, item.name));
+    item.status = 'done';
+    item.msg = forms.length ? '' : 'لم يُعثر في الملف على استمارة معبأة';
+  }
+
+  async function runScanQueue(files) {
+    var scan = ui.scan;
+    if (!scan || scan.running) return;
+    var items = Array.prototype.map.call(files, function (f) { return { file: f, name: f.name, status: 'wait', msg: '', results: [] }; });
+    scan.items = scan.items.concat(items);
+    scan.running = true;
+    render();
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (ui.scan !== scan) return; // أُغلقت الشاشة
+      item.status = 'busy';
+      render();
+      try {
+        var payload = await scanFilePayload(item.file);
+        var r = await sb.functions.invoke('read-registration-form', { body: { file: payload, fields: scanFields() } });
+        if (r.error || !r.data || r.data.error) {
+          var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
+          // الخدمة غير منشورة أو بلا مفتاح: تُعرض الطريقة اليدوية
+          if (!r.data || /not found|404|ANTHROPIC_API_KEY|Failed to send/i.test(why)) scan.manual = true;
+          throw new Error(why || 'تعذر الاتصال بخدمة القراءة');
+        }
+        await saveScannedForms(item, Array.isArray(r.data.forms) ? r.data.forms : []);
+      } catch (err) {
+        item.status = 'error';
+        item.msg = err.message;
+      }
+      item.file = null;
+      render();
+    }
+    scan.running = false;
+    render();
+  }
+
+  // تعليمات تُنسخ إلى محادثة مع Claude مع إرفاق صورة الاستمارة، عند عدم توفر خدمة القراءة الآلية
+  function scanPromptText() {
+    var fields = scanFields();
+    return 'في المرفق استمارة تسجيل مدرسية عربية مطبوعة عبّأها ولي الأمر بخط اليد. انسخ ما كُتب بجانب كل عنوان مطبوع.\n' +
+      '- انسخ المكتوب كما هو دون تصحيح أو تخمين. الخانة الفارغة قيمتها نص فارغ.\n' +
+      '- الأرقام (الهوية، الهاتف، الأعداد) بأرقام 0-9 دون مسافات. التواريخ بصيغة YYYY-MM-DD (ولي الأمر يكتب يوم/شهر/سنة).\n' +
+      '- الحقل الذي له خيارات: أعد الخيار المؤشَّر أو المطابق لما كُتب حرفيًا من القائمة، أو نصًّا فارغًا.\n' +
+      '- unsure: مفاتيح الحقول التي لم تتأكد من قراءة خطها (أعطِ أفضل قراءة لها مع ذلك).\n' +
+      '- إن كان في المرفق أكثر من استمارة فلكل استمارة عنصر في forms.\n\n' +
+      'أجب بـ JSON فقط بهذا الشكل دون أي شرح:\n{"forms":[{' + fields.slice(0, 3).map(function (f) { return '"' + f.k + '":"…"'; }).join(',') + ',…,"unsure":["…"]}]}\n\n' +
+      'الحقول (المفتاح: العنوان المطبوع):\n' + fields.map(function (f) {
+        return f.k + ': ' + f.label + (f.type === 'date' ? ' (تاريخ)' : f.type === 'number' ? ' (رقم)' : '') + (f.options ? ' — الخيارات: ' + f.options.join(' | ') : '');
+      }).join('\n');
+  }
+
+  async function saveScanPaste() {
+    var box = document.getElementById('scan-paste'), raw = box.value, a = raw.indexOf('{'), b = raw.lastIndexOf('}'), parsed = null;
+    try { parsed = JSON.parse(raw.slice(a, b + 1)); } catch (err) { parsed = null; }
+    var forms = parsed && (Array.isArray(parsed.forms) ? parsed.forms : parsed.full_name != null ? [parsed] : null);
+    if (!forms) return toast('النص الملصوق ليس ناتجًا صالحًا. الصق إجابة Claude كاملة (تبدأ بـ { وتنتهي بـ }).', true);
+    var item = { name: 'لصق يدوي', status: 'busy', msg: '', results: [] };
+    ui.scan.items.push(item);
+    await saveScannedForms(item, forms);
+    render();
+  }
+
+  function scanScreenHtml() {
+    var scan = ui.scan, saved = 0;
+    scan.items.forEach(function (it) { it.results.forEach(function (r) { if (r.state === 'saved') saved++; }); });
+    var STATE = { wait: ['pending', 'بانتظار الدور'], busy: ['edit', 'تُقرأ الآن…'], done: ['published', 'تمت القراءة'], error: ['unpaid', 'تعذّرت'] };
+    var items = scan.items.map(function (it) {
+      return '<div class="scan-item"><div class="toolbar" style="align-items:center;margin:0"><b style="flex:1;overflow-wrap:anywhere">' + esc(it.name) + '</b>' +
+        '<span class="badge ' + STATE[it.status][0] + '">' + STATE[it.status][1] + '</span></div>' +
+        (it.msg ? '<div class="formhint">' + esc(it.msg) + '</div>' : '') +
+        it.results.map(function (r) {
+          return '<div class="cand"><span><b>' + esc(r.name) + '</b> <span class="badge ' + (r.state === 'saved' ? 'paid' : r.state === 'dup' ? 'part' : 'unpaid') + '">' +
+            (r.state === 'saved' ? 'أُضيف تسجيلًا مبدئيًا' : r.state === 'dup' ? 'موجود مسبقًا' : 'لم يُضف') + '</span>' +
+            (r.note ? '<br><span class="meta">' + esc(r.note) + '</span>' : '') + '</span>' +
+            (r.id ? '<button type="button" class="btn' + (r.state === 'saved' ? ' primary' : '') + '" data-stedit="' + r.id + '">' + (r.state === 'saved' ? 'مراجعة' : 'فتح السجل') + '</button>' : '') + '</div>';
+        }).join('') + '</div>';
+    }).join('');
+    return '<button type="button" class="btn link" data-scanclose>→ العودة إلى تسجيل الطلاب</button>' +
+      '<div class="card"><h2>إدخال من استمارات مصوّرة</h2>' +
+        '<p class="hint">صوّر الاستمارة الورقية المعبأة (أو امسحها بالماسح) وارفعها. تُقرأ الخانات آليًا ويُنشأ لكل استمارة <b>تسجيل مبدئي</b> موسوم «مصوّرة» يحتاج مراجعة على الورقة، ولا يُعتمد شيء نهائيًا. الحقول التي لم يُقرأ خطها بثقة تُعلَّم عند المراجعة.</p>' +
+        '<ul class="imp-list" style="margin-bottom:12px"><li>صورة واضحة مستقيمة للورقة كاملة، بإضاءة جيدة. صورة لكل استمارة، أو ملف PDF فيه عدة استمارات (حتى 4 ميغابايت).</li>' +
+          '<li>صورة الاستمارة ببياناتها تُرسل إلى خدمة Claude من Anthropic لقراءتها، عبر حساب الأكاديمية. لا تُحفظ الصورة في البرنامج.</li>' +
+          '<li>من رقم هويته مسجَّل مسبقًا لا يُضاف مرة ثانية.</li></ul>' +
+        '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-scanpick' + (scan.running ? ' disabled' : '') + '>' + (scan.running ? 'جارٍ القراءة…' : 'اختيار الصور أو ملفات PDF') + '</button>' +
+          '<input type="file" id="scan-files" accept="image/*,.pdf,application/pdf" multiple hidden>' +
+          (saved ? '<span class="st-count" style="margin:0">أُضيف في هذه الجلسة: ' + saved + ' — تجدهم في «تسجيل مبدئي» بمعيار «من استمارة مصوّرة».</span>' : '') + '</div>' +
+        (items ? '<div style="margin-top:14px">' + items + '</div>' : '') + '</div>' +
+      '<details class="card bank"' + (scan.manual ? ' open' : '') + '><summary>الطريقة اليدوية (إن لم تكن خدمة القراءة الآلية مفعّلة)</summary>' +
+        '<p class="hint" style="margin:10px 0">افتح محادثة مع Claude، أرفق صورة الاستمارة، والصق التعليمات التالية. ثم انسخ إجابته كاملة والصقها هنا.</p>' +
+        '<div class="actions" style="margin:0 0 10px"><button type="button" class="btn" data-scancopy>نسخ التعليمات</button></div>' +
+        '<label class="field" for="scan-paste">إجابة Claude</label><textarea id="scan-paste" rows="6" dir="ltr" placeholder=\'{"forms":[…]}\'></textarea>' +
+        '<div class="actions"><button type="button" class="btn primary" data-scanpaste>إضافة من الإجابة الملصوقة</button></div></details>';
+  }
+
   function renderStudents() {
     if (S.studentsMissing || S.regMissing) {
       app.innerHTML = tabs('students') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لتسجيل الطلاب بعد.<br>' +
@@ -1810,6 +2001,10 @@
     if (ed && !ui.imp) {
       app.innerHTML = tabs('students') + studentFormHtml(st);
       syncStudentDeps();
+      return;
+    }
+    if (ui.scan && !ui.imp) {
+      app.innerHTML = tabs('students') + scanScreenHtml();
       return;
     }
     var counts = {}, byStatus = { pending: 0, final: 0 };
@@ -1824,6 +2019,7 @@
           '<button type="button" class="btn" data-imptemplate>تنزيل قالب Excel</button>' +
           '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' : '') +
           '<button type="button" class="btn" data-stblank>طباعة استمارة ورقية فارغة</button>' +
+          '<button type="button" class="btn" data-scanopen>إدخال من استمارات مصوّرة</button>' +
         '</div>') +
       '<nav class="pills no-print" aria-label="حالة التسجيل">' + [['pending', 'تسجيل مبدئي', byStatus.pending], ['final', 'تسجيل نهائي', byStatus.final], ['', 'الكل', S.students.length]].map(function (p) {
         return '<button type="button" data-ststatus="' + p[0] + '"' + (ui.stStatus === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
@@ -1870,6 +2066,7 @@
       if (missing.length && !confirm('لم تُسجَّل هذه المستندات: ' + missing.join('، ') + '.\nهل تريد اعتماد التسجيل النهائي مع ذلك؟')) return;
       data.status = 'final';
       data.finalized_at = new Date().toISOString();
+      delete data.details.scan; // روجع على الورقة
     } else if (!st) {
       data.status = 'pending';
     }
@@ -2089,7 +2286,23 @@
   document.addEventListener('click', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el, st, r;
-    if ((el = e.target.closest('[data-sibcopy]'))) {
+    if (e.target.closest('[data-scanopen]')) {
+      ui.scan = ui.scan || { items: [], manual: false, running: false };
+      render();
+    } else if (e.target.closest('[data-scanclose]')) {
+      if (ui.scan && ui.scan.running && !confirm('القراءة جارية. إغلاق الشاشة يوقف ما لم يُقرأ بعد. هل تريد الإغلاق؟')) return;
+      ui.scan = null;
+      ui.stStatus = 'pending';
+      render();
+    } else if (e.target.closest('[data-scanpick]')) {
+      document.getElementById('scan-files').click();
+    } else if (e.target.closest('[data-scancopy]')) {
+      var promptText = scanPromptText();
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(promptText).then(function () { toast('نُسخت التعليمات'); }, function () { toast('تعذر النسخ', true); });
+      else toast('تعذر النسخ في هذا المتصفح', true);
+    } else if (e.target.closest('[data-scanpaste]')) {
+      saveScanPaste();
+    } else if ((el = e.target.closest('[data-sibcopy]'))) {
       copyFromSibling(el.getAttribute('data-sibcopy'));
     } else if ((el = e.target.closest('[data-sfnone]'))) {
       document.getElementById('sf-' + el.getAttribute('data-sfnone')).value = 'لا يوجد';
@@ -2145,7 +2358,9 @@
   app.addEventListener('change', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el = e.target;
-    if (el.id === 'imp-skipknown' && ui.imp) {
+    if (el.id === 'scan-files') {
+      if (el.files.length) runScanQueue(el.files);
+    } else if (el.id === 'imp-skipknown' && ui.imp) {
       ui.imp.skipKnown = el.checked;
       render();
     } else if (el.id === 'imp-file') {
