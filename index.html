@@ -5072,8 +5072,9 @@
     return p.length === 3 ? Math.round(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])) / 864e5) + 25569 : null;
   }
 
-  // list: طلاب الورقة. capacity: القدرة الاستيعابية من «إعداد الفصول» (null: تبقى قيمة القالب). note: دالة ملاحظة الطالب
-  function fillRegistrationSheet(xml, list, capacity, note, teacher) {
+  // list: طلاب الورقة. capacity: القدرة الاستيعابية من «إعداد الفصول» (null: تبقى قيمة القالب). note: دالة ما يُكتب في العمود الأخير
+  // noteHead: عنوان العمود الأخير بدل «ملاحظات» (إن أُعطي)
+  function fillRegistrationSheet(xml, list, capacity, note, teacher, noteHead) {
     var m = xml.match(/COUNTA\(B10:B(\d+)\)/);
     if (!m) return null;
     var last = Number(m[1]), slots = last - 9, need = Math.max(slots, list.length), k = need - slots, newLast = last + k;
@@ -5110,6 +5111,7 @@
     }
     var boys = list.filter(function (x) { return x.gender === 'ذكر'; }).length, girls = list.filter(function (x) { return x.gender === 'أنثى'; }).length;
     var cap = capacity == null ? slots : capacity;
+    if (noteHead) head = head.replace(/<c r="L9" s="(\d+)"[^>]*>.*?<\/c>/, function (all, sid) { return '<c r="L9" s="' + sid + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(noteHead) + '</t></is></c>'; });
     // خانة «اسم مربي الصف» (C5)
     if (teacher) head = head.replace(/<c r="C5" s="(\d+)"\/>/, function (all, sid) { return '<c r="C5" s="' + sid + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(teacher) + '</t></is></c>'; });
     head = setCellValue(setCellValue(setCellValue(setCellValue(setCellValue(head, 'F6', cap), 'C7', list.length), 'F7', cap - list.length), 'I6', boys), 'I7', girls);
@@ -5136,6 +5138,28 @@
       });
 
       var finals = S.students.filter(function (x) { return stStatus(x) === 'final' && x.class_name; });
+
+      // العمود الأخير: دفع المواصلات عن الشهر المعروض في شاشة المواصلات (أو الشهر الحالي).
+      // الدفعات يقرؤها مدير النظام وحده؛ لغيره يبقى العمود «ملاحظات» كما في القالب
+      var payHead = '', payNote = null;
+      if (isAdmin() && !S.transportMissing) {
+        if (!ui.tMonth) ui.tMonth = thisMonth();
+        var payMonth = ui.tMonth;
+        var payRowsNow = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('month', payMonth).order('student_id'); });
+        if (!payRowsNow) throw new Error('تعذر جلب دفعات المواصلات');
+        var payMap = {}, memberOf = {};
+        payRowsNow.forEach(function (p) { p.amount = Number(p.amount) || 0; payMap[p.student_id] = p; });
+        S.tPay[payMonth] = payMap;
+        S.tMembers.forEach(function (m) { memberOf[m.student_id] = m; });
+        payHead = 'دفع المواصلات (' + monthLabel(payMonth) + ')';
+        payNote = function (x) {
+          var m = memberOf[x.id], paid = (payMap[x.id] || {}).amount || 0;
+          if (!m) return paid > 0 ? 'مدفوع ' + plainNum(paid) : '';
+          if (!owesThisMonth(m)) return subscribedIn(m, payMonth) ? 'لم يبدأ الاشتراك' : 'اشتراك متوقف';
+          var share = shareOf(m);
+          return paid <= 0 ? 'لم يدفع (' + plainNum(share) + ')' : paid >= share ? 'مدفوع ' + plainNum(paid) : 'مدفوع ' + plainNum(paid) + ' من ' + plainNum(share);
+        };
+      }
       // صف الشعبة من اسمها؛ الروضة (KG2…) ليست صفًّا من صفوف الملف ولو كان في اسمها رقم
       var gradeIn = function (name) { return /kg|روض|تمهيد/i.test(name) ? 0 : gradeOf(name); };
       var placed = {}, stats = {}, workbook = read('xl/workbook.xml'), total = 0, extra = 0;
@@ -5159,7 +5183,7 @@
         classConfig().list.forEach(function (c) {
           if (c.teacher && gradeIn(c.name) === grade && (!side || c.gender === side || sections[c.name]) && teachers.indexOf(c.teacher) < 0) teachers.push(c.teacher);
         });
-        var out = fillRegistrationSheet(read(sheetFile[name]), list, cap, function (x) { return many ? x.class_name : ''; }, teachers.join(' / '));
+        var out = fillRegistrationSheet(read(sheetFile[name]), list, cap, payNote || function (x) { return many ? x.class_name : ''; }, teachers.join(' / '), payHead);
         write(sheetFile[name], out.xml);
         stats[name] = out;
         total += out.count;
