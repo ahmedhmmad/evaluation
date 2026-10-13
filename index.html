@@ -2249,6 +2249,56 @@
     return changed;
   }
 
+  /* حذف سجل طالب. حذف السجل يحذف معه في القاعدة دفعات المواصلات وعضوية الباص المربوطة به،
+     فلا يُحذف سجل له دفعات إلا بعد نقلها إلى سجله الآخر (السجل المكرر برقم الهوية نفسه) */
+  async function deleteStudent(st) {
+    if (!st) return;
+    // الدفعات تُقرأ من القاعدة نفسها لا مما في الصفحة
+    var pays = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('student_id', st.id).order('month'); });
+    if (!pays && !S.transportMissing) return toast('تعذر التحقق من دفعات الطالب؛ لم يُحذف شيء. أعد المحاولة.', true);
+    pays = (pays || []).filter(function (p) { return Number(p.amount) > 0; });
+    var member = S.tMembers.filter(function (m) { return m.student_id === st.id; })[0];
+    var idKey = latinDigits(String(st.national_id || '')).replace(/\s/g, '');
+    var twins = idKey ? S.students.filter(function (x) { return x.id !== st.id && latinDigits(String(x.national_id || '')).replace(/\s/g, '') === idKey; }) : [];
+    // السجل الباقي: النهائي إن وُجد
+    var keep = twins.filter(function (x) { return stStatus(x) === 'final'; })[0] || twins[0];
+
+    if (pays.length) {
+      var sum = pays.reduce(function (a, p) { return a + Number(p.amount); }, 0);
+      var what = pays.length + ' دفعة مواصلات بمجموع ' + money(sum) + ' (' + pays.map(function (p) { return monthLabel(p.month); }).join('، ') + ')';
+      if (!keep) {
+        return alert('لا يمكن حذف «' + st.full_name + '»: له ' + what + '.\n\nحذف السجل يحذف دفعاته. إن كان الحذف مقصودًا فاحذف إيصالاته أولًا من شاشة المواصلات (تُحفظ في أرشيف الإيصالات)، أو استردّها.');
+      }
+      if (!confirm('للطالب «' + st.full_name + '» ' + what + '.\n\nستُنقل الدفعات' + (member ? ' والباص' : '') + ' إلى سجله الآخر (' + ST_STATUS[stStatus(keep)] + (keep.class_name ? ' · ' + keep.class_name : '') + ') ثم يُحذف هذا السجل.\n\nمتابعة؟')) return;
+      var theirs = await fetchAll(function () { return sb.from('transport_payments').select('month, amount').eq('student_id', keep.id).order('month'); });
+      if (!theirs) return toast('تعذر التحقق من دفعات السجل الآخر؛ لم يُحذف شيء.', true);
+      var clash = pays.filter(function (p) { return theirs.some(function (o) { return o.month === p.month; }); });
+      if (clash.length) {
+        return alert('لم يُحذف شيء: للسجلين دفعة عن الشهر نفسه (' + clash.map(function (p) { return monthLabel(p.month); }).join('، ') + ').\nاحذف إيصال أحدهما أو استردّه أولًا ثم أعد المحاولة.');
+      }
+      var mv = await sb.from('transport_payments').update({ student_id: keep.id }).eq('student_id', st.id);
+      if (mv.error) return fail(mv.error);
+      await sb.from('transport_refunds').update({ student_id: keep.id }).eq('student_id', st.id); // سجل المستردات يتبع صاحبه إن وُجد
+    } else if (!confirm('هل تريد حذف الطالب «' + st.full_name + '» نهائيًا؟' + (member && !keep ? '\n\nسيُزال أيضًا من باصه.' : ''))) {
+      return;
+    }
+    // الباص ونقطة الركوب: ينتقلان إن لم يكن للسجل الباقي باص
+    if (member && keep && !S.tMembers.some(function (m) { return m.student_id === keep.id; })) {
+      var mm = await sb.from('transport_members').update({ student_id: keep.id }).eq('student_id', st.id);
+      if (mm.error) return fail(mm.error);
+      if (keep.wants_transport !== true && !S.wantsMissing) {
+        var wt = await sb.from('students').update({ wants_transport: true }).eq('id', keep.id);
+        if (!wt.error) keep.wants_transport = true;
+      }
+    }
+    var r = await sb.from('students').delete().eq('id', st.id);
+    if (r.error) return fail(r.error);
+    S.students = S.students.filter(function (x) { return x.id !== st.id; });
+    await loadTransport();
+    render();
+    toast(pays.length ? 'حُذف السجل ونُقلت دفعاته إلى سجله الآخر' : 'تم الحذف');
+  }
+
   /* ----- اكتشاف الأخطاء في سجلات الطلاب -----
      فحوص تقرأ السجلات ولا تغيّر شيئًا: «خطأ» لما هو خطأ إدخال شبه مؤكد، و«تنبيه» لما يستحق نظرة وقد يكون صحيحًا */
 
@@ -2820,13 +2870,7 @@
       st.status = 'pending'; st.finalized_at = null;
       render();
     } else if (isAdmin() && (el = e.target.closest('[data-stdel]'))) {
-      st = findStudent(el.getAttribute('data-stdel'));
-      if (!confirm('هل تريد حذف الطالب «' + st.full_name + '» نهائيًا؟')) return;
-      r = await sb.from('students').delete().eq('id', st.id);
-      if (r.error) return fail(r.error);
-      S.students = S.students.filter(function (x) { return x.id !== st.id; });
-      S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
-      render();
+      deleteStudent(findStudent(el.getAttribute('data-stdel')));
     } else if (e.target.closest('[data-stxlsx]')) {
       exportStudentsXlsx();
     } else if (e.target.closest('[data-stprint]')) {
