@@ -890,7 +890,69 @@
       await loadTransport();
     }
     S.ready = true;
+    S.syncedAt = new Date();
     render();
+  }
+
+  /* مزامنة: تعيد جلب الطلاب والشعب والمواصلات ودفعات الشهر المعروض من القاعدة، ليُصدَّر ما فيها الآن
+     لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
+     إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
+  var syncing = null;
+  function syncData(quiet) {
+    if (!syncing) syncing = doSync(quiet).then(function (ok) { syncing = null; return ok; }, function () { syncing = null; return false; });
+    return syncing;
+  }
+
+  async function doSync(quiet) {
+    if (!S.ready) return false;
+    if (!canStudents()) { await flush(); await loadAll(); return true; }
+    if (!quiet && (ui.editStudent != null || ui.editTeacher != null)) {
+      toast('احفظ النموذج المفتوح أو أغلقه أولًا، ثم زامن', true);
+      return false;
+    }
+    var KEYS = ['settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
+      'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'refundMissing', 'leaveMissing'];
+    var keep = {};
+    KEYS.forEach(function (k) { keep[k] = S[k]; });
+    if (!quiet) toast('جارٍ مزامنة البيانات…');
+    document.body.classList.add('syncing');
+    try {
+      await flush();
+      var cfg = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
+      if (cfg.error) throw new Error(cfg.error.message);
+      S.settings = cfg.data || null;
+      // عدد الصفوف في القاعدة يُقارن بما جُلب: الجلب على دفعات، فإن نقص شيء أُعيد مرة ثم يُعدّ فشلًا
+      var complete = async function (table, load, size) {
+        for (var attempt = 0; attempt < 2; attempt++) {
+          await load();
+          var c = await sb.from(table).select('*', { count: 'exact', head: true });
+          if (c.error || typeof c.count !== 'number' || c.count === size()) return;
+        }
+        throw new Error('لم تكتمل بيانات الجدول ' + table);
+      };
+      await complete('students', loadStudents, function () { return S.students.length; });
+      if (S.studentsMissing && !keep.studentsMissing) throw new Error('تعذر جلب الطلاب');
+      await complete('transport_members', loadTransport, function () { return S.tMembers.length; });
+      if (S.transportMissing && !keep.transportMissing) throw new Error('تعذر جلب المواصلات');
+      if (ui.tMonth && !S.transportMissing) {
+        var month = ui.tMonth;
+        var rows = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('month', month).order('student_id'); });
+        if (!rows) throw new Error('تعذر جلب دفعات المواصلات');
+        var map = {};
+        rows.forEach(function (p) { p.amount = Number(p.amount) || 0; map[p.student_id] = p; });
+        S.tPay[month] = map;
+      }
+    } catch (err) {
+      KEYS.forEach(function (k) { S[k] = keep[k]; });
+      document.body.classList.remove('syncing');
+      toast('تعذرت المزامنة، والبيانات المعروضة لم تتغير. تحقق من الاتصال ثم أعد المحاولة. (' + err.message + ')', true);
+      return false;
+    }
+    document.body.classList.remove('syncing');
+    S.syncedAt = new Date();
+    render();
+    if (!quiet) toast('تمت المزامنة — الطلاب: ' + S.students.length + ' · المشتركون في المواصلات: ' + S.tMembers.length);
+    return true;
   }
 
   // قاعدة البيانات تعيد ألف صف كحد أقصى في الطلب الواحد، فتُجلب الجداول الكبيرة على دفعات.
@@ -907,7 +969,7 @@
 
   async function loadStudents() {
     // الجدول غير موجود إلى أن يُشغَّل الملف supabase/students.sql
-    var all = await fetchAll(function () { return sb.from('students').select('*').order('full_name'); });
+    var all = await fetchAll(function () { return sb.from('students').select('*').order('full_name').order('id'); });
     S.studentsMissing = !all;
     S.students = all || [];
     // أعمدة التسجيل على مرحلتين غير موجودة إلى أن يُشغَّل الملف supabase/student_registration.sql
@@ -919,7 +981,7 @@
   async function loadTransport() {
     // الجداول غير موجودة إلى أن يُشغَّل الملف supabase/transport.sql
     var g = await sb.from('transport_groups').select('*').order('assembly_point');
-    var m = g.error ? null : await fetchAll(function () { return sb.from('transport_members').select('*').order('joined_at'); });
+    var m = g.error ? null : await fetchAll(function () { return sb.from('transport_members').select('*').order('joined_at').order('student_id'); });
     S.transportMissing = !m;
     // عمود التسميات البديلة أُضيف لاحقًا إلى supabase/transport.sql
     S.aliasMissing = !!m && !!(await sb.from('transport_groups').select('aliases').limit(1)).error;
@@ -930,7 +992,7 @@
     S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
     // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
     S.tFirstPaid = {};
-    var paidRows = m ? await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month'); }) : null;
+    var paidRows = m ? await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month').order('student_id'); }) : null;
     (paidRows || []).forEach(function (p) {
       if (Number(p.amount) > 0 && (!S.tFirstPaid[p.student_id] || p.month < S.tFirstPaid[p.student_id])) S.tFirstPaid[p.student_id] = p.month;
     });
@@ -1105,6 +1167,8 @@
     userbar.innerHTML =
       '<div class="who">' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</div>' +
       '<div class="role">' + ROLES[role()] + '</div>' +
+      '<button type="button" class="btn" data-act="sync" title="إعادة جلب البيانات من القاعدة">مزامنة البيانات</button>' +
+      (S.syncedAt ? '<div class="role">آخر مزامنة: ' + S.syncedAt.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '</div>' : '') +
       '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>';
   }
 
@@ -3644,6 +3708,7 @@
   /* ----- تصدير الدفعات ----- */
 
   async function exportPayXlsx() {
+    if (!(await syncData(true))) return;
     var sc = payScope();
     if (!sc.rows.length) return toast('لا توجد دفعات للتصدير', true);
     try {
@@ -3699,6 +3764,7 @@
   // يشمل كل المسجلين نهائيًا: المشترك وغير المشترك، الدافع وغير الدافع. غير المطالَب هذا الشهر يظهر بحالته بلا مبالغ.
   // النطاق: المجموعة المفتوحة (طلابها فقط)، أو الشعبة المختارة في «دفعات الطلاب»، وإلا المدرسة كلها
   async function exportTransportContacts() {
+    if (!(await syncData(true))) return;
     var g = currentGroup(), cls = !g && location.hash === '#/transport/payments' ? ui.tpClass : '';
     var owing = {};
     payRows().forEach(function (r) { owing[r.x.id] = r; });
@@ -5175,6 +5241,8 @@
   }
 
   async function exportRegistrationWorkbook(btn) {
+    if (!(await syncData(true))) return;
+    btn = document.querySelector('[data-regbook]') || btn; // الشاشة أُعيد رسمها بعد المزامنة
     btn.disabled = true;
     try {
       await loadFflate();
@@ -5505,6 +5573,12 @@
     var act = el.getAttribute('data-act');
     var t = currentTeacher();
 
+    if (act === 'sync') {
+      el.disabled = true;
+      await syncData();
+      el.disabled = false;
+      return;
+    }
     if (act === 'signout') {
       await flush();
       await sb.auth.signOut();
@@ -6165,6 +6239,7 @@
 
   // ملف Excel بما تعرضه شاشة التسجيل بتصفيتها الحالية، وفيه السكن والمواصلات (ملف المواصلات)
   async function exportStudentsXlsx() {
+    if (!(await syncData(true))) return;
     var list = filteredStudents(), groupOf = transportGroupOf();
     if (!list.length) return toast('لا يوجد طلاب للتصدير', true);
     var parts = [ui.stStatus ? ST_STATUS[ui.stStatus] : 'كل الطلاب'];
