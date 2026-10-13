@@ -527,14 +527,21 @@
   table.grid select { max-width: 170px; }
   /* جداول الدفعات: أعمدة أقل وأزرار تلتف داخل خانتها، حتى لا يُقصّ الجدول ولا يتكسر اسم الطالب */
   table.grid.pay td { padding: 8px 6px; }
-  table.grid.pay td.who, #t-members table.grid td:nth-child(2) { min-width: 180px; }
+  table.grid.pay td.who { min-width: 180px; }
+  #t-members table.grid td:nth-child(2) { min-width: 150px; }
+  #t-members table.grid td:nth-child(3) { font-size: .85rem; }
   table.grid.pay td.bus { min-width: 110px; max-width: 180px; }
   table.grid.pay input[type=number] { width: 78px; }
   table.grid.pay select, table.grid.pay td .mnote { width: 135px; }
-  table.grid .acts { display: flex; flex-wrap: wrap; gap: 6px; min-width: 150px; }
-  table.grid .acts .btn, #t-members td.no-print .btn { padding: 6px 10px; font-size: .85rem; }
-  #t-members td.no-print { white-space: normal !important; min-width: 170px; }
-  #t-members td.no-print .btn { margin: 2px 0; }
+  table.grid .acts { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; white-space: nowrap; }
+  table.grid .acts .btn, #t-members td.no-print .btn { padding: 6px 10px; font-size: .85rem; white-space: nowrap; }
+  table.grid .acts input[type=date] { width: auto; padding: 5px 8px; font-size: .85rem; }
+  #t-members td.no-print { white-space: nowrap; }
+  table.grid td.bus a { display: inline-block; }
+  /* اختيار الشهر: الكلمة والخانة متجاورتان دائمًا */
+  .monthpick { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .monthpick label { margin: 0; }
+  .monthpick input { width: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
   .imp-list { margin: 6px 0 0; padding-inline-start: 20px; color: var(--muted); font-size: .9rem; }
   .imp-list li.bad { color: var(--red); }
 
@@ -908,7 +915,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '13/10 — 12';
+  var APP_BUILD = '13/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3306,14 +3313,14 @@
           pickupInput(m, x) + '</td>' + '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">أُضيف إلى الباص ولم يبدأ اشتراكه (لم يصدر له إيصال)</td>' +
           '<td><span class="badge pending">بانتظار الاشتراك</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button> ' +
-          '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
+          '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
       }
       if (!owesThisMonth(m)) {
         return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
           '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + monthLabel(m.left_from) + '</td>' +
           '<td><span class="badge pending">متوقف</span></td>' +
-          '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '">إعادة الاشتراك</button> ' +
-          '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من المجموعة</button></td></tr>';
+          '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button> ' +
+          '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
       }
       var sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0;
       var method = rec.method || 'cash';
@@ -3329,12 +3336,12 @@
         }).join('') + '</select>' +
         payNoteInput(x.id, method, rec) + '</td>' +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + rideBadge(rideState(m, Math.max(0, sh - p))) + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
-        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button> ') +
-        '<button type="button" class="btn" data-mdel="' + x.id + '">إزالة من الباص</button></td></tr>';
+        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button> ') +
+        '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
     }).join('');
     return rows
-      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
+      ? '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الطالب</th><th>واتساب ولي الأمر</th><th>الحصة (ج.م)</th><th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>الحالة</th><th class="no-print"></th></tr></thead>' +
         '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + money(due) + '</td><td>' + money(paid) + '</td>' +
         '<td colspan="3">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>' + groupMethodsHtml(g)
       : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
@@ -3430,8 +3437,8 @@
         act = (r.state === 'suspended'
             ? '<button type="button" class="btn" data-unsuspend="' + x.id + '">رفع التعليق</button> '
             : '<button type="button" class="btn danger" data-suspend="' + x.id + '">تعليق الركوب</button> ') +
-          '<span style="white-space:nowrap"><input type="date" id="grace-' + x.id + '" aria-label="مهلة حتى" min="' + todayISO() + '" value="' + esc(String(m.grace_until || '').slice(0, 10) >= todayISO() ? String(m.grace_until).slice(0, 10) : soonISO) + '" style="width:auto;padding:6px 8px"> ' +
-          '<button type="button" class="btn" data-gracegive="' + x.id + '">' + (r.state === 'extended' ? 'تعديل المهلة' : 'منح مهلة') + '</button></span> ';
+          '<input type="date" id="grace-' + x.id + '" aria-label="مهلة حتى" min="' + todayISO() + '" value="' + esc(String(m.grace_until || '').slice(0, 10) >= todayISO() ? String(m.grace_until).slice(0, 10) : soonISO) + '"> ' +
+          '<button type="button" class="btn" data-gracegive="' + x.id + '">' + (r.state === 'extended' ? 'تعديل المهلة' : 'منح مهلة') + '</button> ';
       }
       act += '<button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button>';
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
@@ -3441,7 +3448,7 @@
           (r.state === 'extended' ? '<br><span style="color:var(--muted);font-size:.85rem">حتى ' + dmy(m.grace_until) + '</span>' : '') +
           (r.state === 'late' && late ? '<br><span style="color:var(--muted);font-size:.85rem">منذ ' + late + ' يومًا</span>' : '') +
           (r.state === 'suspended' && m.suspended_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(m.suspended_by) + (m.suspended_at ? ' · ' + dmy(m.suspended_at) : '') + '</span>' : '') + '</td>' +
-        '<td class="no-print">' + act + '</td></tr>';
+        '<td class="no-print"><div class="acts">' + act + '</div></td></tr>';
     }).join('');
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
         '<label class="field" for="fee-due" style="margin:0">آخر يوم لسداد اشتراك الشهر</label>' +
@@ -3456,7 +3463,7 @@
         (n.late ? '<button type="button" class="btn danger" data-suspendall>تعليق كل المتأخرين (' + n.late + ')</button>' : '') +
         '<button type="button" class="btn" data-latexlsx' + (rows.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
       (body
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الباص</th><th>واتساب ولي الأمر</th><th>المتبقي (ج.م)</th><th>الحالة</th><th class="no-print">الإجراء</th></tr></thead><tbody>' + body + '</tbody></table></div>'
+        ? '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الطالب</th><th>الباص</th><th>واتساب ولي الأمر</th><th>المتبقي (ج.م)</th><th>الحالة</th><th class="no-print">الإجراء</th></tr></thead><tbody>' + body + '</tbody></table></div>'
         : '<div class="empty">لا أحد في هذه القائمة.</div>') + '</div>';
   }
 
@@ -3692,7 +3699,7 @@
           (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
         '<td><div class="acts">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button>') + '</div></td></tr>';
+        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button>') + '</div></td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
       '<nav class="pills">' + pills.map(function (p) {
@@ -3760,7 +3767,7 @@
 
     if (!owesThisMonth(m) && !subscribedIn(m, ui.tMonth)) {
       return head + '<p class="formhint" style="margin-top:10px">اشتراك هذا الطالب في المواصلات متوقف منذ ' + monthLabel(m.left_from) + '، فلا يُطلب منه اشتراك ' + monthLabel(ui.tMonth) + '.</p>' +
-        '<div class="actions"><button type="button" class="btn primary" data-mresume="' + x.id + '">إعادة الاشتراك</button></div></div>';
+        '<div class="actions"><button type="button" class="btn primary" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button></div></div>';
     }
     var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, share = shareOf(m), paid = rec.amount || 0, left = Math.max(0, share - paid);
     if (!paid) ui.rcRefund = false;
@@ -3794,7 +3801,7 @@
         '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
         (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
           '<button type="button" class="btn" data-rcrefund>استرداد مبلغ</button>' +
-          '<button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : notStarted ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
+          '<button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : notStarted ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
       (function () {
         var back = refundsOf(x.id, ui.tMonth);
         return back.length ? '<p class="st-count" style="margin:10px 0 0">رُدّ له عن هذا الشهر: ' + money(refundTotal(back)) + ' (' + back.length + ') — التفاصيل في «المستردات».</p>' : '';
@@ -4071,8 +4078,8 @@
       loadPayments(ui.tMonth);
       return;
     }
-    var monthPick = '<label class="field" for="t-month" style="margin:0">الشهر</label>' +
-      '<input type="month" id="t-month" value="' + ui.tMonth + '" style="width:auto;border:1px solid var(--line);border-radius:8px;padding:8px 12px">';
+    var monthPick = '<span class="monthpick"><label class="field" for="t-month">الشهر</label>' +
+      '<input type="month" id="t-month" value="' + ui.tMonth + '"></span>';
 
     if (g) {
       var editing = ui.editGroup === g.id, tot = groupTotals(g);
