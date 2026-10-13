@@ -907,6 +907,9 @@
   /* مزامنة: تعيد جلب الطلاب والشعب والمواصلات ودفعات الشهر المعروض من القاعدة، ليُصدَّر ما فيها الآن
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
+  // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
+  var APP_BUILD = '13/10 — 12';
+
   var syncing = null;
   function syncData(quiet) {
     if (!syncing) syncing = doSync(quiet).then(function (ok) { syncing = null; return ok; }, function () { syncing = null; return false; });
@@ -1180,6 +1183,7 @@
       '<div class="who">' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</div>' +
       '<div class="role">' + ROLES[role()] + '</div>' +
       '<button type="button" class="btn" data-act="sync" title="إعادة جلب البيانات من القاعدة">مزامنة البيانات</button>' +
+      '<div class="role" title="رقم نسخة البرنامج المفتوحة في هذا المتصفح">نسخة البرنامج: ' + APP_BUILD + '</div>' +
       (S.syncedAt ? '<div class="role">آخر مزامنة: ' + S.syncedAt.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '</div>' : '') +
       '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>';
   }
@@ -2302,6 +2306,8 @@
       }
     }
     var r = await sb.from('students').delete().eq('id', st.id);
+    // القاعدة نفسها ترفض حذف طالب له دفعات (supabase/protect_payments.sql)
+    if (r.error && r.error.code === '23503') return alert('لم يُحذف «' + st.full_name + '»: له دفعات مواصلات مسجلة في القاعدة.\nاضغط «مزامنة البيانات» ثم احذف إيصالاته أو انقلها أولًا.');
     if (r.error) return fail(r.error);
     S.students = S.students.filter(function (x) { return x.id !== st.id; });
     await loadTransport();
