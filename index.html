@@ -2289,8 +2289,10 @@
     var digits = function (v) { return latinDigits(String(v == null ? '' : v)).replace(/\D/g, ''); };
     var det = function (x, k) { return String((x.details || {})[k] == null ? '' : (x.details || {})[k]).trim(); };
     var known = classConfig().list, byId = {}, byName = {}, byGuardian = {};
+    // المسجَّلون نهائيًا فقط: التسجيل المبدئي لم يُراجَع بعد
+    var finals = S.students.filter(function (x) { return stStatus(x) === 'final'; });
 
-    S.students.forEach(function (x) {
+    finals.forEach(function (x) {
       var fin = stStatus(x) === 'final', cg = gradeNum(x.class_name), eg = gradeNum(det(x, 'enroll_grade')), lastText = det(x, 'last_grade');
       var g = cg || eg, where = cg ? 'الشعبة «' + x.class_name + '»' : 'مرحلة التسجيل «' + det(x, 'enroll_grade') + '»';
 
@@ -2374,8 +2376,8 @@
         add('warn', 'guardian', x, 'هوية ولي الأمر ' + k + ' — الاسم هنا: ' + (x.guardian_name || '—'));
       });
     });
-    siblingFixPlan(false).changes.forEach(function (c) {
-      if (c.from != null && c.from !== '' && Number(c.from) < c.to) add('warn', 'sibs', c.x, 'المكتوب ' + c.from + '، والمسجَّلون لولي الأمر نفسه ' + c.to);
+    siblingFixPlan(true).changes.forEach(function (c) {
+      if (stStatus(c.x) === 'final' && c.from != null && c.from !== '' && Number(c.from) < c.to) add('warn', 'sibs', c.x, 'المكتوب ' + c.from + '، والمسجَّلون نهائيًا لولي الأمر نفسه ' + c.to);
     });
     var counts = classCounts();
     known.forEach(function (c) {
@@ -2407,9 +2409,9 @@
         }).join('') + '</tbody></table></div></details>';
     }).join('');
     return '<button type="button" class="btn link" data-checkclose>→ العودة إلى تسجيل الطلاب</button>' +
-      '<div class="card"><h2>اكتشاف الأخطاء في سجلات الطلاب</h2>' +
-        '<p class="hint">الفحص يقرأ السجلات ولا يغيّر شيئًا. «خطأ»: إدخال خاطئ في الغالب. «تنبيه»: يستحق نظرة وقد يكون صحيحًا. اضغط اسم الطالب لفتح سجله وتصحيحه، وبعد الحفظ تعود إلى هذه الشاشة.</p>' +
-        '<p class="st-count" style="margin:10px 0">السجلات المفحوصة: ' + S.students.length + ' · سجلات فيها ملاحظات: <b>' + Object.keys(people).length + '</b></p>' +
+      '<div class="card"><h2>اكتشاف الأخطاء في التسجيل النهائي</h2>' +
+        '<p class="hint">يُفحص المسجَّلون نهائيًا فقط. الفحص يقرأ السجلات ولا يغيّر شيئًا. «خطأ»: إدخال خاطئ في الغالب. «تنبيه»: يستحق نظرة وقد يكون صحيحًا. اضغط اسم الطالب لفتح سجله وتصحيحه، وبعد الحفظ تعود إلى هذه الشاشة.</p>' +
+        '<p class="st-count" style="margin:10px 0">المسجَّلون نهائيًا المفحوصون: ' + S.students.filter(function (x) { return stStatus(x) === 'final'; }).length + ' · سجلات فيها ملاحظات: <b>' + Object.keys(people).length + '</b></p>' +
         '<div class="toolbar">' + chip('', 'الكل', all.length) + chip('err', 'الأخطاء', nErr) + chip('warn', 'التنبيهات', nWarn) +
           '<button type="button" class="btn" data-checkxlsx' + (all.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
         (groups || '<div class="empty">' + (all.length ? 'لا شيء في هذا التصنيف.' : 'لم يُعثر على أخطاء.') + '</div>') + '</div>';
