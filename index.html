@@ -5061,9 +5061,9 @@
     return { open: text.slice(0, text.indexOf('>') + 1), styles: styles };
   }
 
-  // رقم الهاتف بلا علامة «+» في أوله
+  // رقم الهاتف بلا علامة «+»
   function plainPhone(v) {
-    return String(v == null ? '' : v).replace(/^[\s\u200e\u200f]*\+\s*/, '');
+    return String(v == null ? '' : v).replace(/[+\uFF0B\u200e\u200f]/g, '').trim();
   }
 
   // تاريخ ISO إلى الرقم التسلسلي الذي يخزنه Excel
@@ -5092,8 +5092,8 @@
           ? text('B', x.full_name) + text('C', x.gender === 'ذكر' || x.gender === 'أنثى' ? x.gender : '') +
             (birth == null ? text('D', '') : '<c r="D' + r + '" s="' + p.styles.D + '" t="n"><v>' + birth + '</v></c>') +
             text('E', x.national_id) + text('F', x.guardian_name) + text('G', x.guardian_relation) + text('H', plainPhone(x.phone)) + text('I', plainPhone(x.whatsapp)) +
-            text('J', stVal(x, 'city') || stVal(x, 'address')) + text('K', note(x))
-          : 'BCDEFGHIJK'.split('').map(function (col) { return text(col, ''); }).join('')) + '</row>';
+            text('J', plainPhone(stVal(x, 'student_phone'))) + text('K', stVal(x, 'city') || stVal(x, 'address')) + text('L', note(x))
+          : 'BCDEFGHIJKL'.split('').map(function (col) { return text(col, ''); }).join('')) + '</row>';
     }
     var head = xml.slice(0, a), tail = xml.slice(b);
     if (k) {
@@ -5104,8 +5104,8 @@
       var rest = tail.slice(cut).replace(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/g, function (all, c1, r1, c2, r2) {
         return Number(r1) > last ? '<mergeCell ref="' + c1 + (Number(r1) + k) + ':' + c2 + (Number(r2) + k) + '"' : all;
       });
-      var range = new RegExp('([A-K])10:(?:\\1)' + last + '(?!\\d)', 'g'), grow = function (all, col) { return col + '10:' + col + newLast; };
-      head = head.replace(range, grow).replace(/(<dimension ref="A1:K)(\d+)"/, function (all, pre, n) { return pre + (Number(n) + k) + '"'; });
+      var range = new RegExp('([A-L])10:(?:\\1)' + last + '(?!\\d)', 'g'), grow = function (all, col) { return col + '10:' + col + newLast; };
+      head = head.replace(range, grow).replace(/(<dimension ref="A1:L)(\d+)"/, function (all, pre, n) { return pre + (Number(n) + k) + '"'; });
       tail = shifted + rest.replace(range, grow);
     }
     var boys = list.filter(function (x) { return x.gender === 'ذكر'; }).length, girls = list.filter(function (x) { return x.gender === 'أنثى'; }).length;
@@ -5120,7 +5120,7 @@
     btn.disabled = true;
     try {
       await loadFflate();
-      var res = await fetch('registration-template.xlsx');
+      var res = await fetch('registration-template.xlsx?v=2');
       if (!res.ok) throw new Error('تعذر تحميل قالب الكشوف');
       var files = fflate.unzipSync(new Uint8Array(await res.arrayBuffer()));
       var read = function (name) { return fflate.strFromU8(files[name]); };
@@ -5165,7 +5165,7 @@
         total += out.count;
         if (out.added) {
           extra += out.added;
-          workbook = workbook.replace(new RegExp('((?:&apos;|\')?' + reEsc(name) + '(?:&apos;|\')?!\\$A\\$1:\\$K\\$)(\\d+)'), function (all, pre, n) { return pre + (Number(n) + out.added); });
+          workbook = workbook.replace(new RegExp('((?:&apos;|\')?' + reEsc(name) + '(?:&apos;|\')?!\\$A\\$1:\\$L\\$)(\\d+)'), function (all, pre, n) { return pre + (Number(n) + out.added); });
         }
       });
       if (!Object.keys(stats).length) throw new Error('القالب لا يحتوي على أوراق الصفوف المتوقعة');
