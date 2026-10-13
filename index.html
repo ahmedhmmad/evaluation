@@ -3122,6 +3122,7 @@
   }
 
   var EXPORT_BTNS = '<button type="button" class="btn" data-tpx="xlsx">تصدير Excel</button>' +
+    '<button type="button" class="btn" data-tpx="contacts">تصدير العناوين والاتصال (Excel)</button>' +
     '<button type="button" class="btn" data-tpx="pdf">تصدير PDF / طباعة</button>';
 
   // محتوى شاشة «دفعات الطلاب» تحت شريط التصفية: الأرقام، الحالات، الجدول
@@ -3694,6 +3695,58 @@
     }
   }
 
+  // ملف المواصلات: عنوان كل طالب ووسائل الاتصال به ودفعته عن الشهر المعروض، ورقة لكل شعبة.
+  // يشمل من اختيرت له نقطة تجمع ولم يبدأ اشتراكه بعد (بلا مبالغ)، ولا يشمل من أُوقف اشتراكه.
+  // النطاق: المجموعة المفتوحة، أو الشعبة المختارة في «دفعات الطلاب»، وإلا المدرسة كلها
+  async function exportTransportContacts() {
+    var g = currentGroup(), cls = !g && location.hash === '#/transport/payments' ? ui.tpClass : '';
+    var owing = {};
+    payRows().forEach(function (r) { owing[r.x.id] = r; });
+    var rows = S.tMembers.map(function (m) {
+      var x = findStudent(m.student_id), mg = findGroup(m.group_id);
+      if (!x || !mg) return null;
+      return owing[x.id] || (awaitingStart(m) ? { x: x, g: mg, rec: {}, waiting: true } : null);
+    }).filter(function (r) {
+      return r && (!g || r.g === g) && (cls === '-' ? !r.x.class_name : !cls || r.x.class_name === cls);
+    }).sort(function (a, b) {
+      return classRank(a.x.class_name) - classRank(b.x.class_name) || String(a.x.class_name).localeCompare(b.x.class_name, 'ar') ||
+        a.x.full_name.localeCompare(b.x.full_name, 'ar');
+    });
+    if (!rows.length) return toast('لا يوجد طلاب للتصدير', true);
+    var scope = g ? g.assembly_point : cls === '-' ? 'بدون شعبة' : cls || 'كل المدرسة';
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var sheet = function (title, list) {
+        var due = 0, paid = 0, left = 0;
+        var body = list.map(function (r, i) {
+          var x = r.x, w = r.waiting;
+          if (!w) { due += r.share; paid += r.paid; left += r.left; }
+          return [i + 1, x.full_name, x.class_name || '', r.g.assembly_point, stVal(x, 'city') || '', stVal(x, 'address') || '', x.guardian_name || '',
+            plainPhone(x.phone), plainPhone(x.whatsapp), plainPhone(stVal(x, 'student_phone')),
+            w ? '' : r.share, w ? '' : r.paid, w ? '' : r.left, w ? 'لم يبدأ الاشتراك' : PAY_STATUS[r.status] || '',
+            r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : ''];
+        });
+        var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['ملف المواصلات — ' + monthLabel(ui.tMonth) + ' — ' + title], [],
+          ['م', 'اسم الطالب', 'الشعبة', 'نقطة التجمع', 'المدينة', 'العنوان', 'ولي الأمر', 'هاتف ولي الأمر', 'رقم الواتساب', 'جوال الطالب',
+            'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'طريقة الدفع', 'تاريخ السداد', 'رقم الإيصال']]
+          .concat(body, [['', 'المجموع (' + list.length + ' طالبًا)', '', '', '', '', '', '', '', '', due, paid, left]]));
+        ws['!cols'] = [5, 32, 14, 22, 16, 34, 26, 16, 16, 16, 12, 13, 13, 16, 16, 13, 11].map(function (w) { return { wch: w }; });
+        var base = String(title).replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'ورقة', name = base, n = 2;
+        while (used[name]) name = base + ' ' + n++;
+        used[name] = true;
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+      var classes = payByClass(rows);
+      if (classes.length > 1) sheet(scope, rows);
+      classes.forEach(function (c) { sheet(c.name || 'بدون شعبة', c.rows); });
+      XLSX.writeFile(wb, ('ملف-المواصلات-' + scope + '-' + ui.tMonth).replace(/[\\\/:*?"<>|]/g, ' ').replace(/\s+/g, '-') + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
   // ملف PDF يُحفظ من نافذة الطباعة نفسها (الوجهة: «حفظ بتنسيق PDF»)
   function exportPayPdf() {
     if (!payScope().rows.length) return toast('لا توجد دفعات للتصدير', true);
@@ -3840,7 +3893,7 @@
       document.getElementById('rc-body').innerHTML = deskBodyHtml();
       return;
     }
-    if ((el = e.target.closest('[data-tpx]'))) return el.getAttribute('data-tpx') === 'xlsx' ? exportPayXlsx() : exportPayPdf();
+    if ((el = e.target.closest('[data-tpx]'))) return el.getAttribute('data-tpx') === 'xlsx' ? exportPayXlsx() : el.getAttribute('data-tpx') === 'contacts' ? exportTransportContacts() : exportPayPdf();
     if ((el = e.target.closest('[data-tpstatus]'))) {
       ui.tpStatus = el.getAttribute('data-tpstatus');
       return refreshPay();
