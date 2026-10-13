@@ -525,6 +525,16 @@
   .req { color: var(--red); }
   .st-count { color: var(--muted); font-size: .9rem; margin: 0 0 10px; }
   table.grid select { max-width: 170px; }
+  /* جداول الدفعات: أعمدة أقل وأزرار تلتف داخل خانتها، حتى لا يُقصّ الجدول ولا يتكسر اسم الطالب */
+  table.grid.pay td { padding: 8px 6px; }
+  table.grid.pay td.who, #t-members table.grid td:nth-child(2) { min-width: 180px; }
+  table.grid.pay td.bus { min-width: 110px; max-width: 180px; }
+  table.grid.pay input[type=number] { width: 78px; }
+  table.grid.pay select, table.grid.pay td .mnote { width: 135px; }
+  table.grid .acts { display: flex; flex-wrap: wrap; gap: 6px; min-width: 150px; }
+  table.grid .acts .btn, #t-members td.no-print .btn { padding: 6px 10px; font-size: .85rem; }
+  #t-members td.no-print { white-space: normal !important; min-width: 170px; }
+  #t-members td.no-print .btn { margin: 2px 0; }
   .imp-list { margin: 6px 0 0; padding-inline-start: 20px; color: var(--muted); font-size: .9rem; }
   .imp-list li.bad { color: var(--red); }
 
@@ -3665,28 +3675,28 @@
     var body = rows.map(function (r, i) {
       var x = r.x, rec = r.rec, method = rec.method || 'cash';
       var famNote = familyNote(x.id);
-      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + (famNote ? '<br><span style="color:var(--muted);font-size:.85rem">' + famNote + '</span>' : '') + '</td><td>' + esc(x.class_name || '—') + '</td>' +
-        '<td><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + plainNum(r.share) + '</td>' +
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون شعبة') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
+        '<td class="bus"><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + plainNum(r.share) + '</td>' +
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (r.paid || '') + '"></td>' +
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
         payNoteInput(x.id, method, rec) + '</td>' +
-        '<td>' + (r.paid ? '<span dir="ltr">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span><br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by || '—') + '</span>' : '—') + '</td>' +
-        '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') + '</td>' +
-        '<td style="white-space:nowrap">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
+        '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') +
+          (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
+        '<td><div class="acts">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button>') + '</td></tr>';
+        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '">حذف الإيصال</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك</button>') + '</div></td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
       '<nav class="pills">' + pills.map(function (p) {
         return '<button type="button" data-tpstatus="' + p[0] + '"' + (ui.tpStatus === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>' +
       (body
-        ? '<div class="card"><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>نقطة التجمع</th><th>الحصة (ج.م)</th>' +
-          '<th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>وقت التسجيل والمسجِّل</th><th>الحالة</th><th></th></tr></thead><tbody>' + body + '</tbody>' +
-          '<tfoot><tr><td colspan="4">المجموع (' + t.n + ')</td><td>' + plainNum(t.due) + '</td><td>' + plainNum(t.paid) + '</td>' +
-          '<td colspan="4">المتبقي: ' + money(t.left) + '</td></tr></tfoot></table></div></div>'
+        ? '<div class="card"><div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الطالب</th><th>الباص</th><th>الحصة (ج.م)</th>' +
+          '<th>المدفوع (ج.م)</th><th>طريقة الدفع</th><th>الحالة والتسجيل</th><th>الإجراء</th></tr></thead><tbody>' + body + '</tbody>' +
+          '<tfoot><tr><td colspan="3">المجموع (' + t.n + ')</td><td>' + plainNum(t.due) + '</td><td>' + plainNum(t.paid) + '</td>' +
+          '<td colspan="3">المتبقي: ' + money(t.left) + '</td></tr></tfoot></table></div></div>'
         : '<div class="card empty">لا توجد دفعات مطابقة لهذه التصفية.</div>') + awaitingListHtml();
   }
 
@@ -4124,7 +4134,7 @@
           '<select id="tp-class" aria-label="الشعبة" style="width:auto;min-width:170px"><option value="">كل المدرسة</option>' + names.map(function (c) {
             return '<option' + (c === ui.tpClass ? ' selected' : '') + '>' + esc(c) + '</option>';
           }).join('') + '<option value="-"' + (ui.tpClass === '-' ? ' selected' : '') + '>بدون شعبة</option></select>' +
-          '<input type="search" id="tp-search" placeholder="ابحث باسم الطالب أو نقطة التجمع" aria-label="بحث" style="flex:1;min-width:180px" value="' + esc(ui.tpSearch) + '">' +
+          '<input type="search" id="tp-search" placeholder="ابحث باسم الطالب أو الباص" aria-label="بحث" style="flex:1;min-width:180px" value="' + esc(ui.tpSearch) + '">' +
           EXPORT_BTNS + '</div>' +
         '<div id="tp-body">' + payBodyHtml() + '</div>';
       return;
