@@ -758,7 +758,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -2182,6 +2182,10 @@
       app.innerHTML = tabs('students') + scanScreenHtml();
       return;
     }
+    if (ui.check && !ui.imp) {
+      app.innerHTML = tabs('students') + checkScreenHtml();
+      return;
+    }
     if (ui.sibFix && isAdmin() && !ui.imp) {
       app.innerHTML = tabs('students') + siblingFixHtml();
       return;
@@ -2194,6 +2198,7 @@
       (ui.imp ? importPreviewHtml() : ed ? studentFormHtml(st) :
         '<div class="toolbar">' +
           '<button type="button" class="btn primary" data-stedit="new">+ تسجيل طالب</button>' +
+          '<button type="button" class="btn" data-checkopen>اكتشاف الأخطاء</button>' +
           (isAdmin() ? '<button type="button" class="btn" data-impopen>استيراد من Excel</button>' +
           '<button type="button" class="btn" data-imptemplate>تنزيل قالب Excel</button>' +
           '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' +
@@ -2240,6 +2245,193 @@
       if (!r.error) { list[i].details = details; changed++; }
     }
     return changed;
+  }
+
+  /* ----- اكتشاف الأخطاء في سجلات الطلاب -----
+     فحوص تقرأ السجلات ولا تغيّر شيئًا: «خطأ» لما هو خطأ إدخال شبه مؤكد، و«تنبيه» لما يستحق نظرة وقد يكون صحيحًا */
+
+  var CHECKS = {
+    age: 'العمر لا يناسب الصف',
+    birth: 'تاريخ ميلاد غير معقول',
+    dupid: 'رقم هوية مكرر بين طالبين',
+    dupname: 'الاسم نفسه في أكثر من سجل (قد يكون الطالب مسجَّلًا مرتين)',
+    sameid: 'هوية الطالب هي نفسها هوية ولي الأمر',
+    gender: 'جنس الطالب يخالف جنس الشعبة',
+    cls: 'شعبة غير موجودة في «إعداد الفصول»',
+    grade: 'الشعبة تخالف مرحلة التسجيل',
+    last: 'آخر مرحلة اجتازها لا تتسق مع المرحلة التي يسجل فيها',
+    core: 'تسجيل نهائي وبيانات أساسية ناقصة',
+    phone: 'رقم جوال غير سليم',
+    idfmt: 'رقم هوية قصير',
+    name: 'اسم غير مكتمل أو فيه أرقام',
+    guardian: 'اسم ولي الأمر يختلف بين الإخوة (هوية ولي الأمر واحدة)',
+    sibs: '«عدد الأبناء في المركز» أقل من المسجَّلين فعلًا',
+    exit: 'تاريخ الخروج من غزة غير معقول',
+    cap: 'شعبة فوق سعتها القصوى'
+  };
+
+  // الصف رقمًا من اسم شعبة أو مرحلة؛ الروضة و«لم يتم أي مرحلة» صفر
+  function gradeNum(v) {
+    v = String(v || '');
+    return /kg|روض|تمهيد|لم يتم/i.test(v) ? 0 : gradeOf(v);
+  }
+
+  // بداية العام الدراسي الذي يجري التسجيل له: الأول من أكتوبر
+  function schoolYearStart() {
+    var now = new Date();
+    return new Date(now.getFullYear() - (now.getMonth() < 5 ? 1 : 0), 9, 1);
+  }
+
+  // يعيد [{ sev: 'err' | 'warn', check, x (الطالب أو null), who, text }]
+  function studentIssues() {
+    var out = [], start = schoolYearStart(), today = todayISO();
+    var add = function (sev, check, x, text, who) { out.push({ sev: sev, check: check, x: x, who: who || (x ? x.full_name : ''), text: text }); };
+    var digits = function (v) { return latinDigits(String(v == null ? '' : v)).replace(/\D/g, ''); };
+    var det = function (x, k) { return String((x.details || {})[k] == null ? '' : (x.details || {})[k]).trim(); };
+    var known = classConfig().list, byId = {}, byName = {}, byGuardian = {};
+
+    S.students.forEach(function (x) {
+      var fin = stStatus(x) === 'final', cg = gradeNum(x.class_name), eg = gradeNum(det(x, 'enroll_grade')), lastText = det(x, 'last_grade');
+      var g = cg || eg, where = cg ? 'الشعبة «' + x.class_name + '»' : 'مرحلة التسجيل «' + det(x, 'enroll_grade') + '»';
+
+      // تاريخ الميلاد والعمر
+      var b = String(x.birth_date || '').slice(0, 10);
+      if (b) {
+        var age = (start - new Date(b + 'T00:00')) / (365.25 * 864e5), shown = Math.floor(age * 10) / 10;
+        if (b > today) add('err', 'birth', x, 'تاريخ الميلاد ' + dmy(b) + ' في المستقبل');
+        else if (age < 3.5 || age > 21) add('err', 'birth', x, 'تاريخ الميلاد ' + dmy(b) + ' (العمر ' + shown + ' سنة عند بداية العام)');
+        else if (g) {
+          // العمر المعتاد للصف g: من g+5 إلى g+6 سنوات عند بداية العام
+          var text = 'تاريخ الميلاد ' + dmy(b) + ' — العمر ' + shown + ' سنة، و' + where + ' (المعتاد ' + (g + 5) + '–' + (g + 6) + ')';
+          if (age < g + 3.5 || age > g + 10) add('err', 'age', x, text);
+          else if (age < g + 4.5 || age > g + 8) add('warn', 'age', x, text);
+        }
+      }
+
+      // الهوية
+      var id = String(x.national_id || '').replace(/\s/g, ''), idKey = latinDigits(id).toLowerCase(), gid = det(x, 'guardian_id').replace(/\s/g, '');
+      if (idKey) (byId[idKey] || (byId[idKey] = [])).push(x);
+      if (id && id.length < 6) add('warn', 'idfmt', x, 'رقم هوية الطالب: ' + id);
+      if (idKey && latinDigits(gid).toLowerCase() === idKey) add('err', 'sameid', x, 'الرقم ' + id + ' مكتوب للطالب ولولي الأمر');
+      if (digits(gid).length >= 5) (byGuardian[digits(gid)] || (byGuardian[digits(gid)] = [])).push(x);
+
+      // الاسم
+      var nm = norm(x.full_name || '');
+      if (nm) (byName[nm] || (byName[nm] = [])).push(x);
+      if (/\d/.test(latinDigits(x.full_name || ''))) add('err', 'name', x, 'في الاسم أرقام');
+      else if (nm.split(' ').filter(Boolean).length < 3) add('warn', 'name', x, 'الاسم أقل من ثلاثة مقاطع');
+
+      // الشعبة
+      if (x.class_name) {
+        var info = classInfo(x.class_name);
+        if (!info && known.length && fin) add('warn', 'cls', x, 'الشعبة «' + x.class_name + '»');
+        if (info && ((info.gender === 'boys' && x.gender === 'أنثى') || (info.gender === 'girls' && x.gender === 'ذكر'))) {
+          add('err', 'gender', x, 'الطالب ' + x.gender + '، والشعبة «' + x.class_name + '» ' + (info.gender === 'boys' ? 'للذكور' : 'للإناث'));
+        }
+        if (cg && eg && cg !== eg) add('err', 'grade', x, 'الشعبة «' + x.class_name + '»، ومرحلة التسجيل «' + det(x, 'enroll_grade') + '»');
+      }
+      if (eg && lastText) {
+        var lg = gradeNum(lastText);
+        if (lg >= eg) add('err', 'last', x, 'اجتاز «' + lastText + '» ويسجل في «' + det(x, 'enroll_grade') + '»');
+        else if (eg - lg > 2 && !(lg === 0 && eg <= 2)) add('warn', 'last', x, 'اجتاز «' + lastText + '» ويسجل في «' + det(x, 'enroll_grade') + '» (فرق ' + (eg - lg) + ' صفوف)');
+      }
+
+      // التسجيل النهائي
+      if (fin) {
+        var lacks = [['class_name', 'الشعبة'], ['national_id', 'رقم الهوية'], ['birth_date', 'تاريخ الميلاد'], ['gender', 'الجنس'], ['guardian_name', 'اسم ولي الأمر'], ['phone', 'جوال ولي الأمر']]
+          .filter(function (p) { return !String(x[p[0]] == null ? '' : x[p[0]]).trim(); }).map(function (p) { return p[1]; });
+        if (!gid) lacks.push('هوية ولي الأمر');
+        if (lacks.length) add('err', 'core', x, 'ينقصه: ' + lacks.join('، '));
+      }
+
+      // أرقام الجوال: من 10 إلى 14 رقمًا
+      [['phone', x.phone, 'جوال ولي الأمر'], ['alt', det(x, 'alt_phone'), 'الجوال البديل'], ['wa', x.whatsapp, 'الواتساب'], ['st', det(x, 'student_phone'), 'جوال الطالب']].forEach(function (p) {
+        var raw = String(p[1] == null ? '' : p[1]).trim(), n = digits(raw).length;
+        if (!raw || (!n && p[0] !== 'phone')) return; // «لا يوجد» في الخانات الاختيارية
+        if (n < 10 || n > 14) add(p[0] === 'phone' ? 'err' : 'warn', 'phone', x, p[2] + ': ' + raw + ' (' + n + ' رقمًا)');
+      });
+
+      var exit = det(x, 'gaza_exit').slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(exit) && (exit > today || exit < '2000-01-01')) add('err', 'exit', x, 'تاريخ الخروج: ' + dmy(exit));
+    });
+
+    Object.keys(byId).forEach(function (k) {
+      var list = byId[k];
+      if (list.length > 1) list.forEach(function (x) {
+        add('err', 'dupid', x, 'الهوية ' + x.national_id + ' مسجلة أيضًا باسم: ' + list.filter(function (o) { return o !== x; }).map(function (o) { return o.full_name; }).join('، '));
+      });
+    });
+    Object.keys(byName).forEach(function (k) {
+      var list = byName[k];
+      if (list.length > 1 && k.split(' ').length >= 3) list.forEach(function (x) {
+        add('warn', 'dupname', x, 'هويته ' + (x.national_id || '—') + '، وميلاده ' + (x.birth_date ? dmy(x.birth_date) : '—') + ' · عدد السجلات بهذا الاسم: ' + list.length);
+      });
+    });
+    Object.keys(byGuardian).forEach(function (k) {
+      var list = byGuardian[k], names = {};
+      list.forEach(function (x) { var n = norm(x.guardian_name || ''); if (n) names[n] = x.guardian_name; });
+      if (Object.keys(names).length > 1) list.forEach(function (x) {
+        add('warn', 'guardian', x, 'هوية ولي الأمر ' + k + ' — الاسم هنا: ' + (x.guardian_name || '—'));
+      });
+    });
+    siblingFixPlan(false).changes.forEach(function (c) {
+      if (c.from != null && c.from !== '' && Number(c.from) < c.to) add('warn', 'sibs', c.x, 'المكتوب ' + c.from + '، والمسجَّلون لولي الأمر نفسه ' + c.to);
+    });
+    var counts = classCounts();
+    known.forEach(function (c) {
+      if (c.capacity != null && (counts[c.name] || 0) > c.capacity) add('warn', 'cap', null, 'المسجلون نهائيًا ' + counts[c.name] + '، والسعة ' + c.capacity, c.name);
+    });
+    return out;
+  }
+
+  function checkScreenHtml() {
+    var all = studentIssues(), sev = ui.check.sev, list = sev ? all.filter(function (i) { return i.sev === sev; }) : all;
+    var nErr = all.filter(function (i) { return i.sev === 'err'; }).length, nWarn = all.length - nErr;
+    var people = {};
+    all.forEach(function (i) { if (i.x) people[i.x.id] = 1; });
+    var chip = function (value, label, n) {
+      return '<button type="button" class="btn' + (sev === value ? ' primary' : '') + '" data-checksev="' + value + '">' + label + ' (' + n + ')</button>';
+    };
+    var groups = Object.keys(CHECKS).map(function (k) {
+      var rows = list.filter(function (i) { return i.check === k; });
+      if (!rows.length) return '';
+      rows.sort(function (a, b) { return (a.sev === b.sev ? 0 : a.sev === 'err' ? -1 : 1) || String(a.who).localeCompare(b.who, 'ar'); });
+      var hasErr = rows.some(function (i) { return i.sev === 'err'; });
+      return '<details class="bank"' + (hasErr ? ' open' : '') + '><summary><span class="badge ' + (hasErr ? 'unpaid' : 'part') + '">' + rows.length + '</span> ' + CHECKS[k] + '</summary>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الدرجة</th><th>التفاصيل</th></tr></thead><tbody>' + rows.map(function (i, n) {
+          return '<tr><td>' + (n + 1) + '</td><td>' + (i.x
+            ? '<button type="button" class="btn link" style="padding:0;text-align:right" data-stedit="' + esc(i.x.id) + '">' + esc(i.who) + '</button>' +
+              '<br><span style="color:var(--muted);font-size:.85rem">' + ST_STATUS[stStatus(i.x)] + (i.x.class_name ? ' · ' + esc(i.x.class_name) : '') + '</span>'
+            : '<b>' + esc(i.who) + '</b>') + '</td>' +
+            '<td><span class="badge ' + (i.sev === 'err' ? 'unpaid' : 'part') + '">' + (i.sev === 'err' ? 'خطأ' : 'تنبيه') + '</span></td><td>' + esc(i.text) + '</td></tr>';
+        }).join('') + '</tbody></table></div></details>';
+    }).join('');
+    return '<button type="button" class="btn link" data-checkclose>→ العودة إلى تسجيل الطلاب</button>' +
+      '<div class="card"><h2>اكتشاف الأخطاء في سجلات الطلاب</h2>' +
+        '<p class="hint">الفحص يقرأ السجلات ولا يغيّر شيئًا. «خطأ»: إدخال خاطئ في الغالب. «تنبيه»: يستحق نظرة وقد يكون صحيحًا. اضغط اسم الطالب لفتح سجله وتصحيحه، وبعد الحفظ تعود إلى هذه الشاشة.</p>' +
+        '<p class="st-count" style="margin:10px 0">السجلات المفحوصة: ' + S.students.length + ' · سجلات فيها ملاحظات: <b>' + Object.keys(people).length + '</b></p>' +
+        '<div class="toolbar">' + chip('', 'الكل', all.length) + chip('err', 'الأخطاء', nErr) + chip('warn', 'التنبيهات', nWarn) +
+          '<button type="button" class="btn" data-checkxlsx' + (all.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
+        (groups || '<div class="empty">' + (all.length ? 'لا شيء في هذا التصنيف.' : 'لم يُعثر على أخطاء.') + '</div>') + '</div>';
+  }
+
+  async function exportIssuesXlsx() {
+    var all = studentIssues();
+    if (!all.length) return;
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['أخطاء وتنبيهات سجلات الطلاب — ' + dmy(todayISO())], [],
+        ['م', 'الدرجة', 'نوع الملاحظة', 'الطالب', 'رقم الهوية', 'حالة التسجيل', 'الشعبة', 'التفاصيل']].concat(all.map(function (i, n) {
+        return [n + 1, i.sev === 'err' ? 'خطأ' : 'تنبيه', CHECKS[i.check], i.who, i.x ? String(i.x.national_id || '') : '', i.x ? ST_STATUS[stStatus(i.x)] : '', i.x ? i.x.class_name || '' : i.who, i.text];
+      })));
+      ws['!cols'] = [5, 8, 44, 32, 16, 14, 14, 70].map(function (w) { return { wch: w }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'الملاحظات');
+      XLSX.writeFile(wb, 'أخطاء-سجلات-الطلاب-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
   }
 
   /* ----- تصحيح «عدد الأبناء في المركز» للسجلات القديمة (مدير النظام) -----
@@ -2556,7 +2748,23 @@
   document.addEventListener('click', async function (e) {
     if (!canStudents() || location.hash !== '#/students') return;
     var el, st, r;
-    if (isAdmin() && e.target.closest('[data-sibfixopen]')) {
+    if ((el = e.target.closest('[data-checkopen]'))) {
+      // الفحص على ما في القاعدة الآن، لا على ما كان عند فتح الصفحة
+      el.disabled = true;
+      syncData(true).then(function () {
+        ui.check = { sev: '' };
+        render();
+        window.scrollTo(0, 0);
+      });
+    } else if (e.target.closest('[data-checkclose]')) {
+      ui.check = null;
+      render();
+    } else if ((el = e.target.closest('[data-checksev]')) && ui.check) {
+      ui.check.sev = el.getAttribute('data-checksev');
+      render();
+    } else if (e.target.closest('[data-checkxlsx]')) {
+      exportIssuesXlsx();
+    } else if (isAdmin() && e.target.closest('[data-sibfixopen]')) {
       ui.sibFix = { finalOnly: false, busy: false, msg: '' };
       render();
     } else if (e.target.closest('[data-sibfixclose]')) {
