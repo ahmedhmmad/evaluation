@@ -3696,18 +3696,21 @@
   }
 
   // ملف المواصلات: عنوان كل طالب ووسائل الاتصال به ودفعته عن الشهر المعروض، ورقة لكل شعبة.
-  // يشمل من اختيرت له نقطة تجمع ولم يبدأ اشتراكه بعد (بلا مبالغ)، ولا يشمل من أُوقف اشتراكه.
-  // النطاق: المجموعة المفتوحة، أو الشعبة المختارة في «دفعات الطلاب»، وإلا المدرسة كلها
+  // يشمل كل المسجلين نهائيًا: المشترك وغير المشترك، الدافع وغير الدافع. غير المطالَب هذا الشهر يظهر بحالته بلا مبالغ.
+  // النطاق: المجموعة المفتوحة (طلابها فقط)، أو الشعبة المختارة في «دفعات الطلاب»، وإلا المدرسة كلها
   async function exportTransportContacts() {
     var g = currentGroup(), cls = !g && location.hash === '#/transport/payments' ? ui.tpClass : '';
     var owing = {};
     payRows().forEach(function (r) { owing[r.x.id] = r; });
-    var rows = S.tMembers.map(function (m) {
-      var x = findStudent(m.student_id), mg = findGroup(m.group_id);
-      if (!x || !mg) return null;
-      return owing[x.id] || (awaitingStart(m) ? { x: x, g: mg, rec: {}, waiting: true } : null);
+    var memberOf = {};
+    S.tMembers.forEach(function (m) { memberOf[m.student_id] = m; });
+    var rows = S.students.filter(function (x) { return stStatus(x) === 'final' || owing[x.id]; }).map(function (x) {
+      if (owing[x.id]) return owing[x.id];
+      var m = memberOf[x.id], mg = m && findGroup(m.group_id);
+      return { x: x, g: mg || null, rec: {}, waiting: true,
+        note: !mg ? 'غير مشترك' : subscribedIn(m, ui.tMonth) ? 'لم يبدأ الاشتراك' : 'اشتراك متوقف' };
     }).filter(function (r) {
-      return r && (!g || r.g === g) && (cls === '-' ? !r.x.class_name : !cls || r.x.class_name === cls);
+      return (!g || r.g === g) && (cls === '-' ? !r.x.class_name : !cls || r.x.class_name === cls);
     }).sort(function (a, b) {
       return classRank(a.x.class_name) - classRank(b.x.class_name) || String(a.x.class_name).localeCompare(b.x.class_name, 'ar') ||
         a.x.full_name.localeCompare(b.x.full_name, 'ar');
@@ -3723,9 +3726,9 @@
         var body = list.map(function (r, i) {
           var x = r.x, w = r.waiting;
           if (!w) { due += r.share; paid += r.paid; left += r.left; }
-          return [i + 1, x.full_name, x.class_name || '', r.g.assembly_point, stVal(x, 'city') || '', stVal(x, 'address') || '', x.guardian_name || '',
+          return [i + 1, x.full_name, x.class_name || '', r.g ? r.g.assembly_point : '', stVal(x, 'city') || '', stVal(x, 'address') || '', x.guardian_name || '',
             plainPhone(x.phone), plainPhone(x.whatsapp), plainPhone(stVal(x, 'student_phone')),
-            w ? '' : r.share, w ? '' : r.paid, w ? '' : r.left, w ? 'لم يبدأ الاشتراك' : PAY_STATUS[r.status] || '',
+            w ? '' : r.share, w ? '' : r.paid, w ? '' : r.left, w ? r.note : PAY_STATUS[r.status] || '',
             r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : ''];
         });
         var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['ملف المواصلات — ' + monthLabel(ui.tMonth) + ' — ' + title], [],
