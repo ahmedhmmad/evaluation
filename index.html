@@ -939,7 +939,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 4';
+  var APP_BUILD = '15/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7157,7 +7157,8 @@
 
   var roPending = false;
   new MutationObserver(function () {
-    if (!isManager() || roPending) return;
+    // شاشة تغيير كلمة المرور (أول دخول) وشاشة الدخول ليستا من الشاشات المقفلة
+    if (!isManager() || roPending || !S.ready || (S.profile && S.profile.must_change_password)) return;
     roPending = true;
     Promise.resolve().then(function () { roPending = false; applyReadOnly(app); });
   }).observe(app, { childList: true, subtree: true });
