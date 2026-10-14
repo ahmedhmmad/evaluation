@@ -671,6 +671,7 @@
     teacher: 'معلم',
     registrar: 'مسجِّل طلاب',
     supervisor: 'مشرف',
+    manager: 'مدير (مشاهدة فقط)',
     superadmin: 'مدير النظام'
   };
 
@@ -815,10 +816,13 @@
 
   function role() { return S.profile ? S.profile.role : 'pending'; }
   function isAdmin() { return role() === 'superadmin'; }
-  function isStaff() { return role() === 'supervisor' || isAdmin(); }
+  // مدير المدرسة: يرى كل الشاشات ولا يعدّل (القاعدة تمنحه القراءة فقط: supabase/manager.sql)
+  function isManager() { return role() === 'manager'; }
+  function canView() { return isAdmin() || isManager(); }
+  function isStaff() { return role() === 'supervisor' || isAdmin() || isManager(); }
   // مسجِّل الطلاب: يسجّل الطلاب ويعدّل بياناتهم ويرى الشعب فقط؛ لا حذف ولا مدفوعات ولا تقييمات (supabase/registrar.sql)
   function isRegistrar() { return role() === 'registrar'; }
-  function canStudents() { return isAdmin() || isRegistrar(); }
+  function canStudents() { return isAdmin() || isRegistrar() || isManager(); }
 
   // «علوم عامة، رياضيات» → ['علوم عامة', 'رياضيات']
   function splitList(text) {
@@ -895,7 +899,7 @@
       var res = await Promise.all([
         sb.from('teachers').select('*').order('name'),
         sb.from('settings').select('*').eq('id', 1).maybeSingle(),
-        isAdmin() ? sb.from('profiles').select('*').order('created_at') : Promise.resolve({ data: [] })
+        canView() ? sb.from('profiles').select('*').order('created_at') : Promise.resolve({ data: [] })
       ]);
       if (res[0].error) fail(res[0].error);
       S.teachers = res[0].data || [];
@@ -907,9 +911,9 @@
         sb.from('statements').select('*').order('created_at')
       ]);
       // الجدولان غير موجودين إلى أن يُشغَّل الملف supabase/visits.sql
-      if (isAdmin()) {
+      if (canView()) {
         // غير موجود إلى أن يُشغَّل الملف supabase/teacher_accounts.sql
-        var ps = await sb.from('private_settings').select('*').eq('id', 1).maybeSingle();
+        var ps = isAdmin() ? await sb.from('private_settings').select('*').eq('id', 1).maybeSingle() : { data: null, error: null };
         // فئة العامل ومسماه الوظيفي وواتسابه: أعمدة من supabase/staff.sql
         S.staffMissing = !!(await sb.from('teachers').select('category').limit(1)).error;
         S.accountsMissing = !!ps.error;
@@ -935,7 +939,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 3';
+  var APP_BUILD = '15/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1168,7 +1172,7 @@
       { items: [['#/', 'home', 'الرئيسية']] },
       { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']] }
     ];
-    if (isAdmin()) {
+    if (canView()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
       groups.push(
         { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/transport', 'transport', 'المواصلات']] },
@@ -1187,9 +1191,9 @@
     if (h === '#/visits' || /^#\/v\//.test(h)) return 'visits';
     if (h === '#/results' || /^#\/r\//.test(h)) return 'results';
     if (/^#\/transport/.test(h)) return 'transport';
-    if (/^#\/classes/.test(h) && isAdmin()) return 'classes';
+    if (/^#\/classes/.test(h) && canView()) return 'classes';
     var m = h.match(/^#\/(staff|students|admin|rooms|attendance)$/);
-    return m && isAdmin() ? m[1] : 'home';
+    return m && canView() ? m[1] : 'home';
   }
 
   function pageLabel(key) {
@@ -1481,7 +1485,7 @@
               ' placeholder="اتركه فارغًا إن لم يلزمه حساب" autocomplete="off">' +
               '<div class="day">يُنشأ الحساب بكلمة المرور الافتراضية، ويُطلب من صاحبه تغييرها عند أول دخول.</div>') +
             '<div class="tf-nonteach" style="display:' + (TEACHING_CATS.indexOf(staffCat(t)) > -1 ? 'none' : 'contents') + '">' +
-              f('tf-role', 'صلاحية الحساب', '<select id="tf-role"><option value="viewer">مشاهد (يرى النتائج المنشورة)</option><option value="registrar">مسجِّل طلاب</option><option value="supervisor">مشرف</option></select>' +
+              f('tf-role', 'صلاحية الحساب', '<select id="tf-role"><option value="viewer">مشاهد (يرى النتائج المنشورة)</option><option value="registrar">مسجِّل طلاب</option><option value="supervisor">مشرف</option><option value="manager">مدير (مشاهدة فقط)</option></select>' +
                 '<div class="day">لهيئة التدريس والمحفظين يكون الحساب حساب معلم يرى تقييمه فقط.</div>') + '</div>') +
         f('tf-details', 'بيانات أخرى', '<textarea id="tf-details" placeholder="أي معلومات إضافية عن المعلم">' + val('details') + '</textarea>', true) +
       '</div>' +
@@ -1581,7 +1585,7 @@
   }
 
   document.addEventListener('click', async function (e) {
-    if (!isAdmin()) return;
+    if (!canView()) return;
     var el, t;
     if (location.hash === '#/staff' && (el = e.target.closest('[data-staffcat]'))) {
       ui.staffCat = el.getAttribute('data-staffcat');
@@ -3324,7 +3328,7 @@
 
   function currentGroup() {
     var m = location.hash.match(/^#\/transport\/(.+)$/);
-    return m && isAdmin() ? findGroup(m[1]) : null;
+    return m && canView() ? findGroup(m[1]) : null;
   }
 
   function membersOf(gid) {
@@ -4731,7 +4735,7 @@
 
 
   document.addEventListener('click', async function (e) {
-    if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
+    if (!canView() || !/^#\/transport/.test(location.hash)) return;
     var el, g = currentGroup(), r;
     if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
     if (e.target.closest('[data-rcfind]')) return deskSearch();
@@ -4862,7 +4866,7 @@
   });
 
   app.addEventListener('change', async function (e) {
-    if (!isAdmin() || !/^#\/transport/.test(location.hash)) return;
+    if (!canView() || !/^#\/transport/.test(location.hash)) return;
     var el = e.target, g = currentGroup();
     if (el.id === 'rc-method') {
       // خانة رقم الدفع تظهر وتختفي بحسب الطريقة، مع بقاء المبلغ المكتوب
@@ -4919,7 +4923,7 @@
 
   app.addEventListener('input', function (e) {
     var g = currentGroup();
-    if (e.target.id === 'tp-search' && isAdmin()) {
+    if (e.target.id === 'tp-search' && canView()) {
       ui.tpSearch = e.target.value;
       return refreshPay();
     }
@@ -5703,7 +5707,7 @@
             '<div><label class="field" for="nu-name">الاسم <span class="req">*</span></label><input type="text" id="nu-name" required></div>' +
             '<div><label class="field" for="nu-login">اسم المستخدم <span class="req">*</span></label><input type="text" id="nu-login" required dir="ltr" style="text-align:right" autocomplete="off" placeholder="مثال: registrar1"></div>' +
             '<div><label class="field" for="nu-pw">كلمة المرور المؤقتة <span class="req">*</span></label><input type="text" id="nu-pw" required minlength="6" dir="ltr" style="text-align:right" autocomplete="off" value="' + esc(S.defaultPw || '') + '"></div>' +
-            '<div><label class="field" for="nu-role">الصلاحية</label><select id="nu-role"><option value="registrar">' + ROLES.registrar + '</option><option value="supervisor">' + ROLES.supervisor + '</option><option value="viewer">' + ROLES.viewer + '</option></select></div>' +
+            '<div><label class="field" for="nu-role">الصلاحية</label><select id="nu-role"><option value="registrar">' + ROLES.registrar + '</option><option value="supervisor">' + ROLES.supervisor + '</option><option value="viewer">' + ROLES.viewer + '</option><option value="manager">' + ROLES.manager + '</option></select></div>' +
           '</div><div class="actions"><button type="submit" class="btn primary">إنشاء الحساب</button></div></form></div>';
   }
 
@@ -6130,7 +6134,7 @@
       // العمود الأخير: دفع المواصلات عن الشهر المعروض في شاشة المواصلات (أو الشهر الحالي).
       // الدفعات يقرؤها مدير النظام وحده؛ لغيره يبقى العمود «ملاحظات» كما في القالب
       var payHead = '', payNote = null;
-      if (isAdmin() && !S.transportMissing) {
+      if (canView() && !S.transportMissing) {
         if (!ui.tMonth) ui.tMonth = thisMonth();
         var payMonth = ui.tMonth;
         var payRowsNow = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('month', payMonth).order('student_id'); });
@@ -6389,13 +6393,13 @@
     var v = currentVisit();
     if (v) return renderVisit(v);
     if (h === '#/visits' || /^#\/v\//.test(h)) return renderVisits();
-    if (h === '#/staff' && isAdmin()) return renderStaff();
-    if (h === '#/students' && isAdmin()) return renderStudents();
-    if (/^#\/classes/.test(h) && isAdmin()) return renderClasses();
-    if (/^#\/transport/.test(h) && isAdmin()) return renderTransport();
-    if (h === '#/admin' && isAdmin()) return renderAdmin();
-    if (h === '#/rooms' && isAdmin()) return renderRooms();
-    if (h === '#/attendance' && isAdmin()) return renderAttendance();
+    if (h === '#/staff' && canView()) return renderStaff();
+    if (h === '#/students' && canView()) return renderStudents();
+    if (/^#\/classes/.test(h) && canView()) return renderClasses();
+    if (/^#\/transport/.test(h) && canView()) return renderTransport();
+    if (h === '#/admin' && canView()) return renderAdmin();
+    if (h === '#/rooms' && canView()) return renderRooms();
+    if (h === '#/attendance' && canView()) return renderAttendance();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     if (h === '#/teachers') return renderList();
     renderHome();
@@ -7121,6 +7125,43 @@
     }
   });
 
+  /* ---------- وضع المشاهدة (المدير) ----------
+     تُخفى أزرار التعديل وتُقفل خانات الإدخال، وتبقى التصفية والبحث والعرض والطباعة والتصدير.
+     الحماية الفعلية في القاعدة: لا يملك المدير صلاحية كتابة على أي جدول */
+  var VIEW_ACTIONS = ['act', 'alcopy', 'attcls', 'attdayxlsx', 'attrepxlsx', 'attrun', 'attschoolpdf', 'attteacher', 'attview', 'attregister', 'attschool',
+    'busprint', 'cprint', 'cprofile', 'cedit', 'checkclose', 'checkopen', 'checksev', 'checkxlsx', 'latestate', 'latexlsx', 'mreceipt', 'mdesk', 'rcfind', 'rcpick',
+    'regbook', 'rfprint', 'rfxlsx', 'stprint', 'stprofile', 'ststatus', 'stxlsx', 'stedit', 'tedit', 'tgo', 'tpclass', 'tpstatus', 'tpx', 'voidxlsx', 'staffcat',
+    'open', 'openv', 'backup', 'excancel', 'scanclose', 'sibfixclose', 'impcancel', 'staffimpcancel'];
+  var VIEW_ACTS = ['back', 'print', 'reload', 'signout', 'sync', 'auth-mode'];
+  var VIEW_INPUTS = ['tp-class', 'tp-search', 't-month', 't-search', 'att-cls', 'att-day', 'att-from', 'att-to', 'att-exp-month', 'att-exp-day', 'cls-search', 'rc-id', 'st-class'];
+
+  function applyReadOnly(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('button, a.btn'), function (b) {
+      if (b.closest('#userbar') || b.hasAttribute('data-ro-ok')) return;
+      var ok = b.getAttribute('type') !== 'submit' && b.tagName === 'BUTTON' && !b.classList.contains('danger') && Array.prototype.some.call(b.attributes, function (at) {
+        var k = at.name.slice(5);
+        if (at.name.indexOf('data-') !== 0 || VIEW_ACTIONS.indexOf(k) < 0) return false;
+        if (k === 'act') return VIEW_ACTS.indexOf(at.value) > -1;
+        if ((k === 'stedit' || k === 'tedit') && at.value === 'new') return false;
+        return true;
+      });
+      if (b.tagName === 'A' || b.matches('.pills button, nav button')) ok = true;
+      if (!ok) b.style.display = 'none';
+      else if (/^تعديل/.test(b.textContent.trim()) && (b.hasAttribute('data-stedit') || b.hasAttribute('data-tedit') || b.hasAttribute('data-cedit'))) b.textContent = 'عرض';
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('input, select, textarea'), function (el) {
+      if (el.type === 'search' || el.type === 'hidden' || VIEW_INPUTS.indexOf(el.id) > -1 || el.closest('#userbar')) return;
+      el.disabled = true;
+    });
+  }
+
+  var roPending = false;
+  new MutationObserver(function () {
+    if (!isManager() || roPending) return;
+    roPending = true;
+    Promise.resolve().then(function () { roPending = false; applyReadOnly(app); });
+  }).observe(app, { childList: true, subtree: true });
+
   function go(hash) {
     ui.error = '';
     if (location.hash === hash) render(); else location.hash = hash;
@@ -7284,8 +7325,14 @@
       saveGroupForm();
     } else if (e.target.id === 'user-form' && isAdmin()) {
       var nu = function (id) { return document.getElementById(id).value.trim(); };
-      var made = await sb.rpc('create_user_account', { p_name: nu('nu-name'), p_login: toEmail(nu('nu-login')), p_password: document.getElementById('nu-pw').value, p_role: nu('nu-role') });
+      // دالة إنشاء الحساب لا تقبل «مدير»: يُنشأ مشاهدًا ثم تُرفع صلاحيته
+      var wantRole = nu('nu-role');
+      var made = await sb.rpc('create_user_account', { p_name: nu('nu-name'), p_login: toEmail(nu('nu-login')), p_password: document.getElementById('nu-pw').value, p_role: wantRole === 'manager' ? 'viewer' : wantRole });
       if (made.error) return accountRpcFail(made.error);
+      if (wantRole === 'manager') {
+        var mr = await sb.from('profiles').update({ role: 'manager' }).eq('id', made.data);
+        if (mr.error) toast('أُنشئ الحساب مشاهدًا؛ شغّل supabase/manager.sql ثم غيّر صلاحيته', true);
+      }
       var list = await sb.from('profiles').select('*').order('created_at');
       if (!list.error) S.users = list.data || [];
       render();
@@ -8035,8 +8082,8 @@
     else if (pendingProfile) buildProfileSheet(pendingProfile);
     else if (location.hash === '#/students' && canStudents() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (currentClass() && canStudents()) buildStudentsSheet(currentClass());
-    else if (isAdmin() && S.tPay[ui.tMonth] && (currentGroup() || /^#\/transport\/(payments|classes)$/.test(location.hash))) buildPaymentsSheet(payScope());
-    else if (location.hash === '#/rooms' && isAdmin() && classConfig().list.length) buildRoomsSheet();
+    else if (canView() && S.tPay[ui.tMonth] && (currentGroup() || /^#\/transport\/(payments|classes)$/.test(location.hash))) buildPaymentsSheet(payScope());
+    else if (location.hash === '#/rooms' && canView() && classConfig().list.length) buildRoomsSheet();
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
     else return false;
