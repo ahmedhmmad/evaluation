@@ -793,7 +793,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { exemptFor: null, att: null, lateState: '', check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { staffCat: '', staffImp: null, exemptFor: null, att: null, lateState: '', check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -910,6 +910,8 @@
       if (isAdmin()) {
         // غير موجود إلى أن يُشغَّل الملف supabase/teacher_accounts.sql
         var ps = await sb.from('private_settings').select('*').eq('id', 1).maybeSingle();
+        // فئة العامل ومسماه الوظيفي وواتسابه: أعمدة من supabase/staff.sql
+        S.staffMissing = !!(await sb.from('teachers').select('category').limit(1)).error;
         S.accountsMissing = !!ps.error;
         S.defaultPw = (ps.data && ps.data.default_password) || '';
         await loadStudents();
@@ -933,7 +935,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 1';
+  var APP_BUILD = '15/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1167,7 +1169,7 @@
       { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']] }
     ];
     if (isAdmin()) {
-      groups[1].items.push(['#/staff', 'staff', 'بيانات المعلمين']);
+      groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
       groups.push(
         { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/transport', 'transport', 'المواصلات']] },
         { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
@@ -1243,9 +1245,9 @@
       return '<a class="card stat" href="' + href + '"><span class="lbl">' + label + '</span><span class="num">' + num + '</span><span class="sub">' + sub + '</span></a>';
     };
     var stats =
-      stat('#/teachers', 'المعلمون', S.teachers.length,
-        'تقييمات منشورة: ' + count(S.teachers, function (t) { return t.status === 'published'; }) +
-        ' · قيد العمل: ' + count(S.teachers, function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
+      stat('#/teachers', 'المعلمون', evalTeachers().length,
+        'تقييمات منشورة: ' + count(evalTeachers(), function (t) { return t.status === 'published'; }) +
+        ' · قيد العمل: ' + count(evalTeachers(), function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
       stat('#/visits', 'الزيارات الإشرافية', S.visits.length,
         'هذا الشهر: ' + count(S.visits, function (v) { return (v.visit_date || '').slice(0, 7) === month; }));
     if (isAdmin()) {
@@ -1258,9 +1260,9 @@
     // ما يحتاج متابعة
     var todo = [];
     var add = function (n, text, href) { if (n) todo.push('<a href="' + href + '"><span>' + text + '</span><span class="n">' + n + '</span></a>'); };
-    add(count(S.teachers, function (t) { return t.status === 'review'; }), 'تقييمات بانتظار الاعتماد', '#/teachers');
-    add(count(S.teachers, function (t) { return t.status === 'approved'; }), 'تقييمات معتمدة لم تُنشر', '#/teachers');
-    add(count(S.teachers, function (t) { return t.status === 'new'; }), 'معلمون لم يبدأ تقييمهم', '#/teachers');
+    add(count(evalTeachers(), function (t) { return t.status === 'review'; }), 'تقييمات بانتظار الاعتماد', '#/teachers');
+    add(count(evalTeachers(), function (t) { return t.status === 'approved'; }), 'تقييمات معتمدة لم تُنشر', '#/teachers');
+    add(count(evalTeachers(), function (t) { return t.status === 'new'; }), 'معلمون لم يبدأ تقييمهم', '#/teachers');
     if (isAdmin()) {
       if (!S.accountsMissing) add(count(S.teachers, function (t) { return !t.user_id; }), 'معلمون بدون حساب دخول', '#/staff');
       add(count(S.students, function (x) { return x.status !== 'final'; }), 'تسجيلات مبدئية بانتظار المراجعة والاعتماد', '#/students');
@@ -1324,7 +1326,120 @@
       '</form>';
   }
 
-  /* ---------- بيانات المعلمين (مدير النظام) ---------- */
+  /* ---------- بيانات العاملين (مدير النظام) ----------
+     جدول teachers يضم كل العاملين، ولكل واحد فئة. التقييم والزيارات الإشرافية لهيئة التدريس والمحفظين فقط */
+
+  var STAFF_CATS = ['إدارية', 'هيئة تدريس', 'محفظون', 'خدمات مساندة', 'خدمات معاونة'];
+  var TEACHING_CATS = ['هيئة تدريس', 'محفظون'];
+
+  function staffCat(t) { return t && STAFF_CATS.indexOf(t.category) > -1 ? t.category : 'هيئة تدريس'; }
+  function evalTeachers() { return S.teachers.filter(function (t) { return TEACHING_CATS.indexOf(staffCat(t)) > -1; }); }
+
+  // الفئة من نص حر في كشف مستورد
+  function parseStaffCat(v) {
+    var n = norm(v);
+    if (/محفظ/.test(n)) return 'محفظون';
+    if (/ادار/.test(n)) return 'إدارية';
+    if (/مساند/.test(n)) return 'خدمات مساندة';
+    if (/معاون/.test(n)) return 'خدمات معاونة';
+    if (/تدريس|معلم/.test(n)) return 'هيئة تدريس';
+    return '';
+  }
+
+  // استيراد العاملين من Excel أو CSV: الأعمدة بعناوينها (الاسم، المسمى الوظيفي، الفئة، رقم الجوال، رقم الواتساب)
+  async function readStaffFile(file) {
+    try {
+      await loadXlsx();
+      var wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      var aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      var hi = -1, col = {};
+      for (var i = 0; i < Math.min(aoa.length, 15) && hi < 0; i++) {
+        aoa[i].forEach(function (h, j) {
+          var n = norm(String(h));
+          if (/^الاسم|اسم الموظف|اسم العامل/.test(n) && col.name == null) col.name = j;
+          else if (/مسمي|وظيف/.test(n) && col.job == null) col.job = j;
+          else if (/فئه|التصنيف/.test(n) && col.cat == null) col.cat = j;
+          else if (/واتس/.test(n) && col.wa == null) col.wa = j;
+          else if (/جوال|هاتف|موبايل/.test(n) && col.phone == null) col.phone = j;
+        });
+        if (col.name != null) hi = i;
+      }
+      if (hi < 0) throw new Error('لم يُعثر على عمود «الاسم» في الملف');
+      var cell = function (r, k) { return col[k] == null ? '' : String(r[col[k]] == null ? '' : r[col[k]]).replace(/\s+/g, ' ').trim(); };
+      var phone = function (v) { return latinDigits(v).replace(/[^0-9+]/g, ''); };
+      var rows = aoa.slice(hi + 1).map(function (r) {
+        var name = cell(r, 'name');
+        if (!name || /^\d+$/.test(name)) return null;
+        var hit = S.teachers.filter(function (t) { return norm(t.name) === norm(name); })[0] || null;
+        return { name: name, job: cell(r, 'job'), cat: parseStaffCat(cell(r, 'cat')) || 'هيئة تدريس', phone: phone(cell(r, 'phone')), wa: phone(cell(r, 'wa')), match: hit };
+      }).filter(Boolean);
+      if (!rows.length) throw new Error('لا توجد صفوف بأسماء في الملف');
+      ui.staffImp = { file: file.name, rows: rows, busy: false };
+      render();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function staffImportHtml() {
+    var imp = ui.staffImp, add = imp.rows.filter(function (r) { return !r.match; }).length;
+    return '<div class="card"><h2>استيراد العاملين من «' + esc(imp.file) + '»</h2>' +
+      '<p class="hint">جديد: ' + add + ' · موجود (تُحدَّث فئته ومسماه وأرقامه): ' + (imp.rows.length - add) + '. راجع الأسماء قبل الحفظ.</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الاسم</th><th>الفئة</th><th>المسمى الوظيفي</th><th>الجوال</th><th>واتساب</th><th>الحالة</th></tr></thead><tbody>' +
+      imp.rows.map(function (r, i) {
+        return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(r.name) + '</b></td><td>' + esc(r.cat) + '</td><td>' + esc(r.job) + '</td>' +
+          '<td dir="ltr" style="text-align:right">' + esc(r.phone || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(r.wa || '—') + '</td>' +
+          '<td>' + (r.match ? '<span class="badge part">تحديث</span>' : '<span class="badge paid">جديد</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-staffimpsave' + (imp.busy ? ' disabled' : '') + '>' + (imp.busy ? 'جارٍ الحفظ…' : 'حفظ ' + imp.rows.length + ' عاملًا') + '</button>' +
+      '<button type="button" class="btn" data-staffimpcancel>إلغاء</button></div></div>';
+  }
+
+  async function saveStaffImport() {
+    var imp = ui.staffImp, done = 0, failed = [];
+    imp.busy = true;
+    render();
+    for (var i = 0; i < imp.rows.length; i++) {
+      var r = imp.rows[i], teaching = TEACHING_CATS.indexOf(r.cat) > -1;
+      var data = { name: r.name, category: r.cat, job_title: r.job, phone: r.phone, whatsapp: r.wa };
+      var res;
+      if (r.match) {
+        if (teaching && !r.match.subject && r.job) data.subject = r.job;
+        res = await sb.from('teachers').update(data).eq('id', r.match.id);
+        if (!res.error) Object.assign(r.match, data);
+      } else {
+        data.subject = teaching ? r.job : '';
+        res = await sb.from('teachers').insert(data).select().single();
+        if (!res.error) { res.data.ratings = res.data.ratings || {}; S.teachers.push(res.data); }
+      }
+      if (res.error) failed.push(r.name); else done++;
+    }
+    S.teachers.sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    ui.staffImp = null;
+    render();
+    if (failed.length) alert('حُفظ ' + done + '، وتعذّر: ' + failed.join('، ')); else toast('حُفظ ' + done + ' عاملًا');
+  }
+
+  // هيئة التدريس إلى «تسجيل الغياب من المعلمين» (روابط الغياب وبوت الواتساب): من ليس فيه بالاسم ولا بالرقم
+  async function staffToAbsence() {
+    var r = await sb.from('attendance_tokens').select('*');
+    if (r.error) return alert('تسجيل الغياب من المعلمين غير مفعَّل بعد: شغّل الملف supabase/attendance_links.sql في محرر SQL.');
+    var have = r.data || [], last = function (p) { return latinDigits(String(p || '')).replace(/\D/g, '').slice(-9); };
+    var list = S.teachers.filter(function (t) {
+      if (staffCat(t) !== 'هيئة تدريس') return false;
+      var num = last(t.whatsapp || t.phone);
+      return !have.some(function (h) { return norm(h.name) === norm(t.name) || (num.length >= 8 && last(h.phone) === num); });
+    });
+    if (!list.length) return toast('كل هيئة التدريس مضافون إلى تسجيل الغياب');
+    if (!confirm('إضافة ' + list.length + ' من هيئة التدريس إلى «تسجيل الغياب من المعلمين»؟\nيُستخدم رقم الواتساب، وإن لم يوجد فرقم الجوال:\n\n' + list.map(function (t) { return t.name; }).join('\n'))) return;
+    var rows = list.map(function (t) { return { name: t.name, phone: latinDigits(String(t.whatsapp || t.phone || '')).replace(/[^0-9+]/g, '') }; });
+    var ins = await sb.from('attendance_tokens').insert(rows);
+    if (ins.error) return fail(ins.error);
+    S.attLinks = null; // تُجلب من جديد عند فتح شاشة الحضور
+    toast('أُضيف ' + rows.length + ' إلى تسجيل الغياب — روابطهم في «الحضور والغياب»');
+  }
+
 
   function renderStaff() {
     if (S.accountsMissing) {
@@ -1347,10 +1462,14 @@
       : '<div class="day" id="tf-classes">عرّف صفوف المدرسة أولًا من تبويب «الإدارة» ثم اخترها هنا.</div>';
 
     var form = !ed ? '' :
-      '<form class="card" id="teacher-form"><h2>' + (t ? 'تعديل بيانات المعلم' : 'إضافة معلم') + '</h2>' +
+      '<form class="card" id="teacher-form"><h2>' + (t ? 'تعديل بيانات العامل' : 'إضافة عامل') + '</h2>' +
       '<div class="grid2" style="margin-top:12px">' +
-        f('tf-name', 'اسم المعلم', '<input type="text" id="tf-name" required value="' + val('name') + '">') +
-        f('tf-subject', 'المباحث التي يدرّسها', '<input type="text" id="tf-subject" required placeholder="مثال: علوم عامة، رياضيات" value="' + val('subject') + '"><div class="day">افصل بين المباحث بفاصلة.</div>') +
+        f('tf-name', 'الاسم', '<input type="text" id="tf-name" required value="' + val('name') + '">') +
+        (S.staffMissing ? '' :
+          f('tf-cat', 'الفئة', '<select id="tf-cat">' + STAFF_CATS.map(function (c) { return '<option' + (staffCat(t) === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select>') +
+          f('tf-job', 'المسمى الوظيفي', '<input type="text" id="tf-job" placeholder="مثال: المدير، لغة عربية، مراسل" value="' + val('job_title') + '">') +
+          f('tf-wa', 'رقم الواتساب', '<input type="text" id="tf-wa" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('whatsapp') + '">')) +
+        f('tf-subject', 'المباحث التي يدرّسها', '<input type="text" id="tf-subject" placeholder="لهيئة التدريس — مثال: علوم عامة، رياضيات" value="' + val('subject') + '"><div class="day">افصل بين المباحث بفاصلة.</div>') +
         f('tf-classes', 'الصفوف والشعب التي يدرّسها', classPick, true) +
         f('tf-phone', 'رقم الجوال', '<input type="text" id="tf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('phone') + '">') +
         f('tf-qualification', 'المؤهل العلمي', '<input type="text" id="tf-qualification" placeholder="مثال: بكالوريوس تربية علوم" value="' + val('qualification') + '">') +
@@ -1365,9 +1484,14 @@
       '<div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
       '<button type="button" class="btn" data-tedit="">إلغاء</button></div></form>';
 
-    var rows = S.teachers.map(function (x) {
-      return '<tr><td><b>' + esc(x.name) + '</b></td><td>' + esc(x.subject || '—') + '</td><td>' + esc(x.classes || '—') + '</td>' +
-        '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td>' +
+    var catNow = ui.staffCat || '', counts = {};
+    S.teachers.forEach(function (x) { counts[staffCat(x)] = (counts[staffCat(x)] || 0) + 1; });
+    var rows = S.teachers.filter(function (x) { return !catNow || staffCat(x) === catNow; }).map(function (x) {
+      var teach = TEACHING_CATS.indexOf(staffCat(x)) > -1;
+      return '<tr><td><b>' + esc(x.name) + '</b></td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
+        '<td>' + esc(x.job_title || x.subject || '—') + (teach && x.classes ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.classes) + '</span>' : '') + '</td>' +
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.phone || '—') + '</td>' +
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.whatsapp || '—') + '</td>' +
         '<td dir="ltr" style="text-align:right">' + (x.user_id ? esc(displayName(x.login)) : '<span class="badge pending" dir="rtl">بدون حساب</span>') + '</td>' +
         '<td style="white-space:nowrap"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button> ' +
         (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '">إعادة تعيين كلمة المرور</button> ' : '') +
@@ -1380,10 +1504,16 @@
         '<div class="toolbar" style="margin:0"><input type="text" id="default-pw" dir="ltr" minlength="6" required autocomplete="off" aria-label="كلمة المرور الافتراضية" ' +
         'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
         '<button type="submit" class="btn">حفظ</button></div></form>' +
-      (ed ? form : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة معلم</button></div>') +
+      (S.staffMissing ? '<p class="formhint">لتسجيل فئة العامل ومسماه الوظيفي ورقم الواتساب شغّل الملف <code dir="ltr">supabase/staff.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' : '') +
+      (ui.staffImp ? staffImportHtml() : ed ? form : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
+        (S.staffMissing ? '' : '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
+          '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>') + '</div>') +
+      (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', S.teachers.length]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
+        return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
+      }).join('') + '</nav>') +
       '<div class="card">' + (rows
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>المباحث</th><th>الصفوف</th><th>الجوال</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-        : '<div class="empty">لا يوجد معلمون بعد.</div>') + '</div>';
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>' + (S.staffMissing ? '' : 'الفئة') + '</th><th>المسمى / المباحث</th><th>الجوال</th><th>واتساب</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا يوجد عاملون في هذا التصنيف.</div>') + '</div>';
   }
 
   async function saveTeacherForm() {
@@ -1394,6 +1524,11 @@
       classes: Array.prototype.map.call(document.querySelectorAll('[name="tf-class"]:checked'), function (c) { return c.value; }).join('، '),
       qualification: g('tf-qualification'), hire_date: g('tf-hire') || null, details: g('tf-details')
     };
+    if (!S.staffMissing) {
+      data.category = g('tf-cat') || 'هيئة تدريس';
+      data.job_title = g('tf-job');
+      data.whatsapp = latinDigits(g('tf-wa')).replace(/[^0-9+]/g, '');
+    }
     var login = g('tf-login');
     if (login) {
       if (login.indexOf('@') < 0 && !/^[a-z0-9._-]{3,}$/i.test(login)) {
@@ -1437,6 +1572,14 @@
   document.addEventListener('click', async function (e) {
     if (!isAdmin()) return;
     var el, t;
+    if (location.hash === '#/staff' && (el = e.target.closest('[data-staffcat]'))) {
+      ui.staffCat = el.getAttribute('data-staffcat');
+      return render();
+    }
+    if (location.hash === '#/staff' && e.target.closest('[data-staffimp]')) return document.getElementById('staff-file').click();
+    if (location.hash === '#/staff' && e.target.closest('[data-staffimpsave]')) return saveStaffImport();
+    if (location.hash === '#/staff' && e.target.closest('[data-staffimpcancel]')) { ui.staffImp = null; return render(); }
+    if (location.hash === '#/staff' && e.target.closest('[data-staffabs]')) return staffToAbsence();
     if ((el = e.target.closest('[data-tedit]'))) {
       ui.editTeacher = el.getAttribute('data-tedit') || null;
       render();
@@ -1459,6 +1602,12 @@
       if (ui.editTeacher === t.id) ui.editTeacher = null;
       render();
     }
+  });
+
+  app.addEventListener('change', function (e) {
+    if (!isAdmin() || location.hash !== '#/staff' || e.target.id !== 'staff-file') return;
+    if (e.target.files.length) readStaffFile(e.target.files[0]);
+    e.target.value = '';
   });
 
   /* ---------- الطلاب (مدير النظام) ---------- */
@@ -5304,7 +5453,7 @@
 
   function renderList() {
     var q = ui.search.trim();
-    var shown = S.teachers.filter(function (t) {
+    var shown = evalTeachers().filter(function (t) {
       return !q || t.name.indexOf(q) > -1 || t.subject.indexOf(q) > -1;
     });
 
@@ -5326,7 +5475,7 @@
       (shown.length
         ? '<div class="teachers">' + cards + '</div>'
         : '<div class="card empty">' + (S.teachers.length ? 'لا توجد نتائج مطابقة.'
-            : isAdmin() ? 'لا يوجد معلمون بعد. أضفهم من تبويب «بيانات المعلمين».' : 'لا يوجد معلمون بعد. يضيفهم مدير النظام.') + '</div>');
+            : isAdmin() ? 'لا يوجد معلمون بعد. أضفهم من تبويب «بيانات العاملين».' : 'لا يوجد معلمون بعد. يضيفهم مدير النظام.') + '</div>');
   }
 
   /* ---------- التقييم ---------- */
@@ -5489,7 +5638,7 @@
 
     var users = S.users.map(function (u) {
       var self = u.id === S.uid;
-      // حسابات المعلمين تُدار من تبويب «بيانات المعلمين»
+      // حسابات المعلمين تُدار من تبويب «بيانات العاملين»
       var isTeacher = u.role === 'teacher';
       var opts = Object.keys(ROLES).filter(function (k) { return isTeacher || k !== 'teacher'; }).map(function (k) {
         return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
@@ -5792,7 +5941,7 @@
           '<div><label class="field" for="nr-cap">السعة القصوى</label><input type="number" id="nr-cap" min="1" step="1" placeholder="مثال: 30"></div>' +
           '<div><label class="field" for="nr-teacher">مربي الصف</label><input type="text" id="nr-teacher" list="dl-teachers"></div>' +
           '</div><div class="actions"><button type="submit" class="btn primary">إضافة الشعبة</button></div></form>' +
-        '<datalist id="dl-teachers">' + S.teachers.map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist></div>' +
+        '<datalist id="dl-teachers">' + evalTeachers().map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist></div>' +
       homeroomAccountsHtml();
   }
 
@@ -7229,7 +7378,7 @@
         'شغّل الملف <code dir="ltr">supabase/visits.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
       return;
     }
-    var options = S.teachers.map(function (t) {
+    var options = evalTeachers().map(function (t) {
       return '<option value="' + t.id + '">' + esc(t.name) + (t.subject ? ' — ' + esc(t.subject) : '') + '</option>';
     }).join('');
 
