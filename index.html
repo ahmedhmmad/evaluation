@@ -915,7 +915,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '13/10 — 13';
+  var APP_BUILD = '14/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1853,7 +1853,8 @@
 
   function studentFormHtml(st) {
     var final = st && stStatus(st) === 'final', docs = (st && st.documents) || {};
-    var groupId = st ? transportGroupOf()[st.id] : '';
+    // الباص المختار لطالب لم يُسجَّل نهائيًا بعد يُحفظ في سجله (bus_wish) ويُضاف إليه عند اعتماد تسجيله النهائي
+    var groupId = st ? transportGroupOf()[st.id] || (st.details && st.details.bus_wish) || '' : '';
     // من له نقطة تجمع فهو يحتاج مواصلات
     var wants = groupId ? true : st ? st.wants_transport : null;
     return '<form class="card" id="student-form">' +
@@ -1872,13 +1873,13 @@
             '<option value="">لم يُحدَّد بعد</option>' +
             '<option value="yes"' + (wants === true ? ' selected' : '') + '>نعم</option>' +
             '<option value="no"' + (wants === false ? ' selected' : '') + '>لا</option></select>') +
-        '<label class="field" for="sf-transport" style="margin-top:10px">نقطة التجمع</label>' +
+        '<label class="field" for="sf-transport" style="margin-top:10px">الباص</label>' +
         '<select id="sf-transport" style="width:100%;max-width:420px"><option value="">بدون مواصلات</option>' + S.tGroups.map(function (g) {
           return '<option value="' + g.id + '"' + (g.id === groupId ? ' selected' : '') + '>' + esc(g.assembly_point) +
             (g.pickup_time ? ' — ' + esc(g.pickup_time) : '') + '</option>';
         }).join('') + '</select>' +
         '<div class="day">' + (S.tGroups.length
-          ? 'اختر أقرب نقطة تجمع لعنوان السكن مع ولي الأمر. هذا يسجّل حاجته ومكانه فقط: لا يُنشئ إيصالًا ولا مطالبة مالية. يبدأ اشتراكه عند إصدار أول إيصال له من «المواصلات ← إصدار إيصال».'
+          ? 'اختر الباص المناسب لعنوان السكن. يُضاف الطالب إلى الباص عند اعتماد تسجيله النهائي فقط، ولا يُنشئ ذلك إيصالًا ولا مطالبة مالية. يبدأ اشتراكه عند إصدار أول إيصال له من «المواصلات ← إصدار إيصال».'
           : 'لا توجد مجموعات مواصلات بعد؛ أنشئها من صفحة «المواصلات».') + '</div>') +
       '<h2 style="margin-top:20px">المستندات المستلمة</h2>' +
       '<div class="classes-pick" style="margin-top:6px">' + ST_DOCS.map(function (d) {
@@ -2609,6 +2610,12 @@
       data.status = 'pending';
     }
 
+    // الباصات للمسجَّلين نهائيًا فقط: لغيرهم يُحفظ الباص المختار في السجل حتى اعتماد التسجيل النهائي
+    var willBeFinal = (data.status || (st && st.status)) === 'final', pickNow = document.getElementById('sf-transport');
+    if (pickNow) {
+      if (willBeFinal) delete data.details.bus_wish;
+      else data.details.bus_wish = pickNow.value || '';
+    }
     var r = st
       ? await sb.from('students').update(data).eq('id', st.id)
       : await sb.from('students').insert(data).select().single();
@@ -2621,7 +2628,9 @@
     var pick = document.getElementById('sf-transport');
     if (pick) {
       var was = transportGroupOf()[st.id] || '', want = pick.value, tr = null;
-      if (want && want !== was) {
+      if (want && want !== was && !willBeFinal) {
+        // لا يُضاف إلى الباص قبل التسجيل النهائي؛ اختياره محفوظ في السجل
+      } else if (want && want !== was) {
         tr = await sb.from('transport_members').upsert(memberRow(st.id, want), { onConflict: 'student_id' });
       } else if (!want && was) {
         tr = await sb.from('transport_members').delete().eq('student_id', st.id);
@@ -3288,7 +3297,7 @@
     var q = norm(ui.tSearch), inGroup = {};
     S.tMembers.forEach(function (m) { inGroup[m.student_id] = m.group_id; });
     var list = S.students.filter(function (x) {
-      if (inGroup[x.id] === g.id) return false;
+      if (inGroup[x.id] === g.id || stStatus(x) !== 'final') return false; // الباصات للمسجَّلين نهائيًا فقط
       return !q || norm(x.full_name + ' ' + x.address + ' ' + x.class_name).indexOf(q) > -1 || x.national_id.indexOf(latinDigits(ui.tSearch)) > -1;
     });
     // غير الملتحقين بأي مجموعة أولًا
@@ -3347,9 +3356,14 @@
       : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
   }
 
-  // خانة «نقطة الركوب» تحت اسم الطالب في صفحة الباص
+  // خانة «نقطة الركوب» تحت اسم الطالب في صفحة الباص (ومعها تنبيه لمن أُضيف قبل تسجيله النهائي)
   function pickupInput(m, x) {
-    if (S.busMissing) return '';
+    var warn = stStatus(x) !== 'final' ? '<br><span class="badge unpaid" style="margin-top:4px">مبدئي — لا يظهر في كشف الباص</span>' : '';
+    if (S.busMissing) return warn;
+    return warn + pickupBox(m, x);
+  }
+
+  function pickupBox(m, x) {
     return '<input type="text" class="mnote" data-mpickup="' + x.id + '" placeholder="نقطة الركوب" aria-label="نقطة ركوب ' + esc(x.full_name) + '" value="' + esc(m.pickup || '') + '">';
   }
 
@@ -3505,7 +3519,10 @@
 
   // ركاب الباص في الشهر المعروض: كل من فيه إلا من أُوقف اشتراكه
   function busRiders(g) {
-    return membersOf(g.id).filter(function (m) { return findStudent(m.student_id) && (owesThisMonth(m) || subscribedIn(m, ui.tMonth)); });
+    return membersOf(g.id).filter(function (m) {
+      var x = findStudent(m.student_id);
+      return x && stStatus(x) === 'final' && (owesThisMonth(m) || subscribedIn(m, ui.tMonth));
+    });
   }
 
   // اسم العائلة (الكلمة الأخيرة، ومعها «أبو» ونحوها) وما قبله
@@ -3758,9 +3775,12 @@
       '<div class="orig-answers">' + row('رقم الهوية', x.national_id) + row('الشعبة', x.class_name) + row('ولي الأمر', x.guardian_name) +
         row('هاتف ولي الأمر', x.phone || x.whatsapp) + row('الباص', g ? g.assembly_point : 'غير مشترك في المواصلات') + row('الأسرة', familyNote(x.id) || 'لا إخوة مشتركون') + '</div>';
 
+    if (!g && stStatus(x) !== 'final') {
+      return head + '<p class="formhint" style="margin-top:10px">هذا الطالب غير مشترك في المواصلات، ولا يُضاف إلى الباصات إلا بعد اعتماد تسجيله النهائي من «تسجيل الطلاب».</p></div>';
+    }
     if (!g) {
-      return head + '<p class="formhint" style="margin-top:10px">هذا الطالب غير مشترك في المواصلات. اختر نقطة تجمع لإضافته ثم سجّل الدفعة.</p>' +
-        '<div class="toolbar" style="align-items:center;margin-top:8px"><select id="rc-group" aria-label="نقطة التجمع" style="width:auto;min-width:220px"><option value="">— اختر نقطة التجمع —</option>' +
+      return head + '<p class="formhint" style="margin-top:10px">هذا الطالب غير مشترك في المواصلات. اختر الباص لإضافته ثم سجّل الدفعة.</p>' +
+        '<div class="toolbar" style="align-items:center;margin-top:8px"><select id="rc-group" aria-label="الباص" style="width:auto;min-width:220px"><option value="">— اختر الباص —</option>' +
         S.tGroups.map(function (k) { return '<option value="' + k.id + '">' + esc(k.assembly_point) + '</option>'; }).join('') + '</select>' +
         '<button type="button" class="btn primary" data-rcjoin="' + x.id + '">إضافة إلى المواصلات</button></div></div>';
     }
@@ -4473,7 +4493,8 @@
     if ((el = e.target.closest('[data-rcsave]'))) return deskSave(el.getAttribute('data-rcsave') === 'print');
     if ((el = e.target.closest('[data-rcjoin]'))) {
       var joinId = el.getAttribute('data-rcjoin'), groupId = document.getElementById('rc-group').value;
-      if (!groupId) return toast('اختر نقطة التجمع أولًا.', true);
+      if (!groupId) return toast('اختر الباص أولًا.', true);
+      if (!findStudent(joinId) || stStatus(findStudent(joinId)) !== 'final') return toast('يُضاف إلى الباصات المسجَّلون نهائيًا فقط.', true);
       r = await sb.from('transport_members').upsert(memberRow(joinId, groupId), { onConflict: 'student_id' });
       if (r.error) return fail(r.error);
       S.tMembers = S.tMembers.filter(function (k) { return k.student_id !== joinId; });
@@ -4505,6 +4526,7 @@
       go('#/transport');
     } else if (g && (el = e.target.closest('[data-madd]'))) {
       var sid = el.getAttribute('data-madd');
+      if (!findStudent(sid) || stStatus(findStudent(sid)) !== 'final') return toast('يُضاف إلى الباصات المسجَّلون نهائيًا فقط.', true);
       // الطالب في مجموعة واحدة: إن كان في غيرها يُنقل إلى هذه
       r = await sb.from('transport_members').upsert(memberRow(sid, g.id), { onConflict: 'student_id' });
       if (r.error) return fail(r.error);
@@ -5005,6 +5027,9 @@
 
   async function applyClusters() {
     var cl = ui.cl, chosen = cl.clusters.filter(function (c) { return c.on && c.ids.length && c.name.trim(); });
+    // الباصات للمسجَّلين نهائيًا فقط
+    chosen.forEach(function (c) { c.ids = c.ids.filter(function (id) { var x = findStudent(id); return x && stStatus(x) === 'final'; }); });
+    chosen = chosen.filter(function (c) { return c.ids.length; });
     for (var i = 0; i < chosen.length; i++) {
       var c = chosen[i], name = c.name.trim();
       var g = S.tGroups.filter(function (x) { return norm(x.assembly_point) === norm(name); })[0];
