@@ -485,6 +485,7 @@
   table.grid tfoot td { font-weight: 700; background: #f8fafc; }
   .badge.paid { background: var(--green-soft); color: var(--green); }
   .badge.part { background: var(--amber-soft); color: var(--amber); }
+  .badge.exempt { background: #ede9fe; color: #6d28d9; }
   .badge.unpaid { background: var(--red-soft); color: var(--red); }
   .cand { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
   .cand:last-child { border-bottom: 0; }
@@ -775,7 +776,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { att: null, lateState: '', check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { exemptFor: null, att: null, lateState: '', check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -915,7 +916,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 6';
+  var APP_BUILD = '14/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -931,7 +932,7 @@
       return false;
     }
     var KEYS = ['settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
-      'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'refundMissing', 'leaveMissing'];
+      'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
     if (!quiet) toast('جارٍ مزامنة البيانات…');
@@ -1027,6 +1028,8 @@
     S.leaveMissing = !!m && !!(await sb.from('transport_members').select('left_from').limit(1)).error;
     // بيانات الباص ونقطة الركوب والمهلة والتعليق: أعمدتها تأتي من supabase/transport_buses.sql
     S.busMissing = !!m && !!(await sb.from('transport_members').select('pickup, grace_until, suspended_month').limit(1)).error;
+    // الإعفاء بالأشهر: أعمدته من supabase/reserve_and_exempt.sql
+    S.exemptMissing = !!m && !!(await sb.from('transport_members').select('exempt_from').limit(1)).error;
     S.tVoided = null;
   }
 
@@ -1231,7 +1234,7 @@
     if (isAdmin()) {
       stats +=
         stat('#/students', 'الطلاب', S.students.length, 'تسجيل نهائي: ' + count(S.students, function (x) { return x.status === 'final'; }) +
-          ' · مبدئي: ' + count(S.students, function (x) { return x.status !== 'final'; })) +
+          ' · مبدئي: ' + count(S.students, function (x) { return stStatus(x) === 'pending'; }) + ' · احتياط: ' + count(S.students, function (x) { return stStatus(x) === 'reserve'; })) +
         stat('#/transport', 'المواصلات', S.tGroups.length, 'مجموعات · الطلاب المشتركون: ' + count(S.tMembers, function (m) { return findStudent(m.student_id); }));
     }
 
@@ -1478,9 +1481,11 @@
     ['conduct', 'توقيع مدونة السلوك']
   ];
 
-  var ST_STATUS = { pending: 'تسجيل مبدئي', final: 'تسجيل نهائي' };
+  var ST_STATUS = { pending: 'تسجيل مبدئي', reserve: 'احتياط', final: 'تسجيل نهائي' };
 
-  function stStatus(x) { return x.status === 'final' ? 'final' : 'pending'; }
+  function stStatus(x) { return x.status === 'final' ? 'final' : x.status === 'reserve' ? 'reserve' : 'pending'; }
+
+  function stBadge(st) { return st === 'final' ? 'published' : st === 'reserve' ? 'part' : 'edit'; }
 
   function stField(k) {
     for (var i = 0; i < IMPORT_FIELDS.length; i++) if (IMPORT_FIELDS[i].k === k) return IMPORT_FIELDS[i];
@@ -1718,7 +1723,7 @@
       var st = stStatus(x);
       return '<tr><td>' + (++rowNo) + '</td><td><b>' + esc(x.full_name) + '</b></td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.national_id || '—') + (idCount[x.national_id] > 1 ? ' <span class="badge unpaid" dir="rtl">مكرر</span>' : '') + '</td>' +
-        '<td><span class="badge ' + (st === 'final' ? 'published' : 'edit') + '">' + ST_STATUS[st] + '</span>' + ((x.details || {}).scan ? ' <span class="badge part">مصوّرة</span>' : '') + '</td>' +
+        '<td><span class="badge ' + stBadge(st) + '">' + ST_STATUS[st] + '</span>' + ((x.details || {}).scan ? ' <span class="badge part">مصوّرة</span>' : '') + '</td>' +
         '<td>' + (st === 'final'
           ? '<select data-stclass="' + x.id + '" aria-label="صف ' + esc(x.full_name) + '">' + optionsHtml(schoolClasses(), x.class_name) + '</select>'
           : '<span style="color:var(--muted);font-size:.9rem">' + esc(x.class_name || x.requested_class || '—') + '</span>') + '</td>' +
@@ -1861,7 +1866,7 @@
     var wants = groupId ? true : st ? st.wants_transport : null;
     return '<form class="card" id="student-form">' +
       '<div class="toolbar" style="align-items:center;margin-bottom:4px"><h2 style="margin:0;flex:1">' + (st ? (final ? 'تعديل بيانات الطالب' : 'مراجعة تسجيل الطالب') : 'تسجيل طالب') + '</h2>' +
-        '<span class="badge ' + (final ? 'published' : 'edit') + '">' + ST_STATUS[final ? 'final' : 'pending'] + '</span></div>' +
+        '<span class="badge ' + stBadge(st ? stStatus(st) : 'pending') + '">' + ST_STATUS[st ? stStatus(st) : 'pending'] + '</span></div>' +
       (final ? '' : '<p class="hint">راجع البيانات مع المستندات الأصلية وصحّح ما يلزم، ثم اختر الشعبة واعتمد التسجيل النهائي. يمكنك الحفظ والعودة لاحقًا.</p>') +
       (st && st.details && st.details.scan ? '<p class="formhint" style="margin:8px 0">أُدخل هذا السجل من استمارة مصوّرة (' + esc(st.details.scan.file || '') + (st.details.scan.model ? ' · قرأها ' + esc(st.details.scan.model) : '') + ') ولم يُراجَع بعد. طابق كل خانة مع الورقة، وخصوصًا الحقول المعلَّمة «قراءة غير مؤكدة»' +
         ((st.details.scan.unsure || []).length ? ' (' + st.details.scan.unsure.length + ')' : '') + '.</p>' : '') +
@@ -1894,7 +1899,10 @@
           ? '<button type="submit" class="btn primary" data-mode="final">حفظ</button>' +
             '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
           : '<button type="submit" class="btn primary" data-mode="final">حفظ واعتماد التسجيل النهائي</button>' +
-            '<button type="submit" class="btn" data-mode="save" formnovalidate>حفظ دون اعتماد</button>') +
+            '<button type="submit" class="btn" data-mode="save" formnovalidate>' + (st && stStatus(st) === 'reserve' ? 'حفظ (يبقى احتياطًا)' : 'حفظ دون اعتماد') + '</button>' +
+            (st && stStatus(st) === 'reserve'
+              ? '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
+              : '<button type="submit" class="btn" data-mode="reserve" formnovalidate title="قائمة الانتظار: لا يُحتسب في الشعب">تسجيل احتياط</button>')) +
         (st ? '<button type="button" class="btn" data-stprofile="' + st.id + '">طباعة ملف الطالب</button>' : '') +
         '<button type="button" class="btn" data-stedit="">إلغاء</button>' +
       '</div></form>';
@@ -2216,7 +2224,7 @@
       app.innerHTML = tabs('students') + siblingFixHtml();
       return;
     }
-    var counts = {}, byStatus = { pending: 0, final: 0 };
+    var counts = {}, byStatus = { pending: 0, reserve: 0, final: 0 };
     S.students.forEach(function (x) { counts[x.class_name || ''] = (counts[x.class_name || ''] || 0) + 1; byStatus[stStatus(x)]++; });
     var opt = function (value, label, current) { return '<option value="' + esc(value) + '"' + (current === value ? ' selected' : '') + '>' + label + '</option>'; };
 
@@ -2232,7 +2240,7 @@
           '<button type="button" class="btn" data-stblank>طباعة استمارة ورقية فارغة</button>' +
           '<button type="button" class="btn" data-scanopen>إدخال من استمارات مصوّرة</button>' +
         '</div>') +
-      '<nav class="pills no-print" aria-label="حالة التسجيل">' + [['pending', 'تسجيل مبدئي', byStatus.pending], ['final', 'تسجيل نهائي', byStatus.final], ['', 'الكل', S.students.length]].map(function (p) {
+      '<nav class="pills no-print" aria-label="حالة التسجيل">' + [['pending', 'تسجيل مبدئي', byStatus.pending], ['reserve', 'احتياط', byStatus.reserve], ['final', 'تسجيل نهائي', byStatus.final], ['', 'الكل', S.students.length]].map(function (p) {
         return '<button type="button" data-ststatus="' + p[0] + '"' + (ui.stStatus === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>' +
       '<div class="card"><div class="toolbar">' +
@@ -2608,6 +2616,10 @@
       data.status = 'final';
       data.finalized_at = new Date().toISOString();
       delete data.details.scan; // روجع على الورقة
+    } else if (mode === 'reserve' && !wasFinal) {
+      // احتياط: قائمة انتظار، لا يُحتسب في الشعب ولا الباصات. يُحفظ وقت دخوله القائمة لترتيبها
+      if (!(st && stStatus(st) === 'reserve')) data.details.reserve_at = new Date().toISOString();
+      data.status = 'reserve';
     } else if (!st) {
       data.status = 'pending';
     }
@@ -2898,7 +2910,7 @@
       printNow();
     } else if ((el = e.target.closest('[data-stunfinal]'))) {
       st = findStudent(el.getAttribute('data-stunfinal'));
-      if (!confirm('إعادة تسجيل «' + st.full_name + '» إلى الحالة المبدئية؟')) return;
+      if (!confirm('إعادة تسجيل «' + st.full_name + '» إلى التسجيل المبدئي؟')) return;
       r = await sb.from('students').update({ status: 'pending', finalized_at: null }).eq('id', st.id);
       if (r.error) return fail(r.error);
       st.status = 'pending'; st.finalized_at = null;
@@ -3142,8 +3154,13 @@
   }
 
   // من يُطلب منه اشتراك الشهر المعروض: من بدأ اشتراكه ولم يُوقَف، ومن له دفعة مسجلة عن هذا الشهر (حتى لا تختفي)
+  // معفى من اشتراك الشهر: الإعفاء يُحدَّد بأول شهر وآخر شهر (آخر شهر فارغ: مستمر)
+  function exemptIn(m, month) {
+    return !!m && !!m.exempt_from && month >= m.exempt_from && (!m.exempt_to || month <= m.exempt_to);
+  }
+
   function owesThisMonth(m) {
-    return (startedBy(m, ui.tMonth) && subscribedIn(m, ui.tMonth)) || ((S.tPay[ui.tMonth] || {})[m.student_id] || {}).amount > 0;
+    return (exemptIn(m, ui.tMonth) && subscribedIn(m, ui.tMonth)) || (startedBy(m, ui.tMonth) && subscribedIn(m, ui.tMonth)) || ((S.tPay[ui.tMonth] || {})[m.student_id] || {}).amount > 0;
   }
 
   // اختيرت له نقطة تجمع ولم يبدأ اشتراكه بعد
@@ -3324,6 +3341,7 @@
           pickupInput(m, x) + '</td>' + '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">أُضيف إلى الباص ولم يبدأ اشتراكه (لم يصدر له إيصال)</td>' +
           '<td><span class="badge pending">بانتظار الاشتراك</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button> ' +
+          '<button type="button" class="btn" data-mexempt="' + x.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button> ' +
           '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
       }
       if (!owesThisMonth(m)) {
@@ -3333,10 +3351,10 @@
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button> ' +
           '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
       }
-      var sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0;
+      var sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0, ex = exemptIn(m, ui.tMonth);
       var method = rec.method || 'cash';
-      due += sh; paid += p;
-      var badge = sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
+      due += ex ? 0 : sh; paid += p;
+      var badge = ex ? ['exempt', PAY_STATUS.exempt] : sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
       var famNote = familyNote(x.id);
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span>' + pickupInput(m, x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
@@ -3346,9 +3364,10 @@
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
         payNoteInput(x.id, method, rec) + '</td>' +
-        '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + rideBadge(rideState(m, Math.max(0, sh - p))) + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
-        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button> ' : '') + (sh > p ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + (ex ? '<br><span style="color:var(--muted);font-size:.8rem">' + exemptText(m) + '</span>' : rideBadge(rideState(m, Math.max(0, sh - p)))) + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
+        '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button> ' : '') + (sh > p && !ex ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button> ') +
+        '<button type="button" class="btn" data-mexempt="' + x.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button> ' +
         '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
     }).join('');
     return rows
@@ -3356,6 +3375,53 @@
         '<tbody>' + rows + '</tbody><tfoot><tr><td colspan="3">المجموع</td><td>' + money(due) + '</td><td>' + money(paid) + '</td>' +
         '<td colspan="3">المتبقي: ' + money(Math.max(0, due - paid)) + '</td></tr></tfoot></table></div>' + groupMethodsHtml(g)
       : '<div class="empty">لا يوجد طلاب في هذه المجموعة بعد.</div>';
+  }
+
+  function exemptText(m) {
+    if (!m || !m.exempt_from) return '';
+    return 'إعفاء ' + (m.exempt_to && m.exempt_to !== m.exempt_from ? 'من ' + monthLabel(m.exempt_from) + ' إلى ' + monthLabel(m.exempt_to) : m.exempt_to ? monthLabel(m.exempt_from) : 'من ' + monthLabel(m.exempt_from) + ' (مستمر)') +
+      (m.exempt_note ? ' — ' + esc(m.exempt_note) : '');
+  }
+
+  // بطاقة إعفاء طالب من اشتراك المواصلات لأشهر محددة (في صفحة باصه)
+  function exemptFormHtml(g) {
+    var m = ui.exemptFor && memberOf(ui.exemptFor);
+    if (!m || m.group_id !== g.id) return '';
+    var x = findStudent(m.student_id);
+    if (S.exemptMissing) {
+      return '<div class="card"><p class="formhint" style="margin:0">الإعفاء يحتاج إلى أعمدة جديدة: شغّل الملف <code dir="ltr">supabase/reserve_and_exempt.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' +
+        '<div class="actions"><button type="button" class="btn" data-excancel>إغلاق</button></div></div>';
+    }
+    return '<div class="card" style="border:2px solid #c4b5fd"><h2>إعفاء «' + esc(x.full_name) + '» من اشتراك المواصلات</h2>' +
+      '<p class="hint">في أشهر الإعفاء يظهر الطالب «مدفوع (إعفاء)» بلون بنفسجي، ولا يُطلب منه اشتراك ولا يدخل في المطلوب. اترك «إلى شهر» فارغًا لإعفاء مستمر.</p>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<span class="monthpick"><label class="field" for="ex-from">من شهر</label><input type="month" id="ex-from" value="' + esc(m.exempt_from || ui.tMonth) + '"></span>' +
+        '<span class="monthpick"><label class="field" for="ex-to">إلى شهر</label><input type="month" id="ex-to" value="' + esc(m.exempt_from ? m.exempt_to || '' : ui.tMonth) + '"></span>' +
+        '<input type="text" id="ex-note" placeholder="سبب الإعفاء (مثلًا: ابن موظف، حالة خاصة)" value="' + esc(m.exempt_note || '') + '" style="flex:1;min-width:220px"></div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-exsave>حفظ الإعفاء</button>' +
+        (m.exempt_from ? '<button type="button" class="btn danger" data-exdel>إلغاء الإعفاء</button>' : '') +
+        '<button type="button" class="btn" data-excancel>إغلاق</button></div></div>';
+  }
+
+  async function saveExempt(remove) {
+    var sid = ui.exemptFor, m = memberOf(sid);
+    if (!m) return;
+    var patch;
+    if (remove) {
+      if (!confirm('إلغاء إعفاء هذا الطالب؟ يعود مطالَبًا باشتراك الأشهر التي كان معفى منها ولم يدفعها.')) return;
+      patch = { exempt_from: null, exempt_to: null, exempt_note: '' };
+    } else {
+      var from = document.getElementById('ex-from').value, to = document.getElementById('ex-to').value;
+      if (!from) return toast('اختر أول شهر للإعفاء', true);
+      if (to && to < from) return toast('«إلى شهر» قبل «من شهر»', true);
+      patch = { exempt_from: from, exempt_to: to || null, exempt_note: document.getElementById('ex-note').value.trim() };
+    }
+    var r = await sb.from('transport_members').update(patch).eq('student_id', sid);
+    if (r.error) return fail(r.error);
+    Object.assign(m, patch);
+    ui.exemptFor = null;
+    render();
+    toast(remove ? 'أُلغي الإعفاء' : 'حُفظ الإعفاء: ' + exemptText(m).replace(/<[^>]+>/g, ''));
   }
 
   // خانة «نقطة الركوب» تحت اسم الطالب في صفحة الباص (ومعها تنبيه لمن أُضيف قبل تسجيله النهائي)
@@ -3543,10 +3609,11 @@
       var gid = latinDigits(String((x.details || {}).guardian_id || '')).replace(/\D/g, ''), ph = latinDigits(String(x.phone || '')).replace(/\D/g, '').slice(-10);
       // خانة الاشتراك: تُعلَّم لمن دفع عن الشهر، والفارغة لم يدفع
       var paid = (pay[x.id] || {}).amount || 0, share = shareOf(m, g);
-      var mark = paid > 0 && paid >= share ? '✓ مدفوع' : paid > 0 ? 'جزئي ' + plainNum(paid) : '';
-      if (paid > 0 && paid >= share) paidN++;
+      var ex = exemptIn(m, ui.tMonth);
+      var mark = ex ? '✓ إعفاء' : paid > 0 && paid >= share ? '✓ مدفوع' : paid > 0 ? 'جزئي ' + plainNum(paid) : '';
+      if (ex || (paid > 0 && paid >= share)) paidN++;
       var father = String(x.full_name || '').trim().split(/\s+/)[1] || '';
-      return { x: x, m: m, name: nm.family ? first : x.full_name, family: nm.family, father: father, mark: mark, full: paid > 0 && paid >= share,
+      return { x: x, m: m, name: nm.family ? first : x.full_name, family: nm.family, father: father, mark: mark, full: ex || (paid > 0 && paid >= share), exempt: ex,
         key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
     });
     // الإخوة متتالون: الترتيب باسم العائلة ثم الأسرة ثم السن، ويفصل بين الأسر خط
@@ -3567,7 +3634,7 @@
         (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') + '</td>' : '';
       return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.name) + '</b></td>' + famCell +
         '<td>' + esc(r.m.pickup || '') + '</td>' + (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + phone(stVal(r.x, 'student_phone')) +
-        '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + '">' + esc(r.mark) + '</td><td></td></tr>';
+        '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td><td></td></tr>';
     }).join('');
     var dots = '............................';
     sheet.className = 'rm';
@@ -3590,7 +3657,7 @@
 
   /* ----- دفعات المواصلات: كل مشترك مع حصته وما دفعه في الشهر المعروض ----- */
 
-  var PAY_STATUS = { paid: 'مدفوع', part: 'جزئي', unpaid: 'غير مدفوع' };
+  var PAY_STATUS = { paid: 'مدفوع', exempt: 'مدفوع (إعفاء)', part: 'جزئي', unpaid: 'غير مدفوع' };
 
   function plainNum(v) {
     return (Math.round(v * 100) / 100).toLocaleString('en');
@@ -3607,9 +3674,10 @@
     return S.tMembers.map(function (m) {
       var x = findStudent(m.student_id), g = findGroup(m.group_id);
       if (!x || !g || !owesThisMonth(m)) return null;
-      var rec = pay[x.id] || {}, share = shareOf(m, g), paid = rec.amount || 0;
-      return { x: x, g: g, rec: rec, share: share, paid: paid, left: Math.max(0, share - paid),
-        status: share > 0 && paid >= share ? 'paid' : paid > 0 ? 'part' : share > 0 ? 'unpaid' : 'none' };
+      var rec = pay[x.id] || {}, share = shareOf(m, g), paid = rec.amount || 0, ex = exemptIn(m, ui.tMonth);
+      // المعفى: يظهر مسدَّدًا (بلون مختلف)، ولا يدخل اشتراكه في المطلوب
+      return { x: x, g: g, rec: rec, share: share, paid: paid, left: ex ? 0 : Math.max(0, share - paid), exempt: ex,
+        status: ex ? 'exempt' : share > 0 && paid >= share ? 'paid' : paid > 0 ? 'part' : share > 0 ? 'unpaid' : 'none' };
     }).filter(Boolean).sort(function (a, b) {
       return classRank(a.x.class_name) - classRank(b.x.class_name) || String(a.x.class_name).localeCompare(b.x.class_name, 'ar') ||
         a.x.full_name.localeCompare(b.x.full_name, 'ar');
@@ -3628,10 +3696,11 @@
 
   function payTotals(rows) {
     // by / byCount: المحصَّل وعدد الدفعات لكل وسيلة دفع
-    var t = { n: rows.length, due: 0, paid: 0, left: 0, owing: 0, by: {}, byCount: {} };
+    var t = { n: rows.length, due: 0, paid: 0, left: 0, owing: 0, exempt: 0, by: {}, byCount: {} };
     Object.keys(PAY_METHODS).forEach(function (k) { t.by[k] = 0; t.byCount[k] = 0; });
     rows.forEach(function (r) {
-      t.due += r.share; t.paid += r.paid; t.left += r.left;
+      t.due += r.exempt ? 0 : r.share; t.paid += r.paid; t.left += r.left;
+      if (r.exempt) t.exempt++;
       if (r.left > 0) t.owing++;
       if (r.paid > 0) { var k = PAY_METHODS[r.rec.method] ? r.rec.method : 'cash'; t.by[k] += r.paid; t.byCount[k]++; }
     });
@@ -3713,6 +3782,7 @@
     if (!all.length) return '<div class="card empty">لا يوجد طلاب مشتركون في المواصلات بعد. أضف الطلاب إلى نقاط التجمع أولًا.</div>';
     var count = function (s) { return scoped.filter(function (r) { return r.status === s; }).length; };
     var pills = [['', 'الكل', scoped.length], ['paid', PAY_STATUS.paid, count('paid')], ['part', PAY_STATUS.part, count('part')], ['unpaid', PAY_STATUS.unpaid, count('unpaid')]];
+    if (count('exempt')) pills.splice(2, 0, ['exempt', 'إعفاء', count('exempt')]);
     var t = payTotals(rows);
     var body = rows.map(function (r, i) {
       var x = r.x, rec = r.rec, method = rec.method || 'cash';
@@ -3728,7 +3798,8 @@
           (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
         '<td><div class="acts">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
         (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
-        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button>') + '</div></td></tr>';
+        (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button>') +
+        ' <button type="button" class="btn" data-mexempt="' + x.id + '" data-mexemptg="' + r.g.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button></div></td></tr>';
     }).join('');
     return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
       '<nav class="pills">' + pills.map(function (p) {
@@ -3750,10 +3821,11 @@
     }).map(function (m) { return { x: findStudent(m.student_id), g: findGroup(m.group_id) }; })
       .sort(function (a, b) { return a.x.full_name.localeCompare(b.x.full_name, 'ar'); });
     if (!list.length) return '';
-    return '<details class="card bank" style="margin-top:16px"><summary>اختاروا نقطة تجمع ولم يبدأ اشتراكهم (' + list.length + ') — لا يُطالَبون بشيء حتى يصدر لهم إيصال</summary>' +
+    return '<details class="card bank" style="margin-top:16px"><summary>أُضيفوا إلى الباصات ولم يبدأ اشتراكهم (' + list.length + ') — لا يُطالَبون بشيء حتى يصدر لهم إيصال</summary>' +
       list.map(function (r) {
         return '<div class="cand"><span><b>' + esc(r.x.full_name) + '</b><br><span class="meta">' + esc(r.x.class_name || 'بدون شعبة') + ' · ' + esc(r.g.assembly_point) + '</span></span>' +
-          '<button type="button" class="btn" data-mdesk="' + r.x.id + '">إصدار إيصال</button></div>';
+          '<span class="acts"><button type="button" class="btn" data-mdesk="' + r.x.id + '">إصدار إيصال</button>' +
+          '<button type="button" class="btn" data-mexempt="' + r.x.id + '" data-mexemptg="' + r.g.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button></span></div>';
       }).join('') + '</details>';
   }
 
@@ -3814,6 +3886,7 @@
       });
     }
     return head +
+      (exemptIn(m, ui.tMonth) ? '<p class="formhint" style="margin-top:10px;border-color:#c4b5fd;background:#f5f3ff;color:#5b21b6">هذا الطالب معفى من اشتراك ' + monthLabel(ui.tMonth) + ' (' + exemptText(m) + '): يُعدّ مسدَّدًا ولا يُطلب منه شيء.</p>' : '') +
       (notStarted ? '<p class="formhint" style="margin-top:10px">لم يبدأ اشتراك هذا الطالب بعد: اختيرت له نقطة التجمع فقط. يبدأ اشتراكه من ' + monthLabel(ui.tMonth) + ' عند تسجيل هذه الدفعة.</p>' : '') +
       '<div class="stats" style="margin:14px 0 6px">' +
         '<div class="card stat"><span class="lbl">اشتراك ' + monthLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
@@ -4125,7 +4198,7 @@
           '<div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" data-busprint="' + g.id + '">طباعة كشف الباص</button>' + EXPORT_BTNS +
           '<button type="button" class="btn" data-gedit="' + g.id + '">تعديل</button>' +
           '<button type="button" class="btn danger" data-gdel="' + g.id + '">حذف الباص</button></div></div>' +
-        (editing ? groupFormHtml(g) : '') +
+        (editing ? groupFormHtml(g) : '') + exemptFormHtml(g) +
         '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الطلاب (' + tot.n + ') — ' + monthLabel(ui.tMonth) + '</h2>' +
           '<span class="no-print" style="display:flex;gap:8px;align-items:center">' + monthPick + '</span></div>' +
           '<div id="t-members">' + membersTableHtml(g) + '</div></div>' +
@@ -4472,6 +4545,16 @@
     if (e.target.closest('[data-rfxlsx]')) return exportRefundsXlsx();
     if ((el = e.target.closest('[data-mvoid]'))) return voidReceipt(el.getAttribute('data-mvoid'));
     if ((el = e.target.closest('[data-mdesk]'))) return openDesk(el.getAttribute('data-mdesk'));
+    if ((el = e.target.closest('[data-mexempt]'))) {
+      ui.exemptFor = el.getAttribute('data-mexempt');
+      var exg = el.getAttribute('data-mexemptg');
+      if (exg && location.hash !== '#/transport/' + exg) go('#/transport/' + exg); else render();
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (e.target.closest('[data-exsave]')) return saveExempt(false);
+    if (e.target.closest('[data-exdel]')) return saveExempt(true);
+    if (e.target.closest('[data-excancel]')) { ui.exemptFor = null; return render(); }
     if ((el = e.target.closest('[data-busprint]'))) {
       pendingBus = findGroup(el.getAttribute('data-busprint'));
       return pendingBus ? printNow() : null;
