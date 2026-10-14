@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// رسالة نصية واردة من محادثة فردية فقط (لا الرسائل المرسلة منا ولا المجموعات)\nconst body = $input.first().json.body || $input.first().json;\nconst d = body.data || {};\nconst key = d.key || {};\nif (key.fromMe) return [];\nlet jid = key.remoteJid || '';\nif (jid.endsWith('@g.us') || jid === 'status@broadcast') return [];\n// في بعض الإصدارات يأتي المعرّف بصيغة @lid والرقم الحقيقي في حقل آخر\nif (jid.endsWith('@lid')) jid = key.senderPn || key.remoteJidAlt || key.participantAlt || d.senderPn || d.remoteJidAlt || jid;\nif (String(jid).endsWith('@lid')) throw new Error('وصل المرسل بمعرّف @lid دون رقم الجوال: ' + JSON.stringify(key));\nconst phone = String(jid).split('@')[0].replace(/[^0-9]/g, '');\nconst m = d.message || {};\nconst text = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || '';\nif (!phone || !text.trim()) return [];\nreturn [{ json: { phone, text: text.trim() } }];"
+        "jsCode": "// رسالة نصية واردة من محادثة فردية فقط (لا الرسائل المرسلة منا ولا المجموعات)\nconst body = $input.first().json.body || $input.first().json;\nconst d = body.data || {};\nconst key = d.key || {};\nif (key.fromMe) return [];\nlet jid = key.remoteJid || '';\nif (jid.endsWith('@g.us') || jid === 'status@broadcast') return [];\n// في بعض الإصدارات يأتي المعرّف بصيغة @lid والرقم الحقيقي في حقل آخر\nif (jid.endsWith('@lid')) jid = key.senderPn || key.remoteJidAlt || key.participantAlt || d.senderPn || d.remoteJidAlt || jid;\nif (String(jid).endsWith('@lid')) throw new Error('وصل المرسل بمعرّف @lid دون رقم الجوال: ' + JSON.stringify(key));\nconst phone = String(jid).split('@')[0].replace(/[^0-9]/g, '');\nconst m = d.message || {};\nconst text = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || '';\nif (!phone || !text.trim()) return [];\n// الرد يخرج من الـ instance نفسه الذي استقبل الرسالة\nconst instance = body.instance || 'DarAlaman';\nreturn [{ json: { phone, text: text.trim(), instance } }];"
       },
       "id": "b1a1c0de-0002-4000-8000-000000000002",
       "name": "استخراج الرقم والنص",
@@ -68,7 +68,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// خطأ من قاعدة البيانات (مثل مفتاح n8n غير مطابق) يظهر أحمر في سجل التنفيذ\nconst res = $input.first().json;\nif (res.error) throw new Error(res.error);\n// الرد الفارغ: لا يُرسل شيء. سبب ذلك في res.note (رقم غير مسجَّل، أو رسالة خارج محادثة الغياب)\nconst reply = (res.reply || '').trim();\nif (!reply) return [];\nreturn [{ json: { number: $('استخراج الرقم والنص').first().json.phone, text: reply } }];"
+        "jsCode": "// خطأ من قاعدة البيانات (مثل مفتاح n8n غير مطابق) يظهر أحمر في سجل التنفيذ\nconst res = $input.first().json;\nif (res.error) throw new Error(res.error);\n// الرد الفارغ: لا يُرسل شيء. سبب ذلك في res.note (رقم غير مسجَّل، أو رسالة خارج محادثة الغياب)\nconst reply = (res.reply || '').trim();\nif (!reply) return [];\nconst src = $('استخراج الرقم والنص').first().json;\nreturn [{ json: { number: src.phone, text: reply, instance: src.instance } }];"
       },
       "id": "b1a1c0de-0004-4000-8000-000000000004",
       "name": "تجهيز الرد",
@@ -82,7 +82,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://evolution.ahmedhammad.page/message/sendText/DarAlaman",
+        "url": "={{ 'https://evolution.ahmedhammad.page/message/sendText/' + encodeURIComponent($json.instance) }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -108,8 +108,7 @@
       "position": [
         -320,
         200
-      ],
-      "onError": "continueRegularOutput"
+      ]
     }
   ],
   "connections": {
