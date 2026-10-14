@@ -775,7 +775,7 @@
             visits: [], statements: [], visitsMissing: false, defaultPw: '', accountsMissing: false,
             students: [], studentsMissing: false, regMissing: false, wantsMissing: false,
             tGroups: [], tMembers: [], tPay: {}, transportMissing: false, aliasMissing: false };
-  var ui = { lateState: '', check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
+  var ui = { att: null, lateState: '', check: null, sibFix: null, scan: null, rcRefund: false, rcQuery: '', rcStudent: null, rcMethod: '', sibSearch: '', tpClass: '', tpStatus: '', tpSearch: '', search: '', editTeacher: null, editStudent: null, stSearch: '', stClass: '', imp: null, cl: null, clsSearch: '', stFlag: '', stStatus: '', editGroup: null, tMonth: '', tSearch: '', error: '', authMode: 'login', authMsg: '', authErr: '', busy: false };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -915,7 +915,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 5';
+  var APP_BUILD = '14/10 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -970,6 +970,7 @@
     }
     document.body.classList.remove('syncing');
     S.syncedAt = new Date();
+    S.attDay = {}; // سجلات الحضور تُجلب من جديد عند فتحها
     render();
     if (!quiet) toast('تمت المزامنة — الطلاب: ' + S.students.length + ' · المشتركون في المواصلات: ' + S.tMembers.length);
     return true;
@@ -1133,12 +1134,13 @@
     transport: 'M5 4h14a1 1 0 011 1v11H4V5a1 1 0 011-1zM4 11h16M7 16v3M17 16v3M8 14h.01M16 14h.01',
     classes: 'M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z',
     admin: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
-    rooms: 'M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8 9h2M14 9h2M8 12h2M14 12h2'
+    rooms: 'M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8 9h2M14 9h2M8 12h2M14 12h2',
+    attendance: 'M8 3v3M16 3v3M4 7h16v13H4zM8 14l3 3 5-6'
   };
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
-    if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب']] }];
+    if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب']] }];
     if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']] }];
     var groups = [
       { items: [['#/', 'home', 'الرئيسية']] },
@@ -1147,7 +1149,7 @@
     if (isAdmin()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات المعلمين']);
       groups.push(
-        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/transport', 'transport', 'المواصلات']] },
+        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/transport', 'transport', 'المواصلات']] },
         { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
       );
     }
@@ -1157,14 +1159,14 @@
   // الصفحة الحالية كما يدل عليها العنوان (صفحات التفاصيل تتبع قائمتها)
   function activeKey() {
     var h = location.hash;
-    if (isRegistrar()) return /^#\/classes/.test(h) ? 'classes' : 'students';
+    if (isRegistrar()) return /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : 'students';
     if (!isStaff()) return 'results';
     if (h === '#/teachers' || /^#\/t\//.test(h)) return 'teachers';
     if (h === '#/visits' || /^#\/v\//.test(h)) return 'visits';
     if (h === '#/results' || /^#\/r\//.test(h)) return 'results';
     if (/^#\/transport/.test(h)) return 'transport';
     if (/^#\/classes/.test(h) && isAdmin()) return 'classes';
-    var m = h.match(/^#\/(staff|students|admin|rooms)$/);
+    var m = h.match(/^#\/(staff|students|admin|rooms|attendance)$/);
     return m && isAdmin() ? m[1] : 'home';
   }
 
@@ -6077,6 +6079,7 @@
     var r = h.match(/^#\/r\/(.+)$/);
     if (isRegistrar()) {
       if (/^#\/classes/.test(h)) return renderClasses();
+      if (h === '#/attendance') return renderAttendance();
       if (h !== '#/students') return go('#/students');
       return renderStudents();
     }
@@ -6093,10 +6096,361 @@
     if (/^#\/transport/.test(h) && isAdmin()) return renderTransport();
     if (h === '#/admin' && isAdmin()) return renderAdmin();
     if (h === '#/rooms' && isAdmin()) return renderRooms();
+    if (h === '#/attendance' && isAdmin()) return renderAttendance();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     if (h === '#/teachers') return renderList();
     renderHome();
   }
+
+  /* ---------- الحضور والغياب ----------
+     يُسجَّل لكل شعبة يومًا بيوم: صف لكل طالب في جدول attendance (supabase/attendance.sql).
+     اليوم: تسجيل شعبة، أو ملخص المدرسة مع الغائبين. الفترة: نسب الحضور لكل طالب ولكل شعبة */
+
+  var ATT = { present: 'حاضر', absent: 'غائب', late: 'متأخر', excused: 'غائب بعذر' };
+  var ATT_BADGE = { present: 'paid', absent: 'unpaid', late: 'part', excused: 'pending' };
+  S.attDay = {};          // { 'YYYY-MM-DD': { studentId: صف } }
+  S.attMissing = false;
+
+  function attState() {
+    if (!ui.att) ui.att = { view: 'day', day: todayISO(), cls: '', draft: {}, busy: false, from: todayISO().slice(0, 8) + '01', to: todayISO(), report: null, loading: false };
+    return ui.att;
+  }
+
+  // المسجَّلون نهائيًا في الشعبة، بالاسم
+  function classRoll(cls) {
+    return S.students.filter(function (x) { return stStatus(x) === 'final' && x.class_name === cls; })
+      .sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
+  }
+
+  function attClasses() {
+    var names = schoolClasses().slice();
+    S.students.forEach(function (x) { if (stStatus(x) === 'final' && x.class_name && names.indexOf(x.class_name) < 0) names.push(x.class_name); });
+    return names;
+  }
+
+  async function loadAttDay(day) {
+    var rows = await fetchAll(function () { return sb.from('attendance').select('*').eq('day', day).order('student_id'); });
+    if (!rows) { S.attMissing = true; render(); return; }
+    var map = {};
+    rows.forEach(function (r) { map[r.student_id] = r; });
+    S.attDay[day] = map;
+    render();
+  }
+
+  async function loadAttReport() {
+    var a = attState();
+    if (!a.from || !a.to || a.from > a.to) return toast('اختر فترة صحيحة', true);
+    a.loading = true;
+    render();
+    var from = a.from, to = a.to;
+    var rows = await fetchAll(function () { return sb.from('attendance').select('student_id, day, status, class_name').gte('day', from).lte('day', to).order('day').order('student_id'); });
+    a.loading = false;
+    if (!rows) { toast('تعذر جلب سجلات الحضور', true); render(); return; }
+    a.report = { from: from, to: to, rows: rows };
+    render();
+  }
+
+  // حالة الطالب في اليوم المعروض: ما عُدِّل ولم يُحفظ، ثم المحفوظ، وإلا حاضر
+  function attOf(sid) {
+    var a = attState(), d = a.draft[sid], saved = (S.attDay[a.day] || {})[sid];
+    return { status: d ? d.status : saved ? saved.status : 'present', note: d && d.note != null ? d.note : saved ? saved.note || '' : '', saved: saved };
+  }
+
+  function attCounts(list, get) {
+    var n = { present: 0, absent: 0, late: 0, excused: 0 };
+    list.forEach(function (x) { n[get(x)]++; });
+    return n;
+  }
+
+  function attPct(n) {
+    var total = n.present + n.absent + n.late + n.excused;
+    return total ? Math.round((n.present + n.late) / total * 100) + '%' : '—';
+  }
+
+  function attStatsHtml(n, sub) {
+    var card = function (k, color) { return '<div class="card stat"><span class="lbl">' + ATT[k] + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + n[k] + '</span><span class="sub">' + sub + '</span></div>'; };
+    return '<div class="stats">' + card('present') + card('absent', n.absent ? 'var(--red)' : '') + card('late') + card('excused') + '</div>';
+  }
+
+  function attClassHtml(cls) {
+    var a = attState(), roll = classRoll(cls), saved = S.attDay[a.day] || {};
+    if (!roll.length) return '<div class="card empty">لا يوجد مسجَّلون نهائيًا في هذه الشعبة.</div>';
+    var taken = roll.filter(function (x) { return saved[x.id]; }), last = null;
+    taken.forEach(function (x) { if (!last || String(saved[x.id].updated_at) > String(last.updated_at)) last = saved[x.id]; });
+    var dirty = Object.keys(a.draft).length, future = a.day > todayISO();
+    var n = attCounts(roll, function (x) { return attOf(x.id).status; });
+    var rows = roll.map(function (x, i) {
+      var st = attOf(x.id);
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b></td><td><div class="acts">' + Object.keys(ATT).map(function (k) {
+          return '<button type="button" class="btn' + (st.status === k ? ' primary' : '') + '" data-attset="' + x.id + '" data-attv="' + k + '"' + (st.status === k ? ' aria-pressed="true"' : ' aria-pressed="false"') +
+            (st.status === k && k !== 'present' ? ' style="background:var(--' + (k === 'absent' ? 'red' : k === 'late' ? 'gold' : 'muted') + ');border-color:transparent"' : '') + '>' + ATT[k] + '</button>';
+        }).join('') + '</div></td>' +
+        '<td><input type="text" data-attnote="' + x.id + '" placeholder="ملاحظة (سبب الغياب…)" aria-label="ملاحظة ' + esc(x.full_name) + '" value="' + esc(st.note) + '" style="min-width:180px"></td>' +
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+    }).join('');
+    return attStatsHtml(n, cls) +
+      '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">حضور ' + esc(cls) + ' — ' + dmy(a.day) + '</h2>' +
+        '<button type="button" class="btn" data-attall>الكل حاضر</button>' +
+        '<button type="button" class="btn primary" data-attsave' + (a.busy || future ? ' disabled' : '') + '>' + (a.busy ? 'جارٍ الحفظ…' : 'حفظ الحضور') + '</button></div>' +
+        '<p class="hint" style="margin:0 0 10px">' + (future ? 'لا يُسجَّل الحضور ليوم لم يأتِ بعد.' :
+          taken.length ? 'سُجّل حضور هذا اليوم' + (last && last.recorded_by ? ' بواسطة ' + esc(last.recorded_by) : '') + (last && last.updated_at ? ' · ' + issuedWhen({ issued_at: last.updated_at }) : '') + (taken.length < roll.length ? ' — ' + (roll.length - taken.length) + ' طالبًا أُضيفوا بعده لم يُسجَّلوا' : '') + '. يمكنك التعديل والحفظ مجددًا.'
+          : 'لم يُسجَّل حضور هذا اليوم بعد. الجميع «حاضر» افتراضيًا: علّم الغائبين والمتأخرين ثم احفظ.') +
+          (dirty ? ' <b style="color:var(--red)">تعديلات غير محفوظة: ' + dirty + '</b>' : '') + '</p>' +
+        '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الطالب</th><th>الحالة</th><th>ملاحظة</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+
+  function attSchoolHtml() {
+    var a = attState(), saved = S.attDay[a.day] || {}, all = { present: 0, absent: 0, late: 0, excused: 0 }, missing = [], absentees = [];
+    var rows = attClasses().map(function (cls) {
+      var roll = classRoll(cls);
+      if (!roll.length) return '';
+      var taken = roll.filter(function (x) { return saved[x.id]; });
+      if (!taken.length) missing.push(cls);
+      var n = attCounts(taken, function (x) { return saved[x.id].status; });
+      Object.keys(all).forEach(function (k) { all[k] += n[k]; });
+      taken.forEach(function (x) { if (saved[x.id].status !== 'present') absentees.push({ x: x, r: saved[x.id] }); });
+      return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>' + roll.length + '</td>' +
+        '<td>' + (taken.length ? '<span class="badge paid">سُجّل</span>' : '<span class="badge unpaid">لم يُسجَّل</span>') + '</td>' +
+        (taken.length ? '<td>' + n.present + '</td><td>' + (n.absent ? '<b style="color:var(--red)">' + n.absent + '</b>' : 0) + '</td><td>' + n.late + '</td><td>' + n.excused + '</td><td><b>' + attPct(n) + '</b></td>'
+          : '<td colspan="5" style="color:var(--muted)">—</td>') + '</tr>';
+    }).join('');
+    absentees.sort(function (p, q) { return classRank(p.x.class_name) - classRank(q.x.class_name) || p.x.full_name.localeCompare(q.x.full_name, 'ar'); });
+    return attStatsHtml(all, 'المدرسة — ' + dmy(a.day)) +
+      (missing.length ? '<p class="formhint">لم يُسجَّل حضور ' + missing.length + ' شعبة لهذا اليوم: ' + missing.map(esc).join('، ') + '</p>' : '') +
+      '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الشعب — ' + dmy(a.day) + '</h2>' +
+        '<button type="button" class="btn" data-attdayxlsx>تصدير Excel</button></div>' +
+        (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>الطلاب</th><th>التسجيل</th><th>حاضر</th><th>غائب</th><th>متأخر</th><th>بعذر</th><th>نسبة الحضور</th></tr></thead><tbody>' + rows +
+          '</tbody><tfoot><tr><td colspan="3">المدرسة</td><td>' + all.present + '</td><td>' + all.absent + '</td><td>' + all.late + '</td><td>' + all.excused + '</td><td>' + attPct(all) + '</td></tr></tfoot></table></div>'
+          : '<div class="empty">لا توجد شعب فيها مسجَّلون نهائيًا.</div>') + '</div>' +
+      '<div class="card"><h2>الغائبون والمتأخرون اليوم (' + absentees.length + ')</h2>' +
+        (absentees.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>الحالة</th><th>ملاحظة</th><th>ولي الأمر</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' +
+          absentees.map(function (p, i) {
+            return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(p.x.full_name) + '</b></td><td>' + esc(p.x.class_name) + '</td><td><span class="badge ' + ATT_BADGE[p.r.status] + '">' + ATT[p.r.status] + '</span></td>' +
+              '<td>' + esc(p.r.note || '') + '</td><td>' + esc(p.x.guardian_name || '') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(p.x.whatsapp || p.x.phone) || '—') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty">لا غائبين مسجَّلين لهذا اليوم.</div>') + '</div>';
+  }
+
+  // تقرير الفترة: لكل طالب عدد أيام كل حالة، ولكل شعبة متوسطها. الأيام المحسوبة هي التي سُجّل فيها حضور الطالب
+  function attReportData() {
+    var a = attState(), rep = a.report, per = {}, byClass = {};
+    rep.rows.forEach(function (r) {
+      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, late: 0, excused: 0, cls: r.class_name });
+      p[r.status]++;
+      p.cls = r.class_name || p.cls;
+      (byClass[r.class_name] || (byClass[r.class_name] = { days: {}, n: { present: 0, absent: 0, late: 0, excused: 0 } })).days[r.day] = 1;
+      byClass[r.class_name].n[r.status]++;
+    });
+    return { per: per, byClass: byClass };
+  }
+
+  function attReportHtml() {
+    var a = attState();
+    var head = '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
+      '<span class="monthpick"><label class="field" for="att-from">من</label><input type="date" id="att-from" value="' + a.from + '"></span>' +
+      '<span class="monthpick"><label class="field" for="att-to">إلى</label><input type="date" id="att-to" value="' + a.to + '"></span>' +
+      '<button type="button" class="btn primary" data-attrun' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'جارٍ الجلب…' : 'عرض التقرير') + '</button>' +
+      (a.report ? '<button type="button" class="btn" data-attrepxlsx>تصدير Excel</button>' : '') + '</div></div>';
+    if (!a.report) return head + '<div class="card empty">اختر الفترة ثم «عرض التقرير».</div>';
+    var d = attReportData();
+    if (a.cls) {
+      var roll = classRoll(a.cls), days = Object.keys((d.byClass[a.cls] || {}).days || {}).length;
+      var rows = roll.map(function (x, i) {
+        var p = d.per[x.id] || { present: 0, absent: 0, late: 0, excused: 0 };
+        return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b></td><td>' + p.present + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + p.late + '</td><td>' + p.excused + '</td><td><b>' + attPct(p) + '</b></td></tr>';
+      }).join('');
+      return head + '<div class="card"><h2>' + esc(a.cls) + ' — من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + '</h2><p class="st-count">أيام سُجّل فيها حضور الشعبة: ' + days + '</p>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>حاضر</th><th>غائب</th><th>متأخر</th><th>بعذر</th><th>نسبة الحضور</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+    }
+    var all = { present: 0, absent: 0, late: 0, excused: 0 };
+    var crow = attClasses().map(function (cls) {
+      var c = d.byClass[cls];
+      if (!c) return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>0</td><td colspan="5" style="color:var(--muted)">لم يُسجَّل حضور في الفترة</td></tr>';
+      Object.keys(all).forEach(function (k) { all[k] += c.n[k]; });
+      return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>' + Object.keys(c.days).length + '</td><td>' + c.n.absent + '</td><td>' + c.n.late + '</td><td>' + c.n.excused + '</td><td><b>' + attPct(c.n) + '</b></td>' +
+        '<td>' + classRoll(cls).filter(function (x) { return (d.per[x.id] || {}).absent >= 3; }).length + '</td></tr>';
+    }).join('');
+    var most = S.students.filter(function (x) { return (d.per[x.id] || {}).absent >= 3; })
+      .sort(function (p, q) { return d.per[q.id].absent - d.per[p.id].absent || p.full_name.localeCompare(q.full_name, 'ar'); });
+    return head + '<div class="card"><h2>الشعب — من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + '</h2>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>أيام التسجيل</th><th>الغياب (طالب×يوم)</th><th>التأخر</th><th>بعذر</th><th>نسبة الحضور</th><th>غابوا 3 أيام فأكثر</th></tr></thead><tbody>' + crow +
+        '</tbody><tfoot><tr><td colspan="2">المدرسة</td><td>' + all.absent + '</td><td>' + all.late + '</td><td>' + all.excused + '</td><td>' + attPct(all) + '</td><td>' + most.length + '</td></tr></tfoot></table></div></div>' +
+      '<div class="card"><h2>الأكثر غيابًا (3 أيام فأكثر بلا عذر) — ' + most.length + '</h2>' + (most.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + most.map(function (x, i) {
+            return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
+              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
+  }
+
+  function renderAttendance() {
+    var a = attState();
+    if (S.attMissing) {
+      app.innerHTML = tabs('attendance') + '<div class="card empty">لم تُجهَّز قاعدة البيانات للحضور والغياب بعد.<br>شغّل الملف <code dir="ltr">supabase/attendance.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    if (a.view === 'day' && !S.attDay[a.day]) {
+      app.innerHTML = tabs('attendance') + '<div class="card empty">جارٍ التحميل…</div>';
+      loadAttDay(a.day);
+      return;
+    }
+    var classes = attClasses();
+    app.innerHTML = tabs('attendance') +
+      '<div class="toolbar" style="align-items:center"><nav class="pills" style="margin:0">' +
+        '<button type="button" data-attview="day"' + (a.view === 'day' ? ' class="on"' : '') + '>الحضور اليومي</button>' +
+        '<button type="button" data-attview="report"' + (a.view === 'report' ? ' class="on"' : '') + '>تقرير فترة</button></nav>' +
+        '<span style="flex:1"></span>' +
+        '<select id="att-cls" aria-label="الشعبة" style="width:auto;min-width:170px"><option value="">كل المدرسة</option>' + classes.map(function (c) {
+          return '<option' + (c === a.cls ? ' selected' : '') + '>' + esc(c) + '</option>';
+        }).join('') + '</select>' +
+        (a.view === 'day' ? '<span class="monthpick"><label class="field" for="att-day">اليوم</label><input type="date" id="att-day" max="' + todayISO() + '" value="' + a.day + '"></span>' : '') + '</div>' +
+      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml());
+  }
+
+  async function saveAttendance() {
+    var a = attState(), roll = classRoll(a.cls), who = (S.profile && S.profile.full_name) || displayName(S.email), now = new Date().toISOString();
+    if (!roll.length || a.day > todayISO()) return;
+    var rows = roll.map(function (x) {
+      var st = attOf(x.id);
+      return { student_id: x.id, day: a.day, status: st.status, note: st.note.trim(), class_name: a.cls, recorded_by: who, updated_at: now };
+    });
+    a.busy = true;
+    render();
+    var r = await sb.from('attendance').upsert(rows, { onConflict: 'student_id,day' });
+    a.busy = false;
+    if (r.error) { render(); return fail(r.error); }
+    var map = S.attDay[a.day] || (S.attDay[a.day] = {});
+    rows.forEach(function (row) { map[row.student_id] = row; });
+    a.draft = {};
+    render();
+    var n = attCounts(rows, function (row) { return row.status; });
+    toast('حُفظ حضور ' + a.cls + ' — غائب: ' + n.absent + ' · متأخر: ' + n.late + ' · بعذر: ' + n.excused);
+  }
+
+  function leaveAttDraft() {
+    var a = attState();
+    return !Object.keys(a.draft).length || confirm('في حضور هذه الشعبة تعديلات لم تُحفظ. تركها؟');
+  }
+
+  async function exportAttDayXlsx() {
+    var a = attState(), saved = S.attDay[a.day] || {};
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var sum = [[schoolName()], ['الحضور والغياب — ' + dmy(a.day)], [], ['الشعبة', 'الطلاب', 'التسجيل', 'حاضر', 'غائب', 'متأخر', 'بعذر', 'نسبة الحضور']];
+      var abs = [[schoolName()], ['الغائبون والمتأخرون — ' + dmy(a.day)], [], ['م', 'الطالب', 'الشعبة', 'الحالة', 'ملاحظة', 'ولي الأمر', 'هاتف ولي الأمر', 'واتساب ولي الأمر']];
+      attClasses().forEach(function (cls) {
+        var roll = classRoll(cls), taken = roll.filter(function (x) { return saved[x.id]; });
+        if (!roll.length) return;
+        var n = attCounts(taken, function (x) { return saved[x.id].status; });
+        sum.push([cls, roll.length, taken.length ? 'سُجّل' : 'لم يُسجَّل', n.present, n.absent, n.late, n.excused, taken.length ? attPct(n) : '']);
+        taken.forEach(function (x) {
+          var r = saved[x.id];
+          if (r.status !== 'present') abs.push([abs.length - 3, x.full_name, cls, ATT[r.status], r.note || '', x.guardian_name || '', plainPhone(x.phone), plainPhone(x.whatsapp)]);
+        });
+      });
+      var ws1 = XLSX.utils.aoa_to_sheet(sum), ws2 = XLSX.utils.aoa_to_sheet(abs);
+      ws1['!cols'] = [18, 9, 12, 9, 9, 9, 9, 12].map(function (w) { return { wch: w }; });
+      ws2['!cols'] = [5, 32, 14, 12, 26, 26, 16, 16].map(function (w) { return { wch: w }; });
+      XLSX.utils.book_append_sheet(wb, ws1, 'الشعب');
+      XLSX.utils.book_append_sheet(wb, ws2, 'الغائبون');
+      XLSX.writeFile(wb, 'الحضور-والغياب-' + a.day + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  async function exportAttReportXlsx() {
+    var a = attState();
+    if (!a.report) return;
+    try {
+      await loadXlsx();
+      var d = attReportData(), wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var title = 'من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to);
+      var sheet = function (name, aoa, widths) {
+        var ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = widths.map(function (w) { return { wch: w }; });
+        var base = String(name).replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 28) || 'ورقة', nm = base, k = 2;
+        while (used[nm]) nm = base + ' ' + k++;
+        used[nm] = true;
+        XLSX.utils.book_append_sheet(wb, ws, nm);
+      };
+      var classes = a.cls ? [a.cls] : attClasses();
+      if (!a.cls) {
+        sheet('ملخص الشعب', [[schoolName()], ['الحضور والغياب — ' + title], [], ['الشعبة', 'أيام التسجيل', 'الغياب', 'التأخر', 'بعذر', 'نسبة الحضور']].concat(classes.map(function (cls) {
+          var c = d.byClass[cls];
+          return c ? [cls, Object.keys(c.days).length, c.n.absent, c.n.late, c.n.excused, attPct(c.n)] : [cls, 0, '', '', '', ''];
+        })), [18, 12, 10, 10, 10, 12]);
+      }
+      classes.forEach(function (cls) {
+        var roll = classRoll(cls);
+        if (!roll.length) return;
+        sheet(cls, [[schoolName()], ['حضور ' + cls + ' — ' + title], [], ['م', 'الطالب', 'حاضر', 'غائب', 'متأخر', 'بعذر', 'نسبة الحضور', 'واتساب ولي الأمر']].concat(roll.map(function (x, i) {
+          var p = d.per[x.id] || { present: 0, absent: 0, late: 0, excused: 0 };
+          return [i + 1, x.full_name, p.present, p.absent, p.late, p.excused, attPct(p), plainPhone(x.whatsapp || x.phone)];
+        })), [5, 32, 8, 8, 8, 8, 12, 16]);
+      });
+      XLSX.writeFile(wb, ('تقرير-الحضور-' + (a.cls || 'المدرسة') + '-' + a.report.from + '-' + a.report.to).replace(/\s+/g, '-') + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  app.addEventListener('click', function (e) {
+    if (location.hash !== '#/attendance' || !canStudents()) return;
+    var el, a = attState();
+    if ((el = e.target.closest('[data-attset]'))) {
+      var sid = el.getAttribute('data-attset'), cur = attOf(sid);
+      a.draft[sid] = { status: el.getAttribute('data-attv'), note: cur.note };
+      var y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+    } else if (e.target.closest('[data-attall]')) {
+      classRoll(a.cls).forEach(function (x) { if (attOf(x.id).status !== 'present') a.draft[x.id] = { status: 'present', note: attOf(x.id).note }; });
+      render();
+    } else if (e.target.closest('[data-attsave]')) {
+      saveAttendance();
+    } else if ((el = e.target.closest('[data-attview]'))) {
+      if (!leaveAttDraft()) return;
+      a.draft = {};
+      a.view = el.getAttribute('data-attview');
+      render();
+    } else if ((el = e.target.closest('[data-attcls]'))) {
+      a.cls = el.getAttribute('data-attcls');
+      render();
+      window.scrollTo(0, 0);
+    } else if (e.target.closest('[data-attrun]')) {
+      loadAttReport();
+    } else if (e.target.closest('[data-attdayxlsx]')) {
+      exportAttDayXlsx();
+    } else if (e.target.closest('[data-attrepxlsx]')) {
+      exportAttReportXlsx();
+    }
+  });
+
+  app.addEventListener('change', function (e) {
+    if (location.hash !== '#/attendance' || !canStudents()) return;
+    var el = e.target, a = attState();
+    if (el.id === 'att-cls') {
+      if (!leaveAttDraft()) { el.value = a.cls; return; }
+      a.draft = {};
+      a.cls = el.value;
+      render();
+    } else if (el.id === 'att-day') {
+      if (!el.value || !leaveAttDraft()) { el.value = a.day; return; }
+      a.draft = {};
+      a.day = el.value;
+      render();
+    } else if (el.id === 'att-from') {
+      a.from = el.value;
+    } else if (el.id === 'att-to') {
+      a.to = el.value;
+    } else if (el.hasAttribute('data-attnote')) {
+      var sid = el.getAttribute('data-attnote');
+      a.draft[sid] = { status: attOf(sid).status, note: el.value };
+      render();
+    }
+  });
 
   function go(hash) {
     ui.error = '';
