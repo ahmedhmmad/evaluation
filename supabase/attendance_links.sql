@@ -170,6 +170,7 @@ create or replace function public.absence_bot(p_key text, p_phone text, p_text t
 language plpgsql security definer set search_path = public as $$
 declare
   ph text := att_phone(p_phone);
+  pk text := right(att_phone(p_phone), 9);   -- conversation key: same teacher whatever form the number arrives in
   msg text := btrim(translate(coalesce(p_text, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹،', '01234567890123456789,'));
   who text; st attendance_bot_state; cls text; total int; picks int[]; bad int[]; ids uuid[]; names text; reply text; recorded boolean;
 begin
@@ -180,10 +181,10 @@ begin
   -- not a registered teacher: stay silent (the note and number are for the n8n execution log only)
   if who is null then return jsonb_build_object('reply', '', 'note', 'number not registered', 'phone', ph); end if;
 
-  select * into st from attendance_bot_state where phone = ph and updated_at > now() - interval '30 minutes';
+  select * into st from attendance_bot_state where phone = pk and updated_at > now() - interval '30 minutes';
 
   if msg in ('إلغاء', 'الغاء') then
-    delete from attendance_bot_state where phone = ph;
+    delete from attendance_bot_state where phone = pk;
     return jsonb_build_object('reply', case when st.phone is null then '' else 'أُلغي تسجيل الغياب.' end);
   end if;
 
@@ -192,7 +193,7 @@ begin
       case when exists (select 1 from attendance a where a.day = att_today() and a.class_name = c.class_name) then ' ✓' else '' end, E'\n' order by c.pos)
       into reply from att_classes() c;
     if reply is null then return jsonb_build_object('reply', 'لا توجد شعب فيها طلاب مسجَّلون.'); end if;
-    insert into attendance_bot_state (phone, step, class_name, updated_at) values (ph, 'class', '', now())
+    insert into attendance_bot_state (phone, step, class_name, updated_at) values (pk, 'class', '', now())
       on conflict (phone) do update set step = 'class', class_name = '', updated_at = now();
     return jsonb_build_object('reply', 'أهلًا ' || who || E'\nتسجيل غياب يوم ' || to_char(att_today(), 'DD/MM/YYYY') ||
       E'\nأرسل رقم الشعبة:\n\n' || reply || E'\n\n(✓ سُجّل غيابها اليوم؛ اختيارها يعدّل التسجيل) · «إلغاء» للخروج');
@@ -207,7 +208,7 @@ begin
     select string_agg(r.pos || ') ' || r.full_name ||
       case when exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused')) then ' (غائب)' else '' end, E'\n' order by r.pos)
       into reply from att_roll(cls) r;
-    update attendance_bot_state set step = 'absent', class_name = cls, updated_at = now() where phone = ph;
+    update attendance_bot_state set step = 'absent', class_name = cls, updated_at = now() where phone = pk;
     return jsonb_build_object('reply', 'طلاب ' || cls || E':\n\n' || reply ||
       E'\n\nأرسل أرقام الغائبين مفصولة بمسافة أو فاصلة (مثل: 3 7 12)\nأو 0 إن لم يغب أحد.');
   end if;
@@ -229,7 +230,7 @@ begin
     select array_agg(r.id), string_agg('• ' || r.full_name, E'\n' order by r.pos) into ids, names
       from att_roll(cls) r where r.pos = any(coalesce(picks, '{}'));
     perform att_save(cls, ids, who || ' (واتساب)');
-    delete from attendance_bot_state where phone = ph;
+    delete from attendance_bot_state where phone = pk;
     return jsonb_build_object('reply', '✅ سُجّل غياب ' || cls || ' ليوم ' || to_char(att_today(), 'DD/MM/YYYY') || E'\n' ||
       case when names is null then 'لا غائبين — الجميع حاضر.' else 'الغائبون (' || array_length(ids, 1) || E'):\n' || names end ||
       E'\n\nللتعديل أرسل «غياب» مرة أخرى.');
