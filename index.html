@@ -915,7 +915,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 3';
+  var APP_BUILD = '14/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3543,7 +3543,8 @@
       var paid = (pay[x.id] || {}).amount || 0, share = shareOf(m, g);
       var mark = paid > 0 && paid >= share ? '✓ مدفوع' : paid > 0 ? 'جزئي ' + plainNum(paid) : '';
       if (paid > 0 && paid >= share) paidN++;
-      return { x: x, m: m, name: nm.family ? first + ' ' + nm.family : x.full_name, family: nm.family, mark: mark, full: paid > 0 && paid >= share,
+      var father = String(x.full_name || '').trim().split(/\s+/)[1] || '';
+      return { x: x, m: m, name: nm.family ? first : x.full_name, family: nm.family, father: father, mark: mark, full: paid > 0 && paid >= share,
         key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
     });
     // الإخوة متتالون: الترتيب باسم العائلة ثم الأسرة ثم السن، ويفصل بين الأسر خط
@@ -3552,14 +3553,18 @@
     list.sort(function (a, b) {
       return head[a.key].localeCompare(head[b.key], 'ar') || a.key.localeCompare(b.key) || String(a.x.birth_date || '').localeCompare(String(b.x.birth_date || '')) || a.name.localeCompare(b.name, 'ar');
     });
-    var families = Object.keys(head).length, prev = '';
+    var families = Object.keys(head).length, prev = '', size = {};
+    list.forEach(function (r) { size[r.key] = (size[r.key] || 0) + 1; });
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
-    var phone = function (v) { return '<td class="c" dir="ltr" style="white-space:nowrap">' + esc(plainPhone(v)) + '</td>'; };
+    var phone = function (v, span) { return '<td class="c" dir="ltr" style="white-space:nowrap' + (span > 1 ? ';vertical-align:middle' : '') + '"' + (span > 1 ? ' rowspan="' + span + '"' : '') + '>' + esc(plainPhone(v)) + '</td>'; };
+    // العائلة وهاتف ولي الأمر خانة واحدة تجمع الإخوة: يعرف المشرف أنهم لأسرة واحدة ويتصل برقم واحد
     var rows = list.map(function (r, i) {
-      var first = r.key !== prev;
+      var first = r.key !== prev, n = size[r.key];
       prev = r.key;
-      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.name) + '</b></td>' +
-        '<td>' + esc(r.m.pickup || '') + '</td>' + phone(r.x.phone || r.x.whatsapp) + phone(stVal(r.x, 'student_phone')) +
+      var famCell = first ? '<td' + (n > 1 ? ' rowspan="' + n + '" style="vertical-align:middle;background:#eef2f7"' : '') + '><b>' + esc(head[r.key] || '—') + '</b>' +
+        (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') + '</td>' : '';
+      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.name) + '</b></td>' + famCell +
+        '<td>' + esc(r.m.pickup || '') + '</td>' + (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + phone(stVal(r.x, 'student_phone')) +
         '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + '">' + esc(r.mark) + '</td><td></td><td></td></tr>';
     }).join('');
     var dots = '............................';
@@ -3567,9 +3572,9 @@
     sheet.innerHTML =
       reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', monthLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
         ['المشرف/ة', g.supervisor_name ? esc(g.supervisor_name) + (g.supervisor_phone ? ' (' + esc(g.supervisor_phone) + ')' : '') : dots], ['وقت التجمع', g.pickup_time || '']]) +
-      '<table class="rz"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:17%"><col style="width:15%"><col style="width:15%"><col style="width:11%"><col style="width:7%"><col style="width:8%"></colgroup>' +
-      '<thead><tr><th>م</th><th>اسم الطالب</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب</th><th>الاشتراك</th><th>حضور</th><th>ملاحظات</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="8" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
+      '<table class="rz"><colgroup><col style="width:5%"><col style="width:12%"><col style="width:18%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:10%"><col style="width:6%"><col style="width:7%"></colgroup>' +
+      '<thead><tr><th>م</th><th>اسم الطالب</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب</th><th>الاشتراك</th><th>حضور</th><th>ملاحظات</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="9" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
         ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN) + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
     fitSheet();
