@@ -399,6 +399,7 @@
   #print-sheet.att-regs .att-page + .att-page { break-before: page; page-break-before: always; }
   #print-sheet.att-regs .att-page { padding-top: 2mm; }
   #print-sheet.att-regs .att-title { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1b2a6b; padding-bottom: .3em; margin-bottom: .5em; font-size: 1.25em; }
+  #print-sheet.att-regs .att-sub { display: flex; gap: 3em; margin: 0 0 .5em; font-size: 1.15em; }
   #print-sheet.att-regs table.att-reg { width: 100%; table-layout: fixed; border-collapse: collapse; }
   #print-sheet.att-regs table.att-reg th, #print-sheet.att-regs table.att-reg td { padding: .12em .1em; border: 1px solid #b9c0cc; text-align: center; line-height: 1.25; overflow: hidden; }
   #print-sheet.att-regs table.att-reg th:nth-child(2), #print-sheet.att-regs table.att-reg td.nm { width: 40mm; text-align: right; white-space: nowrap; padding-inline-start: .4em; }
@@ -930,7 +931,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 12';
+  var APP_BUILD = '14/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -5538,6 +5539,8 @@
     var cfg = {
       rooms: c && !Array.isArray(c) ? Number(c.rooms) || 0 : 0,
       fees: c && !Array.isArray(c) && c.fees ? c.fees : null, // رسوم المواصلات للأسرة: { first, next }
+      // أيام العطل (غير الجمعة والسبت): تواريخ YYYY-MM-DD
+      holidays: c && !Array.isArray(c) && Array.isArray(c.holidays) ? c.holidays.filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort() : [],
       list: list.map(function (x) {
         if (typeof x === 'string') return { name: x, gender: '', capacity: null, teacher: '' };
         var cap = x.capacity == null || x.capacity === '' ? null : Number(x.capacity);
@@ -5614,7 +5617,7 @@
   }
 
   async function saveClassConfig(cfg, focusId) {
-    var value = { rooms: cfg.rooms, fees: cfg.fees || classConfig().fees || undefined, list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity, teacher: x.teacher || '' }; }) };
+    var value = { rooms: cfg.rooms, fees: cfg.fees || classConfig().fees || undefined, holidays: cfg.holidays || classConfig().holidays || [], list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity, teacher: x.teacher || '' }; }) };
     var r = await sb.from('settings').update({ classes: value }).eq('id', 1);
     if (r.error) { render(); return fail(r.error); }
     (S.settings || (S.settings = {})).classes = value;
@@ -6315,6 +6318,7 @@
       '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">حضور ' + esc(cls) + ' — ' + dmy(a.day) + '</h2>' +
         '<button type="button" class="btn" data-attall>الكل حاضر</button>' +
         '<button type="button" class="btn primary" data-attsave' + (a.busy || future ? ' disabled' : '') + '>' + (a.busy ? 'جارٍ الحفظ…' : 'حفظ الحضور') + '</button></div>' +
+        (attOff(a.day) ? '<p class="formhint" style="margin:0 0 10px">' + dayName(a.day) + ' ' + dmy(a.day) + (attHoliday(a.day) ? ' مسجَّل عطلة' : ' عطلة أسبوعية') + '؛ تأكد من اليوم قبل تسجيل الحضور.</p>' : '') +
         '<p class="hint" style="margin:0 0 10px">' + (future ? 'لا يُسجَّل الحضور ليوم لم يأتِ بعد.' :
           taken.length ? 'سُجّل حضور هذا اليوم' + (last && last.recorded_by ? ' بواسطة ' + esc(last.recorded_by) : '') + (last && last.updated_at ? ' · ' + issuedWhen({ issued_at: last.updated_at }) : '') + (taken.length < roll.length ? ' — ' + (roll.length - taken.length) + ' طالبًا أُضيفوا بعده لم يُسجَّلوا' : '') + '. يمكنك التعديل والحفظ مجددًا.'
           : 'لم يُسجَّل حضور هذا اليوم بعد. الجميع «حاضر» افتراضيًا: علّم الغائبين ثم احفظ.') +
@@ -6418,6 +6422,22 @@
      كشف شهري لكل شعبة بالأسماء وأيام الشهر، وتقارير المدرسة: يومي وأسبوعي (السبت إلى الجمعة) وشهري */
 
   var ATT_MARK = { present: '✓', absent: 'غ' };
+
+  // يوم لا دراسة فيه: الجمعة والسبت، وما أُضيف عطلةً
+  function attOff(day) {
+    var w = new Date(day + 'T00:00').getDay();
+    return w === 5 || w === 6 || classConfig().holidays.indexOf(day) > -1;
+  }
+
+  function attHoliday(day) { return classConfig().holidays.indexOf(day) > -1; }
+
+  function classTeacher(cls) { var info = classInfo(cls); return info && info.teacher ? info.teacher : ''; }
+
+  async function setHoliday(day, on) {
+    var cfg = classConfig(), list = cfg.holidays.filter(function (d) { return d !== day; });
+    if (on) list.push(day);
+    await saveClassConfig({ rooms: cfg.rooms, list: cfg.list, fees: cfg.fees, holidays: list.sort() });
+  }
   var WEEKDAYS = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
 
   function isoOf(d) {
@@ -6495,16 +6515,16 @@
         if (!classes.length) return toast('لا توجد شعب فيها مسجَّلون نهائيًا', true);
         classes.forEach(function (cls) {
           var roll = classRoll(cls), absentPerDay = days.map(function () { return 0; }), recorded = days.map(function (dd) { return !!((d.byClass[cls] || {}).days || {})[dd]; });
-          var head = ['م', 'اسم الطالب'].concat(days.map(function (dd) { return Number(dd.slice(8)) + ' ' + WEEKDAYS[new Date(dd + 'T00:00').getDay()]; }), ['أيام الحضور', 'أيام الغياب', 'نسبة الحضور']);
+          var head = ['م', 'اسم الطالب'].concat(days.map(function (dd) { return Number(dd.slice(8)) + (attOff(dd) ? ' (' + (attHoliday(dd) ? 'عطلة' : WEEKDAYS[new Date(dd + 'T00:00').getDay()]) + ')' : ''); }), ['أيام الحضور', 'أيام الغياب']);
           var body = roll.map(function (x, i) {
             var p = d.per[x.id] || { present: 0, absent: 0, days: {} };
             var cells = days.map(function (dd, j) { var st = p.days[dd]; if (st === 'absent') absentPerDay[j]++; return st ? ATT_MARK[st] : ''; });
-            return [i + 1, x.full_name].concat(cells, [p.present, p.absent, p.present + p.absent ? attPct(p) : '']);
+            return [i + 1, x.full_name].concat(cells, [p.present, p.absent]);
           });
           var foot = ['', 'عدد الغائبين في اليوم'].concat(absentPerDay.map(function (v, j) { return recorded[j] ? v : ''; }));
-          xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + cls + ' — ' + monthLabel(month)], [], head].concat(body, [foot, [],
-            ['', 'المفتاح: ✓ حاضر · غ غائب · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
-            [4, 30].concat(days.map(function () { return 7; }), [10, 10, 11]));
+          xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + monthLabel(month)], ['الصف: ' + cls, '', 'مربي الصف: ' + (classTeacher(cls) || ''), '', '', '', '', '', 'عدد الطلاب: ' + roll.length], [], head].concat(body, [foot, [],
+            ['', 'المفتاح: ✓ حاضر · غ غائب · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
+            [4, 30].concat(days.map(function (dd) { return attOff(dd) ? 9 : 5; }), [10, 10]));
         });
         XLSX.writeFile(wb, ('كشف-الحضور-' + (a.cls || 'كل-الشعب') + '-' + month).replace(/\s+/g, '-') + '.xlsx');
       } catch (err) {
@@ -6604,21 +6624,22 @@
     var pages = p.classes.map(function (cls) {
       var roll = classRoll(cls), recorded = {}, absentPerDay = {};
       days.forEach(function (dd) { recorded[dd] = !!((d.byClass[cls] || {}).days || {})[dd]; absentPerDay[dd] = 0; });
-      var fri = function (dd) { return new Date(dd + 'T00:00').getDay() === 5; };
+      var fri = attOff;
       var body = roll.map(function (x, i) {
         var q = d.per[x.id] || { present: 0, absent: 0, days: {} };
         return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + '</td>' + days.map(function (dd) {
           var st = q.days[dd];
           if (st === 'absent') absentPerDay[dd]++;
           return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? ATT_MARK[st] : '') + '</td>';
-        }).join('') + '<td class="c">' + q.present + '</td><td class="c"><b>' + q.absent + '</b></td><td class="c">' + (q.present + q.absent ? attPct(q) : '') + '</td></tr>';
+        }).join('') + '<td class="c">' + q.present + '</td><td class="c"><b>' + q.absent + '</b></td></tr>';
       }).join('');
       return '<section class="att-page">' +
-        '<div class="att-title"><b>' + esc(schoolName()) + '</b><span>كشف الحضور والغياب — ' + esc(cls) + ' — ' + monthLabel(p.month) + '</span><span>عدد الطلاب: ' + roll.length + '</span></div>' +
-        '<table class="rz att-reg"><thead><tr><th rowspan="2">م</th><th rowspan="2">اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
-          '<th rowspan="2">حضور</th><th rowspan="2">غياب</th><th rowspan="2">النسبة</th></tr><tr>' + days.map(function (dd) { return '<th class="wd' + (fri(dd) ? ' fr' : '') + '">' + WEEKDAYS[new Date(dd + 'T00:00').getDay()].slice(0, 2) + '</th>'; }).join('') + '</tr></thead>' +
-        '<tbody>' + body + '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : '') + '</td>'; }).join('') + '<td colspan="3"></td></tr></tbody></table>' +
-        '<p class="att-key">المفتاح: ✓ حاضر · غ غائب · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم · الأعمدة المظلّلة: أيام الجمعة · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
+        '<div class="att-title"><b>' + esc(schoolName()) + '</b><span>كشف الحضور والغياب — ' + monthLabel(p.month) + '</span><span></span></div>' +
+        '<div class="att-sub"><span>الصف: <b>' + esc(cls) + '</b></span><span>مربي الصف: <b>' + esc(classTeacher(cls) || '..................................') + '</b></span><span>عدد الطلاب: <b>' + roll.length + '</b></span></div>' +
+        '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
+          '<th>حضور</th><th>غياب</th></tr></thead>' +
+        '<tbody>' + body + '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>' +
+        '<p class="att-key">المفتاح: ✓ حاضر · غ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
@@ -6642,9 +6663,18 @@
         pair('data-attschool="day" data-fmt="X"', 'يومي:') +
         pair('data-attschool="week" data-fmt="X"', 'أسبوعي (' + dmy(wk.from).slice(0, 5) + '–' + dmy(wk.to).slice(0, 5) + '):') +
         pair('data-attschool="month" data-fmt="X"', 'شهري (' + monthLabel(day.slice(0, 7)) + '):') + '</div>' +
+      (isAdmin() ? (function () {
+        var range = monthRange(month), hol = classConfig().holidays.filter(function (dd) { return dd >= range.from && dd <= range.to; });
+        return '<div class="toolbar" style="align-items:center">' +
+          '<span class="monthpick"><label class="field" for="att-hol">إضافة يوم عطلة</label><input type="date" id="att-hol"></span>' +
+          '<button type="button" class="btn" data-attholadd>إضافة عطلة</button>' +
+          '<span class="st-count" style="margin:0">عطل ' + monthLabel(month) + ': ' + (hol.length ? hol.map(function (dd) {
+            return '<span class="badge pending" style="margin-inline-start:4px">' + dayName(dd) + ' ' + dmy(dd) + ' <button type="button" class="btn link" data-attholdel="' + dd + '" title="حذف العطلة" style="padding:0 2px">×</button></span>';
+          }).join('') : 'لا عطل غير الجمعة والسبت') + '</span></div>';
+      })() : '') +
       '<label class="field" for="att-notes">ملاحظات حول اليوم الدراسي (تُطبع في الثلث الأخير من كشف المدرسة)</label>' +
       '<textarea id="att-notes" rows="3" placeholder="اتركها فارغة لتُطبع أسطرًا للكتابة باليد">' + esc(a.dayNote || '') + '</textarea>' +
-      '<p class="hint" style="margin:6px 0 0">الكشف الشهري: صفحة أفقية لكل شعبة، صف لكل طالب وعمود لكل يوم (✓ حاضر · غ غائب). كشف المدرسة: الشعب بأعدادها ونسبها وأسماء غائبيها. الأسبوع من السبت إلى الجمعة. الملاحظات لا تُحفظ في البرنامج، تُطبع فقط.</p></div>';
+      '<p class="hint" style="margin:6px 0 0">الكشف الشهري: صفحة أفقية لكل شعبة، صف لكل طالب وعمود لكل يوم (✓ حاضر · غ غائب)، والجمعة والسبت والعطل مظلّلة. كشف المدرسة: الشعب بأعدادها ونسبها وأسماء غائبيها. الأسبوع من السبت إلى الجمعة. الملاحظات لا تُحفظ في البرنامج، تُطبع فقط.</p></div>';
   }
 
   /* ----- روابط المعلمين لتسجيل الغياب، ومفتاح n8n (مدير النظام) -----
@@ -6855,6 +6885,13 @@
       exportAttDayXlsx();
     } else if (e.target.closest('[data-attrepxlsx]')) {
       exportAttReportXlsx();
+    } else if (isAdmin() && e.target.closest('[data-attholadd]')) {
+      var hd = (document.getElementById('att-hol') || {}).value;
+      if (!hd) return toast('اختر اليوم أولًا', true);
+      a.expMonth = hd.slice(0, 7);
+      setHoliday(hd, true);
+    } else if (isAdmin() && (el = e.target.closest('[data-attholdel]'))) {
+      setHoliday(el.getAttribute('data-attholdel'), false);
     } else if ((el = e.target.closest('[data-attregister]'))) {
       if (el.getAttribute('data-attregister') === 'pdf') printAttRegister(); else exportAttRegister();
     } else if ((el = e.target.closest('[data-attschool]'))) {
