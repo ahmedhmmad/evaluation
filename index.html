@@ -501,6 +501,7 @@
   table.grid tfoot td { font-weight: 700; background: #f8fafc; }
   .badge.paid { background: var(--green-soft); color: var(--green); }
   .badge.part { background: var(--amber-soft); color: var(--amber); }
+  .rsv, #print-sheet .rsv { color: #b45309; font-weight: 800; margin-inline-start: 3px; }
   .badge.exempt { background: #ede9fe; color: #6d28d9; }
   .badge.unpaid { background: var(--red-soft); color: var(--red); }
   .cand { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
@@ -932,7 +933,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 14';
+  var APP_BUILD = '15/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1501,6 +1502,13 @@
 
   function stStatus(x) { return x.status === 'final' ? 'final' : x.status === 'reserve' ? 'reserve' : 'pending'; }
 
+  // في المدرسة: المسجَّل نهائيًا، ومن هو احتياط (يُعامَل معاملته حتى يُبَتّ في أمره)
+  function enrolled(x) { var st = stStatus(x); return st === 'final' || st === 'reserve'; }
+  function isReserve(x) { return !!x && stStatus(x) === 'reserve'; }
+  // علامة الاحتياط بعد الاسم: نجمة بلون مختلف (وفي Excel: «*»)
+  function rsvMark(x) { return isReserve(x) ? '<span class="rsv" title="احتياط">*</span>' : ''; }
+  function rsvText(x) { return isReserve(x) ? ' *' : ''; }
+
   function stBadge(st) { return st === 'final' ? 'published' : st === 'reserve' ? 'part' : 'edit'; }
 
   function stField(k) {
@@ -1737,7 +1745,7 @@
     var LIMIT = 300, rowNo = 0;
     var rows = shown.slice(0, LIMIT).map(function (x) {
       var st = stStatus(x);
-      return '<tr><td>' + (++rowNo) + '</td><td><b>' + esc(x.full_name) + '</b></td>' +
+      return '<tr><td>' + (++rowNo) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.national_id || '—') + (idCount[x.national_id] > 1 ? ' <span class="badge unpaid" dir="rtl">مكرر</span>' : '') + '</td>' +
         '<td><span class="badge ' + stBadge(st) + '">' + ST_STATUS[st] + '</span>' + ((x.details || {}).scan ? ' <span class="badge part">مصوّرة</span>' : '') + '</td>' +
         '<td>' + (st === 'final'
@@ -1820,7 +1828,7 @@
   function siblingListHtml(st) {
     var list = siblingMatches(st, ui.sibSearch);
     return list.map(function (x) {
-      return '<div class="cand"><span><b>' + esc(x.full_name) + '</b><br><span class="meta">' + ST_STATUS[stStatus(x)] +
+      return '<div class="cand"><span><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta">' + ST_STATUS[stStatus(x)] +
         (x.class_name ? ' · ' + esc(x.class_name) : '') + (x.guardian_name ? ' · ولي الأمر: ' + esc(x.guardian_name) : '') + '</span></span>' +
         '<button type="button" class="btn" data-sibcopy="' + x.id + '">انسخ بيانات الأسرة</button></div>';
     }).join('') || (ui.sibSearch.trim() ? '<div class="empty" style="padding:10px">لا يوجد طالب مطابق.</div>' : '');
@@ -2392,10 +2400,10 @@
     var det = function (x, k) { return String((x.details || {})[k] == null ? '' : (x.details || {})[k]).trim(); };
     var known = classConfig().list, byId = {}, byName = {}, byGuardian = {};
     // المسجَّلون نهائيًا فقط: التسجيل المبدئي لم يُراجَع بعد
-    var finals = S.students.filter(function (x) { return stStatus(x) === 'final'; });
+    var finals = S.students.filter(function (x) { return enrolled(x); });
 
     finals.forEach(function (x) {
-      var fin = stStatus(x) === 'final', cg = gradeNum(x.class_name), eg = gradeNum(det(x, 'enroll_grade')), lastText = det(x, 'last_grade');
+      var fin = enrolled(x), cg = gradeNum(x.class_name), eg = gradeNum(det(x, 'enroll_grade')), lastText = det(x, 'last_grade');
       var g = cg || eg, where = cg ? 'الشعبة «' + x.class_name + '»' : 'مرحلة التسجيل «' + det(x, 'enroll_grade') + '»';
 
       // تاريخ الميلاد والعمر
@@ -2479,7 +2487,7 @@
       });
     });
     siblingFixPlan(true).changes.forEach(function (c) {
-      if (stStatus(c.x) === 'final' && c.from != null && c.from !== '' && Number(c.from) < c.to) add('warn', 'sibs', c.x, 'المكتوب ' + c.from + '، والمسجَّلون نهائيًا لولي الأمر نفسه ' + c.to);
+      if (enrolled(c.x) && c.from != null && c.from !== '' && Number(c.from) < c.to) add('warn', 'sibs', c.x, 'المكتوب ' + c.from + '، والمسجَّلون نهائيًا لولي الأمر نفسه ' + c.to);
     });
     var counts = classCounts();
     known.forEach(function (c) {
@@ -2513,7 +2521,7 @@
     return '<button type="button" class="btn link" data-checkclose>→ العودة إلى تسجيل الطلاب</button>' +
       '<div class="card"><h2>اكتشاف الأخطاء في التسجيل النهائي</h2>' +
         '<p class="hint">يُفحص المسجَّلون نهائيًا فقط. الفحص يقرأ السجلات ولا يغيّر شيئًا. «خطأ»: إدخال خاطئ في الغالب. «تنبيه»: يستحق نظرة وقد يكون صحيحًا. اضغط اسم الطالب لفتح سجله وتصحيحه، وبعد الحفظ تعود إلى هذه الشاشة.</p>' +
-        '<p class="st-count" style="margin:10px 0">المسجَّلون نهائيًا المفحوصون: ' + S.students.filter(function (x) { return stStatus(x) === 'final'; }).length + ' · سجلات فيها ملاحظات: <b>' + Object.keys(people).length + '</b></p>' +
+        '<p class="st-count" style="margin:10px 0">المسجَّلون نهائيًا المفحوصون: ' + S.students.filter(function (x) { return enrolled(x); }).length + ' · سجلات فيها ملاحظات: <b>' + Object.keys(people).length + '</b></p>' +
         '<div class="toolbar">' + chip('', 'الكل', all.length) + chip('err', 'الأخطاء', nErr) + chip('warn', 'التنبيهات', nWarn) +
           '<button type="button" class="btn" data-checkxlsx' + (all.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
         (groups || '<div class="empty">' + (all.length ? 'لا شيء في هذا التصنيف.' : 'لم يُعثر على أخطاء.') + '</div>') + '</div>';
@@ -2550,7 +2558,7 @@
       (groups[gid] || (groups[gid] = [])).push(x);
     });
     Object.keys(groups).forEach(function (gid) {
-      var list = groups[gid], n = finalOnly ? list.filter(function (x) { return stStatus(x) === 'final'; }).length : list.length;
+      var list = groups[gid], n = finalOnly ? list.filter(function (x) { return enrolled(x); }).length : list.length;
       families++;
       if (!n) return; // لا أحد من أبنائه مسجَّل نهائيًا بعد
       list.forEach(function (x) {
@@ -2641,7 +2649,7 @@
     }
 
     // الباصات للمسجَّلين نهائيًا فقط: لغيرهم يُحفظ الباص المختار في السجل حتى اعتماد التسجيل النهائي
-    var willBeFinal = (data.status || (st && st.status)) === 'final', pickNow = document.getElementById('sf-transport');
+    var willBeFinal = ['final', 'reserve'].indexOf(data.status || (st && st.status)) > -1, pickNow = document.getElementById('sf-transport');
     if (pickNow) {
       if (willBeFinal) delete data.details.bus_wish;
       else data.details.bus_wish = pickNow.value || '';
@@ -3036,7 +3044,7 @@
 
   // طلاب الشعبة المسجلون نهائيًا، مرتبين بالاسم
   function classStudents(name) {
-    return S.students.filter(function (x) { return stStatus(x) === 'final' && x.class_name === name; })
+    return S.students.filter(function (x) { return enrolled(x) && x.class_name === name; })
       .sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
   }
 
@@ -3046,7 +3054,7 @@
       return !q || norm(x.full_name).indexOf(q) > -1 || String(x.national_id || '').indexOf(latinDigits(ui.clsSearch)) > -1;
     });
     var rows = shown.map(function (x) {
-      return '<tr><td>' + (list.indexOf(x) + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td>' +
+      return '<tr><td>' + (list.indexOf(x) + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.national_id || '—') + '</td><td>' + esc(x.gender || '—') + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td><td>' + esc(x.guardian_name || '—') + '</td>' +
         '<td class="no-print"><select data-cmove="' + x.id + '" aria-label="نقل ' + esc(x.full_name) + ' إلى شعبة أخرى">' +
@@ -3063,7 +3071,7 @@
   function renderClasses() {
     if (S.studentsMissing || S.regMissing) return renderStudents();
     var name = currentClass(), classes = schoolClasses();
-    var finals = S.students.filter(function (x) { return stStatus(x) === 'final'; });
+    var finals = S.students.filter(function (x) { return enrolled(x); });
 
     if (name && (classes.indexOf(name) > -1 || classStudents(name).length)) {
       var list = classStudents(name);
@@ -3336,7 +3344,7 @@
     var q = norm(ui.tSearch), inGroup = {};
     S.tMembers.forEach(function (m) { inGroup[m.student_id] = m.group_id; });
     var list = S.students.filter(function (x) {
-      if (inGroup[x.id] === g.id || stStatus(x) !== 'final') return false; // الباصات للمسجَّلين نهائيًا فقط
+      if (inGroup[x.id] === g.id || !enrolled(x)) return false; // الباصات للمسجَّلين نهائيًا فقط
       return !q || norm(x.full_name + ' ' + x.address + ' ' + x.class_name).indexOf(q) > -1 || x.national_id.indexOf(latinDigits(ui.tSearch)) > -1;
     });
     // غير الملتحقين بأي مجموعة أولًا
@@ -3344,7 +3352,7 @@
     var LIMIT = 30;
     return (list.slice(0, LIMIT).map(function (x) {
       var other = inGroup[x.id] && findGroup(inGroup[x.id]);
-      return '<div class="cand"><span><b>' + esc(x.full_name) + '</b><br><span class="meta">' + esc(x.class_name || 'بدون صف') +
+      return '<div class="cand"><span><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta">' + esc(x.class_name || 'بدون صف') +
         (x.address ? ' · ' + esc(x.address) : '') + (other ? ' · في مجموعة «' + esc(other.assembly_point) + '»' : '') + '</span></span>' +
         '<button type="button" class="btn" data-madd="' + x.id + '">' + (other ? 'نقل إلى هنا' : 'إضافة') + '</button></div>';
     }).join('') || '<div class="empty">' + (S.students.length ? 'لا يوجد طلاب مطابقون.' : 'سجّل الطلاب أولًا من تبويب «تسجيل الطلاب».') + '</div>') +
@@ -3357,7 +3365,7 @@
     var rows = members.map(function (m, i) {
       var x = findStudent(m.student_id);
       if (awaitingStart(m)) {
-        return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span>' +
+        return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span>' +
           pickupInput(m, x) + '</td>' + '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">أُضيف إلى الباص ولم يبدأ اشتراكه (لم يصدر له إيصال)</td>' +
           '<td><span class="badge pending">بانتظار الاشتراك</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button> ' +
@@ -3365,7 +3373,7 @@
           '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
       }
       if (!owesThisMonth(m)) {
-        return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
+        return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
           '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + monthLabel(m.left_from) + '</td>' +
           '<td><span class="badge pending">متوقف</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button> ' +
@@ -3376,7 +3384,7 @@
       if (!ex) { due += sh; paid += p; }
       var badge = ex ? ['exempt', PAY_STATUS.exempt] : sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
       var famNote = familyNote(x.id);
-      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span>' + pickupInput(m, x) + '</td>' +
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span>' + pickupInput(m, x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
         '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + shareOf({ student_id: x.id, share: null }) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
         (ex ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
@@ -3447,7 +3455,7 @@
 
   // خانة «نقطة الركوب» تحت اسم الطالب في صفحة الباص (ومعها تنبيه لمن أُضيف قبل تسجيله النهائي)
   function pickupInput(m, x) {
-    var warn = stStatus(x) !== 'final' ? '<br><span class="badge unpaid" style="margin-top:4px">مبدئي — لا يظهر في كشف الباص</span>' : '';
+    var warn = !enrolled(x) ? '<br><span class="badge unpaid" style="margin-top:4px">مبدئي — لا يظهر في كشف الباص</span>' : '';
     if (S.busMissing) return warn;
     return warn + pickupBox(m, x);
   }
@@ -3544,7 +3552,7 @@
           '<button type="button" class="btn" data-gracegive="' + x.id + '">' + (r.state === 'extended' ? 'تعديل المهلة' : 'منح مهلة') + '</button> ';
       }
       act += '<button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button>';
-      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
         '<td>' + esc(r.g.assembly_point) + '</td><td dir="ltr" style="text-align:right">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td>' +
         '<td><b>' + plainNum(r.left) + '</b>' + (r.paid ? '<br><span style="color:var(--muted);font-size:.85rem">دفع ' + plainNum(r.paid) + ' من ' + plainNum(r.share) + '</span>' : '') + '</td>' +
         '<td><span class="badge ' + (r.state === 'late' || r.state === 'suspended' ? 'unpaid' : r.state === 'extended' ? 'part' : 'pending') + '">' + RIDE_STATE[r.state] + '</span>' +
@@ -3610,7 +3618,7 @@
   function busRiders(g) {
     return membersOf(g.id).filter(function (m) {
       var x = findStudent(m.student_id);
-      return x && stStatus(x) === 'final' && (owesThisMonth(m) || subscribedIn(m, ui.tMonth));
+      return x && enrolled(x) && (owesThisMonth(m) || subscribedIn(m, ui.tMonth));
     });
   }
 
@@ -3662,7 +3670,7 @@
       prev = r.key;
       var famCell = first ? '<td' + (n > 1 ? ' rowspan="' + n + '" style="vertical-align:middle;background:#eef2f7"' : '') + '><b>' + esc(head[r.key] || '—') + '</b>' +
         (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') + '</td>' : '';
-      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.name) + '</b></td>' + famCell +
+      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.name) + '</b>' + rsvMark(r.x) + '</td>' + famCell +
         '<td>' + esc(r.m.pickup || '') + '</td>' + (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + secondPhone(r.x) +
         '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td><td></td></tr>';
     }).join('');
@@ -3675,7 +3683,7 @@
       '<thead><tr><th>م</th><th>اسم الطالب</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب / واتساب</th><th>الاشتراك</th><th style="white-space:nowrap">الحضور</th></tr></thead><tbody>' +
       (rows || '<tr><td colspan="8" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
-        ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
+        (list.some(function (r) { return isReserve(r.x); }) ? ' &nbsp;&nbsp;&nbsp; * احتياط' : '') + ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
     fitSheet();
   }
 
@@ -3819,7 +3827,7 @@
     var body = rows.map(function (r, i) {
       var x = r.x, rec = r.rec, method = rec.method || 'cash';
       var famNote = familyNote(x.id);
-      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون شعبة') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون شعبة') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
         '<td class="bus"><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + (r.exempt ? '<span style="color:#6d28d9">إعفاء</span>' : plainNum(r.share)) + '</td>' +
         (r.exempt ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (r.paid || '') + '"></td>' +
@@ -3892,7 +3900,7 @@
       '<div class="orig-answers">' + row('رقم الهوية', x.national_id) + row('الشعبة', x.class_name) + row('ولي الأمر', x.guardian_name) +
         row('هاتف ولي الأمر', x.phone || x.whatsapp) + row('الباص', g ? g.assembly_point : 'غير مشترك في المواصلات') + row('الأسرة', familyNote(x.id) || 'لا إخوة مشتركون') + '</div>';
 
-    if (!g && stStatus(x) !== 'final') {
+    if (!g && !enrolled(x)) {
       return head + '<p class="formhint" style="margin-top:10px">هذا الطالب غير مشترك في المواصلات، ولا يُضاف إلى الباصات إلا بعد اعتماد تسجيله النهائي من «تسجيل الطلاب».</p></div>';
     }
     if (!g) {
@@ -4404,7 +4412,7 @@
     payRows().forEach(function (r) { owing[r.x.id] = r; });
     var memberOf = {};
     S.tMembers.forEach(function (m) { memberOf[m.student_id] = m; });
-    var rows = S.students.filter(function (x) { return stStatus(x) === 'final' || owing[x.id]; }).map(function (x) {
+    var rows = S.students.filter(function (x) { return enrolled(x) || owing[x.id]; }).map(function (x) {
       if (owing[x.id]) return owing[x.id];
       var m = memberOf[x.id], mg = m && findGroup(m.group_id);
       return { x: x, g: mg || null, rec: {}, waiting: true,
@@ -4622,7 +4630,7 @@
     if ((el = e.target.closest('[data-rcjoin]'))) {
       var joinId = el.getAttribute('data-rcjoin'), groupId = document.getElementById('rc-group').value;
       if (!groupId) return toast('اختر الباص أولًا.', true);
-      if (!findStudent(joinId) || stStatus(findStudent(joinId)) !== 'final') return toast('يُضاف إلى الباصات المسجَّلون نهائيًا فقط.', true);
+      if (!findStudent(joinId) || !enrolled(findStudent(joinId))) return toast('يُضاف إلى الباصات المسجَّلون نهائيًا فقط.', true);
       r = await sb.from('transport_members').upsert(memberRow(joinId, groupId), { onConflict: 'student_id' });
       if (r.error) return fail(r.error);
       S.tMembers = S.tMembers.filter(function (k) { return k.student_id !== joinId; });
@@ -4654,7 +4662,7 @@
       go('#/transport');
     } else if (g && (el = e.target.closest('[data-madd]'))) {
       var sid = el.getAttribute('data-madd');
-      if (!findStudent(sid) || stStatus(findStudent(sid)) !== 'final') return toast('يُضاف إلى الباصات المسجَّلون نهائيًا فقط.', true);
+      if (!findStudent(sid) || !enrolled(findStudent(sid))) return toast('يُضاف إلى الباصات المسجَّلون نهائيًا فقط.', true);
       // الطالب في مجموعة واحدة: إن كان في غيرها يُنقل إلى هذه
       r = await sb.from('transport_members').upsert(memberRow(sid, g.id), { onConflict: 'student_id' });
       if (r.error) return fail(r.error);
@@ -4753,7 +4761,7 @@
   function clusterPool(includePending) {
     var inGroup = transportGroupOf();
     return S.students.filter(function (x) {
-      return !inGroup[x.id] && x.wants_transport !== false && String(x.address || '').trim() && (includePending || stStatus(x) === 'final');
+      return !inGroup[x.id] && x.wants_transport !== false && String(x.address || '').trim() && (includePending || enrolled(x));
     });
   }
 
@@ -5083,7 +5091,7 @@
 
   function clusterMemberRow(id, current) {
     var x = findStudent(id);
-    return '<div class="cand"><span><b>' + esc(x.full_name) + '</b><br><span class="meta">' + esc(x.address) + '</span></span>' + clusterMoveSelect(id, current) + '</div>';
+    return '<div class="cand"><span><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta">' + esc(x.address) + '</span></span>' + clusterMoveSelect(id, current) + '</div>';
   }
 
   function renderCluster() {
@@ -5156,7 +5164,7 @@
   async function applyClusters() {
     var cl = ui.cl, chosen = cl.clusters.filter(function (c) { return c.on && c.ids.length && c.name.trim(); });
     // الباصات للمسجَّلين نهائيًا فقط
-    chosen.forEach(function (c) { c.ids = c.ids.filter(function (id) { var x = findStudent(id); return x && stStatus(x) === 'final'; }); });
+    chosen.forEach(function (c) { c.ids = c.ids.filter(function (id) { var x = findStudent(id); return x && enrolled(x); }); });
     chosen = chosen.filter(function (c) { return c.ids.length; });
     for (var i = 0; i < chosen.length; i++) {
       var c = chosen[i], name = c.name.trim();
@@ -5572,14 +5580,14 @@
   // عدد المسجلين نهائيًا في كل شعبة { الاسم: العدد }
   function classCounts() {
     var counts = {};
-    S.students.forEach(function (x) { if (stStatus(x) === 'final' && x.class_name) counts[x.class_name] = (counts[x.class_name] || 0) + 1; });
+    S.students.forEach(function (x) { if (enrolled(x) && x.class_name) counts[x.class_name] = (counts[x.class_name] || 0) + 1; });
     return counts;
   }
 
   // حال الشعبة لو أُضيف إليها هذا الطالب: st الطالب إن كان مسجلًا (لا يُعدّ مرتين إن كان فيها أصلًا)، gender جنسه
   function classStatus(name, st, gender) {
     var info = classInfo(name), n = classCounts()[name] || 0;
-    if (st && stStatus(st) === 'final' && st.class_name === name) n--;
+    if (st && enrolled(st) && st.class_name === name) n--;
     var cap = info ? info.capacity : null, warn = [];
     if (cap != null && n >= cap) warn.push('الشعبة «' + name + '» ممتلئة: المسجلون ' + n + ' والسعة القصوى ' + cap + '.');
     if (info && gender && ((info.gender === 'boys' && gender === 'أنثى') || (info.gender === 'girls' && gender === 'ذكر'))) {
@@ -5895,7 +5903,7 @@
       var birth = x ? excelDate(x.birth_date) : null;
       rows += p.open.replace(/r="\d+"/, 'r="' + r + '"') + '<c r="A' + r + '" s="' + p.styles.A + '" t="n"><v>' + (i + 1) + '</v></c>' +
         (x
-          ? text('B', x.full_name) + text('C', x.gender === 'ذكر' || x.gender === 'أنثى' ? x.gender : '') +
+          ? text('B', x.full_name + rsvText(x)) + text('C', x.gender === 'ذكر' || x.gender === 'أنثى' ? x.gender : '') +
             (birth == null ? text('D', '') : '<c r="D' + r + '" s="' + p.styles.D + '" t="n"><v>' + birth + '</v></c>') +
             text('E', x.national_id) + text('F', x.guardian_name) + text('G', x.guardian_relation) + text('H', plainPhone(x.phone)) + text('I', plainPhone(x.whatsapp)) +
             text('J', plainPhone(stVal(x, 'student_phone'))) + text('K', stVal(x, 'city') || stVal(x, 'address')) + text('L', note(x))
@@ -5944,7 +5952,7 @@
         sheetFile[sh.getAttribute('name')] = 'xl/' + String(target[id]).replace(/^\/?xl\//, '');
       });
 
-      var finals = S.students.filter(function (x) { return stStatus(x) === 'final' && x.class_name; });
+      var finals = S.students.filter(function (x) { return enrolled(x) && x.class_name; });
 
       // العمود الأخير: دفع المواصلات عن الشهر المعروض في شاشة المواصلات (أو الشهر الحالي).
       // الدفعات يقرؤها مدير النظام وحده؛ لغيره يبقى العمود «ملاحظات» كما في القالب
@@ -6240,13 +6248,13 @@
 
   // المسجَّلون نهائيًا في الشعبة، بالاسم
   function classRoll(cls) {
-    return S.students.filter(function (x) { return stStatus(x) === 'final' && x.class_name === cls; })
+    return S.students.filter(function (x) { return enrolled(x) && x.class_name === cls; })
       .sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
   }
 
   function attClasses() {
     var names = schoolClasses().slice();
-    S.students.forEach(function (x) { if (stStatus(x) === 'final' && x.class_name && names.indexOf(x.class_name) < 0) names.push(x.class_name); });
+    S.students.forEach(function (x) { if (enrolled(x) && x.class_name && names.indexOf(x.class_name) < 0) names.push(x.class_name); });
     return names;
   }
 
@@ -6308,7 +6316,7 @@
     var n = attCounts(roll, function (x) { return attOf(x.id).status; });
     var rows = roll.map(function (x, i) {
       var st = attOf(x.id);
-      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b></td><td><div class="acts">' + Object.keys(ATT).map(function (k) {
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td><div class="acts">' + Object.keys(ATT).map(function (k) {
           return '<button type="button" class="btn' + (st.status === k ? ' primary' : '') + '" data-attset="' + x.id + '" data-attv="' + k + '"' + (st.status === k ? ' aria-pressed="true"' : ' aria-pressed="false"') +
             (st.status === k && k === 'absent' ? ' style="background:var(--red);border-color:transparent"' : '') + '>' + ATT[k] + '</button>';
         }).join('') + '</div></td>' +
@@ -6394,7 +6402,7 @@
       var roll = classRoll(a.cls), days = Object.keys((d.byClass[a.cls] || {}).days || {}).length;
       var rows = roll.map(function (x, i) {
         var p = d.per[x.id] || { present: 0, absent: 0 };
-        return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b></td><td>' + p.present + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td><b>' + attPct(p) + '</b></td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + p.present + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td><b>' + attPct(p) + '</b></td></tr>';
       }).join('');
       return head + '<div class="card"><h2>' + esc(a.cls) + ' — من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + '</h2><p class="st-count">أيام سُجّل فيها حضور الشعبة: ' + days + '</p>' +
         '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>أيام الحضور</th><th>أيام الغياب</th><th>نسبة الحضور</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
@@ -6414,7 +6422,7 @@
         '</tbody><tfoot><tr><td colspan="2">المدرسة</td><td>' + all.absent + '</td><td>' + attPct(all) + '</td><td>' + most.length + '</td></tr></tfoot></table></div></div>' +
       '<div class="card"><h2>الأكثر غيابًا (3 أيام فأكثر) — ' + most.length + '</h2>' + (most.length
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + most.map(function (x, i) {
-            return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
+            return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
               '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
   }
@@ -6520,7 +6528,7 @@
           var body = roll.map(function (x, i) {
             var p = d.per[x.id] || { present: 0, absent: 0, days: {} };
             var cells = days.map(function (dd, j) { var st = p.days[dd]; if (st === 'absent') absentPerDay[j]++; return st ? ATT_MARK[st] : ''; });
-            return [i + 1, x.full_name].concat(cells, [p.present, p.absent]);
+            return [i + 1, x.full_name + rsvText(x)].concat(cells, [p.present, p.absent]);
           });
           var foot = ['', 'عدد الغائبين في اليوم'].concat(absentPerDay.map(function (v, j) { return recorded[j] ? v : ''; }));
           xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + monthLabel(month)], ['الصف: ' + cls, '', 'مربي الصف: ' + (classTeacher(cls) || ''), '', '', '', '', '', 'عدد الطلاب: ' + roll.length], [], head].concat(body, [foot, [],
@@ -6629,8 +6637,8 @@
       var fri = attOff;
       var body = roll.map(function (x, i) {
         var q = d.per[x.id] || { present: 0, absent: 0, days: {} };
-        if (p.teacher) return '<tr class="tc"><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + '</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '"></td>'; }).join('') + '</tr>';
-        return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + '</td>' + days.map(function (dd) {
+        if (p.teacher) return '<tr class="tc"><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '"></td>'; }).join('') + '</tr>';
+        return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
           var st = q.days[dd];
           if (st === 'absent') absentPerDay[dd]++;
           return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? ATT_MARK[st] : '') + '</td>';
@@ -6642,7 +6650,7 @@
         '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
           (p.teacher ? '' : '<th>حضور</th><th>غياب</th>') + '</tr></thead>' +
         '<tbody>' + body + (p.teacher ? '</tbody></table>' : '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>') +
-        '<p class="att-key">' + (p.teacher ? 'الأعمدة المظلّلة: الجمعة والسبت والعطل' : 'المفتاح: ✓ حاضر · غ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
+        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'الأعمدة المظلّلة: الجمعة والسبت والعطل' : 'المفتاح: ✓ حاضر · غ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
