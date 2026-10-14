@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>تسجيل الغياب</title>
+<style>
+  :root { --navy: #1b2a6b; --red: #b42318; --red-soft: #fde8e7; --green: #067647; --green-soft: #e3f5ec; --line: #e2e6ee; --muted: #667085; --bg: #f5f7fb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Segoe UI", Tahoma, sans-serif; background: var(--bg); color: #1d2433; font-size: 17px; }
+  header { background: var(--navy); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 2; }
+  header h1 { margin: 0; font-size: 1.15rem; }
+  header .sub { font-size: .85rem; opacity: .85; margin-top: 2px; }
+  main { padding: 14px 16px 120px; max-width: 640px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .msg { text-align: center; color: var(--muted); padding: 30px 10px; }
+  .err { color: var(--red); }
+  .classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .classes button { font: inherit; padding: 16px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; cursor: pointer; text-align: center; }
+  .classes button b { display: block; font-size: 1.05rem; }
+  .classes button span { font-size: .8rem; color: var(--muted); }
+  .classes button.done { border-color: #a6dcc0; background: var(--green-soft); }
+  .row { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); cursor: pointer; user-select: none; }
+  .row:last-child { border-bottom: 0; }
+  .row .n { width: 26px; color: var(--muted); font-size: .85rem; }
+  .row .name { flex: 1; }
+  .row .tag { font-size: .8rem; padding: 3px 10px; border-radius: 99px; background: var(--green-soft); color: var(--green); }
+  .row.absent { background: var(--red-soft); }
+  .row.absent .tag { background: var(--red); color: #fff; }
+  .list { padding: 0; overflow: hidden; }
+  .bar { position: fixed; bottom: 0; inset-inline: 0; background: #fff; border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .bar[hidden] { display: none; }
+  .bar .count { flex: 1; max-width: 300px; font-size: .95rem; }
+  button.primary { font: inherit; font-weight: 700; background: var(--navy); color: #fff; border: 0; border-radius: 10px; padding: 12px 22px; cursor: pointer; }
+  button.ghost { font: inherit; background: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  button:disabled { opacity: .6; }
+  .back { margin-bottom: 10px; }
+  .hint { font-size: .85rem; color: var(--muted); margin: 0 0 10px; }
+</style>
+</head>
+<body>
+<header><h1 id="title">تسجيل الغياب</h1><div class="sub" id="sub"></div></header>
+<main id="main"><div class="msg">جارٍ التحميل…</div></main>
+<div class="bar" id="bar" hidden></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+  var main = document.getElementById('main'), bar = document.getElementById('bar'), sub = document.getElementById('sub');
+  var token = new URLSearchParams(location.search).get('t') || '';
+  var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  var st = { info: null, cls: '', students: [], absent: {}, busy: false };
+
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function dmy(iso) { var p = String(iso || '').split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : ''; }
+  function fail(text) { bar.hidden = true; main.innerHTML = '<div class="msg err">' + esc(text) + '</div>'; }
+
+  async function call(fn, args) {
+    var r = await sb.rpc(fn, args);
+    if (r.error) throw new Error(/function|schema cache/i.test(r.error.message) ? 'خدمة تسجيل الغياب غير مفعّلة بعد.' : 'تعذر الاتصال، تحقق من الإنترنت وأعد المحاولة.');
+    if (r.data && r.data.error) throw new Error(r.data.error);
+    return r.data;
+  }
+
+  async function showClasses() {
+    bar.hidden = true;
+    st.cls = '';
+    main.innerHTML = '<div class="msg">جارٍ التحميل…</div>';
+    try { st.info = await call('absence_classes', { p_token: token }); } catch (e) { return fail(e.message); }
+    sub.textContent = st.info.teacher + ' · ' + dmy(st.info.day);
+    document.getElementById('title').textContent = 'تسجيل الغياب';
+    main.innerHTML = '<p class="hint">اختر الشعبة. الشعب المظلّلة بالأخضر سُجّل غيابها اليوم، واختيارها يعدّل التسجيل.</p>' +
+      '<div class="classes">' + st.info.classes.map(function (c, i) {
+        return '<button type="button" data-i="' + i + '"' + (c.recorded ? ' class="done"' : '') + '><b>' + esc(c.name) + '</b><span>' + c.students + ' طالبًا' + (c.recorded ? ' · ✓ سُجّل' : '') + '</span></button>';
+      }).join('') + '</div>';
+  }
+
+  async function showRoll(cls) {
+    st.cls = cls;
+    main.innerHTML = '<div class="msg">جارٍ التحميل…</div>';
+    var data;
+    try { data = await call('absence_roll', { p_token: token, p_class: cls }); } catch (e) { return fail(e.message); }
+    st.students = data.students;
+    st.absent = {};
+    st.students.forEach(function (s) { if (s.absent) st.absent[s.id] = true; });
+    document.getElementById('title').textContent = cls;
+    drawRoll(data.recorded);
+  }
+
+  function drawRoll(recorded) {
+    main.innerHTML = '<button type="button" class="ghost back" data-back>→ الشعب</button>' +
+      '<p class="hint">' + (recorded ? 'سُجّل غياب هذه الشعبة اليوم؛ عدّل ثم احفظ. ' : '') + 'المس اسم كل طالب غائب، ثم اضغط «حفظ». الباقون يُسجَّلون حاضرين.</p>' +
+      '<div class="card list">' + st.students.map(function (s, i) {
+        var a = !!st.absent[s.id];
+        return '<div class="row' + (a ? ' absent' : '') + '" data-id="' + s.id + '" role="checkbox" aria-checked="' + a + '" tabindex="0"><span class="n">' + (i + 1) + '</span><span class="name">' + esc(s.name) + '</span><span class="tag">' + (a ? 'غائب' : 'حاضر') + '</span></div>';
+      }).join('') + '</div>';
+    drawBar();
+  }
+
+  function drawBar() {
+    var n = Object.keys(st.absent).length;
+    bar.hidden = false;
+    bar.innerHTML = '<span class="count">الغائبون: <b>' + n + '</b> من ' + st.students.length + '</span><button type="button" class="primary" data-save' + (st.busy ? ' disabled' : '') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ') + '</button>';
+  }
+
+  async function save() {
+    st.busy = true;
+    drawBar();
+    var res;
+    try { res = await call('absence_submit', { p_token: token, p_class: st.cls, p_absent: Object.keys(st.absent) }); } catch (e) { st.busy = false; drawBar(); return alert(e.message); }
+    st.busy = false;
+    bar.hidden = true;
+    main.innerHTML = '<div class="card"><h2 style="margin:0 0 8px;color:var(--green)">✅ حُفظ غياب ' + esc(st.cls) + '</h2>' +
+      (res.absent.length ? '<p>الغائبون (' + res.absent.length + '):</p><ul>' + res.absent.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '<p>لا غائبين — الجميع حاضر.</p>') +
+      '<button type="button" class="primary" data-back>تسجيل شعبة أخرى</button></div>';
+  }
+
+  document.addEventListener('click', function (e) {
+    var el;
+    if ((el = e.target.closest('[data-i]'))) return showRoll(st.info.classes[Number(el.getAttribute('data-i'))].name);
+    if (e.target.closest('[data-back]')) return showClasses();
+    if (e.target.closest('[data-save]')) return save();
+    if ((el = e.target.closest('.row[data-id]'))) {
+      var id = el.getAttribute('data-id');
+      if (st.absent[id]) delete st.absent[id]; else st.absent[id] = true;
+      var a = !!st.absent[id];
+      el.classList.toggle('absent', a);
+      el.setAttribute('aria-checked', a);
+      el.querySelector('.tag').textContent = a ? 'غائب' : 'حاضر';
+      drawBar();
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.row[data-id]')) { e.preventDefault(); e.target.click(); }
+  });
+
+  if (!sb) fail('الصفحة غير مهيأة.');
+  else if (!/^[0-9a-f]{32,}$/i.test(token)) fail('الرابط غير صالح. اطلب رابطك من إدارة المدرسة.');
+  else showClasses();
+})();
+</script>
+</body>
+</html>

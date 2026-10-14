@@ -930,7 +930,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 10';
+  var APP_BUILD = '14/10 — 11';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6639,6 +6639,101 @@
       '<p class="hint" style="margin:6px 0 0">الكشف الشهري: صفحة أفقية لكل شعبة، صف لكل طالب وعمود لكل يوم (✓ حاضر · غ غائب). كشف المدرسة: الشعب بأعدادها ونسبها وأسماء غائبيها. الأسبوع من السبت إلى الجمعة. الملاحظات لا تُحفظ في البرنامج، تُطبع فقط.</p></div>';
   }
 
+  /* ----- روابط المعلمين لتسجيل الغياب، ومفتاح n8n (مدير النظام) -----
+     كل معلم له رابط سري (absence.html?t=…) يسجّل منه الغياب بلا حساب، ويُعرف به في بوت الواتساب برقم جواله.
+     الجداول من supabase/attendance_links.sql */
+  S.attLinks = null;      // null: لم تُجلب بعد
+  S.attBotKey = '';
+  S.attLinksMissing = false;
+
+  async function loadAttLinks() {
+    var r = await sb.from('attendance_tokens').select('*').order('name');
+    if (r.error) { S.attLinksMissing = true; S.attLinks = []; render(); return; }
+    var k = await sb.from('attendance_settings').select('bot_key').eq('id', 1).maybeSingle();
+    S.attLinks = r.data || [];
+    S.attBotKey = (k.data && k.data.bot_key) || '';
+    render();
+  }
+
+  function absenceLink(token) {
+    return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'absence.html?t=' + token;
+  }
+
+  function attLinksHtml() {
+    if (!isAdmin()) return '';
+    if (S.attLinks == null) { loadAttLinks(); return '<div class="card no-print"><h2>تسجيل الغياب من المعلمين</h2><div class="empty">جارٍ التحميل…</div></div>'; }
+    if (S.attLinksMissing) {
+      return '<div class="card no-print"><h2>تسجيل الغياب من المعلمين (رابط وواتساب)</h2><p class="formhint" style="margin:0">لتفعيلها شغّل الملف <code dir="ltr">supabase/attendance_links.sql</code> في محرر SQL ثم حدّث الصفحة.</p></div>';
+    }
+    var rows = S.attLinks.map(function (t) {
+      var link = absenceLink(t.token), wa = plainPhone(t.phone).replace(/^0/, '20');
+      return '<tr' + (t.active ? '' : ' style="color:var(--muted)"') + '><td><b>' + esc(t.name) + '</b>' + (t.active ? '' : ' <span class="badge pending">موقوف</span>') + '</td>' +
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(t.phone || '—') + '</td>' +
+        '<td><div class="acts"><button type="button" class="btn" data-alcopy="' + esc(t.token) + '">نسخ الرابط</button>' +
+          (wa ? '<a class="btn" target="_blank" rel="noopener" href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent('رابط تسجيل الغياب الخاص بك:\n' + link) + '">إرسال واتساب</a>' : '') +
+          '<button type="button" class="btn" data-altoggle="' + esc(t.token) + '">' + (t.active ? 'إيقاف' : 'تفعيل') + '</button>' +
+          '<button type="button" class="btn danger" data-aldel="' + esc(t.token) + '">حذف</button></div></td></tr>';
+    }).join('');
+    return '<div class="card no-print"><h2>تسجيل الغياب من المعلمين (رابط وواتساب)</h2>' +
+      '<p class="hint">لكل معلم رابط خاص يفتحه من جواله فيختار الشعبة ويلمس أسماء الغائبين، بلا حساب ولا كلمة مرور. ورقم جواله يعرّفه لبوت الواتساب: يرسل «غياب» إلى رقم المدرسة فيسجّل بالأرقام. لا يرى المعلم إلا أسماء طلاب الشعب، ولا يسجّل إلا ليوم اليوم. إيقاف المعلم يوقف رابطه والبوت معًا.</p>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<input type="text" id="al-name" placeholder="اسم المعلم" style="flex:1;min-width:160px">' +
+        '<input type="text" id="al-phone" placeholder="جوال المعلم (واتساب)" dir="ltr" inputmode="tel" style="width:200px;text-align:right">' +
+        '<button type="button" class="btn primary" data-aladd>إضافة معلم</button></div>' +
+      (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>المعلم</th><th>الجوال</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">لم يُضف معلمون بعد.</div>') +
+      '<details style="margin-top:12px"><summary>مفتاح n8n (للرسائل الصباحية وبوت الواتساب)</summary>' +
+        '<p class="hint" style="margin:8px 0">يوضع في workflows الـ n8n مكان <code dir="ltr">PUT_BOT_KEY_HERE</code>. من يملكه يستطيع تسجيل الغياب باسم أي معلم مسجَّل هنا، فلا تنشره. إن تسرّب فغيّره ثم حدّثه في n8n.</p>' +
+        '<div class="toolbar" style="align-items:center"><code dir="ltr" style="flex:1;overflow-wrap:anywhere">' + esc(S.attBotKey ? S.attBotKey.slice(0, 6) + '…' + S.attBotKey.slice(-4) : '—') + '</code>' +
+        '<button type="button" class="btn" data-alkeycopy>نسخ المفتاح</button><button type="button" class="btn danger" data-alkeynew>تغيير المفتاح</button></div></details></div>';
+  }
+
+  async function copyText(text, done) {
+    try { await navigator.clipboard.writeText(text); toast(done); } catch (err) { prompt('انسخ:', text); }
+  }
+
+  app.addEventListener('click', async function (e) {
+    if (location.hash !== '#/attendance' || !isAdmin()) return;
+    var el, r;
+    if (e.target.closest('[data-aladd]')) {
+      var name = document.getElementById('al-name').value.replace(/\s+/g, ' ').trim(), phone = latinDigits(document.getElementById('al-phone').value).replace(/[^0-9+]/g, '');
+      if (!name) return toast('اكتب اسم المعلم', true);
+      if (phone && S.attLinks.some(function (t) { return t.phone && plainPhone(t.phone).slice(-10) === plainPhone(phone).slice(-10); })) return toast('هذا الجوال مسجَّل لمعلم آخر', true);
+      r = await sb.from('attendance_tokens').insert({ name: name, phone: phone }).select().single();
+      if (r.error) return fail(r.error);
+      S.attLinks.push(r.data);
+      S.attLinks.sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+      render();
+      toast('أُضيف ' + name);
+    } else if ((el = e.target.closest('[data-alcopy]'))) {
+      copyText(absenceLink(el.getAttribute('data-alcopy')), 'نُسخ الرابط');
+    } else if ((el = e.target.closest('[data-altoggle]'))) {
+      var t = S.attLinks.filter(function (x) { return x.token === el.getAttribute('data-altoggle'); })[0];
+      r = await sb.from('attendance_tokens').update({ active: !t.active }).eq('token', t.token);
+      if (r.error) return fail(r.error);
+      t.active = !t.active;
+      render();
+    } else if ((el = e.target.closest('[data-aldel]'))) {
+      var d = S.attLinks.filter(function (x) { return x.token === el.getAttribute('data-aldel'); })[0];
+      if (!confirm('حذف «' + d.name + '»؟ يتوقف رابطه نهائيًا، وما سجّله من غياب يبقى.')) return;
+      r = await sb.from('attendance_tokens').delete().eq('token', d.token);
+      if (r.error) return fail(r.error);
+      S.attLinks = S.attLinks.filter(function (x) { return x !== d; });
+      render();
+    } else if (e.target.closest('[data-alkeycopy]')) {
+      copyText(S.attBotKey, 'نُسخ المفتاح');
+    } else if (e.target.closest('[data-alkeynew]')) {
+      if (!confirm('تغيير مفتاح n8n؟ تتوقف الرسائل الصباحية والبوت حتى تضع المفتاح الجديد في n8n.')) return;
+      var bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      var key = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      r = await sb.from('attendance_settings').update({ bot_key: key }).eq('id', 1);
+      if (r.error) return fail(r.error);
+      S.attBotKey = key;
+      render();
+      toast('تغيّر المفتاح — ضعه في n8n');
+    }
+  });
+
   function renderAttendance() {
     var a = attState();
     if (S.attMissing) {
@@ -6660,7 +6755,7 @@
           return '<option' + (c === a.cls ? ' selected' : '') + '>' + esc(c) + '</option>';
         }).join('') + '</select>' +
         (a.view === 'day' ? '<span class="monthpick"><label class="field" for="att-day">اليوم</label><input type="date" id="att-day" max="' + todayISO() + '" value="' + a.day + '"></span>' : '') + '</div>' +
-      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml()) + attExportHtml();
+      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml()) + attExportHtml() + attLinksHtml();
   }
 
   async function saveAttendance() {
