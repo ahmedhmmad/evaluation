@@ -935,7 +935,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 2';
+  var APP_BUILD = '15/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1469,16 +1469,20 @@
           f('tf-cat', 'الفئة', '<select id="tf-cat">' + STAFF_CATS.map(function (c) { return '<option' + (staffCat(t) === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select>') +
           f('tf-job', 'المسمى الوظيفي', '<input type="text" id="tf-job" placeholder="مثال: المدير، لغة عربية، مراسل" value="' + val('job_title') + '">') +
           f('tf-wa', 'رقم الواتساب', '<input type="text" id="tf-wa" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('whatsapp') + '">')) +
+        '<div class="tf-teach" style="display:' + (TEACHING_CATS.indexOf(staffCat(t)) > -1 ? 'contents' : 'none') + '">' +
         f('tf-subject', 'المباحث التي يدرّسها', '<input type="text" id="tf-subject" placeholder="لهيئة التدريس — مثال: علوم عامة، رياضيات" value="' + val('subject') + '"><div class="day">افصل بين المباحث بفاصلة.</div>') +
-        f('tf-classes', 'الصفوف والشعب التي يدرّسها', classPick, true) +
+        f('tf-classes', 'الصفوف والشعب التي يدرّسها', classPick, true) + '</div>' +
         f('tf-phone', 'رقم الجوال', '<input type="text" id="tf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('phone') + '">') +
         f('tf-qualification', 'المؤهل العلمي', '<input type="text" id="tf-qualification" placeholder="مثال: بكالوريوس تربية علوم" value="' + val('qualification') + '">') +
         f('tf-hire', 'تاريخ التعيين', '<input type="date" id="tf-hire" value="' + val('hire_date') + '">') +
         (t && t.user_id
           ? f('tf-login-ro', 'حساب الدخول', '<input type="text" id="tf-login-ro" dir="ltr" readonly style="text-align:right" value="' + esc(displayName(t.login)) + '">')
-          : f('tf-login', 'اسم المستخدم للدخول', '<input type="text" id="tf-login" dir="ltr" style="text-align:right"' + (t ? '' : ' required') +
-              ' placeholder="أحرف إنجليزية وأرقام، أو بريد إلكتروني" autocomplete="off">' +
-              '<div class="day">يُنشأ الحساب بكلمة المرور الافتراضية، ويُطلب من المعلم تغييرها عند أول دخول.</div>')) +
+          : f('tf-login', 'إنشاء حساب دخول: اسم المستخدم', '<input type="text" id="tf-login" dir="ltr" style="text-align:right"' +
+              ' placeholder="اتركه فارغًا إن لم يلزمه حساب" autocomplete="off">' +
+              '<div class="day">يُنشأ الحساب بكلمة المرور الافتراضية، ويُطلب من صاحبه تغييرها عند أول دخول.</div>') +
+            '<div class="tf-nonteach" style="display:' + (TEACHING_CATS.indexOf(staffCat(t)) > -1 ? 'none' : 'contents') + '">' +
+              f('tf-role', 'صلاحية الحساب', '<select id="tf-role"><option value="viewer">مشاهد (يرى النتائج المنشورة)</option><option value="registrar">مسجِّل طلاب</option><option value="supervisor">مشرف</option></select>' +
+                '<div class="day">لهيئة التدريس والمحفظين يكون الحساب حساب معلم يرى تقييمه فقط.</div>') + '</div>') +
         f('tf-details', 'بيانات أخرى', '<textarea id="tf-details" placeholder="أي معلومات إضافية عن المعلم">' + val('details') + '</textarea>', true) +
       '</div>' +
       '<div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
@@ -1494,7 +1498,7 @@
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.whatsapp || '—') + '</td>' +
         '<td dir="ltr" style="text-align:right">' + (x.user_id ? esc(displayName(x.login)) : '<span class="badge pending" dir="rtl">بدون حساب</span>') + '</td>' +
         '<td style="white-space:nowrap"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button> ' +
-        (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '">إعادة تعيين كلمة المرور</button> ' : '') +
+        (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '">إعادة تعيين كلمة المرور</button> ' : '<button type="button" class="btn" data-tacc="' + x.id + '">إنشاء حساب</button> ') +
         '<button type="button" class="btn danger" data-tdel="' + x.id + '">حذف</button></td></tr>';
     }).join('');
 
@@ -1529,7 +1533,9 @@
       data.job_title = g('tf-job');
       data.whatsapp = latinDigits(g('tf-wa')).replace(/[^0-9+]/g, '');
     }
-    var login = g('tf-login');
+    var login = g('tf-login'), role = g('tf-role');
+    // الشعب والمباحث لهيئة التدريس والمحفظين فقط
+    if (data.category && TEACHING_CATS.indexOf(data.category) < 0) { data.classes = ''; data.subject = ''; }
     if (login) {
       if (login.indexOf('@') < 0 && !/^[a-z0-9._-]{3,}$/i.test(login)) {
         return toast('اسم المستخدم: ثلاثة أحرف إنجليزية أو أرقام على الأقل، بدون مسافات.', true);
@@ -1558,6 +1564,11 @@
         render();
         return fail(acc.error);
       }
+      // غير هيئة التدريس: صلاحية الحساب كما اختيرت بدل «معلم»
+      if (TEACHING_CATS.indexOf(staffCat(t)) < 0) {
+        var pr = await sb.from('profiles').update({ role: role || 'viewer' }).eq('id', acc.data);
+        if (pr.error) toast('أُنشئ الحساب بصلاحية معلم؛ غيّرها من «الإعدادات والمستخدمون»', true);
+      }
       t.user_id = acc.data;
       t.login = toEmail(login);
       // ليظهر الحساب الجديد في قائمة المستخدمين
@@ -1580,6 +1591,13 @@
     if (location.hash === '#/staff' && e.target.closest('[data-staffimpsave]')) return saveStaffImport();
     if (location.hash === '#/staff' && e.target.closest('[data-staffimpcancel]')) { ui.staffImp = null; return render(); }
     if (location.hash === '#/staff' && e.target.closest('[data-staffabs]')) return staffToAbsence();
+    if (location.hash === '#/staff' && (el = e.target.closest('[data-tacc]'))) {
+      ui.editTeacher = el.getAttribute('data-tacc');
+      render();
+      var lg = document.getElementById('tf-login');
+      if (lg) { lg.focus(); lg.scrollIntoView({ block: 'center' }); }
+      return;
+    }
     if ((el = e.target.closest('[data-tedit]'))) {
       ui.editTeacher = el.getAttribute('data-tedit') || null;
       render();
@@ -1605,6 +1623,12 @@
   });
 
   app.addEventListener('change', function (e) {
+    if (isAdmin() && location.hash === '#/staff' && e.target.id === 'tf-cat') {
+      var teach = TEACHING_CATS.indexOf(e.target.value) > -1;
+      Array.prototype.forEach.call(document.querySelectorAll('.tf-teach'), function (d) { d.style.display = teach ? 'contents' : 'none'; });
+      Array.prototype.forEach.call(document.querySelectorAll('.tf-nonteach'), function (d) { d.style.display = teach ? 'none' : 'contents'; });
+      return;
+    }
     if (!isAdmin() || location.hash !== '#/staff' || e.target.id !== 'staff-file') return;
     if (e.target.files.length) readStaffFile(e.target.files[0]);
     e.target.value = '';
