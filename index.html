@@ -915,7 +915,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 1';
+  var APP_BUILD = '14/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3536,12 +3536,14 @@
 
   function buildBusSheet(g) {
     var pay = S.tPay[ui.tMonth] || {};
-    var list = busRiders(g).map(function (m) {
+    // في الكشف من سدّد اشتراك الشهر كاملًا فقط
+    var list = busRiders(g).filter(function (m) {
+      var paid = (pay[m.student_id] || {}).amount || 0;
+      return owesThisMonth(m) && paid > 0 && paid >= shareOf(m, g);
+    }).map(function (m) {
       var x = findStudent(m.student_id), nm = splitFamily(x.full_name);
       var gid = latinDigits(String((x.details || {}).guardian_id || '')).replace(/\D/g, ''), ph = latinDigits(String(x.phone || '')).replace(/\D/g, '').slice(-10);
-      var left = owesThisMonth(m) ? Math.max(0, shareOf(m, g) - ((pay[x.id] || {}).amount || 0)) : 0, state = rideState(m, left);
-      return { x: x, m: m, given: nm.given, family: nm.family, key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id,
-        note: !owesThisMonth(m) ? 'لم يبدأ الاشتراك' : state === 'suspended' ? 'موقوف — لم يسدد' : state === 'late' ? 'متأخر في السداد' : '' };
+      return { x: x, m: m, given: nm.given, family: nm.family, key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
     });
     // الإخوة متتالون: الترتيب باسم العائلة ثم الأسرة ثم السن
     var head = {};
@@ -3555,16 +3557,17 @@
       var first = r.key !== prev;
       prev = r.key;
       return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td>' + esc(r.given || r.x.full_name) + '</td><td><b>' + (first ? esc(head[r.key]) : '') + '</b></td>' +
-        '<td>' + esc(r.m.pickup || '') + '</td><td class="c" dir="ltr">' + esc(plainPhone(r.x.phone || r.x.whatsapp)) + '</td><td></td><td>' + r.note + '</td></tr>';
+        '<td>' + esc(r.m.pickup || '') + '</td><td class="c" dir="ltr">' + esc(plainPhone(r.x.phone || r.x.whatsapp)) + '</td>' +
+        '<td class="c" dir="ltr">' + esc(plainPhone(stVal(r.x, 'student_phone'))) + '</td><td></td><td></td></tr>';
     }).join('');
     var dots = '............................';
     sheet.className = 'rm';
     sheet.innerHTML =
       reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', monthLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
         ['المشرف/ة', g.supervisor_name ? esc(g.supervisor_name) + (g.supervisor_phone ? ' (' + esc(g.supervisor_phone) + ')' : '') : dots], ['وقت التجمع', g.pickup_time || '']]) +
-      '<table class="rz"><colgroup><col style="width:5%"><col style="width:24%"><col style="width:14%"><col style="width:19%"><col style="width:15%"><col style="width:7%"><col style="width:16%"></colgroup>' +
-      '<thead><tr><th>م</th><th>اسم الطالب</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>حضور</th><th>ملاحظات</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="7" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
+      '<table class="rz"><colgroup><col style="width:5%"><col style="width:21%"><col style="width:12%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:13%"></colgroup>' +
+      '<thead><tr><th>م</th><th>اسم الطالب</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب</th><th>حضور</th><th>ملاحظات</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="8" class="c">لا يوجد في هذا الباص من سدّد اشتراك ' + monthLabel(ui.tMonth) + '</td></tr>') + '</tbody></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>' +
       reportSigns([['السائق', g.driver_name || ''], ['المشرف/ة', g.supervisor_name || ''], ['اعتماد الإدارة', principalName()]]);
     fitSheet();
