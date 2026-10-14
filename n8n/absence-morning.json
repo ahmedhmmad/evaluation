@@ -55,7 +55,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://evolution.ahmedhammad.page/message/sendText/DarAlaman",
+        "url": "https://evolution.ahmedhammad.page/message/sendText/ThirdPillar",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -130,7 +130,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://evolution.ahmedhammad.page/message/sendText/DarAlaman",
+        "url": "https://evolution.ahmedhammad.page/message/sendText/ThirdPillar",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
