@@ -930,7 +930,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 9';
+  var APP_BUILD = '14/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3300,7 +3300,11 @@
   // المطلوب والمحصَّل لمجموعة في الشهر المعروض
   function groupTotals(g) {
     var pay = S.tPay[ui.tMonth] || {}, due = 0, paid = 0, n = 0;
-    membersOf(g.id).filter(owesThisMonth).forEach(function (m) { n++; due += shareOf(m, g); paid += pay[m.student_id] ? pay[m.student_id].amount : 0; });
+    // المعفى خارج العدد والمطلوب والمحصَّل
+    membersOf(g.id).filter(owesThisMonth).forEach(function (m) {
+      if (exemptIn(m, ui.tMonth)) return;
+      n++; due += shareOf(m, g); paid += pay[m.student_id] ? pay[m.student_id].amount : 0;
+    });
     return { n: n, due: due, paid: paid };
   }
 
@@ -3367,17 +3371,18 @@
       }
       var sh = shareOf(m, g), rec = pay[x.id] || {}, p = rec.amount || 0, ex = exemptIn(m, ui.tMonth);
       var method = rec.method || 'cash';
-      due += ex ? 0 : sh; paid += p;
+      if (!ex) { due += sh; paid += p; }
       var badge = ex ? ['exempt', PAY_STATUS.exempt] : sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
       var famNote = familyNote(x.id);
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b><br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span>' + pickupInput(m, x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
         '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + shareOf({ student_id: x.id, share: null }) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
+        (ex ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (p || '') + '"></td>' +
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
-        payNoteInput(x.id, method, rec) + '</td>' +
+        payNoteInput(x.id, method, rec) + '</td>') +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + (ex ? '<br><span style="color:var(--muted);font-size:.8rem">' + exemptText(m) + '</span>' : rideBadge(rideState(m, Math.max(0, sh - p)))) + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
         '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button> ' : '') + (sh > p && !ex ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button> ') +
@@ -3617,7 +3622,7 @@
   var pendingBus = null;
 
   function buildBusSheet(g) {
-    var pay = S.tPay[ui.tMonth] || {}, paidN = 0;
+    var pay = S.tPay[ui.tMonth] || {}, paidN = 0, exemptN = 0;
     var list = busRiders(g).map(function (m) {
       var x = findStudent(m.student_id), nm = splitFamily(x.full_name), first = String(x.full_name || '').trim().split(/\s+/)[0] || '';
       var gid = latinDigits(String((x.details || {}).guardian_id || '')).replace(/\D/g, ''), ph = latinDigits(String(x.phone || '')).replace(/\D/g, '').slice(-10);
@@ -3625,7 +3630,8 @@
       var paid = (pay[x.id] || {}).amount || 0, share = shareOf(m, g);
       var ex = exemptIn(m, ui.tMonth);
       var mark = ex ? '✓ إعفاء' : paid > 0 && paid >= share ? '✓ مدفوع' : paid > 0 ? 'جزئي ' + plainNum(paid) : '';
-      if (ex || (paid > 0 && paid >= share)) paidN++;
+      if (ex) exemptN++;
+      else if (paid > 0 && paid >= share) paidN++;
       var father = String(x.full_name || '').trim().split(/\s+/)[1] || '';
       return { x: x, m: m, name: nm.family ? first : x.full_name, family: nm.family, father: father, mark: mark, full: ex || (paid > 0 && paid >= share), exempt: ex,
         key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
@@ -3659,7 +3665,7 @@
       '<thead><tr><th>م</th><th>اسم الطالب</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب</th><th>الاشتراك</th><th style="white-space:nowrap">الحضور</th></tr></thead><tbody>' +
       (rows || '<tr><td colspan="8" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
-        ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN) + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
+        ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
     fitSheet();
   }
 
@@ -3713,8 +3719,9 @@
     var t = { n: rows.length, due: 0, paid: 0, left: 0, owing: 0, exempt: 0, by: {}, byCount: {} };
     Object.keys(PAY_METHODS).forEach(function (k) { t.by[k] = 0; t.byCount[k] = 0; });
     rows.forEach(function (r) {
-      t.due += r.exempt ? 0 : r.share; t.paid += r.paid; t.left += r.left;
-      if (r.exempt) t.exempt++;
+      // المعفى خارج الحساب كله: لا في المشتركين المطالَبين ولا المطلوب ولا المحصَّل
+      if (r.exempt) { t.exempt++; t.n--; return; }
+      t.due += r.share; t.paid += r.paid; t.left += r.left;
       if (r.left > 0) t.owing++;
       if (r.paid > 0) { var k = PAY_METHODS[r.rec.method] ? r.rec.method : 'cash'; t.by[k] += r.paid; t.byCount[k]++; }
     });
@@ -3782,7 +3789,8 @@
       card('الطلاب المشتركون', t.n, firstSub || monthLabel(ui.tMonth)) +
       card('المطلوب', cash(t.due), 'مجموع اشتراكات الشهر') +
       card('المحصَّل', cash(t.paid), (t.due ? Math.round(t.paid / t.due * 100) : 0) + '% من المطلوب', 'var(--green)') +
-      card('المتبقي', cash(t.left), t.owing ? 'لم يسددوا كامل الاشتراك: ' + t.owing : 'لا متأخرات', t.left ? 'var(--red)' : '') + '</div>' +
+      card('المتبقي', cash(t.left), t.owing ? 'لم يسددوا كامل الاشتراك: ' + t.owing : 'لا متأخرات', t.left ? 'var(--red)' : '') +
+      (t.exempt ? card('المعفون', t.exempt, 'خارج المطلوب والمحصَّل', '#6d28d9') : '') + '</div>' +
       (t.by ? methodStripHtml(t) : '');
   }
 
@@ -3802,12 +3810,13 @@
       var x = r.x, rec = r.rec, method = rec.method || 'cash';
       var famNote = familyNote(x.id);
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون شعبة') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
-        '<td class="bus"><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + plainNum(r.share) + '</td>' +
+        '<td class="bus"><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + (r.exempt ? '<span style="color:#6d28d9">إعفاء</span>' : plainNum(r.share)) + '</td>' +
+        (r.exempt ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
         '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (r.paid || '') + '"></td>' +
         '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
           return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
         }).join('') + '</select>' +
-        payNoteInput(x.id, method, rec) + '</td>' +
+        payNoteInput(x.id, method, rec) + '</td>') +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') +
           (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
         '<td><div class="acts">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
@@ -4350,10 +4359,10 @@
         add(title, top(title).concat(
           [['م', 'اسم الطالب', 'الشعبة', 'الباص', 'هاتف ولي الأمر', 'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'طريقة الدفع', 'تاريخ السداد', 'رقم الإيصال', 'وقت التسجيل', 'المسجِّل']],
           rows.map(function (r, i) {
-            return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, String(r.x.whatsapp || r.x.phone || ''), r.share, r.paid, r.left,
+            return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, String(r.x.whatsapp || r.x.phone || ''), r.exempt ? 'إعفاء' : r.share, r.exempt ? '' : r.paid, r.exempt ? '' : r.left,
               PAY_STATUS[r.status] || '', r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : '', r.paid ? issuedWhen(r.rec) : '', r.paid ? r.rec.issued_by || '' : ''];
           }),
-          [['', 'المجموع', '', '', '', t.due, t.paid, t.left, '', '', '', '']], [[]], [['', 'تفصيل المحصَّل حسب وسيلة الدفع']],
+          [['', 'المجموع', '', '', '', t.due, t.paid, t.left, t.exempt ? 'المعفون: ' + t.exempt + ' (خارج المجموع)' : '', '', '', '']], [[]], [['', 'تفصيل المحصَّل حسب وسيلة الدفع']],
           Object.keys(PAY_METHODS).map(function (k) { return ['', PAY_METHODS[k], '', '', '', '', t.by[k], '', t.byCount[k] ? 'عدد الدفعات: ' + t.byCount[k] : '']; })),
           [5, 32, 14, 24, 16, 12, 13, 13, 16, 14, 13, 11, 18, 20]);
       };
@@ -4361,9 +4370,9 @@
         var list = payByClass(sc.rows), sum = payTotals(sc.rows);
         var pct = function (t) { return t.due ? Math.round(t.paid / t.due * 100) + '%' : ''; };
         add('ملخص الشعب', top('ملخص الشعب').concat(
-          [['م', 'الشعبة', 'المشتركون', 'المطلوب (ج.م)', 'المحصَّل (ج.م)'].concat(methodNames, ['المتبقي (ج.م)', 'نسبة التحصيل', 'لم يسددوا'])],
-          list.map(function (c, i) { return [i + 1, c.name || 'بدون شعبة', c.t.n, c.t.due, c.t.paid].concat(methodAmounts(c.t), [c.t.left, pct(c.t), c.t.owing]); }),
-          [['', 'المجموع', sum.n, sum.due, sum.paid].concat(methodAmounts(sum), [sum.left, pct(sum), sum.owing])]), [5, 22, 12, 14, 14, 12, 12, 14, 12, 14, 13, 12]);
+          [['م', 'الشعبة', 'المشتركون', 'المطلوب (ج.م)', 'المحصَّل (ج.م)'].concat(methodNames, ['المتبقي (ج.م)', 'نسبة التحصيل', 'لم يسددوا', 'المعفون'])],
+          list.map(function (c, i) { return [i + 1, c.name || 'بدون شعبة', c.t.n, c.t.due, c.t.paid].concat(methodAmounts(c.t), [c.t.left, pct(c.t), c.t.owing, c.t.exempt || '']); }),
+          [['', 'المجموع', sum.n, sum.due, sum.paid].concat(methodAmounts(sum), [sum.left, pct(sum), sum.owing, sum.exempt || ''])]), [5, 22, 12, 14, 14, 12, 12, 14, 12, 14, 13, 12, 10]);
         detail('كل المدرسة', sc.rows);
         list.forEach(function (c) { detail(c.name || 'بدون شعبة', c.rows); });
       } else {
@@ -4406,10 +4415,10 @@
         var due = 0, paid = 0, left = 0;
         var body = list.map(function (r, i) {
           var x = r.x, w = r.waiting;
-          if (!w) { due += r.share; paid += r.paid; left += r.left; }
+          if (!w && !r.exempt) { due += r.share; paid += r.paid; left += r.left; }
           return [i + 1, x.full_name, x.class_name || '', r.g ? r.g.assembly_point : '', stVal(x, 'city') || '', stVal(x, 'address') || '', x.guardian_name || '',
             plainPhone(x.phone), plainPhone(x.whatsapp), plainPhone(stVal(x, 'student_phone')),
-            w ? '' : r.share, w ? '' : r.paid, w ? '' : r.left, w ? r.note : PAY_STATUS[r.status] || '',
+            w || r.exempt ? '' : r.share, w || r.exempt ? '' : r.paid, w || r.exempt ? '' : r.left, w ? r.note : PAY_STATUS[r.status] || '',
             r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : ''];
         });
         var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['ملف المواصلات — ' + monthLabel(ui.tMonth) + ' — ' + title], [],
