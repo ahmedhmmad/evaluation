@@ -915,7 +915,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 2';
+  var APP_BUILD = '14/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3535,41 +3535,43 @@
   var pendingBus = null;
 
   function buildBusSheet(g) {
-    var pay = S.tPay[ui.tMonth] || {};
-    // في الكشف من سدّد اشتراك الشهر كاملًا فقط
-    var list = busRiders(g).filter(function (m) {
-      var paid = (pay[m.student_id] || {}).amount || 0;
-      return owesThisMonth(m) && paid > 0 && paid >= shareOf(m, g);
-    }).map(function (m) {
-      var x = findStudent(m.student_id), nm = splitFamily(x.full_name);
+    var pay = S.tPay[ui.tMonth] || {}, paidN = 0;
+    var list = busRiders(g).map(function (m) {
+      var x = findStudent(m.student_id), nm = splitFamily(x.full_name), first = String(x.full_name || '').trim().split(/\s+/)[0] || '';
       var gid = latinDigits(String((x.details || {}).guardian_id || '')).replace(/\D/g, ''), ph = latinDigits(String(x.phone || '')).replace(/\D/g, '').slice(-10);
-      return { x: x, m: m, given: nm.given, family: nm.family, key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
+      // خانة الاشتراك: تُعلَّم لمن دفع عن الشهر، والفارغة لم يدفع
+      var paid = (pay[x.id] || {}).amount || 0, share = shareOf(m, g);
+      var mark = paid > 0 && paid >= share ? '✓ مدفوع' : paid > 0 ? 'جزئي ' + plainNum(paid) : '';
+      if (paid > 0 && paid >= share) paidN++;
+      return { x: x, m: m, name: nm.family ? first + ' ' + nm.family : x.full_name, family: nm.family, mark: mark, full: paid > 0 && paid >= share,
+        key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
     });
-    // الإخوة متتالون: الترتيب باسم العائلة ثم الأسرة ثم السن
+    // الإخوة متتالون: الترتيب باسم العائلة ثم الأسرة ثم السن، ويفصل بين الأسر خط
     var head = {};
     list.forEach(function (r) { if (!head[r.key] || r.family.length > head[r.key].length) head[r.key] = r.family; });
     list.sort(function (a, b) {
-      return head[a.key].localeCompare(head[b.key], 'ar') || a.key.localeCompare(b.key) || String(a.x.birth_date || '').localeCompare(String(b.x.birth_date || '')) || a.given.localeCompare(b.given, 'ar');
+      return head[a.key].localeCompare(head[b.key], 'ar') || a.key.localeCompare(b.key) || String(a.x.birth_date || '').localeCompare(String(b.x.birth_date || '')) || a.name.localeCompare(b.name, 'ar');
     });
     var families = Object.keys(head).length, prev = '';
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
+    var phone = function (v) { return '<td class="c" dir="ltr" style="white-space:nowrap">' + esc(plainPhone(v)) + '</td>'; };
     var rows = list.map(function (r, i) {
       var first = r.key !== prev;
       prev = r.key;
-      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td>' + esc(r.given || r.x.full_name) + '</td><td><b>' + (first ? esc(head[r.key]) : '') + '</b></td>' +
-        '<td>' + esc(r.m.pickup || '') + '</td><td class="c" dir="ltr">' + esc(plainPhone(r.x.phone || r.x.whatsapp)) + '</td>' +
-        '<td class="c" dir="ltr">' + esc(plainPhone(stVal(r.x, 'student_phone'))) + '</td><td></td><td></td></tr>';
+      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.name) + '</b></td>' +
+        '<td>' + esc(r.m.pickup || '') + '</td>' + phone(r.x.phone || r.x.whatsapp) + phone(stVal(r.x, 'student_phone')) +
+        '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + '">' + esc(r.mark) + '</td><td></td><td></td></tr>';
     }).join('');
     var dots = '............................';
     sheet.className = 'rm';
     sheet.innerHTML =
       reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', monthLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
         ['المشرف/ة', g.supervisor_name ? esc(g.supervisor_name) + (g.supervisor_phone ? ' (' + esc(g.supervisor_phone) + ')' : '') : dots], ['وقت التجمع', g.pickup_time || '']]) +
-      '<table class="rz"><colgroup><col style="width:5%"><col style="width:21%"><col style="width:12%"><col style="width:16%"><col style="width:13%"><col style="width:13%"><col style="width:7%"><col style="width:13%"></colgroup>' +
-      '<thead><tr><th>م</th><th>اسم الطالب</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب</th><th>حضور</th><th>ملاحظات</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="8" class="c">لا يوجد في هذا الباص من سدّد اشتراك ' + monthLabel(ui.tMonth) + '</td></tr>') + '</tbody></table>' +
-      '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>' +
-      reportSigns([['السائق', g.driver_name || ''], ['المشرف/ة', g.supervisor_name || ''], ['اعتماد الإدارة', principalName()]]);
+      '<table class="rz"><colgroup><col style="width:5%"><col style="width:22%"><col style="width:17%"><col style="width:15%"><col style="width:15%"><col style="width:11%"><col style="width:7%"><col style="width:8%"></colgroup>' +
+      '<thead><tr><th>م</th><th>اسم الطالب</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب</th><th>الاشتراك</th><th>حضور</th><th>ملاحظات</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="8" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
+      '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
+        ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN) + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
     fitSheet();
   }
 
