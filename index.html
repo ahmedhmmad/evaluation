@@ -916,7 +916,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '14/10 — 7';
+  var APP_BUILD = '14/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6364,6 +6364,160 @@
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
   }
 
+  /* ----- تصدير كشوف الحضور -----
+     كشف شهري لكل شعبة بالأسماء وأيام الشهر، وتقارير المدرسة: يومي وأسبوعي (السبت إلى الجمعة) وشهري */
+
+  var ATT_MARK = { present: '✓', absent: 'غ', late: 'ت', excused: 'ع' };
+  var WEEKDAYS = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
+
+  function isoOf(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function daysBetween(from, to) {
+    var out = [], d = new Date(from + 'T00:00'), end = new Date(to + 'T00:00');
+    while (d <= end) { out.push(isoOf(d)); d.setDate(d.getDate() + 1); }
+    return out;
+  }
+
+  function monthRange(month) {
+    var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+    return { from: month + '-01', to: isoOf(new Date(y, m, 0)) };
+  }
+
+  // الأسبوع الدراسي الذي فيه اليوم: من السبت إلى الجمعة
+  function weekRange(day) {
+    var d = new Date(day + 'T00:00');
+    d.setDate(d.getDate() - (d.getDay() + 1) % 7);
+    var from = isoOf(d);
+    d.setDate(d.getDate() + 6);
+    return { from: from, to: isoOf(d) };
+  }
+
+  async function fetchAttRange(from, to) {
+    return fetchAll(function () { return sb.from('attendance').select('student_id, day, status, note, class_name').gte('day', from).lte('day', to).order('day').order('student_id'); });
+  }
+
+  function xlsxSheet(wb, used, name, aoa, widths) {
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = widths.map(function (w) { return { wch: w }; });
+    var base = String(name).replace(/[\[\]:*?\/\\]/g, ' ').trim().slice(0, 28) || 'ورقة', nm = base, k = 2;
+    while (used[nm]) nm = base + ' ' + k++;
+    used[nm] = true;
+    XLSX.utils.book_append_sheet(wb, ws, nm);
+  }
+
+  // كشف الشهر لكل شعبة: صف لكل طالب، وعمود لكل يوم من أيام الشهر
+  async function exportAttRegister() {
+    var a = attState(), month = a.expMonth || a.day.slice(0, 7), range = monthRange(month);
+    if (!(await syncData(true))) return;
+    var rows = await fetchAttRange(range.from, range.to);
+    if (!rows) return toast('تعذر جلب سجلات الحضور', true);
+    try {
+      await loadXlsx();
+      var at = {}, days = daysBetween(range.from, range.to), wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      rows.forEach(function (r) { (at[r.student_id] || (at[r.student_id] = {}))[r.day] = r.status; });
+      var classes = a.cls ? [a.cls] : attClasses(), made = 0;
+      classes.forEach(function (cls) {
+        var roll = classRoll(cls);
+        if (!roll.length) return;
+        made++;
+        var head = ['م', 'اسم الطالب'].concat(days.map(function (d) { return Number(d.slice(8)) + ' ' + WEEKDAYS[new Date(d + 'T00:00').getDay()]; }), ['غياب', 'تأخر', 'بعذر', 'أيام التسجيل', 'نسبة الحضور']);
+        var absentPerDay = days.map(function () { return 0; }), recorded = days.map(function () { return false; });
+        var body = roll.map(function (x, i) {
+          var mine = at[x.id] || {}, n = { present: 0, absent: 0, late: 0, excused: 0 };
+          var cells = days.map(function (d, j) {
+            var st = mine[d];
+            if (!st) return '';
+            n[st]++;
+            recorded[j] = true;
+            if (st === 'absent' || st === 'excused') absentPerDay[j]++;
+            return ATT_MARK[st];
+          });
+          var total = n.present + n.absent + n.late + n.excused;
+          return [i + 1, x.full_name].concat(cells, [n.absent, n.late, n.excused, total, total ? attPct(n) : '']);
+        });
+        var foot = ['', 'عدد الغائبين في اليوم'].concat(absentPerDay.map(function (v, j) { return recorded[j] ? v : ''; }));
+        xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + cls + ' — ' + monthLabel(month)], [], head].concat(body, [foot, [],
+          ['', 'المفتاح: ✓ حاضر · غ غائب · ت متأخر · ع غائب بعذر · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
+          [4, 30].concat(days.map(function () { return 7; }), [7, 7, 7, 11, 11]));
+      });
+      if (!made) return toast('لا توجد شعب فيها مسجَّلون نهائيًا', true);
+      XLSX.writeFile(wb, ('كشف-الحضور-' + (a.cls || 'كل-الشعب') + '-' + month).replace(/\s+/g, '-') + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // تقرير المدرسة لفترة: ملخص الشعب، والغياب يومًا بيوم لكل شعبة، والطلاب الأكثر غيابًا
+  async function exportAttSchool(kind) {
+    var a = attState(), day = a.expDay || a.day;
+    var range = kind === 'day' ? { from: day, to: day } : kind === 'week' ? weekRange(day) : monthRange(day.slice(0, 7));
+    var label = kind === 'day' ? 'تقرير يومي — ' + dmy(day) : kind === 'week' ? 'تقرير أسبوعي — من ' + dmy(range.from) + ' إلى ' + dmy(range.to) : 'تقرير شهري — ' + monthLabel(day.slice(0, 7));
+    if (!(await syncData(true))) return;
+    var rows = await fetchAttRange(range.from, range.to);
+    if (!rows) return toast('تعذر جلب سجلات الحضور', true);
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {}, days = daysBetween(range.from, range.to), per = {}, cell = {}, byClass = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      rows.forEach(function (r) {
+        var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, late: 0, excused: 0, notes: [] });
+        p[r.status]++;
+        if (r.note && r.status !== 'present' && p.notes.indexOf(r.note) < 0) p.notes.push(r.note);
+        var c = byClass[r.class_name] || (byClass[r.class_name] = { days: {}, n: { present: 0, absent: 0, late: 0, excused: 0 } });
+        c.days[r.day] = 1;
+        c.n[r.status]++;
+        var key = r.class_name + '|' + r.day, v = cell[key] || (cell[key] = { absent: 0, all: 0 });
+        v.all++;
+        if (r.status === 'absent' || r.status === 'excused') v.absent++;
+      });
+      var top = function (t) { return [[schoolName()], ['الحضور والغياب — ' + label], []]; };
+      var all = { present: 0, absent: 0, late: 0, excused: 0 }, classes = attClasses().filter(function (c) { return classRoll(c).length; });
+      xlsxSheet(wb, used, 'ملخص الشعب', top().concat([['الشعبة', 'الطلاب', 'أيام التسجيل', 'حاضر', 'غائب', 'متأخر', 'بعذر', 'نسبة الحضور']], classes.map(function (cls) {
+        var c = byClass[cls];
+        if (!c) return [cls, classRoll(cls).length, 0, '', '', '', '', 'لم يُسجَّل'];
+        Object.keys(all).forEach(function (k) { all[k] += c.n[k]; });
+        return [cls, classRoll(cls).length, Object.keys(c.days).length, c.n.present, c.n.absent, c.n.late, c.n.excused, attPct(c.n)];
+      }), [['المدرسة', classes.reduce(function (t, c) { return t + classRoll(c).length; }, 0), '', all.present, all.absent, all.late, all.excused, attPct(all)]]),
+        [18, 9, 12, 9, 9, 9, 9, 12]);
+      if (kind !== 'day') {
+        xlsxSheet(wb, used, 'الغياب حسب اليوم', top().concat([['الشعبة'].concat(days.map(function (d) { return Number(d.slice(8)) + ' ' + WEEKDAYS[new Date(d + 'T00:00').getDay()]; }), ['المجموع'])],
+          classes.map(function (cls) {
+            var sum = 0;
+            return [cls].concat(days.map(function (d) { var v = cell[cls + '|' + d]; if (v) sum += v.absent; return v ? v.absent : ''; }), [sum]);
+          }), [[], ['', 'العدد: الغائبون (بعذر وبدونه) في الشعبة ذلك اليوم · فارغ: لم يُسجَّل حضور الشعبة']]),
+          [18].concat(days.map(function () { return 8; }), [10]));
+      }
+      var min = kind === 'day' ? 1 : kind === 'week' ? 2 : 3;
+      var list = S.students.filter(function (x) { var p = per[x.id]; return p && (kind === 'day' ? p.absent + p.late + p.excused >= 1 : p.absent >= min); })
+        .sort(function (p, q) { return classRank(p.class_name) - classRank(q.class_name) || per[q.id].absent - per[p.id].absent || p.full_name.localeCompare(q.full_name, 'ar'); });
+      xlsxSheet(wb, used, kind === 'day' ? 'الغائبون والمتأخرون' : 'الأكثر غيابًا',
+        top().concat([kind === 'day' ? [] : ['', 'من غاب ' + min + ' أيام فأكثر بلا عذر في الفترة'], ['م', 'الطالب', 'الشعبة', 'غائب', 'متأخر', 'بعذر', 'ملاحظات', 'ولي الأمر', 'هاتف ولي الأمر', 'واتساب ولي الأمر']], list.map(function (x, i) {
+          var p = per[x.id];
+          return [i + 1, x.full_name, x.class_name || '', p.absent, p.late, p.excused, p.notes.join(' · '), x.guardian_name || '', plainPhone(x.phone), plainPhone(x.whatsapp)];
+        })), [5, 32, 14, 7, 7, 7, 30, 26, 16, 16]);
+      XLSX.writeFile(wb, ('تقرير-الحضور-' + (kind === 'day' ? 'يومي-' + day : kind === 'week' ? 'أسبوعي-' + range.from : 'شهري-' + day.slice(0, 7))) + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function attExportHtml() {
+    var a = attState(), month = a.expMonth || a.day.slice(0, 7), day = a.expDay || a.day, wk = weekRange(day);
+    return '<div class="card no-print"><h2>تصدير الكشوف (Excel)</h2>' +
+      '<div class="toolbar" style="align-items:center;margin-top:8px">' +
+        '<span class="monthpick"><label class="field" for="att-exp-month">الشهر</label><input type="month" id="att-exp-month" value="' + month + '"></span>' +
+        '<button type="button" class="btn primary" data-attregister>' + (a.cls ? 'كشف ' + esc(a.cls) + ' الشهري بالأسماء' : 'كشوف الشعب الشهرية بالأسماء (ورقة لكل شعبة)') + '</button></div>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<span class="monthpick"><label class="field" for="att-exp-day">تقرير المدرسة عن يوم</label><input type="date" id="att-exp-day" max="' + todayISO() + '" value="' + day + '"></span>' +
+        '<button type="button" class="btn" data-attschool="day">يومي</button>' +
+        '<button type="button" class="btn" data-attschool="week" title="من ' + dmy(wk.from) + ' إلى ' + dmy(wk.to) + '">أسبوعي (' + dmy(wk.from).slice(0, 5) + '–' + dmy(wk.to).slice(0, 5) + ')</button>' +
+        '<button type="button" class="btn" data-attschool="month">شهري (' + monthLabel(day.slice(0, 7)) + ')</button></div>' +
+      '<p class="hint" style="margin:0">الكشف الشهري: صف لكل طالب وعمود لكل يوم (✓ حاضر · غ غائب · ت متأخر · ع بعذر). تقارير المدرسة: ملخص الشعب، والغياب يومًا بيوم، والأكثر غيابًا. الأسبوع من السبت إلى الجمعة.</p></div>';
+  }
+
   function renderAttendance() {
     var a = attState();
     if (S.attMissing) {
@@ -6385,7 +6539,7 @@
           return '<option' + (c === a.cls ? ' selected' : '') + '>' + esc(c) + '</option>';
         }).join('') + '</select>' +
         (a.view === 'day' ? '<span class="monthpick"><label class="field" for="att-day">اليوم</label><input type="date" id="att-day" max="' + todayISO() + '" value="' + a.day + '"></span>' : '') + '</div>' +
-      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml());
+      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml()) + attExportHtml();
   }
 
   async function saveAttendance() {
@@ -6508,6 +6662,10 @@
       exportAttDayXlsx();
     } else if (e.target.closest('[data-attrepxlsx]')) {
       exportAttReportXlsx();
+    } else if (e.target.closest('[data-attregister]')) {
+      exportAttRegister();
+    } else if ((el = e.target.closest('[data-attschool]'))) {
+      exportAttSchool(el.getAttribute('data-attschool'));
     }
   });
 
@@ -6523,6 +6681,12 @@
       if (!el.value || !leaveAttDraft()) { el.value = a.day; return; }
       a.draft = {};
       a.day = el.value;
+      render();
+    } else if (el.id === 'att-exp-month') {
+      a.expMonth = el.value;
+      render();
+    } else if (el.id === 'att-exp-day') {
+      if (el.value) a.expDay = el.value;
       render();
     } else if (el.id === 'att-from') {
       a.from = el.value;
