@@ -164,15 +164,122 @@ begin
     else 'لم يُسجَّل غياب هذه الشعب اليوم ' || to_char(att_today(), 'DD/MM/YYYY') || E':\n' || missing end);
 end $$;
 
+-- Arabic text in one form for matching names: no diacritics or tatweel, أ/إ/آ → ا, ى → ي, ة → ه, Western digits,
+-- and «عبد الله» / «أبو بكر» written as one word, so «عبدالله» and «عبد الله» are the same.
+create or replace function public.att_norm(p text) returns text
+language sql immutable as $$
+  select regexp_replace(btrim(regexp_replace(
+    translate(regexp_replace(lower(coalesce(p, '')), '[ًٌٍَُِّْـ]', '', 'g'),
+              'أإآٱىة٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹،؛',
+              'اااايه01234567890123456789,,'),
+    '\s+', ' ', 'g')), '(^| )(عبد|ابو) ', '\1\2', 'g')
+$$;
+
+-- Students of a class whose name is, or starts with, the given words (first name, or first and father's name…).
+create or replace function public.att_name_hits(p_class text, q text) returns table (pos int, id uuid, full_name text)
+language sql stable security definer set search_path = public as $$
+  select r.pos, r.id, r.full_name from att_roll(p_class) r
+  where att_norm(r.full_name) = q or left(att_norm(r.full_name), length(q) + 1) = q || ' '
+$$;
+
+-- Reads a teacher's list of absentees: numbers from the class list and/or names (first names are enough),
+-- separated by commas, new lines or « و ». Returns the students found and, if any entry is unclear,
+-- a description of each problem (nothing is saved until every entry is clear).
+create or replace function public.att_pick(p_class text, p_text text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  t text := att_norm(p_text);
+  chunk text; w text; words text[]; i int; part text; n int; total int;
+  ids uuid[] := '{}'; probs text[] := '{}'; pending text[];
+begin
+  select count(*) into total from att_roll(p_class);
+  if t in ('0', 'لا يوجد', 'لايوجد', 'لا احد', 'لا غياب', 'الكل حاضر', 'لا احد غائب') then
+    return jsonb_build_object('ids', '[]'::jsonb, 'problems', '');
+  end if;
+  t := regexp_replace(t, '\s*(,|\n| و )\s*', ',', 'g');
+  foreach chunk in array string_to_array(t, ',') loop
+    chunk := btrim(chunk);
+    continue when chunk = '';
+    if chunk ~ '^[0-9][0-9 \-]*$' then
+      foreach w in array regexp_split_to_array(chunk, '[ \-]+') loop
+        continue when w = '';
+        if w::int < 1 or w::int > total then
+          probs := probs || ('الرقم ' || w || ' ليس في الشعبة (من 1 إلى ' || total || ')');
+        else
+          ids := ids || (select r.id from att_roll(p_class) r where r.pos = w::int);
+        end if;
+      end loop;
+      continue;
+    end if;
+    -- the entry as one name; if no student has it, word by word («أحمد يوسف» = two students), keeping عبد/أبو with the next word
+    pending := array[chunk];
+    if position(' ' in chunk) > 0 and not exists (select 1 from att_name_hits(p_class, chunk)) then
+      pending := '{}';
+      words := string_to_array(chunk, ' ');
+      i := 1;
+      while i <= array_length(words, 1) loop
+        part := words[i];
+        if part in ('عبد', 'ابو', 'ام', 'بن', 'ابن') and i < array_length(words, 1) then part := part || ' ' || words[i + 1]; i := i + 1; end if;
+        pending := pending || part;
+        i := i + 1;
+      end loop;
+    end if;
+    foreach w in array pending loop
+      select count(*) into n from att_name_hits(p_class, w);
+      if n = 1 then
+        ids := ids || (select h.id from att_name_hits(p_class, w) h);
+      elsif n = 0 then
+        probs := probs || ('«' || w || '»: لا يوجد في الشعبة طالب بهذا الاسم');
+      else
+        probs := probs || ('«' || w || '» يطابق ' || n || ' طلاب: ' ||
+          (select string_agg(h.pos || ') ' || h.full_name, '، ' order by h.pos) from att_name_hits(p_class, w) h));
+      end if;
+    end loop;
+  end loop;
+  return jsonb_build_object('ids', coalesce((select jsonb_agg(distinct x) from unnest(ids) x), '[]'::jsonb), 'problems', array_to_string(probs, E'\n'));
+end $$;
+
+-- What the bot says after a class is chosen: no list of names, only how to answer.
+create or replace function public.att_bot_prompt(p_class text) returns text
+language sql stable security definer set search_path = public as $$
+  select 'الشعبة: ' || p_class || ' (' || (select count(*) from att_roll(p_class)) || ' طالبًا)' ||
+    coalesce(E'\nسُجّل غيابها اليوم سابقًا؛ الغائبون الآن: ' || nullif((
+      select string_agg(r.full_name, '، ' order by r.pos) from att_roll(p_class) r
+      where exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused'))), ''),
+      case when exists (select 1 from attendance a where a.day = att_today() and a.class_name = p_class) then E'\nسُجّل غيابها اليوم سابقًا: لا غائبين.' else '' end) ||
+    E'\n\nأرسل أسماء الغائبين الأولى مفصولة بفاصلة (مثل: أحمد، يوسف) أو أرقامهم، أو 0 إن لم يغب أحد.' ||
+    E'\nلعرض الأسماء مرقّمة أرسل «قائمة» · «إلغاء» للخروج'
+$$;
+
+-- Reads the absentees for the class in the conversation; saves when every entry is clear.
+create or replace function public.att_bot_absent(p_pk text, p_class text, p_text text, p_who text) returns text
+language plpgsql security definer set search_path = public as $$
+declare res jsonb := att_pick(p_class, p_text); ids uuid[]; names text;
+begin
+  if res ->> 'problems' <> '' then
+    update attendance_bot_state set step = 'absent', class_name = p_class, updated_at = now() where phone = p_pk;
+    return 'لم يُحفظ شيء بعد — في الرسالة ما يحتاج توضيحًا:' || E'\n' || (res ->> 'problems') ||
+      E'\n\nأعد إرسال الغائبين كلهم (بالأرقام أو بالاسم الأول واسم الأب)، أو «قائمة» لعرض الأسماء.';
+  end if;
+  select array_agg(x::uuid) into ids from jsonb_array_elements_text(res -> 'ids') x;
+  select string_agg('• ' || r.full_name, E'\n' order by r.pos) into names from att_roll(p_class) r where r.id = any(coalesce(ids, '{}'));
+  perform att_save(p_class, ids, p_who || ' (واتساب)');
+  delete from attendance_bot_state where phone = p_pk;
+  return '✅ سُجّل غياب ' || p_class || ' ليوم ' || to_char(att_today(), 'DD/MM/YYYY') || E'\n' ||
+    case when names is null then 'لا غائبين — الجميع حاضر.' else 'الغائبون (' || array_length(ids, 1) || E'):\n' || names end ||
+    E'\n\nللتعديل أرسل «غياب» مرة أخرى.';
+end $$;
+
 -- The WhatsApp conversation. n8n passes each incoming message; the reply text comes back ('' = do not reply).
--- «غياب» → numbered classes → class number → numbered students → numbers of the absent (or 0) → saved.
+--   «غياب» → numbered classes → class number → names (or numbers) of the absent, or 0 → saved.
+--   In one message: «غياب 3 أحمد، يوسف» or «غياب 3 0». «قائمة» shows the class list; «إلغاء» stops.
 create or replace function public.absence_bot(p_key text, p_phone text, p_text text) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   ph text := att_phone(p_phone);
   pk text := right(att_phone(p_phone), 9);   -- conversation key: same teacher whatever form the number arrives in
-  msg text := btrim(translate(coalesce(p_text, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹،', '01234567890123456789,'));
-  who text; st attendance_bot_state; cls text; total int; picks int[]; bad int[]; ids uuid[]; names text; reply text; recorded boolean;
+  msg text := att_norm(p_text);
+  who text; st attendance_bot_state; cls text; rest text; reply text; cnum text;
 begin
   if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the attendance screen'); end if;
   -- the number is matched on its last 9 digits, so 010…, +2010…, 0020… and a country code other than Egypt all match
@@ -183,63 +290,60 @@ begin
 
   select * into st from attendance_bot_state where phone = pk and updated_at > now() - interval '30 minutes';
 
-  if msg in ('إلغاء', 'الغاء') then
+  if msg in ('الغاء', 'إلغاء') then
     delete from attendance_bot_state where phone = pk;
     return jsonb_build_object('reply', case when st.phone is null then '' else 'أُلغي تسجيل الغياب.' end);
   end if;
 
-  if msg in ('غياب', 'الغياب', 'غ') then
-    select string_agg(c.pos || ') ' || c.class_name ||
-      case when exists (select 1 from attendance a where a.day = att_today() and a.class_name = c.class_name) then ' ✓' else '' end, E'\n' order by c.pos)
-      into reply from att_classes() c;
-    if reply is null then return jsonb_build_object('reply', 'لا توجد شعب فيها طلاب مسجَّلون.'); end if;
+  -- «غياب» alone, or «غياب <رقم الشعبة> [الغائبون]»
+  if msg ~ '^(ال)?غياب( |$)' or msg = 'غ' then
+    rest := btrim(regexp_replace(msg, '^(ال)?غياب', ''));
+    if msg = 'غ' then rest := ''; end if;
     insert into attendance_bot_state (phone, step, class_name, updated_at) values (pk, 'class', '', now())
       on conflict (phone) do update set step = 'class', class_name = '', updated_at = now();
-    return jsonb_build_object('reply', 'أهلًا ' || who || E'\nتسجيل غياب يوم ' || to_char(att_today(), 'DD/MM/YYYY') ||
-      E'\nأرسل رقم الشعبة:\n\n' || reply || E'\n\n(✓ سُجّل غيابها اليوم؛ اختيارها يعدّل التسجيل) · «إلغاء» للخروج');
+    if rest = '' then
+      select string_agg(c.pos || ') ' || c.class_name ||
+        case when exists (select 1 from attendance a where a.day = att_today() and a.class_name = c.class_name) then ' ✓' else '' end, E'\n' order by c.pos)
+        into reply from att_classes() c;
+      if reply is null then return jsonb_build_object('reply', 'لا توجد شعب فيها طلاب مسجَّلون.'); end if;
+      return jsonb_build_object('reply', 'أهلًا ' || who || E'\nتسجيل غياب يوم ' || to_char(att_today(), 'DD/MM/YYYY') ||
+        E'\nأرسل رقم الشعبة:\n\n' || reply ||
+        E'\n\n✓ سُجّل غيابها اليوم (اختيارها يعدّل التسجيل)\nاختصار في رسالة واحدة: «غياب 3 أحمد، يوسف» أو «غياب 3 0»');
+    end if;
+    msg := rest;
+    st.step := 'class';
+    st.phone := pk;
   end if;
 
   if st.phone is null then return jsonb_build_object('reply', '', 'note', 'not in a conversation: send «غياب» first', 'teacher', who); end if;
 
+  -- choosing the class: «3», or «3 أحمد، يوسف» to choose it and send the absentees at once
   if st.step = 'class' then
-    if msg !~ '^[0-9]+$' then return jsonb_build_object('reply', 'أرسل رقم الشعبة فقط (مثل 3)، أو «إلغاء».'); end if;
-    select c.class_name into cls from att_classes() c where c.pos = msg::int;
-    if cls is null then return jsonb_build_object('reply', 'لا توجد شعبة بهذا الرقم. أرسل رقمًا من القائمة.'); end if;
-    select string_agg(r.pos || ') ' || r.full_name ||
-      case when exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused')) then ' (غائب)' else '' end, E'\n' order by r.pos)
-      into reply from att_roll(cls) r;
+    cnum := substring(msg from '^([0-9]+)');
+    if cnum is null then return jsonb_build_object('reply', 'أرسل رقم الشعبة (مثل 3)، أو «إلغاء».'); end if;
+    select c.class_name into cls from att_classes() c where c.pos = cnum::int;
+    if cls is null then return jsonb_build_object('reply', 'لا توجد شعبة بالرقم ' || cnum || '. أرسل «غياب» لعرض الشعب.'); end if;
+    rest := btrim(regexp_replace(substring(msg from '^[0-9]+(.*)$'), '^[ :\-]+', ''));
     update attendance_bot_state set step = 'absent', class_name = cls, updated_at = now() where phone = pk;
-    return jsonb_build_object('reply', 'طلاب ' || cls || E':\n\n' || reply ||
-      E'\n\nأرسل أرقام الغائبين مفصولة بمسافة أو فاصلة (مثل: 3 7 12)\nأو 0 إن لم يغب أحد.');
+    if rest = '' then return jsonb_build_object('reply', att_bot_prompt(cls)); end if;
+    return jsonb_build_object('reply', att_bot_absent(pk, cls, rest, who));
   end if;
 
   if st.step = 'absent' then
-    cls := st.class_name;
-    select count(*) into total from att_roll(cls);
-    if msg in ('0', 'لا يوجد', 'لايوجد', 'لا أحد', 'لا احد') then
-      picks := '{}';
-    elsif msg ~ '^[0-9 ,\-]+$' then
-      select array_agg(distinct v::int) into picks from regexp_split_to_table(msg, '[ ,\-]+') v where v <> '';
-    else
-      return jsonb_build_object('reply', 'أرسل أرقام الغائبين فقط (مثل: 3 7 12)، أو 0 إن لم يغب أحد، أو «إلغاء».');
+    if msg in ('قائمه', 'القائمه', 'الاسماء', 'اسماء') then
+      select string_agg(r.pos || ') ' || r.full_name, E'\n' order by r.pos) into reply from att_roll(st.class_name) r;
+      update attendance_bot_state set updated_at = now() where phone = pk;
+      return jsonb_build_object('reply', 'طلاب ' || st.class_name || E':\n\n' || coalesce(reply, '—') ||
+        E'\n\nأرسل أرقام الغائبين أو أسماءهم، أو 0 إن لم يغب أحد.');
     end if;
-    select array_agg(p) into bad from unnest(coalesce(picks, '{}')) p where p < 1 or p > total;
-    if bad is not null then
-      return jsonb_build_object('reply', 'هذه الأرقام ليست في القائمة: ' || array_to_string(bad, '، ') || E'\nأرسل الأرقام من 1 إلى ' || total || '.');
-    end if;
-    select array_agg(r.id), string_agg('• ' || r.full_name, E'\n' order by r.pos) into ids, names
-      from att_roll(cls) r where r.pos = any(coalesce(picks, '{}'));
-    perform att_save(cls, ids, who || ' (واتساب)');
-    delete from attendance_bot_state where phone = pk;
-    return jsonb_build_object('reply', '✅ سُجّل غياب ' || cls || ' ليوم ' || to_char(att_today(), 'DD/MM/YYYY') || E'\n' ||
-      case when names is null then 'لا غائبين — الجميع حاضر.' else 'الغائبون (' || array_length(ids, 1) || E'):\n' || names end ||
-      E'\n\nللتعديل أرسل «غياب» مرة أخرى.');
+    return jsonb_build_object('reply', att_bot_absent(pk, st.class_name, msg, who));
   end if;
 
   return jsonb_build_object('reply', '');
 end $$;
 
 revoke all on function public.att_today(), public.att_phone(text), public.att_classes(), public.att_roll(text), public.att_save(text, uuid[], text),
-  public.att_token_name(text), public.att_bot_ok(text) from public, anon, authenticated;
+  public.att_token_name(text), public.att_bot_ok(text), public.att_norm(text), public.att_name_hits(text, text), public.att_pick(text, text),
+  public.att_bot_prompt(text), public.att_bot_absent(text, text, text, text) from public, anon, authenticated;
 grant execute on function public.absence_classes(text), public.absence_roll(text, text), public.absence_submit(text, text, uuid[]),
   public.absence_links(text), public.absence_missing(text), public.absence_bot(text, text, text) to anon, authenticated;

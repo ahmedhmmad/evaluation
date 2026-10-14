@@ -3,13 +3,23 @@
   "nodes": [
     {
       "parameters": {
-        "rule": { "interval": [{ "field": "cronExpression", "expression": "45 7 * * 0-4" }] }
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 7 * * 0-4"
+            }
+          ]
+        }
       },
       "id": "c2b2c0de-0001-4000-8000-000000000001",
       "name": "7:45 صباحًا (الأحد–الخميس)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-1200, 100]
+      "position": [
+        -1200,
+        100
+      ]
     },
     {
       "parameters": {
@@ -18,9 +28,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
-            { "name": "Authorization", "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -32,25 +51,36 @@
       "name": "قائمة المعلمين وروابطهم",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-980, 100]
+      "position": [
+        -980,
+        100
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const base = 'https://ahmedhmmad.github.io/evaluation/absence.html?t=';\nconst rows = $input.all().flatMap(i => Array.isArray(i.json) ? i.json : [i.json]).filter(r => r && r.phone && r.token);\nreturn rows.map(r => ({ json: { number: r.phone, text: `صباح الخير ${r.name}\\n\\nرابط تسجيل غياب اليوم:\\n${base}${r.token}\\n\\nأو أرسل كلمة «غياب» في هذه المحادثة.` } }));"
+        "jsCode": "const base = 'https://ahmedhmmad.github.io/evaluation/absence.html?t=';\nconst rows = $input.all().flatMap(i => Array.isArray(i.json) ? i.json : [i.json]).filter(r => r && r.phone && r.token);\nreturn rows.map(r => ({ json: { number: r.phone, text: `صباح الخير ${r.name}\\n\\nرابط تسجيل غياب اليوم:\\n${base}${r.token}\\n\\nأو اكتب هنا: «غياب» ثم رقم الشعبة وأسماء الغائبين الأولى، مثل: غياب 3 أحمد، يوسف` } }));"
       },
       "id": "c2b2c0de-0003-4000-8000-000000000003",
       "name": "تجهيز الرسائل",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-760, 100]
+      "position": [
+        -760,
+        100
+      ]
     },
     {
-      "parameters": { "options": {} },
+      "parameters": {
+        "options": {}
+      },
       "id": "c2b2c0de-0004-4000-8000-000000000004",
       "name": "واحدة تلو الأخرى",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [-540, 100]
+      "position": [
+        -540,
+        100
+      ]
     },
     {
       "parameters": {
@@ -59,8 +89,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "PUT_EVOLUTION_API_KEY" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "PUT_EVOLUTION_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -72,27 +108,45 @@
       "name": "إرسال الرابط",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-320, 20],
+      "position": [
+        -320,
+        20
+      ],
       "onError": "continueRegularOutput"
     },
     {
-      "parameters": { "amount": 8 },
+      "parameters": {
+        "amount": 8
+      },
       "id": "c2b2c0de-0006-4000-8000-000000000006",
       "name": "انتظار",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [-100, 20],
+      "position": [
+        -100,
+        20
+      ],
       "webhookId": "c2b2c0de-0006-4000-8000-0000000000aa"
     },
     {
       "parameters": {
-        "rule": { "interval": [{ "field": "cronExpression", "expression": "30 9 * * 0-4" }] }
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 9 * * 0-4"
+            }
+          ]
+        }
       },
       "id": "c2b2c0de-0007-4000-8000-000000000007",
       "name": "9:30 صباحًا (الأحد–الخميس)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-1200, 420]
+      "position": [
+        -1200,
+        420
+      ]
     },
     {
       "parameters": {
@@ -101,9 +155,18 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
-            { "name": "Authorization", "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -115,7 +178,10 @@
       "name": "الشعب التي لم يُسجَّل غيابها",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-980, 420]
+      "position": [
+        -980,
+        420
+      ]
     },
     {
       "parameters": {
@@ -125,7 +191,10 @@
       "name": "تجهيز التنبيه",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-760, 420]
+      "position": [
+        -760,
+        420
+      ]
     },
     {
       "parameters": {
@@ -134,8 +203,14 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "PUT_EVOLUTION_API_KEY" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "PUT_EVOLUTION_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
@@ -147,21 +222,118 @@
       "name": "إرسال التنبيه للإدارة",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-540, 420],
+      "position": [
+        -540,
+        420
+      ],
       "onError": "continueRegularOutput"
     }
   ],
   "connections": {
-    "7:45 صباحًا (الأحد–الخميس)": { "main": [[{ "node": "قائمة المعلمين وروابطهم", "type": "main", "index": 0 }]] },
-    "قائمة المعلمين وروابطهم": { "main": [[{ "node": "تجهيز الرسائل", "type": "main", "index": 0 }]] },
-    "تجهيز الرسائل": { "main": [[{ "node": "واحدة تلو الأخرى", "type": "main", "index": 0 }]] },
-    "واحدة تلو الأخرى": { "main": [[], [{ "node": "إرسال الرابط", "type": "main", "index": 0 }]] },
-    "إرسال الرابط": { "main": [[{ "node": "انتظار", "type": "main", "index": 0 }]] },
-    "انتظار": { "main": [[{ "node": "واحدة تلو الأخرى", "type": "main", "index": 0 }]] },
-    "9:30 صباحًا (الأحد–الخميس)": { "main": [[{ "node": "الشعب التي لم يُسجَّل غيابها", "type": "main", "index": 0 }]] },
-    "الشعب التي لم يُسجَّل غيابها": { "main": [[{ "node": "تجهيز التنبيه", "type": "main", "index": 0 }]] },
-    "تجهيز التنبيه": { "main": [[{ "node": "إرسال التنبيه للإدارة", "type": "main", "index": 0 }]] }
+    "7:45 صباحًا (الأحد–الخميس)": {
+      "main": [
+        [
+          {
+            "node": "قائمة المعلمين وروابطهم",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "قائمة المعلمين وروابطهم": {
+      "main": [
+        [
+          {
+            "node": "تجهيز الرسائل",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "تجهيز الرسائل": {
+      "main": [
+        [
+          {
+            "node": "واحدة تلو الأخرى",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "واحدة تلو الأخرى": {
+      "main": [
+        [],
+        [
+          {
+            "node": "إرسال الرابط",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "إرسال الرابط": {
+      "main": [
+        [
+          {
+            "node": "انتظار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "انتظار": {
+      "main": [
+        [
+          {
+            "node": "واحدة تلو الأخرى",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9:30 صباحًا (الأحد–الخميس)": {
+      "main": [
+        [
+          {
+            "node": "الشعب التي لم يُسجَّل غيابها",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "الشعب التي لم يُسجَّل غيابها": {
+      "main": [
+        [
+          {
+            "node": "تجهيز التنبيه",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "تجهيز التنبيه": {
+      "main": [
+        [
+          {
+            "node": "إرسال التنبيه للإدارة",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "pinData": {},
-  "settings": { "executionOrder": "v1", "timezone": "Africa/Cairo" }
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo"
+  }
 }
