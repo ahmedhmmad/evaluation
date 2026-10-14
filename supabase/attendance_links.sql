@@ -173,9 +173,12 @@ declare
   msg text := btrim(translate(coalesce(p_text, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹،', '01234567890123456789,'));
   who text; st attendance_bot_state; cls text; total int; picks int[]; bad int[]; ids uuid[]; names text; reply text; recorded boolean;
 begin
-  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key'); end if;
-  select name into who from attendance_tokens where active and att_phone(phone) = ph and ph <> '' limit 1;
-  if who is null then return jsonb_build_object('reply', ''); end if;   -- not a registered teacher: stay silent
+  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the attendance screen'); end if;
+  -- the number is matched on its last 9 digits, so 010…, +2010…, 0020… and a country code other than Egypt all match
+  select name into who from attendance_tokens
+  where active and length(ph) >= 9 and right(att_phone(phone), 9) = right(ph, 9) limit 1;
+  -- not a registered teacher: stay silent (the note and number are for the n8n execution log only)
+  if who is null then return jsonb_build_object('reply', '', 'note', 'number not registered', 'phone', ph); end if;
 
   select * into st from attendance_bot_state where phone = ph and updated_at > now() - interval '30 minutes';
 
@@ -195,7 +198,7 @@ begin
       E'\nأرسل رقم الشعبة:\n\n' || reply || E'\n\n(✓ سُجّل غيابها اليوم؛ اختيارها يعدّل التسجيل) · «إلغاء» للخروج');
   end if;
 
-  if st.phone is null then return jsonb_build_object('reply', ''); end if;  -- not in a conversation: ignore
+  if st.phone is null then return jsonb_build_object('reply', '', 'note', 'not in a conversation: send «غياب» first', 'teacher', who); end if;
 
   if st.step = 'class' then
     if msg !~ '^[0-9]+$' then return jsonb_build_object('reply', 'أرسل رقم الشعبة فقط (مثل 3)، أو «إلغاء».'); end if;
