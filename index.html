@@ -402,11 +402,13 @@
   #print-sheet.att-regs table.att-reg tr.tc td { height: 1.9em; }
   #print-sheet.att-regs table.att-reg tr { break-inside: avoid; page-break-inside: avoid; }
   #print-sheet.att-regs table.att-reg thead { display: table-header-group; }
+  #print-sheet.att-regs table.att-reg thead th { white-space: nowrap; padding-inline: 0; font-size: .9em; }
   #print-sheet.att-regs .att-sub { display: flex; gap: 3em; margin: 0 0 .5em; font-size: 1.15em; }
   #print-sheet.att-regs table.att-reg { width: 100%; table-layout: fixed; border-collapse: collapse; }
   #print-sheet.att-regs table.att-reg th, #print-sheet.att-regs table.att-reg td { padding: .22em .1em; border: 1px solid #9aa3b2; text-align: center; line-height: 1.35; overflow: hidden; }
   #print-sheet.att-regs table.att-reg th:nth-child(2), #print-sheet.att-regs table.att-reg td.nm { width: 62mm; text-align: right; white-space: nowrap; padding-inline-start: .4em; }
   #print-sheet.att-regs table.att-reg th:first-child { width: 11mm; }
+  #print-sheet.att-regs table.att-reg th.tot { width: 15mm; }
   #print-sheet.att-regs table.att-reg tbody td:first-child { white-space: nowrap; }
   #print-sheet.att-regs table.att-reg .fr { background: #e5e7eb; }
   #print-sheet.att-regs table.att-reg td.ab { color: #d92d20; font-weight: 800; }
@@ -942,7 +944,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 12';
+  var APP_BUILD = '15/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7031,7 +7033,7 @@
         '<div class="att-title"><b>' + esc(schoolName()) + '</b><span>' + (p.teacher ? 'سجل الحضور والغياب (نسخة المعلم)' : 'كشف الحضور والغياب') + ' — ' + monthLabel(p.month) + '</span><span></span></div>' +
         '<div class="att-sub"><span>الصف: <b>' + esc(cls) + '</b></span><span>مربي الصف: <b>' + esc(classTeacher(cls) || '..................................') + '</b></span><span>عدد الطلاب: <b>' + roll.length + '</b></span></div>' +
         '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
-          (p.teacher ? '' : '<th>حضور</th><th>غياب</th>') + '</tr></thead>' +
+          (p.teacher ? '' : '<th class="tot">حضور</th><th class="tot">غياب</th>') + '</tr></thead>' +
         '<tbody>' + body + (p.teacher ? '</tbody></table>' : '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>') +
         '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'الأعمدة المظلّلة: الجمعة والسبت والعطل' : 'المفتاح: ✓ حاضر · غـ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
@@ -7047,7 +7049,7 @@
   function fitRegisterPages(root) {
     var maxH = (REPORT.page.width - 2 * REPORT.page.marginY - 4) * 96 / 25.4;
     Array.prototype.forEach.call(root.querySelectorAll('.att-page'), function (pg) {
-      var size = 14, names = pg.querySelectorAll('td.nm');
+      var size = 14, names = pg.querySelectorAll('td.nm, thead th'); // الأسماء وأرقام الأيام لا تُقص ولا تنكسر
       var tooBig = function () {
         if (pg.offsetHeight > maxH) return true;
         for (var i = 0; i < names.length; i++) if (names[i].scrollWidth > names[i].clientWidth + 1) return true;
