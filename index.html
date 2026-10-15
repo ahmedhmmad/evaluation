@@ -393,6 +393,7 @@
   #print-sheet .pe-summary > div { border: .5pt solid var(--rule); border-top: 1.5pt solid var(--gold); padding: .3em; text-align: center; }
   #print-sheet .pe-summary .k { display: block; font-size: .9em; color: var(--navy); }
   #print-sheet .pe-summary .v { display: block; font-family: var(--font-head); font-size: 1.5em; font-weight: 800; color: var(--navy-dark); line-height: 1.25; }
+  #print-sheet table.rz td.big { font-size: 1.25em; }
   #print-sheet .att-notes { margin-top: 1.2em; border: 1px solid #b9c0cc; border-radius: 6px; padding: .6em .9em; min-height: 85mm; box-sizing: border-box; }
   #print-sheet .att-notes .att-lines { white-space: pre-wrap; min-height: 72mm; line-height: 2.2em; margin-top: .3em;
     background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(2.2em - 1px), #c9ced8 calc(2.2em - 1px), #c9ced8 2.2em); }
@@ -944,7 +945,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '16/10 — 4';
+  var APP_BUILD = '16/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3839,22 +3840,22 @@
     var families = Object.keys(head).length, prev = '', size = {};
     list.forEach(function (r) { size[r.key] = (size[r.key] || 0) + 1; });
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
-    var phone = function (v, span) { return '<td class="c" dir="ltr" style="white-space:nowrap' + (span > 1 ? ';vertical-align:middle' : '') + '"' + (span > 1 ? ' rowspan="' + span + '"' : '') + '>' + esc(plainPhone(v)) + '</td>'; };
+    var phone = function (v, span) { return '<td class="c big" dir="ltr" style="white-space:nowrap' + (span > 1 ? ';vertical-align:middle' : '') + '"' + (span > 1 ? ' rowspan="' + span + '"' : '') + '>' + esc(plainPhone(v)) + '</td>'; };
     // جوال الطالب، وإن كان هو رقم ولي الأمر نفسه فرقم الواتساب بدله (إن اختلف)، حتى لا يتكرر الرقم
     var same = function (p, q) { var a = latinDigits(String(p || '')).replace(/\D/g, '').slice(-10), b = latinDigits(String(q || '')).replace(/\D/g, '').slice(-10); return a.length >= 8 && a === b; };
     var secondPhone = function (x) {
       var main = x.phone || x.whatsapp, st = stVal(x, 'student_phone');
-      if (st && !same(st, main)) return '<td class="c" dir="ltr" style="white-space:nowrap">' + esc(plainPhone(st)) + '</td>';
-      if (x.whatsapp && !same(x.whatsapp, main)) return '<td class="c" style="white-space:nowrap"><span dir="ltr">' + esc(plainPhone(x.whatsapp)) + '</span> <small>(واتساب)</small></td>';
+      if (st && !same(st, main)) return '<td class="c big" dir="ltr" style="white-space:nowrap">' + esc(plainPhone(st)) + '</td>';
+      if (x.whatsapp && !same(x.whatsapp, main)) return '<td class="c big" style="white-space:nowrap"><span dir="ltr">' + esc(plainPhone(x.whatsapp)) + '</span> <small>(واتساب)</small></td>';
       return '<td class="c" style="color:#7d8597">' + (st ? 'نفس رقم ولي الأمر' : '—') + '</td>';
     };
     // العائلة وهاتف ولي الأمر خانة واحدة تجمع الإخوة: يعرف المشرف أنهم لأسرة واحدة ويتصل برقم واحد
     var rows = list.map(function (r, i) {
       var first = r.key !== prev, n = size[r.key];
       prev = r.key;
-      var famCell = first ? '<td' + (n > 1 ? ' rowspan="' + n + '" style="vertical-align:middle;background:#eef2f7"' : '') + '><b>' + esc(head[r.key] || '—') + '</b>' +
+      var famCell = first ? '<td class="big"' + (n > 1 ? ' rowspan="' + n + '" style="vertical-align:middle;background:#eef2f7"' : '') + '><b>' + esc(head[r.key] || '—') + '</b>' +
         (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') + '</td>' : '';
-      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '><td class="c" style="white-space:nowrap;padding-inline:.2em">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(r.name) + '</b>' + rsvMark(r.x) + '</td><td class="c" style="white-space:nowrap">' + esc(r.x.class_name || '—') + '</td>' + famCell +
+      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '><td class="c" style="white-space:nowrap;padding-inline:.2em">' + (i + 1) + '</td><td class="big" style="white-space:nowrap"><b>' + esc(r.name) + '</b>' + rsvMark(r.x) + '</td><td class="c" style="white-space:nowrap">' + esc(r.x.class_name || '—') + '</td>' + famCell +
         '<td>' + esc(r.m.pickup || '') + '</td>' + (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + secondPhone(r.x) +
         '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td><td></td></tr>';
     }).join('');
