@@ -944,7 +944,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '16/10 — 3';
+  var APP_BUILD = '16/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4041,12 +4041,7 @@
         var sharesT = list.reduce(function (t, r) { return t + (r.exempt ? 0 : r.share); }, 0);
         var famRow = '<tr style="border-top:3px solid var(--line);background:#f8fafc"><td colspan="8"><b>أسرة ' + esc(familyName(list[0].x) || list[0].x.full_name) + '</b> — المطلوب للأسرة ' + plainNum(dueT) + ' · المدفوع في الإيصالات ' + plainNum(paidT) +
           (gap ? ' · <b style="color:' + (gap > 0 ? 'var(--amber,#b45309)' : 'var(--red)') + '">' + (gap > 0 ? 'زيادة ' : 'نقص ') + plainNum(Math.abs(gap)) + '</b>' : ' · <b style="color:var(--green)">المجموع مطابق (توزيع مختلف بين الإخوة)</b>') +
-          // التثبيت لمن يطابق مجموع إيصالاتهم مطلوب الأسرة فقط (التوزيع بين الإخوة وحده مختلف)؛ الزيادة أو النقص تُصحَّح محاسبيًا
-          (isAdmin() && !S.dueMissing && !gap && paidIds.length && sharesT === dueT && list.some(function (r) { return !r.exempt && r.paid > 0 && r.paid !== r.share; })
-            ? ' <button type="button" class="btn" style="margin-inline-start:8px" data-famfreeze="' + paidIds.join(',') + '" title="يصير المطلوب من كل أخ هو مبلغ إيصاله المطبوع، دون تغيير أي إيصال">تثبيت كما في الإيصالات</button>' : '') +
-          (gap ? '<br><span style="font-size:.9rem;color:var(--muted)">مجموع الإيصالات لا يساوي مطلوب الأسرة: يُصحَّح الإيصال الزائد بـ«استرداد» الفرق أو بحذفه إلى الأرشيف وإصدار إيصال صحيح.</span>' : '') +
-          (isAdmin() && !S.dueMissing && frozen.length && sharesT !== dueT
-            ? '<br><span style="font-size:.9rem;color:var(--red)">ثُبِّت المطلوب لهذه الأسرة على مجموع ' + plainNum(sharesT) + ' بدل ' + plainNum(dueT) + '.</span> <button type="button" class="btn" data-famunfreeze="' + frozen.join(',') + '">إلغاء التثبيت</button>' : '') + '</td></tr>';
+          '</td></tr>';
         return famRow + list.map(function (r, i) {
           var m = memberOf(r.x.id), diff = r.paid - r.share, custom = m && m.share != null && m.share !== '';
           return '<tr' + (i === 0 ? ' style="border-top:2px solid var(--line)"' : '') + '><td><b>' + esc(r.x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(r.x.class_name || '') + ' · ' + esc(r.g.assembly_point) + '</span></td>' +
