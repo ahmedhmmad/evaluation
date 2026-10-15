@@ -944,7 +944,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 14';
+  var APP_BUILD = '15/10 — 15';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4000,6 +4000,37 @@
     '<button type="button" class="btn" data-tpx="pdf">تصدير PDF / طباعة</button>';
 
   // محتوى شاشة «دفعات الطلاب» تحت شريط التصفية: الأرقام، الحالات، الجدول
+  /* مراجعة الأسر: إخوة مشتركون في الشهر المعروض لا يطابق ما دفعه أحدهم المطلوب منه، أو له حصة خاصة.
+     للعثور على ما عُدِّل يدويًا وتصحيحه. يعرض ولا يغيّر شيئًا */
+  function familyAuditHtml(all) {
+    var info = familyInfo(), fams = {};
+    all.forEach(function (r) {
+      var f = info[r.x.id];
+      if (f && f.size > 1) (fams[f.family] || (fams[f.family] = [])).push(r);
+    });
+    var bad = Object.keys(fams).map(function (k) {
+      return fams[k].sort(function (a, b) { return info[a.x.id].rank - info[b.x.id].rank; });
+    }).filter(function (list) {
+      return list.some(function (r) { var m = memberOf(r.x.id); return !r.exempt && ((r.paid > 0 && r.paid !== r.share) || (m && m.share != null && m.share !== '')); });
+    });
+    if (!bad.length) return '';
+    var words = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس'];
+    var two = function (n) { return ('0' + n).slice(-2); };
+    var when = function (p) { var d = p && p.updated_at ? new Date(p.updated_at) : null; return d && !isNaN(d) ? two(d.getDate()) + '/' + two(d.getMonth() + 1) + ' ' + two(d.getHours()) + ':' + two(d.getMinutes()) : ''; };
+    return '<details class="card bank" style="border:2px solid var(--amber,#b45309)"' + (ui.famAuditOpen ? ' open' : '') + ' data-famaudit><summary><b>أسر تحتاج مراجعة (' + bad.length + ')</b> — إخوة لا يطابق ما دفعه أحدهم المطلوب منه، أو له حصة خاصة</summary>' +
+      '<p class="hint" style="margin:8px 0">«المطلوب» هو ما يحسبه البرنامج الآن: الأول 700 والثاني فما بعد 600. إن كنت عدّلت المدفوع أو الحصة الخاصة يدويًا، صحّح من صف الطالب في الجدول أدناه (المدفوع، أو امسح الحصة الخاصة من صفحة الباص).</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>ترتيبه</th><th>المطلوب</th><th>حصة خاصة</th><th>المدفوع</th><th>الفرق</th><th>رقم الإيصال</th><th>آخر تعديل للدفعة</th></tr></thead><tbody>' +
+      bad.map(function (list) {
+        return list.map(function (r, i) {
+          var m = memberOf(r.x.id), diff = r.paid - r.share, custom = m && m.share != null && m.share !== '';
+          return '<tr' + (i === 0 ? ' style="border-top:2px solid var(--line)"' : '') + '><td><b>' + esc(r.x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(r.x.class_name || '') + ' · ' + esc(r.g.assembly_point) + '</span></td>' +
+            '<td>' + (words[info[r.x.id].rank - 1] || info[r.x.id].rank) + '</td><td>' + (r.exempt ? 'إعفاء' : plainNum(r.share)) + '</td><td>' + (custom ? '<b>' + plainNum(Number(m.share)) + '</b>' : '—') + '</td>' +
+            '<td>' + (r.paid ? plainNum(r.paid) : '—') + '</td><td>' + (r.paid && diff ? '<b style="color:' + (diff > 0 ? 'var(--amber,#b45309)' : 'var(--red)') + '">' + (diff > 0 ? '+' : '') + plainNum(diff) + '</b>' : '—') + '</td>' +
+            '<td>' + (r.rec.receipt_no != null ? r.rec.receipt_no : '—') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(when(r.rec)) + '</td></tr>';
+        }).join('');
+      }).join('') + '</tbody></table></div></details>';
+  }
+
   function payBodyHtml() {
     var all = payRows(), scoped = payFiltered(all, true), rows = payFiltered(all);
     if (!all.length) return '<div class="card empty">لا يوجد طلاب مشتركون في المواصلات بعد. أضف الطلاب إلى نقاط التجمع أولًا.</div>';
@@ -4025,7 +4056,7 @@
         (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button>') +
         ' <button type="button" class="btn" data-mexempt="' + x.id + '" data-mexemptg="' + r.g.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button></div></td></tr>';
     }).join('');
-    return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') +
+    return payStatsHtml(payTotals(scoped), ui.tpClass === '-' ? 'بدون شعبة' : ui.tpClass || 'كل المدرسة') + familyAuditHtml(all) +
       '<nav class="pills">' + pills.map(function (p) {
         return '<button type="button" data-tpstatus="' + p[0] + '"' + (ui.tpStatus === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>' +
@@ -4872,6 +4903,10 @@
     l[map[el.id]] = el.value;
     if (el.id !== 'led-from' && el.id !== 'led-to') render();
   });
+
+  app.addEventListener('toggle', function (e) {
+    if (e.target.hasAttribute && e.target.hasAttribute('data-famaudit')) ui.famAuditOpen = e.target.open;
+  }, true);
 
   app.addEventListener('input', function (e) {
     if (location.hash !== '#/transport/ledger' || e.target.id !== 'led-q') return;
