@@ -944,7 +944,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 16';
+  var APP_BUILD = '16/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -960,7 +960,7 @@
       return false;
     }
     var KEYS = ['settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
-      'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'refundMissing', 'leaveMissing'];
+      'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
     if (!quiet) toast('جارٍ مزامنة البيانات…');
@@ -1058,6 +1058,8 @@
     S.busMissing = !!m && !!(await sb.from('transport_members').select('pickup, grace_until, suspended_month').limit(1)).error;
     // الإعفاء بالأشهر: أعمدته من supabase/reserve_and_exempt.sql
     S.exemptMissing = !!m && !!(await sb.from('transport_members').select('exempt_from').limit(1)).error;
+    // المبلغ المطلوب وقت إصدار الإيصال: عمود من supabase/receipts_due.sql
+    S.dueMissing = !!m && !!(await sb.from('transport_payments').select('due').limit(1)).error;
     S.tVoided = null;
   }
 
@@ -3464,6 +3466,9 @@
 
   // حصة الطالب الشهرية: المحددة له يدويًا، وإلا رسوم الأسرة بحسب ترتيبه بين إخوته المشتركين
   function shareOf(m) {
+    // صدر إيصال لهذا الشهر وحُفظ معه المطلوب وقتها: هو المطلوب، ولا يُعاد حسابه بعد ذلك (الإيصالات الأقدم بلا مطلوب محفوظ تُحسب كما كانت)
+    var issued = (S.tPay[ui.tMonth] || {})[m.student_id];
+    if (issued && issued.amount > 0 && issued.due != null && issued.due !== '') return Number(issued.due);
     if (m.share != null && m.share !== '') return Number(m.share);
     var fees = transportFees(), fam = familyInfo()[m.student_id];
     return fam && fam.rank > 1 ? fees.next : fees.first;
@@ -4966,6 +4971,11 @@
     };
     Object.assign(row, patch);
     row.amount = Math.max(0, Number(row.amount) || 0);
+    // إيصال جديد: يُحفظ معه المطلوب وقت إصداره، فلا يتغير بعد ذلك. الدفعة المكمِّلة تُبقي مطلوبه الأول
+    if (!S.dueMissing) {
+      if (old.amount > 0) { if (old.due != null) row.due = old.due; }
+      else if (row.amount > 0) { var mm = memberOf(studentId); if (mm) row.due = shareOf(mm); }
+    }
     // الملاحظة تخص طريقة الدفع التي كُتبت لها: تُمسح عند تغيير الطريقة، ولا ملاحظة للنقد
     if (row.method === 'cash' || ('method' in patch && !('method_note' in patch) && patch.method !== (old.method || 'cash'))) row.method_note = '';
     if ('amount' in patch) row.paid_on = todayISO();
