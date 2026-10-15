@@ -399,14 +399,16 @@
   #print-sheet.att-regs .att-page + .att-page { break-before: page; page-break-before: always; }
   #print-sheet.att-regs .att-page { padding-top: 2mm; }
   #print-sheet.att-regs .att-title { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #1b2a6b; padding-bottom: .3em; margin-bottom: .5em; font-size: 1.25em; }
-  #print-sheet.att-regs table.att-reg tr.tc td { height: 1.65em; }
+  #print-sheet.att-regs table.att-reg tr.tc td { height: 1.9em; }
+  #print-sheet.att-regs table.att-reg tr { break-inside: avoid; page-break-inside: avoid; }
+  #print-sheet.att-regs table.att-reg thead { display: table-header-group; }
   #print-sheet.att-regs .att-sub { display: flex; gap: 3em; margin: 0 0 .5em; font-size: 1.15em; }
   #print-sheet.att-regs table.att-reg { width: 100%; table-layout: fixed; border-collapse: collapse; }
-  #print-sheet.att-regs table.att-reg th, #print-sheet.att-regs table.att-reg td { padding: .12em .1em; border: 1px solid #b9c0cc; text-align: center; line-height: 1.25; overflow: hidden; }
-  #print-sheet.att-regs table.att-reg th:nth-child(2), #print-sheet.att-regs table.att-reg td.nm { width: 40mm; text-align: right; white-space: nowrap; padding-inline-start: .4em; }
+  #print-sheet.att-regs table.att-reg th, #print-sheet.att-regs table.att-reg td { padding: .22em .1em; border: 1px solid #9aa3b2; text-align: center; line-height: 1.35; overflow: hidden; }
+  #print-sheet.att-regs table.att-reg th:nth-child(2), #print-sheet.att-regs table.att-reg td.nm { width: 62mm; text-align: right; white-space: nowrap; padding-inline-start: .4em; }
   #print-sheet.att-regs table.att-reg th:first-child { width: 6mm; }
   #print-sheet.att-regs table.att-reg .fr { background: #e5e7eb; }
-  #print-sheet.att-regs table.att-reg td.ab { color: #b42318; font-weight: 700; }
+  #print-sheet.att-regs table.att-reg td.ab { color: #b42318; background: #fde2e0; font-weight: 800; }
   #print-sheet.att-regs table.att-reg th.wd { font-weight: 400; font-size: .85em; }
   #print-sheet.att-regs .att-key { margin: .5em 0 0; font-size: .95em; color: #4b5563; }
   #print-sheet.pe table.rz td { padding: .22em .55em; line-height: 1.3; }
@@ -939,7 +941,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 9';
+  var APP_BUILD = '15/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6956,7 +6958,7 @@
     return withAttRange(range, function (rows) {
       var classes = registerClasses();
       if (!classes.length) return toast('لا توجد شعب فيها مسجَّلون نهائيًا', true);
-      pendingAtt = { kind: 'register', month: month, range: range, classes: classes, d: attCollect(teacher ? [] : rows), teacher: !!teacher };
+      pendingAtt = { kind: 'register', month: month, range: range, classes: classes, d: attCollect(rows), teacher: !!teacher };
       printNow();
     });
   }
@@ -7004,7 +7006,9 @@
       var fri = attOff;
       var body = roll.map(function (x, i) {
         var q = d.per[x.id] || { present: 0, absent: 0, days: {} };
-        if (p.teacher) return '<tr class="tc"><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '"></td>'; }).join('') + '</tr>';
+        if (p.teacher) return '<tr class="tc"><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
+          return q.days[dd] === 'absent' ? '<td class="c ab">غ</td>' : '<td class="c' + (fri(dd) ? ' fr' : '') + '"></td>';
+        }).join('') + '</tr>';
         return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
           var st = q.days[dd];
           if (st === 'absent') absentPerDay[dd]++;
@@ -7022,8 +7026,33 @@
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
     sheet.style.width = '267mm';
-    sheet.style.fontSize = '7.5pt';
     sheet.innerHTML = pages;
+    fitRegisterPages(sheet);
+  }
+
+  // يُكبَّر خط كل شعبة في كشف الشهر إلى أكبر حجم تتسع به في صفحة A4 أفقية، دون أن يُقصّ اسم طالب.
+  // لا يصغر عن 11pt: الشعبة الكبيرة تمتد على صفحة ثانية ويتكرر رأس الجدول فيها
+  function fitRegisterPages(root) {
+    var maxH = (REPORT.page.width - 2 * REPORT.page.marginY - 4) * 96 / 25.4;
+    Array.prototype.forEach.call(root.querySelectorAll('.att-page'), function (pg) {
+      var size = 14, names = pg.querySelectorAll('td.nm');
+      var tooBig = function () {
+        if (pg.offsetHeight > maxH) return true;
+        for (var i = 0; i < names.length; i++) if (names[i].scrollWidth > names[i].clientWidth + 1) return true;
+        return false;
+      };
+      pg.style.fontSize = size + 'pt';
+      while (tooBig() && size > 11) {
+        size -= 0.25;
+        pg.style.fontSize = size + 'pt';
+      }
+      // شعبة قليلة العدد: تطول صفوفها لتملأ الصفحة (حتى 12mm للصف) فتتسع خانات الكتابة
+      var rows = pg.querySelectorAll('tbody tr:not(.total)'), spare = maxH - pg.offsetHeight;
+      if (rows.length && spare > 0) {
+        var h = Math.min(rows[0].offsetHeight + spare / rows.length, 12 * 96 / 25.4);
+        Array.prototype.forEach.call(rows, function (tr) { tr.firstElementChild.style.height = Math.floor(h) + 'px'; });
+      }
+    });
   }
 
   function attExportHtml() {
@@ -8589,6 +8618,7 @@
     // القياس النهائي داخل الإطار نفسه بعد تحميل خطوطه: هو ما سيُطبع فعلًا
     var printed = doc.getElementById('print-sheet');
     if (printed.getAttribute('data-fit')) fitElement(printed, true);
+    else if (printed.classList.contains('att-regs')) fitRegisterPages(printed); // بخطوط الإطار نفسها
     frame.contentWindow.focus();
     frame.contentWindow.print();
     printLandscape = false; // طباعة الصفحة العادية بعدها تعود عمودية
