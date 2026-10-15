@@ -941,7 +941,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 10';
+  var APP_BUILD = '15/10 — 11';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1039,10 +1039,10 @@
     S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
     // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
     S.tFirstPaid = {};
-    var paidRows = m ? await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month').order('student_id'); }) : null;
-    (paidRows || []).forEach(function (p) {
-      if (Number(p.amount) > 0 && (!S.tFirstPaid[p.student_id] || p.month < S.tFirstPaid[p.student_id])) S.tFirstPaid[p.student_id] = p.month;
-    });
+    S.tFirstReceipt = {}; // رقم أول إيصال للطالب في شهر بدايته: به يُعرف من بدأ أولًا بين إخوة بدؤوا في الشهر نفسه
+    var paidRows = m ? await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount, receipt_no').order('month').order('student_id'); }) : null;
+    if (m && !paidRows) paidRows = await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month').order('student_id'); });
+    (paidRows || []).forEach(noteFirstPaid);
     // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
     S.issuerMissing = !!m && !!(await sb.from('transport_payments').select('issued_by').limit(1)).error;
     // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
@@ -3373,12 +3373,20 @@
   }
 
   // بعد تسجيل دفعة أو حذفها أو ردّها: يُعاد حساب أول شهر دفع عنه الطالب
+  // أول شهر دفع عنه الطالب، ورقم إيصاله في ذلك الشهر
+  function noteFirstPaid(p) {
+    if (!(Number(p.amount) > 0)) return;
+    var cur = S.tFirstPaid[p.student_id], no = p.receipt_no == null ? null : Number(p.receipt_no);
+    if (!cur || p.month < cur) { S.tFirstPaid[p.student_id] = p.month; S.tFirstReceipt[p.student_id] = no; }
+  }
+
   async function refreshFirstPaid(studentId) {
-    var r = await sb.from('transport_payments').select('student_id, month, amount').eq('student_id', studentId);
+    var r = await sb.from('transport_payments').select('student_id, month, amount, receipt_no').eq('student_id', studentId);
+    if (r.error) r = await sb.from('transport_payments').select('student_id, month, amount').eq('student_id', studentId);
     if (r.error) return;
-    var first = '';
-    (r.data || []).forEach(function (p) { if (Number(p.amount) > 0 && (!first || p.month < first)) first = p.month; });
-    if (first) S.tFirstPaid[studentId] = first; else delete S.tFirstPaid[studentId];
+    delete S.tFirstPaid[studentId];
+    delete S.tFirstReceipt[studentId];
+    (r.data || []).forEach(noteFirstPaid);
   }
 
   // فتح شاشة «إصدار إيصال» على طالب بعينه
@@ -3447,9 +3455,12 @@
     ids.forEach(function (id) { var r = root(id); (families[r] || (families[r] = [])).push(byId[id]); });
     var info = {};
     Object.keys(families).forEach(function (r) {
-      // الأول من بدأ اشتراكه أولًا (فلا يتغير مبلغ من سبق أن دفع)، ثم الأكبر سنًّا
+      // الأول من بدأ اشتراكه أولًا (فلا يتغير مبلغ من سبق أن دفع): بشهر البداية، ثم بأسبقية إيصاله الأول
+      // (أخوان بدآ في الشهر نفسه: صاحب الإيصال الأسبق هو الأول)، ثم الأكبر سنًّا لمن لم يدفع بعد
+      var rec = function (id) { var n = (S.tFirstReceipt || {})[id]; return n == null ? Infinity : n; };
       var list = families[r].sort(function (a, b) {
         return String(S.tFirstPaid[a.id] || '9999').localeCompare(String(S.tFirstPaid[b.id] || '9999')) ||
+          (rec(a.id) === rec(b.id) ? 0 : rec(a.id) < rec(b.id) ? -1 : 1) ||
           String(a.birth_date || '9999').localeCompare(String(b.birth_date || '9999')) || a.full_name.localeCompare(b.full_name, 'ar');
       });
       list.forEach(function (x, i) { info[x.id] = { rank: i + 1, size: list.length, family: r }; });
