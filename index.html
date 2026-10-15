@@ -944,7 +944,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '16/10 — 1';
+  var APP_BUILD = '16/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4022,7 +4022,13 @@
       '<p class="hint" style="margin:8px 0">«المطلوب» هو ما يحسبه البرنامج الآن: الأول 700 والثاني فما بعد 600. إن كنت عدّلت المدفوع أو الحصة الخاصة يدويًا، صحّح من صف الطالب في الجدول أدناه (المدفوع، أو امسح الحصة الخاصة من صفحة الباص).</p>' +
       '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>ترتيبه</th><th>المطلوب</th><th>حصة خاصة</th><th>المدفوع</th><th>الفرق</th><th>رقم الإيصال</th><th>آخر تعديل للدفعة</th></tr></thead><tbody>' +
       bad.map(function (list) {
-        return list.map(function (r, i) {
+        var dueT = 0, paidT = 0, paidIds = [];
+        list.forEach(function (r) { if (!r.exempt) { dueT += r.share; paidT += r.paid; } if (r.paid > 0) paidIds.push(r.x.id); });
+        var gap = paidT - dueT;
+        var famRow = '<tr style="border-top:3px solid var(--line);background:#f8fafc"><td colspan="8"><b>أسرة ' + esc(familyName(list[0].x) || list[0].x.full_name) + '</b> — المطلوب للأسرة ' + plainNum(dueT) + ' · المدفوع في الإيصالات ' + plainNum(paidT) +
+          (gap ? ' · <b style="color:' + (gap > 0 ? 'var(--amber,#b45309)' : 'var(--red)') + '">' + (gap > 0 ? 'زيادة ' : 'نقص ') + plainNum(Math.abs(gap)) + '</b>' : ' · <b style="color:var(--green)">المجموع مطابق (توزيع مختلف بين الإخوة)</b>') +
+          (isAdmin() && !S.dueMissing && paidIds.length ? ' <button type="button" class="btn" style="margin-inline-start:8px" data-famfreeze="' + paidIds.join(',') + '" title="يصير المطلوب من كل أخ هو مبلغ إيصاله المطبوع، دون تغيير أي إيصال">تثبيت كما في الإيصالات</button>' : '') + '</td></tr>';
+        return famRow + list.map(function (r, i) {
           var m = memberOf(r.x.id), diff = r.paid - r.share, custom = m && m.share != null && m.share !== '';
           return '<tr' + (i === 0 ? ' style="border-top:2px solid var(--line)"' : '') + '><td><b>' + esc(r.x.full_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(r.x.class_name || '') + ' · ' + esc(r.g.assembly_point) + '</span></td>' +
             '<td>' + (words[info[r.x.id].rank - 1] || info[r.x.id].rank) + '</td><td>' + (r.exempt ? 'إعفاء' : plainNum(r.share)) + '</td><td>' + (custom ? '<b>' + plainNum(Number(m.share)) + '</b>' : '—') + '</td>' +
@@ -4913,6 +4919,25 @@
     if (!map[el.id]) return;
     l[map[el.id]] = el.value;
     if (el.id !== 'led-from' && el.id !== 'led-to') render();
+  });
+
+  // «تثبيت كما في الإيصالات»: لكل إيصال في الأسرة يُحفظ «المطلوب» مساويًا لمبلغه. لا يتغير مبلغ ولا رقم ولا وسيلة
+  app.addEventListener('click', async function (e) {
+    var el = e.target.closest('[data-famfreeze]');
+    if (!el || !isAdmin() || location.hash !== '#/transport/payments') return;
+    var ids = el.getAttribute('data-famfreeze').split(','), pay = S.tPay[ui.tMonth] || {};
+    var names = ids.map(function (id) { var x = findStudent(id); return (x ? x.full_name : id) + ': ' + plainNum((pay[id] || {}).amount || 0); });
+    if (!confirm('تثبيت المطلوب لهذه الأسرة عن ' + monthLabel(ui.tMonth) + ' كما في إيصالاتها المطبوعة؟\n\n' + names.join('\n') +
+      '\n\nلا يتغير أي إيصال ولا مبلغ مدفوع؛ يصير المطلوب من كل أخ هو مبلغ إيصاله، فتختفي الأسرة من قائمة المراجعة.')) return;
+    for (var i = 0; i < ids.length; i++) {
+      var rec = pay[ids[i]];
+      if (!rec || !(rec.amount > 0)) continue;
+      var r = await sb.from('transport_payments').update({ due: rec.amount }).eq('student_id', ids[i]).eq('month', ui.tMonth);
+      if (r.error) return fail(r.error);
+      rec.due = rec.amount;
+    }
+    refreshPay();
+    toast('ثُبِّت المطلوب كما في الإيصالات');
   });
 
   app.addEventListener('toggle', function (e) {
