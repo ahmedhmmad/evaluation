@@ -944,7 +944,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '15/10 — 15';
+  var APP_BUILD = '15/10 — 16';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3571,11 +3571,7 @@
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
         '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + shareOf({ student_id: x.id, share: null }) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
         (ex ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
-        '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (p || '') + '"></td>' +
-        '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
-          return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
-        }).join('') + '</select>' +
-        payNoteInput(x.id, method, rec) + '</td>') +
+        receiptCells(p, rec)) +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + (ex ? '<br><span style="color:var(--muted);font-size:.8rem">' + exemptText(m) + '</span>' : rideBadge(rideState(m, Math.max(0, sh - p)))) + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
         '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button> ' : '') + (sh > p && !ex ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
         (p > 0 ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button> ') +
@@ -4044,11 +4040,7 @@
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون شعبة') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
         '<td class="bus"><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + (r.exempt ? '<span style="color:#6d28d9">إعفاء</span>' : plainNum(r.share)) + '</td>' +
         (r.exempt ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
-        '<td><input type="number" min="0" step="any" data-mpaid="' + x.id + '" aria-label="المدفوع من ' + esc(x.full_name) + '" value="' + (r.paid || '') + '"></td>' +
-        '<td><select data-mmethod="' + x.id + '" aria-label="طريقة دفع ' + esc(x.full_name) + '">' + Object.keys(PAY_METHODS).map(function (k) {
-          return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
-        }).join('') + '</select>' +
-        payNoteInput(x.id, method, rec) + '</td>') +
+        receiptCells(r.paid, rec)) +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') +
           (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
         '<td><div class="acts">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
@@ -4149,16 +4141,23 @@
         '<div class="card stat"><span class="lbl">المتبقي</span><span class="num"' + (left ? ' style="color:var(--red)"' : '') + '>' + plainNum(left) + ' <small>ج.م</small></span><span class="sub">' + (left ? 'يُسدَّد بتسجيل المبلغ كاملًا' : 'مسدَّد') + '</span></div>' +
       '</div>' +
       '<div class="grid2">' +
-        '<div><label class="field" for="rc-amount">إجمالي المدفوع عن الشهر (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + Math.max(share, paid) + '">' +
-          (paid && left ? '<div class="day">سبق تسجيل ' + plainNum(paid) + ' ج.م. اكتب الإجمالي بعد إضافة ما يدفعه الآن.</div>' : '') + '</div>' +
-        '<div><label class="field" for="rc-method">طريقة الدفع</label><select id="rc-method">' + Object.keys(PAY_METHODS).map(function (k) {
-          return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
-        }).join('') + '</select></div>' +
-        (method === 'cash' ? '' : '<div style="grid-column:1/-1"><label class="field" for="rc-note">' + (ref ? 'رقم الدفع (' + PAY_METHODS[method] + ')' : 'حدّد طريقة الدفع') + '</label>' +
-          '<input type="text" id="rc-note"' + (ref ? ' dir="ltr" inputmode="numeric" style="text-align:right"' : '') + ' value="' + esc(method === rec.method ? rec.method_note || '' : '') + '"></div>') +
-      '</div>' +
-      '<div class="actions"><button type="button" class="btn primary" data-rcsave="print">تسجيل الدفعة وطباعة الإيصال</button>' +
-        '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>' +
+      (paid ? '<p class="formhint" style="margin:0 0 10px">صدر لهذا الشهر الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' بمبلغ ' + money(paid) + ' (' + esc(payMethodLabel(rec)) + '). ' +
+          'الإيصال المسجَّل لا يُعدَّل: للتخفيض «استرداد مبلغ»، وللتصحيح «حذف» الإيصال (يُحفظ في الأرشيف) ثم إصدار إيصال جديد.' + (left ? ' ويمكن تسجيل دفعة مكمِّلة بالمبلغ المتبقي.' : '') + '</p>' : '') +
+      (paid && !left ? '' :
+      '<div class="grid2">' +
+        (paid
+          ? '<div><label class="field" for="rc-amount">دفعة مكمِّلة الآن (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + left + '">' +
+              '<div class="day">تُضاف إلى الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' فيصير ' + money(paid + left) + '، بوسيلة الدفع نفسها.</div></div>' +
+            '<div><label class="field">طريقة الدفع</label><div style="padding:10px 0"><b>' + esc(payMethodLabel(rec)) + '</b></div></div>'
+          : '<div><label class="field" for="rc-amount">المبلغ المدفوع عن الشهر (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + share + '"></div>' +
+            '<div><label class="field" for="rc-method">طريقة الدفع</label><select id="rc-method">' + Object.keys(PAY_METHODS).map(function (k) {
+              return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
+            }).join('') + '</select></div>' +
+            (method === 'cash' ? '' : '<div style="grid-column:1/-1"><label class="field" for="rc-note">' + (ref ? 'رقم الدفع (' + PAY_METHODS[method] + ')' : 'حدّد طريقة الدفع') + '</label>' +
+              '<input type="text" id="rc-note"' + (ref ? ' dir="ltr" inputmode="numeric" style="text-align:right"' : '') + ' value=""></div>')) +
+      '</div>') +
+      '<div class="actions">' + (paid && !left ? '' : '<button type="button" class="btn primary" data-rcsave="print">' + (paid ? 'تسجيل الدفعة المكمِّلة وطباعة الإيصال' : 'تسجيل الدفعة وطباعة الإيصال') + '</button>' +
+        '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>') +
         (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
           '<button type="button" class="btn" data-rcrefund>استرداد مبلغ</button>' +
           '<button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : notStarted ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
@@ -4203,8 +4202,15 @@
     var x = findStudent(ui.rcStudent), amount = Number(document.getElementById('rc-amount').value);
     if (!x) return;
     if (!(amount > 0)) return toast('اكتب مبلغًا أكبر من صفر.', true);
-    var method = document.getElementById('rc-method').value, note = document.getElementById('rc-note');
-    await setPayment(x.id, { amount: amount, method: method, method_note: note ? note.value.trim() : '' });
+    var prev = (S.tPay[ui.tMonth] || {})[x.id];
+    if (prev && prev.amount > 0) {
+      // دفعة مكمِّلة: تُضاف إلى الإيصال القائم بوسيلته نفسها
+      amount = prev.amount + amount;
+      await setPayment(x.id, { amount: amount });
+    } else {
+      var method = document.getElementById('rc-method').value, note = document.getElementById('rc-note');
+      await setPayment(x.id, { amount: amount, method: method, method_note: note ? note.value.trim() : '' });
+    }
     var rec = (S.tPay[ui.tMonth] || {})[x.id];
     if (!rec || rec.amount !== amount) return; // لم يُحفظ: ظهرت رسالة الخطأ
     ui.rcMethod = '';
@@ -4931,8 +4937,28 @@
   }
 
   // patch: ما تغيّر في دفعة الطالب لهذا الشهر (المبلغ أو طريقة الدفع)
+  // خانتا المبلغ ووسيلة الدفع في الجداول للعرض: الإيصال المسجَّل لا يُعدَّل يدويًا
+  function receiptCells(paid, rec) {
+    if (!(paid > 0)) return '<td style="color:var(--muted)">—</td><td style="color:var(--muted)">لم يصدر إيصال</td>';
+    return '<td><b>' + plainNum(paid) + '</b></td><td>' + esc(PAY_METHODS[rec.method] ? PAY_METHODS[rec.method] : PAY_METHODS.cash) +
+      (rec.method_note ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + esc(rec.method_note) + '</span>' : '') + '</td>';
+  }
+
+  /* الإيصال المسجَّل لا يُعدَّل عشوائيًا: لا يُخفَّض مبلغه ولا تُغيَّر وسيلة دفعه ولا رقم دفعه من هنا.
+     التخفيض بـ«الاسترداد» (يُسجَّل في سجل المستردات)، والتصحيح بـ«حذف الإيصال» (يُحفظ في الأرشيف بسببه) ثم إصدار إيصال جديد.
+     يُسمح فقط بالزيادة: دفعة مكمِّلة لمن دفع جزءًا، بالوسيلة نفسها */
+  function receiptChangeBlocked(old, patch) {
+    if (!(old.amount > 0)) return '';
+    if ('amount' in patch && Number(patch.amount) < old.amount) return 'لا يُخفَّض مبلغ إيصال مسجَّل. استخدم «استرداد»، أو احذف الإيصال (يُحفظ في الأرشيف) وأصدر إيصالًا جديدًا.';
+    if ('method' in patch && patch.method !== (old.method || 'cash')) return 'لا تُغيَّر وسيلة دفع إيصال مسجَّل. احذف الإيصال (يُحفظ في الأرشيف) وأصدر إيصالًا جديدًا بالوسيلة الصحيحة.';
+    if ('method_note' in patch && String(patch.method_note || '') !== String(old.method_note || '')) return 'لا يُغيَّر رقم الدفع في إيصال مسجَّل. احذف الإيصال (يُحفظ في الأرشيف) وأصدر إيصالًا جديدًا.';
+    return '';
+  }
+
   async function setPayment(studentId, patch) {
     var old = S.tPay[ui.tMonth][studentId] || {};
+    var blocked = receiptChangeBlocked(old, patch);
+    if (blocked) { toast(blocked, true); if (currentGroup()) render(); else refreshPay(); return; }
     var row = {
       student_id: studentId, month: ui.tMonth,
       amount: old.amount || 0, method: old.method || 'cash', method_note: old.method_note || '',
