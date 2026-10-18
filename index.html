@@ -389,7 +389,7 @@
   #print-sheet table.tt-ptable { width: 100%; border-collapse: collapse; table-layout: fixed; }
   #print-sheet table.tt-ptable th, #print-sheet table.tt-ptable td { border: 1px solid #9aa3b5; text-align: center; padding: .2em .15em; vertical-align: middle; }
   #print-sheet table.tt-ptable thead th { background: var(--navy-dark); color: #fff; font-family: var(--font-head); font-size: .8em; line-height: 1.3; }
-  #print-sheet table.tt-ptable thead small { display: block; font-weight: 400; font-size: .85em; direction: ltr; }
+  #print-sheet table.tt-ptable thead small { display: block; font-weight: 400; font-size: .85em; }
   #print-sheet table.tt-ptable thead th:first-child, #print-sheet table.tt-ptable tbody th { width: 5.2em; }
   #print-sheet table.tt-ptable tbody th { background: var(--gold-soft); color: var(--navy); font-family: var(--font-head); font-size: .95em; }
   #print-sheet table.tt-ptable td b { display: block; font-family: var(--font-head); font-size: 1em; line-height: 1.25; }
@@ -593,7 +593,7 @@
   table.tt-grid { border-collapse: collapse; width: 100%; min-width: 720px; table-layout: fixed; }
   .tt-grid th, .tt-grid td { border: 1px solid var(--line); }
   .tt-grid thead th { background: var(--primary-dark); color: #fff; padding: 8px 4px; font-weight: 700; font-size: .9rem; }
-  .tt-grid thead th small { display: block; font-weight: 400; font-size: .72rem; opacity: .85; direction: ltr; }
+  .tt-grid thead th small { display: block; font-weight: 400; font-size: .72rem; opacity: .85; }
   .tt-grid thead th.corner, .tt-grid tbody th { width: 84px; }
   .tt-grid tbody th { background: var(--primary-soft); color: var(--primary-dark); font-weight: 800; }
   .tt-grid td { height: 76px; padding: 0; vertical-align: top; }
@@ -1087,7 +1087,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 2';
+  var APP_BUILD = '19/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6948,9 +6948,13 @@
     return v[0];
   }
   // وقت الحصة في رأس العمود: لشعبة بعينها وقتها، ولجدول معلم الوقت المشترك أو «حسب المرحلة»
+  // فترة زمنية تُقرأ من اليمين دائمًا، البداية (الأصغر) ثم النهاية: «8:00 – 8:40» وبداية الفترة على اليمين.
+  // محصورة باتجاه عربي (RLI…PDI) فلا يقلب النص المحيط بها ترتيبها
+  function ttRange(f, t) { return '⁧' + f + ' – ' + t + '⁩'; }
+
   function ttHeadTime(cls, p) {
     var t = cls ? ttTimeFor(cls, p) : ttCommonTime(p);
-    return t ? t[0] + ' – ' + t[1] : ttCfg().bells.stages.length ? 'حسب المرحلة' : '';
+    return t ? ttRange(t[0], t[1]) : ttCfg().bells.stages.length ? 'حسب المرحلة' : '';
   }
   // عدد الحصص في اليوم: أكثرها بين المراحل، ولا يقل عن آخر حصة مستعملة
   function ttPeriods() {
@@ -7131,7 +7135,7 @@
     var inner = list.map(function (s) {
       if (mode === 'c') return '<span class="m">' + esc(s.subject) + '</span><span class="s">' + esc(ttShortTName(s.teacher_id)) + '</span>';
       var pt = !ttCommonTime(p) && ttTimeFor(s.class_name, p);
-      return '<span class="m">' + esc(s.class_name) + '</span><span class="s">' + esc(s.subject) + (pt ? ' · ' + pt[0] + ' – ' + pt[1] : '') + '</span>';
+      return '<span class="m">' + esc(s.class_name) + '</span><span class="s">' + esc(s.subject) + '</span>' + (pt ? '<span class="s" style="white-space:nowrap">' + ttRange(pt[0], pt[1]) + '</span>' : '');
     }).join('<hr>');
     var cls = 'tt-cell' + (isC ? ' conflict' : isR ? ' review' : '') + (list.length > 1 ? ' multi' : '');
     var flag = isC ? '<span class="flag">تعارض</span>' : isR ? '<span class="flag">للتأكيد</span>' : '';
@@ -7268,7 +7272,7 @@
       return x.day === e.day && x.period === e.period && (ttView() === 'teachers' ? x.teacher_id === ui.ttTeacher : x.class_name === ui.ttClass);
     }) : [];
     return '<div class="card" id="tt-editor" style="border:2px solid var(--primary)"><h2>' + (e.id ? 'تعديل الحصة' : 'إضافة حصة') + '</h2>' +
-      '<p class="hint">' + esc(cfg.days[e.day] || '') + ' · الحصة ' + e.period + (t ? ' · ' + t[0] + ' – ' + t[1] : '') + '</p>' +
+      '<p class="hint">' + esc(cfg.days[e.day] || '') + ' · الحصة ' + e.period + (t ? ' · ' + ttRange(t[0], t[1]) : '') + '</p>' +
       (sib.length > 1 ? '<div class="tt-picker">' + sib.map(function (x) { return '<button type="button" data-ttopen="' + x.id + '"' + (x.id === e.id ? ' class="on"' : '') + '>' + esc(x.class_name) + ' · ' + esc(ttTName(x.teacher_id)) + '</button>'; }).join('') + '</div>' : '') +
       '<div class="tt-form">' +
         field('tte-day', 'اليوم', '<select id="tte-day">' + cfg.days.map(function (n, i) { return opt(i, n, e.day); }).join('') + '</select>') +
@@ -7576,7 +7580,7 @@
       h += '<section class="dst"><h3>' + esc(st.name) + '</h3><div class="dnow">' + (ni.state === 'in' ? 'الآن: <em>' + esc(ttRowLabel(st, ni.cur)) + '</em> · متبقٍ ' + ni.left + ' دقيقة' : esc(ni.text)) + '</div>' +
         (ni.state === 'in' ? '<div class="dbar"><i style="width:' + Math.round(ni.pct * 100) + '%"></i></div>' : '') + '<div class="drows">' +
         st.rows.map(function (r, i) {
-          return '<div class="drow k-' + r.k + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (ttIsPast(ni, i) ? ' past' : '') + '"><span>' + esc(ttRowLabel(st, i)) + '</span><span dir="ltr">' + esc(r.f) + ' – ' + esc(r.t) + '</span></div>';
+          return '<div class="drow k-' + r.k + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (ttIsPast(ni, i) ? ' past' : '') + '"><span>' + esc(ttRowLabel(st, i)) + '</span><span>' + esc(ttRange(r.f, r.t)) + '</span></div>';
         }).join('') + '</div></section>';
     });
     return h + '</div>';

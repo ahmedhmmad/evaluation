@@ -29,7 +29,7 @@
   .row.k-a, .row.k-b { color: #e9dcc3; }
   .row.now { background: #c5a46d; color: #0f2647; font-weight: 800; border-radius: 8px; }
   .row.past { opacity: .45; }
-  .row span:last-child { direction: ltr; font-variant-numeric: tabular-nums; }
+  .row span:last-child { font-variant-numeric: tabular-nums; }
   .msg { text-align: center; font-size: 1.3rem; opacity: .85; padding: 15vh 0; }
   .tools { position: fixed; bottom: 12px; inset-inline-start: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
   .tools button { font: inherit; font-size: .9rem; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
@@ -95,7 +95,7 @@
       return '<section class="stage"><h2>' + esc(st.name) + '</h2><div class="now">' + (ni.state === 'in' ? 'الآن: <em>' + esc(label(st, ni.cur)) + '</em> · متبقٍ ' + ni.left + ' دقيقة' : esc(ni.text)) + '</div>' +
         (ni.state === 'in' ? '<div class="bar"><i style="width:' + Math.round(ni.pct * 100) + '%"></i></div>' : '') +
         st.rows.map(function (r, i) {
-          return '<div class="row k-' + esc(r.k) + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (past(ni, i) ? ' past' : '') + '"><span>' + esc(label(st, i)) + '</span><span>' + esc(r.f) + ' – ' + esc(r.t) + '</span></div>';
+          return '<div class="row k-' + esc(r.k) + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (past(ni, i) ? ' past' : '') + '"><span>' + esc(label(st, i)) + '</span><span>⁧' + esc(r.f) + ' – ' + esc(r.t) + '⁩</span></div>'; // من اليمين: البداية ثم النهاية
         }).join('') + '</section>';
     }).join('') + '</div>';
   }
