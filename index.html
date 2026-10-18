@@ -949,7 +949,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 7';
+  var APP_BUILD = '18/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8787,7 +8787,11 @@
     var imgs = Array.prototype.map.call(doc.images, function (img) {
       return img.complete ? null : new Promise(function (resolve) { img.addEventListener('load', resolve); img.addEventListener('error', resolve); });
     });
-    await Promise.race([Promise.all(imgs.concat([reportFontsReady(doc)])), new Promise(function (resolve) { setTimeout(resolve, 3000); })]);
+    // ملف الخطوط يُحمَّل أولًا: طلب الخط قبل وصول تعريفه ينتهي فورًا فيُقاس بخط بديل أقصر وتفيض الورقة عند الطباعة
+    var link = doc.querySelector('link[rel="stylesheet"]');
+    var cssReady = !link || link.sheet ? Promise.resolve() : new Promise(function (resolve) { link.addEventListener('load', resolve); link.addEventListener('error', resolve); });
+    var fontsReady = cssReady.then(function () { return reportFontsReady(doc); });
+    await Promise.race([Promise.all(imgs.concat([fontsReady])), new Promise(function (resolve) { setTimeout(resolve, 6000); })]);
     if (!frame.isConnected) return;
     // القياس النهائي داخل الإطار نفسه بعد تحميل خطوطه: هو ما سيُطبع فعلًا
     var printed = doc.getElementById('print-sheet');
