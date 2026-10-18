@@ -953,7 +953,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 15';
+  var APP_BUILD = '18/10 — 16';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7538,8 +7538,33 @@
       var refText = g.k === 'cash' ? '—' : g.ref || (hasPayRef(g.k) ? '(بلا رقم)' : '—');
       return [PAY_METHODS[g.k], refText, g.n, plainNum(g.sum), g.names.join('، ')];
     });
-    var sums = order.filter(function (k) { return byMethod[k]; }).map(function (k) { return ['مجموع ' + PAY_METHODS[k], '', byMethod[k].n, plainNum(byMethod[k].sum), '']; });
-    return [['وسيلة الدفع', 'رقم الدفع', 'عدد الدفعات', 'المجموع (ج.م)', 'الطلاب']].concat(rows, sums, [['المجموع الكلي', '', count, plainNum(total), '']]);
+    return [['وسيلة الدفع', 'رقم الدفع', 'عدد الدفعات', 'المجموع (ج.م)', 'الطلاب']].concat(rows, [['المجموع الكلي', '', count, plainNum(total), '']]);
+  }
+
+  // مجموع الدفعات حسب وسيلة الدفع: نقدًا، إنستاباي، فودافون كاش، أخرى (كلها تظهر ولو صفرًا) ثم المجموع
+  function repMethodAoa(res) {
+    if (!repUsesTpay()) return [];
+    var by = {}, total = 0, count = 0;
+    Object.keys(PAY_METHODS).forEach(function (k) { by[k] = { n: 0, sum: 0 }; });
+    res.list.forEach(function (x) {
+      var t = repTpayOf(x);
+      if (!t || !(t.paid > 0)) return;
+      var k = repPayMethod(t.rec);
+      by[k].n++; by[k].sum += t.paid; total += t.paid; count++;
+    });
+    if (!count) return [];
+    return [['وسيلة الدفع', 'عدد الدفعات', 'المجموع (ج.م)', 'النسبة']].concat(Object.keys(PAY_METHODS).map(function (k) {
+      return [PAY_METHODS[k], by[k].n, plainNum(by[k].sum), repPct(by[k].sum, total)];
+    }), [['المجموع', count, plainNum(total), '100%']]);
+  }
+
+  // جدول بسيط: الصف الأخير مجموع، والأعمدة بعد الأول أرقام في سطر واحد (forPrint: بتنسيق الورقة المطبوعة)
+  function repSimpleTable(aoa, forPrint) {
+    var nw = ' style="white-space:nowrap"', last = aoa.length - 1;
+    return '<table class="' + (forPrint ? 'rz' : 'grid') + '"><thead><tr>' + aoa[0].map(function (h) { return '<th' + nw + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      aoa.slice(1).map(function (row, i) {
+        return '<tr' + (i + 1 === last ? (forPrint ? ' class="total"' : ' style="font-weight:700"') : '') + '>' + row.map(function (v, j) { return '<td' + (j && forPrint ? ' class="c"' : '') + nw + '>' + esc(v) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody></table>';
   }
   var TPAY_ORDER = ['دفع', 'دفع جزئيًا', 'لم يدفع', 'معفى'];
 
@@ -7746,13 +7771,14 @@
   }
 
   function repRefHtml(res) {
-    var ra = repRefAoa(res), n = ra.length;
+    var ma = repMethodAoa(res), ra = repRefAoa(res), n = ra.length;
     if (!n) return '';
+    var methodsCard = '<div class="card"><h2>مجموع الدفعات حسب وسيلة الدفع</h2><div class="table-wrap">' + repSimpleTable(ma) + '</div></div>';
     var methods = Object.keys(PAY_METHODS).length, nw = ' style="white-space:nowrap"';
-    return '<div class="card"><h2>تفصيل الدفعات حسب رقم الدفع</h2><div class="table-wrap"><table class="grid"><thead><tr>' + ra[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    return methodsCard + '<div class="card"><h2>تفصيل الدفعات حسب رقم الدفع</h2><div class="table-wrap"><table class="grid"><thead><tr>' + ra[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       ra.slice(1).map(function (row) {
-        var sum = !row[1] && /^مجموع|^المجموع/.test(row[0]);
-        return '<tr' + (sum ? ' style="font-weight:700;background:var(--surface-2,#f3f4f6)"' : '') + '><td' + nw + '>' + esc(row[0]) + '</td><td dir="ltr"' + nw + '>' + esc(row[1]) + '</td><td' + nw + '>' + row[2] + '</td><td' + nw + '>' + esc(row[3]) + '</td><td>' + esc(row[4]) + '</td></tr>';
+        var sum = row[0] === 'المجموع الكلي';
+        return '<tr' + (sum ? ' style="font-weight:700"' : '') + '><td' + nw + '>' + esc(row[0]) + '</td><td dir="ltr"' + nw + '>' + esc(row[1]) + '</td><td' + nw + '>' + row[2] + '</td><td' + nw + '>' + esc(row[3]) + '</td><td>' + esc(row[4]) + '</td></tr>';
       }).join('') + '</tbody></table></div></div>';
   }
 
@@ -7776,7 +7802,12 @@
       })));
       ws2['!cols'] = [{ wch: 5 }].concat(cols.map(function (c) { return { wch: c.k === 'full_name' ? 32 : c.k === 'address' ? 40 : 16 }; }));
       XLSX.utils.book_append_sheet(wb, ws2, 'الكشف');
-      var ra = repRefAoa(res);
+      var ma = repMethodAoa(res), ra = repRefAoa(res);
+      if (ma.length) {
+        var wsM = XLSX.utils.aoa_to_sheet(head.concat(ma));
+        wsM['!cols'] = [{ wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, wsM, 'حسب وسيلة الدفع');
+      }
       if (ra.length) {
         var ws3 = XLSX.utils.aoa_to_sheet(head.concat(ra));
         ws3['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 60 }];
@@ -7815,10 +7846,11 @@
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     // في نهاية التقرير: تفصيل الدفعات حسب رقم الدفع
-    var ra = repRefAoa(res), nw = ' style="white-space:nowrap"';
-    var refTable = ra.length ? '<div class="rsec" style="margin-top:1em">تفصيل الدفعات حسب رقم الدفع</div><table class="rz"><thead><tr>' + ra[0].map(function (h) { return '<th' + nw + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    var ra = repRefAoa(res), ma = repMethodAoa(res), nw = ' style="white-space:nowrap"';
+    var refTable = ra.length ? '<div class="rsec" style="margin-top:1em">مجموع الدفعات حسب وسيلة الدفع</div>' + repSimpleTable(ma, true) +
+      '<div class="rsec" style="margin-top:1em">تفصيل الدفعات حسب رقم الدفع</div><table class="rz"><thead><tr>' + ra[0].map(function (h) { return '<th' + nw + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       ra.slice(1).map(function (row) {
-        var sum = !row[1] && /^مجموع|^المجموع/.test(row[0]);
+        var sum = row[0] === 'المجموع الكلي';
         return '<tr' + (sum ? ' class="total"' : '') + '><td' + nw + '>' + esc(row[0]) + '</td><td class="c" dir="ltr"' + nw + '>' + esc(row[1]) + '</td><td class="c"' + nw + '>' + row[2] + '</td><td class="c"' + nw + '>' + esc(row[3]) + '</td><td>' + esc(row[4]) + '</td></tr>';
       }).join('') + '</tbody></table>' : '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + statsTable + (res.list.length ? listTable : '') + refTable;
