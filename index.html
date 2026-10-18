@@ -953,7 +953,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 14';
+  var APP_BUILD = '18/10 — 15';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7507,7 +7507,40 @@
   var REP_SCOPES = { enrolled: 'المسجَّلون (نهائي واحتياط)', final: 'التسجيل النهائي', reserve: 'الاحتياط', pending: 'التسجيل المبدئي', all: 'كل الطلاب', bus: 'المضافون إلى باص' };
 
   // متغيرات دفع المواصلات تُحسب لشهر المواصلات المختار (ui.tMonth، المشترك مع شاشة المواصلات)
-  var REP_TPAY = ['_tpay', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon'];
+  var REP_TPAY = ['_tpay', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon', '_tmethod', '_tref'];
+
+  // وسيلة دفع الإيصال ورقم الدفع (للإلكتروني)، أو تحديد «أخرى»
+  function repPayMethod(rec) { return PAY_METHODS[rec.method] ? rec.method : 'cash'; }
+  function repPayRef(rec) { var k = repPayMethod(rec); return k === 'cash' ? '' : String(rec.method_note || '').trim(); }
+
+  // تفصيل الدفعات حسب رقم الدفع: لكل وسيلة ورقم عدد الدفعات ومجموعها وأسماء الطلاب، ثم مجموع كل وسيلة والمجموع الكلي.
+  // يعيد صفوفًا (أولها العناوين) أو [] إن لم يكن في التقرير دفعات
+  function repRefAoa(res) {
+    if (!repUsesTpay()) return [];
+    var groups = {}, byMethod = {}, total = 0, count = 0;
+    res.list.forEach(function (x) {
+      var t = repTpayOf(x);
+      if (!t || !(t.paid > 0)) return;
+      var k = repPayMethod(t.rec), ref = repPayRef(t.rec), key = k + '\u0001' + ref;
+      var g = groups[key] || (groups[key] = { k: k, ref: ref, n: 0, sum: 0, names: [] });
+      // الاسم الأول والعائلة: يكفي للتعرف ويُبقي الجدول قصيرًا
+      var nm = splitFamily(x.full_name);
+      g.n++; g.sum += t.paid; g.names.push(nm.family ? (nameParts(x.full_name)[0] || '') + ' ' + nm.family : x.full_name);
+      byMethod[k] = byMethod[k] || { n: 0, sum: 0 };
+      byMethod[k].n++; byMethod[k].sum += t.paid;
+      total += t.paid; count++;
+    });
+    if (!count) return [];
+    var order = Object.keys(PAY_METHODS);
+    var rows = Object.keys(groups).map(function (key) { return groups[key]; }).sort(function (a, b) {
+      return order.indexOf(a.k) - order.indexOf(b.k) || b.sum - a.sum || a.ref.localeCompare(b.ref);
+    }).map(function (g) {
+      var refText = g.k === 'cash' ? '—' : g.ref || (hasPayRef(g.k) ? '(بلا رقم)' : '—');
+      return [PAY_METHODS[g.k], refText, g.n, plainNum(g.sum), g.names.join('، ')];
+    });
+    var sums = order.filter(function (k) { return byMethod[k]; }).map(function (k) { return ['مجموع ' + PAY_METHODS[k], '', byMethod[k].n, plainNum(byMethod[k].sum), '']; });
+    return [['وسيلة الدفع', 'رقم الدفع', 'عدد الدفعات', 'المجموع (ج.م)', 'الطلاب']].concat(rows, sums, [['المجموع الكلي', '', count, plainNum(total), '']]);
+  }
   var TPAY_ORDER = ['دفع', 'دفع جزئيًا', 'لم يدفع', 'معفى'];
 
   function repUsesTpay() {
@@ -7551,6 +7584,8 @@
       { k: '_tleft', label: 'المتبقي', get: function (x) { var t = repTpayOf(x); return t ? (t.state === 'معفى' ? '—' : plainNum(Math.max(0, t.due - t.paid))) : ''; } },
       { k: '_treceipt', label: 'رقم الإيصال', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 && t.rec.receipt_no != null ? String(t.rec.receipt_no) : ''; } },
       { k: '_tpaidon', label: 'تاريخ الدفع', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 && t.rec.paid_on ? dmy(t.rec.paid_on) : ''; } },
+      { k: '_tmethod', label: 'وسيلة الدفع', cat: true, get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 ? PAY_METHODS[repPayMethod(t.rec)] : ''; } },
+      { k: '_tref', label: 'رقم الدفع', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 ? repPayRef(t.rec) : ''; } },
       { k: '_age', label: 'العمر عند بداية العام', cat: true, get: function (x) {
         if (!x.birth_date) return '';
         var a = Math.floor((start - new Date(String(x.birth_date).slice(0, 10) + 'T00:00')) / (365.25 * 864e5));
@@ -7638,7 +7673,7 @@
 
   // أعمدة أرقام لا تنقسم على سطرين
   function repNoWrap(k) {
-    return ['national_id', 'guardian_id', 'phone', 'alt_phone', 'whatsapp', 'student_phone', 'birth_date', '_age', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon'].indexOf(k) > -1;
+    return ['national_id', 'guardian_id', 'phone', 'alt_phone', 'whatsapp', 'student_phone', 'birth_date', '_age', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon', '_tmethod', '_tref'].indexOf(k) > -1;
   }
 
   function repStatHeadNw(h) { return h === 'العدد' || h === 'المجموع' || h === 'النسبة'; }
@@ -7707,7 +7742,18 @@
         '<div class="toolbar" style="margin-top:12px"><button type="button" class="btn primary" data-reppdf data-ro-ok>طباعة / PDF</button><button type="button" class="btn" data-repxlsx data-ro-ok>تصدير Excel</button></div></div>' +
       '<div class="stats"><div class="card stat"><span class="lbl">عدد الطلاب</span><span class="num">' + res.list.length + '</span><span class="sub">' + esc(repDesc(res).map(function (p) { return p[1]; }).join(' · ')) + '</span></div></div>' +
       (statsHtml ? '<div class="card"><h2>الإحصائية' + (s ? ' — ' + esc(s.g1.label) + (s.g2 ? ' × ' + esc(s.g2.label) : '') : '') + '</h2>' + statsHtml + '</div>' : '') +
-      '<div class="card"><h2>الكشف (' + res.list.length + ')</h2>' + listHtml + '</div>';
+      '<div class="card"><h2>الكشف (' + res.list.length + ')</h2>' + listHtml + '</div>' + repRefHtml(res);
+  }
+
+  function repRefHtml(res) {
+    var ra = repRefAoa(res), n = ra.length;
+    if (!n) return '';
+    var methods = Object.keys(PAY_METHODS).length, nw = ' style="white-space:nowrap"';
+    return '<div class="card"><h2>تفصيل الدفعات حسب رقم الدفع</h2><div class="table-wrap"><table class="grid"><thead><tr>' + ra[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      ra.slice(1).map(function (row) {
+        var sum = !row[1] && /^مجموع|^المجموع/.test(row[0]);
+        return '<tr' + (sum ? ' style="font-weight:700;background:var(--surface-2,#f3f4f6)"' : '') + '><td' + nw + '>' + esc(row[0]) + '</td><td dir="ltr"' + nw + '>' + esc(row[1]) + '</td><td' + nw + '>' + row[2] + '</td><td' + nw + '>' + esc(row[3]) + '</td><td>' + esc(row[4]) + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
   }
 
   async function exportRepXlsx() {
@@ -7730,6 +7776,12 @@
       })));
       ws2['!cols'] = [{ wch: 5 }].concat(cols.map(function (c) { return { wch: c.k === 'full_name' ? 32 : c.k === 'address' ? 40 : 16 }; }));
       XLSX.utils.book_append_sheet(wb, ws2, 'الكشف');
+      var ra = repRefAoa(res);
+      if (ra.length) {
+        var ws3 = XLSX.utils.aoa_to_sheet(head.concat(ra));
+        ws3['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 60 }];
+        XLSX.utils.book_append_sheet(wb, ws3, 'تفصيل الدفعات');
+      }
       XLSX.writeFile(wb, (title + '-' + todayISO()).replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, '-') + '.xlsx');
     } catch (err) {
       toast(err.message, true);
@@ -7762,7 +7814,14 @@
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + statsTable + (res.list.length ? listTable : '');
+    // في نهاية التقرير: تفصيل الدفعات حسب رقم الدفع
+    var ra = repRefAoa(res), nw = ' style="white-space:nowrap"';
+    var refTable = ra.length ? '<div class="rsec" style="margin-top:1em">تفصيل الدفعات حسب رقم الدفع</div><table class="rz"><thead><tr>' + ra[0].map(function (h) { return '<th' + nw + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      ra.slice(1).map(function (row) {
+        var sum = !row[1] && /^مجموع|^المجموع/.test(row[0]);
+        return '<tr' + (sum ? ' class="total"' : '') + '><td' + nw + '>' + esc(row[0]) + '</td><td class="c" dir="ltr"' + nw + '>' + esc(row[1]) + '</td><td class="c"' + nw + '>' + row[2] + '</td><td class="c"' + nw + '>' + esc(row[3]) + '</td><td>' + esc(row[4]) + '</td></tr>';
+      }).join('') + '</tbody></table>' : '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + statsTable + (res.list.length ? listTable : '') + refTable;
   }
 
   app.addEventListener('click', function (e) {
@@ -7770,7 +7829,7 @@
     var el, r = repState();
     if ((el = e.target.closest('[data-reppreset]'))) {
       // من دفع ومن لم يدفع عن الشهر، من المضافين إلى باص فقط: إحصائية حسب الحالة والباص، والكشف بالمبالغ
-      ui.rep = { scope: 'bus', filters: [], g1: '_tpay', g2: '_bus', cols: ['full_name', 'class_name', 'phone', '_bus', '_tpay', '_tdue', '_tpaid', '_tleft', '_treceipt'], title: 'دفع رسوم المواصلات' };
+      ui.rep = { scope: 'bus', filters: [], g1: '_tpay', g2: '_bus', cols: ['full_name', 'class_name', 'phone', '_bus', '_tpay', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tmethod', '_tref'], title: 'دفع رسوم المواصلات' };
       render();
     } else if (e.target.closest('[data-repaddf]')) {
       var fields = repFields(), cats = repCatFields(fields, repScoped()), used = r.filters.map(function (f) { return f.k; });
