@@ -951,7 +951,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 12';
+  var APP_BUILD = '18/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7639,6 +7639,8 @@
     return ['national_id', 'guardian_id', 'phone', 'alt_phone', 'whatsapp', 'student_phone', 'birth_date', '_age', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon'].indexOf(k) > -1;
   }
 
+  function repStatHeadNw(h) { return h === 'العدد' || h === 'المجموع' || h === 'النسبة'; }
+
   function repPct(n, total) { return total ? Math.round(n / total * 1000) / 10 + '%' : '—'; }
 
   // جدول الإحصائية: صفوف المتغير الأول، وأعمدة الثاني (أو العدد والنسبة)
@@ -7675,9 +7677,10 @@
         '<button type="button" class="btn" data-repdelf="' + i + '" data-ro-ok title="حذف الشرط">×</button></div>';
     }).join('');
     var aoa = repStatsAoa(res), s = res.stats;
-    var statsHtml = aoa.length ? '<div class="table-wrap"><table class="grid"><thead><tr>' + aoa[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      aoa.slice(1, -1).map(function (row) { return '<tr>' + row.map(function (v, j) { return j ? '<td>' + esc(v) + '</td>' : '<td><b>' + esc(v) + '</b></td>'; }).join('') + '</tr>'; }).join('') +
-      '</tbody><tfoot><tr>' + aoa[aoa.length - 1].map(function (v) { return '<td>' + esc(v) + '</td>'; }).join('') + '</tr></tfoot></table></div>' : '';
+    // الأعداد والنسب وعناوين «العدد/المجموع/النسبة» في سطر واحد
+    var statsHtml = aoa.length ? '<div class="table-wrap"><table class="grid"><thead><tr>' + aoa[0].map(function (h) { return '<th' + (repStatHeadNw(h) ? ' style="white-space:nowrap"' : '') + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      aoa.slice(1, -1).map(function (row) { return '<tr>' + row.map(function (v, j) { return j ? '<td style="white-space:nowrap">' + esc(v) + '</td>' : '<td><b>' + esc(v) + '</b></td>'; }).join('') + '</tr>'; }).join('') +
+      '</tbody><tfoot><tr>' + aoa[aoa.length - 1].map(function (v, j) { return '<td' + (j ? ' style="white-space:nowrap"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr></tfoot></table></div>' : '';
     var cols = r.cols.map(function (k) { return repField(k, res.fields); }).filter(Boolean), LIMIT = 300;
     var listHtml = res.list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       res.list.slice(0, LIMIT).map(function (x, i) {
@@ -7740,9 +7743,9 @@
     var head = reportHead(esc(title), repDesc(res).concat([['عدد الطلاب', res.list.length]])).replace(/^<img class="wm"[^>]*>/, '');
     var statsTable = st.length ? '<table class="rz" style="margin-bottom:1em"><thead><tr><td class="pg-space" colspan="' + st[0].length + '"></td></tr>' +
       '<tr><td class="ls-head" colspan="' + st[0].length + '">' + head + '<div class="rsec">الإحصائية' + (res.stats ? ': ' + esc(res.stats.g1.label) + (res.stats.g2 ? ' × ' + esc(res.stats.g2.label) : '') : '') + '</div></td></tr>' +
-      '<tr>' + st[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      st.slice(1, -1).map(function (row) { return '<tr>' + row.map(function (v, j) { return '<td' + (j ? ' class="c"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('') +
-      '<tr class="total">' + st[st.length - 1].map(function (v, j) { return '<td' + (j ? ' class="c"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr></tbody></table>' : '';
+      '<tr>' + st[0].map(function (h) { return '<th' + (repStatHeadNw(h) ? ' style="white-space:nowrap"' : '') + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      st.slice(1, -1).map(function (row) { return '<tr>' + row.map(function (v, j) { return '<td' + (j ? ' class="c" style="white-space:nowrap"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr>'; }).join('') +
+      '<tr class="total">' + st[st.length - 1].map(function (v, j) { return '<td' + (j ? ' class="c" style="white-space:nowrap"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr></tbody></table>' : '';
     var listTable = '<table class="rz' + (st.length ? ' newpage' : '') + '"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr>' +
       (st.length ? '' : '<tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>') +
       '<tr><th style="white-space:nowrap;padding-inline:.25em">م</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>' +
