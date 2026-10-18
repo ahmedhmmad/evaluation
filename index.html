@@ -951,7 +951,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 10';
+  var APP_BUILD = '18/10 — 11';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8296,7 +8296,7 @@
   // يُصغَّر خط الورقة إلى أن تتسع في صفحة A4 واحدة. el: الورقة (هنا أو داخل إطار الطباعة)؛
   // padded: الورقة تحمل هوامش الصفحة حشوًا فيدخل في ارتفاعها
   function fitElement(el, padded) {
-    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - (padded ? 0 : 2 * p.marginY) - 12) * 96 / 25.4; // هامش أمان 12mm: طباعة المتصفح قد تزيد الارتفاع قليلًا عن القياس
+    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - (padded ? 0 : 2 * p.marginY) - 22) * 96 / 25.4; // هامش أمان 22mm: الطابعة تقتطع حافة غير قابلة للطباعة (نحو 5mm من كل جهة) فتقصر الصفحة الفعلية
     var size = REPORT.baseSize;
     el.style.fontSize = size + 'pt';
     while (el.offsetHeight > maxPx && size > REPORT.minSize) {
@@ -8307,9 +8307,9 @@
 
   // الكشوف الطويلة (ls): صفحة واحدة دائمًا، يُصغَّر الخط حتى تتسع. إن لم تتسع حتى بأصغر خط (كشف بمئات الأسطر)
   // تُطبع بالخط الكامل على صفحات متتالية تتكرر فيها عناوين الأعمدة، بدل خط لا يُقرأ يفيض رغم ذلك.
-  // هامش أمان 12mm: طباعة المتصفح قد تزيد الارتفاع قليلًا عن القياس
+  // هامش أمان 22mm: حافة الطابعة غير القابلة للطباعة تقصّر الصفحة الفعلية
   function fitPages(el) {
-    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - 12) * 96 / 25.4;
+    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - 22) * 96 / 25.4;
     var size = REPORT.baseSize;
     el.style.fontSize = size + 'pt';
     while (el.offsetHeight > maxPx && size > REPORT.minSize) { size -= 0.25; el.style.fontSize = size + 'pt'; }
