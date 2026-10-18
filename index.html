@@ -1093,7 +1093,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 4';
+  var APP_BUILD = '19/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7065,7 +7065,7 @@
   }
 
   function ttNav(view, cf) {
-    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review'; }).length + ttQuotaDiff().length;
+    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review' || ttPinBad(s); }).length + ttQuotaDiff().length;
     var pend = (S.ttProposals || []).filter(function (p) { return p.status === 'pending'; }).length;
     var item = function (key, hash, label, n) {
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + (n ? '<b>' + n + '</b>' : '') + '</button>';
@@ -7145,14 +7145,14 @@
     if (!list.length) {
       return edit ? '<button type="button" class="tt-cell empty" data-ttnew="' + d + '|' + p + '" aria-label="إضافة حصة: ' + esc(ttCfg().days[d]) + '، الحصة ' + p + '">+</button>' : '<div class="tt-cell empty"></div>';
     }
-    var isC = list.some(function (s) { return cf.ids[s.id]; }), isR = list.some(function (s) { return s.status === 'review'; });
+    var isC = list.some(function (s) { return cf.ids[s.id] || ttPinBad(s); }), isR = list.some(function (s) { return s.status === 'review'; });
     var inner = list.map(function (s) {
       if (mode === 'c') return '<span class="m">' + esc(s.subject) + '</span><span class="s">' + esc(ttShortTName(s.teacher_id)) + '</span>';
       var pt = !ttCommonTime(p) && ttTimeFor(s.class_name, p);
       return '<span class="m">' + esc(s.class_name) + '</span><span class="s">' + esc(s.subject) + '</span>' + (pt ? '<span class="s" style="white-space:nowrap">' + ttRange(pt[0], pt[1]) + '</span>' : '');
     }).join('<hr>');
     var cls = 'tt-cell' + (isC ? ' conflict' : isR ? ' review' : '') + (list.length > 1 ? ' multi' : '');
-    var flag = isC ? '<span class="flag">تعارض</span>' : isR ? '<span class="flag">للتأكيد</span>' : '';
+    var flag = isC ? '<span class="flag">' + (list.some(function (s) { return cf.ids[s.id]; }) ? 'تعارض' : 'خارج أول اليوم') + '</span>' : isR ? '<span class="flag">للتأكيد</span>' : '';
     var note = list.map(function (s) { return s.note; }).filter(Boolean).join(' · ');
     var title = note ? ' title="' + esc(note) + '"' : '';
     return edit ? '<button type="button" class="' + cls + '" data-ttopen="' + list[0].id + '"' + title + '>' + flag + inner + '</button>' : '<div class="' + cls + '"' + title + '>' + flag + inner + '</div>';
@@ -7265,7 +7265,8 @@
   }
 
   function ttClashes(e) {
-    var out = [];
+    var out = [], r1 = ttRules().first;
+    if (ttPinBad({ subject: e.subject, period: e.period })) out.push('حصص ' + e.subject + ' لا تكون إلا في ' + ttFirstText(r1.v) + ' (شرط الأكاديمية)');
     ttLive().forEach(function (x) {
       if (x.id === e.id || x.day !== e.day || x.period !== e.period) return;
       if (x.class_name === e.class_name) out.push('الصف ' + x.class_name + ' عنده ' + x.subject + ' مع ' + ttTName(x.teacher_id) + ' في الوقت نفسه');
@@ -7422,12 +7423,13 @@
         return '<div class="tt-item"><span class="what"><b>' + esc(p.from.name) + '</b> (' + p.n + ' حصة' + (p.from.category ? ' · ' + esc(p.from.category) : '') + ') ← هو نفسه <b>' + esc(p.to.name) + '</b>' + (p.to.category ? ' (' + esc(p.to.category) + ')' : '') + '؟</span>' +
           '<span class="acts"><button type="button" class="btn primary" data-ttmerge="' + p.from.id + '|' + p.to.id + '">دمج</button></span></div>';
       }).join('') + '</div></div>';
-    var qd = ttQuotaDiff();
+    var qd = ttQuotaDiff(), r1 = ttRules().first;
+    var pins = r1.on ? live.filter(function (s) { return ttPinBad(s); }) : [];
     var quota = !qd.length ? '' : '<div class="card"><h2>اختلاف عن النصاب (' + qd.length + ')</h2><p class="hint">عدد حصص المادة في الشعبة في الجدول غير ما في «النصاب والقواعد». عدّل الجدول أو النصاب.</p>' +
       '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>المادة</th><th>المعلم</th><th>النصاب</th><th>في الجدول</th></tr></thead><tbody>' +
       qd.map(function (x) { return '<tr><td>' + esc(x.class_name) + '</td><td>' + esc(x.subject) + '</td><td>' + esc(ttTName(x.teacher_id)) + '</td><td>' + x.need + '</td><td><b style="color:var(--red)">' + x.got + '</b></td></tr>'; }).join('') +
       '</tbody></table></div></div>';
-    return dups + quota + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
+    return dups + quota + (pins.length ? section('حصص تخالف شرط أول اليوم', pins, 'bad', '', 'حصص ' + esc(r1.subjects) + ' لا تكون إلا في ' + ttFirstText(r1.v) + '. انقلها.') : '') + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
       section('حصص تحتاج تأكيدًا', live.filter(function (s) { return s.status === 'review'; }), 'review', 'تم تأكيد كل الحصص.') +
       section('حصص لشعبة ليست في «إعداد الفصول»', live.filter(function (s) { return known.indexOf(s.class_name) < 0; }), 'bad', 'كل الحصص لشعب موجودة.', 'غُيّر اسم الشعبة أو حُذفت من «إعداد الفصول». عدّل الحصة إلى الشعبة الصحيحة.') +
       section('حصص بلا معلم', live.filter(function (s) { return !s.teacher_id || !find(s.teacher_id); }), 'bad', 'لكل حصة معلم.') +
@@ -7775,7 +7777,9 @@
     run: { on: true, v: 3, label: 'أقصى عدد حصص متتالية للمعلم', unit: 'حصص' },
     day: { on: true, v: 5, label: 'أقصى عدد حصص للمعلم في اليوم', unit: 'حصص' },
     side: { on: true, v: 65, label: 'أقصى نسبة من حصص المعلم في نصف واحد من اليوم (أوله أو آخره)', unit: '%' },
-    gaps: { on: true, v: 2, label: 'أقصى عدد حصص فراغ بين حصص المعلم في اليوم', unit: 'حصص' }
+    gaps: { on: true, v: 2, label: 'أقصى عدد حصص فراغ بين حصص المعلم في اليوم', unit: 'حصص' },
+    // شرط الأكاديمية: حصص القرآن الكريم لا تكون إلا في إحدى أول حصتين. ملزم: لا يقترح التحسين ما يخالفه ولا يُعتمد
+    first: { on: true, v: 2, subjects: 'قرآن', label: 'شرط ملزم: مواد لا تكون إلا في أول حصص اليوم', unit: 'حصص' }
   };
   var TT_WEIGHT = { run: 3, day: 3, side: 2, gaps: 1 };
 
@@ -7784,9 +7788,20 @@
     Object.keys(TT_RULES).forEach(function (k) {
       var x = r[k] || {};
       out[k] = { on: x.on == null ? TT_RULES[k].on : !!x.on, v: x.v == null || isNaN(Number(x.v)) ? TT_RULES[k].v : Number(x.v) };
+      if (TT_RULES[k].subjects != null) out[k].subjects = x.subjects == null ? TT_RULES[k].subjects : String(x.subjects);
     });
     return out;
   }
+
+  // مادة مقيدة بأول حصص اليوم (القرآن الكريم)، وحصة تخالف ذلك
+  function ttPinned(subject, rules) {
+    var r = (rules || ttRules()).first;
+    if (!r.on) return false;
+    var n = norm(ttFixSubject(subject));
+    return splitList(r.subjects).some(function (x) { return norm(ttFixSubject(x)) === n; });
+  }
+  function ttFirstText(v) { return v === 1 ? 'الحصة الأولى من اليوم' : v === 2 ? 'إحدى أول حصتين من اليوم' : 'إحدى أول ' + v + ' حصص من اليوم'; }
+  function ttPinBad(s, rules) { rules = rules || ttRules(); return ttPinned(s.subject, rules) && s.period > rules.first.v; }
   function ttQuota() { return S.ttConfig && Array.isArray(S.ttConfig.quota) ? S.ttConfig.quota : []; }
 
   // جودة جدول معلم حسب القواعد: الدرجة (صفر = لا مخالفة) وتفصيل كل مخالفة. list: حصصه {day, period}
@@ -7802,10 +7817,12 @@
       var gaps = ps.length ? ps[ps.length - 1] - ps[0] + 1 - ps.length : 0;
       if (rules.gaps.on && gaps > rules.gaps.v) { parts.gaps += gaps - rules.gaps.v; lean || notes.push(gaps + ' حصص فراغ يوم ' + dn[d]); }
     });
-    if (rules.side.on && list.length >= 4) {
-      var half = NP / 2, early = list.filter(function (s) { return s.period <= half; }).length, late = list.length - early;
-      var cap = Math.ceil(list.length * rules.side.v / 100), more = Math.max(early, late);
-      if (more > cap) { parts.side = more - cap; lean || notes.push(more + ' من ' + list.length + ' حصة في ' + (late > early ? 'آخر اليوم' : 'أول اليوم')); }
+    // التكتل يُقاس على غير المواد المقيدة بأول اليوم (القرآن في أوله بالشرط لا بسوء التوزيع)
+    var free = rules.first.on ? list.filter(function (s) { return !ttPinned(s.subject, rules); }) : list;
+    if (rules.side.on && free.length >= 4) {
+      var half = NP / 2, early = free.filter(function (s) { return s.period <= half; }).length, late = free.length - early;
+      var cap = Math.ceil(free.length * rules.side.v / 100), more = Math.max(early, late);
+      if (more > cap) { parts.side = more - cap; lean || notes.push(more + ' من ' + free.length + ' حصة في ' + (late > early ? 'آخر اليوم' : 'أول اليوم')); }
     }
     var score = 0;
     Object.keys(parts).forEach(function (k) { score += parts[k] * TT_WEIGHT[k]; });
@@ -7899,7 +7916,8 @@
     return '<div class="card"><h2>قواعد الجدول الجيد</h2><p class="hint">بها تُقاس جودة جدول كل معلم وتبحث أداة «تحسين الجدول» عن الأفضل. «النصف الأول من اليوم» هو الحصص الأولى حتى منتصف الدوام.</p>' +
       Object.keys(TT_RULES).map(function (k) {
         return '<div class="toolbar" style="align-items:center;margin:6px 0"><label class="check" style="padding:0;min-width:min(100%,460px)"><input type="checkbox" data-trule="' + k + '" data-f="on"' + (r[k].on ? ' checked' : '') + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].label + '</label>' +
-          '<input type="number" min="0" max="' + (k === 'side' ? 100 : 12) + '" data-trule="' + k + '" data-f="v" value="' + r[k].v + '" style="width:5em"' + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].unit + '</div>';
+          '<input type="number" min="0" max="' + (k === 'side' ? 100 : 12) + '" data-trule="' + k + '" data-f="v" value="' + r[k].v + '" style="width:5em"' + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].unit +
+          (k === 'first' ? ' <label class="field" style="margin:0">المواد:</label><input type="text" data-trule="first" data-f="subjects" value="' + esc(r.first.subjects) + '" placeholder="قرآن" style="width:14em"' + (edit ? '' : ' disabled') + ' title="افصل بين المواد بفاصلة">' : '') + '</div>';
       }).join('') + (edit ? '<button type="button" class="btn primary" data-trulesave style="margin-top:8px">حفظ القواعد</button>' : '') + '</div>';
   }
 
@@ -7936,7 +7954,11 @@
       if (b.id) { var bd = b.day, bp = b.period; setSlot(a, bd, bp); setSlot(b, ad, ap); } else setSlot(a, b.day, b.period);
       return function undo() { if (b.id) { var x = a.day, y = a.period; setSlot(a, b.day, b.period); setSlot(b, x, y); } else setSlot(a, ad, ap); };
     };
+    var pinned = {};
+    S0.forEach(function (s) { pinned[s.id] = ttPinned(s.subject, rules); });
     var valid = function (a, b) {
+      if (pinned[a.id] && b.period > rules.first.v) return false;
+      if (b.id && pinned[b.id] && a.period > rules.first.v) return false;
       // المعلم في الخانة الجديدة غير مشغول بغير الحصة المتبادلة
       if (a.teacher_id && (tBusy[a.teacher_id + '|' + b.day + '|' + b.period] || 0) - (b.id && b.teacher_id === a.teacher_id ? 1 : 0) > 0) return false;
       if (b.id && b.teacher_id && (tBusy[b.teacher_id + '|' + a.day + '|' + a.period] || 0) - (b.teacher_id === a.teacher_id ? 1 : 0) > 0) return false;
@@ -8119,6 +8141,7 @@
       var stale = (p.changes || []).filter(function (c) { var s = ttById(c.id); return !s || s.status === 'removed' || s.day !== c.from.d || s.period !== c.from.p; });
       if (stale.length) return alert('تغيّر الجدول منذ إعداد هذا الاقتراح (' + stale.length + ' من حصصه لم تعد في مكانها). ارفضه وأعد البحث عن تحسين.');
       if (ttConflicts(ttWithChanges(p.changes)).groups.length > ttConflicts().groups.length) return alert('تطبيق هذا الاقتراح الآن يصنع تعارضًا. ارفضه وأعد البحث عن تحسين.');
+      if (ttWithChanges(p.changes).filter(function (s) { return ttPinBad(s); }).length > ttLive().filter(function (s) { return ttPinBad(s); }).length) return alert('هذا الاقتراح ينقل حصة ' + ttRules().first.subjects + ' إلى ما بعد الحصة ' + ttRules().first.v + '، وهذا يخالف شرط الأكاديمية. ارفضه وأعد البحث عن تحسين.');
       if (!confirm('اعتماد الاقتراح ونقل ' + p.changes.length + ' حصة؟')) return;
       var done = [];
       for (var i = 0; i < p.changes.length; i++) {
@@ -8329,6 +8352,8 @@
       var rules = {};
       Object.keys(TT_RULES).forEach(function (k) {
         rules[k] = { on: app.querySelector('[data-trule="' + k + '"][data-f="on"]').checked, v: Number(app.querySelector('[data-trule="' + k + '"][data-f="v"]').value) || 0 };
+        var subj = app.querySelector('[data-trule="' + k + '"][data-f="subjects"]');
+        if (subj) rules[k].subjects = subj.value.trim();
       });
       ttSaveConfig({ rules: rules }).then(function (ok) { if (ok) { ui.ttOpt = null; render(); toast('حُفظت القواعد'); } });
       return;
