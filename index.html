@@ -1087,7 +1087,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 1';
+  var APP_BUILD = '19/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6973,6 +6973,40 @@
   }
 
   function ttTName(id) { var t = id && find(id); return t ? t.name : 'بدون معلم'; }
+
+  // الاسم الأول واسم العائلة: «سحر أحمد محمد الطويل» ← «سحر الطويل». الأسماء المركبة تبقى كاملة («عبد الرحمن»، «عطا الله»، «أبو القمبز»)
+  function ttFamily(words) {
+    var n = words.length, last = words[n - 1];
+    if (n >= 3 && (/^(الله|الدين|الرحمن|الرحيم)$/.test(last) || /^(أبو|ابو|آل|بن|ابن|بني)$/.test(words[n - 2]))) return words[n - 2] + ' ' + last;
+    return last;
+  }
+  function ttShortName(full) {
+    var words = String(full || '').trim().split(/\s+/), first = nameParts(full)[0] || '';
+    var fam = ttFamily(words), short = first + ' ' + fam;
+    return words.length <= 2 || short.split(' ').length >= words.length ? String(full || '').trim() : short;
+  }
+  function ttShortTName(id) { var t = id && find(id); return t ? ttShortName(t.name) : 'بدون معلم'; }
+
+  function ttLev(a, b) {
+    var p = [], i, j;
+    for (j = 0; j <= b.length; j++) p[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      var prev = p[0];
+      p[0] = i;
+      for (j = 1; j <= b.length; j++) { var t = p[j]; p[j] = Math.min(p[j] + 1, p[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; }
+    }
+    return p[b.length];
+  }
+  // اسمان لشخص واحد: الاسم الأول نفسه، وبقية أحدهما (بلا مسافات) هي بقية الآخر أو آخرها («عطا الله»/«عطاالله»،
+  // «إيمان الدهون»/«إيمان محمد الدهون»)، أو اسم العائلة يختلف بحرف واحد («الدهون»/«المدهون»)
+  function ttSameName(a, b) {
+    var pa = nameParts(norm(a)), pb = nameParts(norm(b));
+    if (pa.length < 2 || pb.length < 2 || pa[0] !== pb[0]) return false;
+    var ra = pa.slice(1).join('').replace(/\s/g, ''), rb = pb.slice(1).join('').replace(/\s/g, '');
+    if (ra === rb || (Math.min(ra.length, rb.length) >= 3 && (ra.slice(-rb.length) === rb || rb.slice(-ra.length) === ra))) return true;
+    var fa = ttFamily(norm(a).split(' ')).replace(/\s/g, ''), fb = ttFamily(norm(b).split(' ')).replace(/\s/g, '');
+    return Math.min(fa.length, fb.length) >= 4 && ttLev(fa, fb) <= 1;
+  }
   function ttWho() { return (S.profile && S.profile.full_name) || displayName(S.email); }
   // الشعب: من إعداد الفصول، ومعها أي شعبة في الجدول لم تعد في الإعداد (تظهر في المراجعة)
   function ttClasses() {
@@ -7032,9 +7066,13 @@
     var one = view === 'classes' && ui.ttClass ? b('data-ttprint="c|' + esc(ui.ttClass) + '"', 'طباعة جدول الصف') :
       view === 'teachers' && ui.ttTeacher ? b('data-ttprint="t|' + esc(ui.ttTeacher) + '"', 'طباعة جدول المعلم') : '';
     return '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b style="font-size:.95rem">طباعة / PDF:</b>' + one +
+      '<label class="check" style="padding:0"><input type="checkbox" id="tt-sign" data-ro-ok' + (ttSignOn() ? ' checked' : '') + '> مع خانات التوقيع</label>' +
       b('data-ttprint="c|"', 'جداول كل الصفوف') + b('data-ttprint="t|"', 'جداول كل المعلمين') +
       b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + '</div></div>';
   }
+
+  // خانات التوقيع في جداول المعلمين والصفوف المطبوعة: اختيارية، ويُحفظ الاختيار في هذا المتصفح
+  function ttSignOn() { try { return localStorage.getItem('tt-sign') === '1'; } catch (e) { return false; } }
 
   function renderTimetable() {
     if (S.ttMissing) {
@@ -7091,7 +7129,7 @@
     }
     var isC = list.some(function (s) { return cf.ids[s.id]; }), isR = list.some(function (s) { return s.status === 'review'; });
     var inner = list.map(function (s) {
-      if (mode === 'c') return '<span class="m">' + esc(s.subject) + '</span><span class="s">' + esc(ttTName(s.teacher_id)) + '</span>';
+      if (mode === 'c') return '<span class="m">' + esc(s.subject) + '</span><span class="s">' + esc(ttShortTName(s.teacher_id)) + '</span>';
       var pt = !ttCommonTime(p) && ttTimeFor(s.class_name, p);
       return '<span class="m">' + esc(s.class_name) + '</span><span class="s">' + esc(s.subject) + (pt ? ' · ' + pt[0] + ' – ' + pt[1] : '') + '</span>';
     }).join('<hr>');
@@ -7148,9 +7186,15 @@
     if (!list.some(function (t) { return t.id === ui.ttTeacher; })) ui.ttTeacher = list[0].id;
     var t = find(ui.ttTeacher), mine = ttLive().filter(function (s) { return s.teacher_id === t.id; });
     var sub = [t.job_title || t.subject, t.category].filter(Boolean).map(esc).join(' · ');
+    var move = canEditTT() && mine.length ? '<details class="bank" style="margin-top:12px"><summary>نقل حصص هذا المعلم إلى سجل آخر في بيانات العاملين</summary>' +
+      '<p class="hint" style="margin:8px 0">لمعلم سُجّل مرتين باسمين مختلفين: تنتقل كل حصصه إلى السجل المختار' + (ttDeletable(t) ? '، ويُحذف هذا السجل لأنه بلا حساب ولا تقييم' : '') + '.</p>' +
+      '<select id="tt-moveto" style="width:auto;max-width:340px"><option value="">— اختر السجل —</option>' + S.teachers.filter(function (x) { return x.id !== t.id; }).sort(function (a, b) {
+        return (ttSameName(b.name, t.name) ? 1 : 0) - (ttSameName(a.name, t.name) ? 1 : 0) || a.name.localeCompare(b.name, 'ar');
+      }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.category ? ' — ' + esc(x.category) : '') + '</option>'; }).join('') + '</select> ' +
+      '<button type="button" class="btn" data-ttmoveto="' + t.id + '">نقل الحصص</button></details>' : '';
     return '<div class="card">' + ttPicker('t', list, t.id, cf) + add +
       '<div class="tt-head" style="margin-top:10px"><div><h2>' + esc(t.name) + '</h2>' + (sub ? '<p class="hint" style="margin:0">' + sub + '</p>' : '') + '</div>' + ttTeacherStats(mine) + '</div>' +
-      ttGridHtml(mine, 't', null, cf) + ttSubjects(mine) + ttLegend() + '</div>';
+      ttGridHtml(mine, 't', null, cf) + ttSubjects(mine) + ttLegend() + move + '</div>';
   }
 
   // «جدولي»: المعلم صاحب الحساب يرى جدوله فقط
@@ -7286,6 +7330,51 @@
     toast(status === 'removed' ? 'حُذفت الحصة — تُستعاد من «المراجعة»' : status === 'ok' ? 'تم التأكيد' : 'استُعيدت الحصة، وهي تحتاج تأكيدًا');
   }
 
+  /* ----- سجلات معلمين مكررة -----
+     الاستيراد قد يضيف سجلًا جديدًا لمعلم له سجل في «بيانات العاملين» باسم مكتوب بشكل آخر. يُقترح هنا كل سجل له حصص
+     يشبه اسمه سجلًا واحدًا بلا حصص؛ الدمج ينقل الحصص إلى السجل الأصلي ثم يحذف المكرر إن لم يكن له حساب ولا تقييم ولا زيارات */
+  function ttLessonCounts() {
+    var n = {};
+    S.ttSessions.forEach(function (x) { if (x.teacher_id) n[x.teacher_id] = (n[x.teacher_id] || 0) + 1; });
+    return n;
+  }
+  function ttDupPairs() {
+    var n = ttLessonCounts(), pairs = [];
+    S.teachers.forEach(function (a) {
+      if (!n[a.id]) return;
+      var to = S.teachers.filter(function (b) { return b.id !== a.id && !n[b.id] && (norm(b.name) === norm(a.name) || ttSameName(a.name, b.name)); });
+      if (to.length === 1) pairs.push({ from: a, to: to[0], n: n[a.id] });
+    });
+    return pairs;
+  }
+  // يُحذف السجل بعد نقل حصصه إن كان فارغًا: لا حساب دخول، ولا تقييم بدأ، ولا زيارات
+  function ttDeletable(t) {
+    return isAdmin() && !t.user_id && !t.login && (!t.status || t.status === 'new') && !(t.ratings && Object.keys(t.ratings).length) &&
+      !S.visits.some(function (v) { return v.teacher_id === t.id; });
+  }
+  async function ttMergeTeacher(fromId, toId) {
+    var from = find(fromId), to = find(toId), n = ttLessonCounts()[fromId] || 0;
+    if (!from || !to || from === to) return;
+    var del = ttDeletable(from);
+    if (!confirm('نقل ' + n + ' حصة من «' + from.name + '» إلى سجل «' + to.name + '»' + (del ? '، ثم حذف السجل «' + from.name + '» من بيانات العاملين' : '') + '؟')) return;
+    var r = await sb.from('timetable_sessions').update({ teacher_id: toId, updated_by: ttWho(), updated_at: new Date().toISOString() }).eq('teacher_id', fromId);
+    if (r.error) return fail(r.error);
+    S.ttSessions.forEach(function (x) { if (x.teacher_id === fromId) x.teacher_id = toId; });
+    // مسمى الوظيفة والمادة من السجل المكرر يُكملان السجل الأصلي إن كانا فارغين فيه
+    var fill = {};
+    if (!to.job_title && from.job_title) fill.job_title = from.job_title;
+    if (!to.subject && from.subject) fill.subject = from.subject;
+    if (Object.keys(fill).length && !(await sb.from('teachers').update(fill).eq('id', toId)).error) Object.assign(to, fill);
+    var gone = false;
+    if (del) {
+      var d = await sb.from('teachers').delete().eq('id', fromId);
+      if (!d.error) { S.teachers = S.teachers.filter(function (t) { return t.id !== fromId; }); gone = true; }
+    }
+    if (ui.ttTeacher === fromId) ui.ttTeacher = toId;
+    render();
+    toast('نُقلت ' + n + ' حصة إلى «' + to.name + '»' + (gone ? ' وحُذف السجل المكرر' : ' — السجل «' + from.name + '» بقي في بيانات العاملين؛ احذفه منها إن لم يعد له لزوم'));
+  }
+
   /* ----- المراجعة ----- */
   function ttReviewHtml(cf) {
     var days = ttCfg().days, editor = canEditTT();
@@ -7303,8 +7392,14 @@
     };
     var bad = [];
     cf.groups.forEach(function (g) { g.list.forEach(function (s) { if (bad.indexOf(s) < 0) bad.push(s); }); });
-    var known = classConfig().names, live = ttLive();
-    return section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
+    var known = classConfig().names, live = ttLive(), pairs = ttDupPairs();
+    var dups = !editor || !pairs.length ? '' : '<div class="card" style="border:2px solid var(--amber)"><h2>سجلات معلمين مكررة (' + pairs.length + ')</h2>' +
+      '<p class="hint">معلم له حصص يشبه اسمه سجلًا في «بيانات العاملين» ليست له حصص. غالبًا الشخص نفسه مكتوبًا بشكل آخر. الدمج ينقل الحصص إلى سجله في بيانات العاملين' + (isAdmin() ? ' ويحذف المكرر إن لم يكن له حساب ولا تقييم.' : '.') + '</p><div class="tt-items">' +
+      pairs.map(function (p) {
+        return '<div class="tt-item"><span class="what"><b>' + esc(p.from.name) + '</b> (' + p.n + ' حصة' + (p.from.category ? ' · ' + esc(p.from.category) : '') + ') ← هو نفسه <b>' + esc(p.to.name) + '</b>' + (p.to.category ? ' (' + esc(p.to.category) + ')' : '') + '؟</span>' +
+          '<span class="acts"><button type="button" class="btn primary" data-ttmerge="' + p.from.id + '|' + p.to.id + '">دمج</button></span></div>';
+      }).join('') + '</div></div>';
+    return dups + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
       section('حصص تحتاج تأكيدًا', live.filter(function (s) { return s.status === 'review'; }), 'review', 'تم تأكيد كل الحصص.') +
       section('حصص لشعبة ليست في «إعداد الفصول»', live.filter(function (s) { return known.indexOf(s.class_name) < 0; }), 'bad', 'كل الحصص لشعب موجودة.', 'غُيّر اسم الشعبة أو حُذفت من «إعداد الفصول». عدّل الحصة إلى الشعبة الصحيحة.') +
       section('حصص بلا معلم', live.filter(function (s) { return !s.teacher_id || !find(s.teacher_id); }), 'bad', 'لكل حصة معلم.') +
@@ -7519,11 +7614,11 @@
     if (!data || !Array.isArray(data.sessions) || !Array.isArray(data.teachers) || !Array.isArray(data.classes)) throw new Error('الملف ليس ملف جدول حصص (ينقصه المعلمون أو الصفوف أو الحصص)');
     var names = classConfig().names, classMap = {}, teacherMap = {};
     data.classes.forEach(function (c) { classMap[c.id] = names.filter(function (n) { return norm(n) === norm(c.name); })[0] || ''; });
-    // المطابقة بالاسم كما هو، وإلا بالاسم الأول واسم العائلة إن دلّا على شخص واحد. «prev» اسم من حلّ المعلم محله فلا يُطابق به
-    var ends = function (x) { var w = norm(x).split(' '); return w[0] + ' ' + w[w.length - 1]; };
+    // المطابقة بالاسم كما هو، وإلا بالاسم نفسه مكتوبًا بشكل آخر (ttSameName) إن دلّ على سجل واحد.
+    // «prev» اسم من حلّ المعلم محله فلا يُطابق به
     data.teachers.forEach(function (t) {
       var hit = S.teachers.filter(function (x) { return norm(x.name) === norm(t.name); });
-      if (!hit.length) hit = S.teachers.filter(function (x) { return ends(x.name) === ends(t.name); });
+      if (!hit.length) hit = S.teachers.filter(function (x) { return ttSameName(x.name, t.name); });
       teacherMap[t.id] = hit.length === 1 ? hit[0].id : '__new';
     });
     ui.ttImp = { data: data, fileName: fileName, classMap: classMap, teacherMap: teacherMap };
@@ -7662,7 +7757,7 @@
       for (var q = 1; q <= NP; q++) {
         var c = mine.filter(function (s) { return s.day === d && s.period === q; });
         r += '<td>' + c.map(function (s) {
-          if (!isT) return '<b>' + esc(s.subject) + '</b><small>' + esc(ttTName(s.teacher_id)) + '</small>';
+          if (!isT) return '<b>' + esc(s.subject) + '</b><small>' + esc(ttShortTName(s.teacher_id)) + '</small>';
           var pt = !ttCommonTime(q) && ttTimeFor(s.class_name, q);
           return '<b>' + esc(s.class_name) + '</b><small>' + esc(s.subject) + (pt ? ' · ' + pt[0] : '') + '</small>';
         }).join('<hr>') + '</td>';
@@ -7673,7 +7768,7 @@
       '<div class="tt-ptitle">' + (isT ? 'جدول المعلم/ة: ' + esc(x.name) : 'جدول الصف ' + esc(x)) + '</div>' +
       '<div class="tt-pmeta">' + meta.filter(Boolean).map(esc).join(' · ') + '</div>' +
       '<table class="tt-ptable"><thead>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
-      '<div class="tt-sig"><span>' + (isT ? 'توقيع المعلم/ة' : 'توقيع مربي الصف') + ': ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div></section>';
+      (ttSignOn() ? '<div class="tt-sig"><span>المشرف التربوي: ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div>' : '') + '</section>';
   }
 
   function ttMasterPage(byCls) {
@@ -7807,6 +7902,12 @@
       st.rows.push(nr);
       return render();
     }
+    if ((el = e.target.closest('[data-ttmerge]'))) { var mp = el.getAttribute('data-ttmerge').split('|'); return ttMergeTeacher(mp[0], mp[1]); }
+    if ((el = e.target.closest('[data-ttmoveto]'))) {
+      var to = document.getElementById('tt-moveto').value;
+      if (!to) return toast('اختر السجل الذي تنتقل إليه الحصص', true);
+      return ttMergeTeacher(el.getAttribute('data-ttmoveto'), to);
+    }
     if (e.target.closest('[data-ttimprun]')) return ttRunImport(e.target.closest('[data-ttimprun]'));
     if (e.target.closest('[data-ttimpcancel]')) { ui.ttImp = null; return render(); }
   });
@@ -7818,6 +7919,7 @@
     if (!/^#\/timetable/.test(location.hash)) return;
     var el = e.target;
     if (el.id === 'tt-addteacher' && el.value) { ui.ttTeacher = el.value; return render(); }
+    if (el.id === 'tt-sign') { try { localStorage.setItem('tt-sign', el.checked ? '1' : '0'); } catch (err) {} return; }
     if (!canEditTT()) return;
     if (/^tte-(day|period|class|teacher|subject)$/.test(el.id)) {
       ttReadEditor();

@@ -31,8 +31,10 @@
   .row.past { opacity: .45; }
   .row span:last-child { direction: ltr; font-variant-numeric: tabular-nums; }
   .msg { text-align: center; font-size: 1.3rem; opacity: .85; padding: 15vh 0; }
-  .fs { position: fixed; bottom: 12px; inset-inline-start: 12px; font: inherit; font-size: .9rem; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
-  :fullscreen .fs { display: none; }
+  .tools { position: fixed; bottom: 12px; inset-inline-start: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .tools button { font: inherit; font-size: .9rem; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  .tools button.on { background: #c5a46d; color: #0f2647; border-color: #c5a46d; font-weight: 800; }
+  :fullscreen .tools .test, :fullscreen #fs { display: none; }
 </style>
 </head>
 <body>
@@ -42,7 +44,12 @@
   <div class="clock"><b id="clock">—</b><span id="date"></span></div>
 </div>
 <div id="main"><p class="msg">جارٍ التحميل…</p></div>
-<button type="button" class="fs" id="fs">ملء الشاشة</button>
+<div class="tools">
+  <button type="button" id="sound">🔔 تفعيل الجرس</button>
+  <button type="button" class="test" id="t-period">تجربة نغمة الحصة</button>
+  <button type="button" class="test" id="t-break">تجربة نغمة الاستراحة</button>
+  <button type="button" id="fs">ملء الشاشة</button>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
@@ -102,6 +109,61 @@
     draw();
   }
 
+  /* الجرس: نغمة عند بداية كل حصة (والطابور ونهاية الدوام)، ونغمة مميزة عند بداية الاستراحة.
+     المتصفح لا يسمح بالصوت قبل أن يضغط أحد على الصفحة، فيُفعَّل بزر «تفعيل الجرس» مرة بعد فتحها */
+  var audio = null, soundOn = false, soundBtn = document.getElementById('sound');
+  function tone(freq, start, len, vol) {
+    var o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime + start;
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.5, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g); g.connect(audio.destination);
+    o.start(t); o.stop(t + len + 0.05);
+  }
+  // الحصة: «دينغ دونغ» مرتين. الاستراحة: لحن صاعد من أربع نغمات يتكرر مرتين
+  var MELODY = {
+    period: [[659, 0, 1.1], [523, 0.6, 1.4], [659, 2.0, 1.1], [523, 2.6, 1.4]],
+    'break': [[523, 0, .45], [659, .35, .45], [784, .7, .45], [1047, 1.05, 1.1], [523, 2.2, .45], [659, 2.55, .45], [784, 2.9, .45], [1047, 3.25, 1.3]]
+  };
+  function ring(kind) {
+    if (!audio || !soundOn) return;
+    if (audio.state === 'suspended') audio.resume();
+    MELODY[kind].forEach(function (n) { tone(n[0], n[1], n[2], kind === 'break' ? .4 : .5); });
+  }
+  function setSound(on) {
+    soundOn = on;
+    if (on && !audio) { var AC = window.AudioContext || window.webkitAudioContext; audio = AC ? new AC() : null; }
+    if (on && audio && audio.state === 'suspended') audio.resume();
+    soundBtn.textContent = on ? '🔔 الجرس مفعّل' : '🔕 تفعيل الجرس';
+    soundBtn.className = on ? 'on' : '';
+    try { localStorage.setItem('bells-sound', on ? '1' : '0'); } catch (e) {}
+  }
+  soundBtn.addEventListener('click', function () { setSound(!soundOn); });
+  document.getElementById('t-period').addEventListener('click', function () { if (!soundOn) setSound(true); ring('period'); });
+  document.getElementById('t-break').addEventListener('click', function () { if (!soundOn) setSound(true); ring('break'); });
+  try { if (localStorage.getItem('bells-sound') === '1') soundBtn.textContent = '🔔 اضغط لتشغيل الجرس'; } catch (e) {}
+
+  // كل ثانية: هل بدأ بند جديد في إحدى المراحل؟ (المرحلتان قد تتغيران معًا: استراحة هنا وحصة هناك فتُسمع النغمتان)
+  var last = null;
+  function watch() {
+    if (!bells) return;
+    var now = new Date(), keys = bells.stages.map(function (st) { var ni = nowInfo(st, now); return ni.state === 'in' ? 'in' + ni.cur : ni.state; });
+    if (last && keys.join() !== last.join()) {
+      var kinds = {};
+      keys.forEach(function (k, i) {
+        if (k === last[i]) return;
+        if (/^in/.test(k)) kinds[bells.stages[i].rows[+k.slice(2)].k === 'b' ? 'break' : 'period'] = 1;
+        else if (k === 'after') kinds.period = 1;
+      });
+      if (kinds['break']) ring('break');
+      if (kinds.period) setTimeout(function () { ring('period'); }, kinds['break'] ? 5000 : 0);
+      draw();
+    }
+    last = keys;
+  }
+
   document.getElementById('fs').addEventListener('click', function () {
     var p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
     if (p && p.catch) p.catch(function () {});
@@ -109,6 +171,7 @@
   });
   load();
   setInterval(draw, 20000);
+  setInterval(watch, 1000);
   setInterval(load, 10 * 60000); // تعديل المواعيد في البرنامج يظهر هنا خلال عشر دقائق
 })();
 </script>
