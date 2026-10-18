@@ -396,7 +396,8 @@
   #print-sheet table.rz td.big { font-size: 1.25em; }
   #print-sheet table.rz.bus { table-layout: auto; }
   #print-sheet table.rz.bus th { white-space: nowrap; }
-  #print-sheet table.rz.bus .addr { font-size: .72em; font-weight: 400; color: #374151; }
+  #print-sheet table.rz.bus .addr { font-size: .72em; font-weight: 400; color: #374151; line-height: 1.25; }
+  #print-sheet table.rz.bus td { padding-top: .2em; padding-bottom: .2em; line-height: 1.25; }
   #print-sheet .att-notes { margin-top: 1.2em; border: 1px solid #b9c0cc; border-radius: 6px; padding: .6em .9em; min-height: 85mm; box-sizing: border-box; }
   #print-sheet .att-notes .att-lines { white-space: pre-wrap; min-height: 72mm; line-height: 2.2em; margin-top: .3em;
     background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(2.2em - 1px), #c9ced8 calc(2.2em - 1px), #c9ced8 2.2em); }
@@ -948,7 +949,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 2';
+  var APP_BUILD = '18/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3868,8 +3869,8 @@
       var first = r.key !== prev, n = size[r.key];
       prev = r.key;
       var famCell = first ? '<td class="big"' + (n > 1 ? ' rowspan="' + n + '" style="vertical-align:middle;background:#eef2f7"' : '') + '><b>' + esc(head[r.key] || '—') + '</b>' +
-        (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') +
-        (stVal(r.x, 'address') ? '<br><span class="addr">العنوان: ' + esc(stVal(r.x, 'address')) + '</span>' : '') + '</td>' : '';
+        // سطر ثانٍ واحد: الأب وعدد الإخوة ثم العنوان التفصيلي
+        (r.father || stVal(r.x, 'address') ? '<br><span class="addr">' + [r.father ? 'الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') : '', stVal(r.x, 'address') ? 'العنوان: ' + esc(stVal(r.x, 'address')) : ''].filter(Boolean).join(' — ') + '</span>' : '') + '</td>' : '';
       return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '><td class="c" style="white-space:nowrap;padding-inline:.2em">' + (i + 1) + '</td><td class="big" style="white-space:nowrap"><b>' + esc(r.name) + '</b>' + rsvMark(r.x) + '</td><td class="c" style="white-space:nowrap">' + esc(r.x.class_name || '—') + '</td>' + famCell +
         (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + secondPhone(r.x) +
         '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td></tr>';
@@ -8239,7 +8240,7 @@
   // يُصغَّر خط الورقة إلى أن تتسع في صفحة A4 واحدة. el: الورقة (هنا أو داخل إطار الطباعة)؛
   // padded: الورقة تحمل هوامش الصفحة حشوًا فيدخل في ارتفاعها
   function fitElement(el, padded) {
-    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - (padded ? 0 : 2 * p.marginY) - 6) * 96 / 25.4;
+    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - (padded ? 0 : 2 * p.marginY) - 12) * 96 / 25.4; // هامش أمان 12mm: طباعة المتصفح قد تزيد الارتفاع قليلًا عن القياس
     var size = REPORT.baseSize;
     el.style.fontSize = size + 'pt';
     while (el.offsetHeight > maxPx && size > REPORT.minSize) {
