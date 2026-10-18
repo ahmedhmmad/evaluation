@@ -361,7 +361,9 @@
 
   /* الجداول */
   #print-sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .92em; }
-  #print-sheet th, #print-sheet td { border: .5pt solid var(--rule); padding: .32em .55em; vertical-align: middle; text-align: start; overflow-wrap: anywhere; }
+  #print-sheet.tight th, #print-sheet.tight td { white-space: normal !important; }
+  #print-sheet.tight2 th, #print-sheet.tight2 td { overflow-wrap: anywhere; }
+  #print-sheet th, #print-sheet td { border: .5pt solid var(--rule); padding: .32em .55em; vertical-align: middle; text-align: start; overflow-wrap: break-word; } /* لا تُكسر الكلمة إلا إن لم تتسع في عمودها: «anywhere» كان يضيّق الأعمدة فتنقسم الكلمات حرفًا حرفًا */
   #print-sheet thead { display: table-header-group; }
   #print-sheet thead th { background: var(--navy); color: #fff; font-weight: 700; text-align: center; }
   #print-sheet tr { break-inside: avoid; }
@@ -951,7 +953,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 13';
+  var APP_BUILD = '18/10 — 14';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7750,8 +7752,12 @@
       (st.length ? '' : '<tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>') +
       '<tr><th style="white-space:nowrap;padding-inline:.25em">م</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       res.list.map(function (x, i) {
-        // الترقيم والأرقام والمبالغ في سطر واحد دائمًا
-        return '<tr><td class="c" style="white-space:nowrap;padding-inline:.25em">' + (i + 1) + '</td>' + cols.map(function (c) { return '<td' + (c.k === 'full_name' || c.k === 'address' ? '' : ' class="c"') + (repNoWrap(c.k) ? ' style="white-space:nowrap"' : '') + '>' + esc(c.get(x)) + (c.k === 'full_name' ? rsvMark(x) : '') + '</td>'; }).join('') + '</tr>';
+        // كل قيمة قصيرة (الترقيم والأسماء والشعبة والباص والأرقام والمبالغ) في سطر واحد؛ النص الطويل كالعنوان وحده يلتف.
+        // يُصغَّر الخط بعدها حتى يتسع الجدول في عرض الورقة
+        return '<tr><td class="c" style="white-space:nowrap;padding-inline:.25em">' + (i + 1) + '</td>' + cols.map(function (c) {
+          var v = c.get(x);
+          return '<td' + (c.k === 'full_name' || c.k === 'address' ? '' : ' class="c"') + (repNoWrap(c.k) || String(v).length <= 30 ? ' style="white-space:nowrap"' : '') + '>' + esc(v) + (c.k === 'full_name' ? rsvMark(x) : '') + '</td>';
+        }).join('') + '</tr>';
       }).join('') + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
@@ -8302,28 +8308,48 @@
 
   var sheet = document.getElementById('print-sheet');
 
-  // يُصغَّر خط الورقة إلى أن تتسع في صفحة A4 واحدة. el: الورقة (هنا أو داخل إطار الطباعة)؛
+  // يُصغَّر خط الورقة إلى أن تتسع في صفحة A4 واحدة طولًا وعرضًا. el: الورقة (هنا أو داخل إطار الطباعة)؛
   // padded: الورقة تحمل هوامش الصفحة حشوًا فيدخل في ارتفاعها
   function fitElement(el, padded) {
     var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - (padded ? 0 : 2 * p.marginY) - 22) * 96 / 25.4; // هامش أمان 22mm: الطابعة تقتطع حافة غير قابلة للطباعة (نحو 5mm من كل جهة) فتقصر الصفحة الفعلية
-    var size = REPORT.baseSize;
+    fitLevels(el, maxPx);
+  }
+
+  // جدول أعرض من الورقة (أعمدة كثيرة): يُصغَّر الخط حتى يتسع عرضها أيضًا
+  // (يُقارن عرض كل جدول بعرض المحتوى داخل الهوامش، لا بعرض الورقة كلها)
+  function tooWide(el) {
+    var cs = el.ownerDocument.defaultView.getComputedStyle(el), w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    return Array.prototype.some.call(el.querySelectorAll('table'), function (t) { return t.offsetWidth > w + 1; });
+  }
+
+  // أكبر خط يتسع فيه العرض (والطول إن طُلب). يعيد { h, w }: هل اتسع الطول والعرض
+  function shrinkTo(el, maxPx) {
+    var size = REPORT.baseSize, tall = function () { return maxPx != null && el.offsetHeight > maxPx; };
     el.style.fontSize = size + 'pt';
-    while (el.offsetHeight > maxPx && size > REPORT.minSize) {
-      size -= 0.25;
-      el.style.fontSize = size + 'pt';
-    }
+    while ((tall() || tooWide(el)) && size > REPORT.minSize) { size -= 0.25; el.style.fontSize = size + 'pt'; }
+    return { h: !tall(), w: !tooWide(el) };
+  }
+
+  // درجات الالتفاف حين لا يتسع العرض حتى بأصغر خط: 0 كما صُمّمت الخلايا،
+  // 1 تلتف الأسماء والنصوص عند المسافات (الأرقام تبقى كاملة)، 2 آخر حل: تُكسر الكلمات
+  function wrapLevel(el, lv) {
+    el.classList.toggle('tight', lv > 0);
+    el.classList.toggle('tight2', lv > 1);
+  }
+
+  function fitLevels(el, maxPx) {
+    var r;
+    for (var lv = 0; lv < 3; lv++) { wrapLevel(el, lv); r = shrinkTo(el, maxPx); if (r.w) break; }
+    return r;
   }
 
   // الكشوف الطويلة (ls): صفحة واحدة دائمًا، يُصغَّر الخط حتى تتسع. إن لم تتسع حتى بأصغر خط (كشف بمئات الأسطر)
-  // تُطبع بالخط الكامل على صفحات متتالية تتكرر فيها عناوين الأعمدة، بدل خط لا يُقرأ يفيض رغم ذلك.
+  // تُطبع بأكبر خط يتسع فيه العرض على صفحات متتالية تتكرر فيها عناوين الأعمدة، بدل خط لا يُقرأ يفيض رغم ذلك.
   // هامش أمان 22mm: حافة الطابعة غير القابلة للطباعة تقصّر الصفحة الفعلية
   function fitPages(el) {
     var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - 22) * 96 / 25.4;
-    var size = REPORT.baseSize;
-    el.style.fontSize = size + 'pt';
-    while (el.offsetHeight > maxPx && size > REPORT.minSize) { size -= 0.25; el.style.fontSize = size + 'pt'; }
-    var fits = el.offsetHeight <= maxPx;
-    if (!fits) el.style.fontSize = REPORT.baseSize + 'pt';
+    var r = fitLevels(el, maxPx), fits = r.h && r.w;
+    if (!fits) fitLevels(el, null);
     // اتسع في صفحة: لا يبدأ جدول بعده صفحة جديدة (الإحصائية والكشف معًا في الورقة نفسها)
     el.classList.toggle('one-page', fits);
   }
