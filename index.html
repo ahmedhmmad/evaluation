@@ -949,7 +949,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 6';
+  var APP_BUILD = '18/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3876,18 +3876,23 @@
         '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td></tr>';
     }).join('');
     var dots = '............................';
-    // بالخط الكامل دائمًا: الباص الكبير يكمل على صفحة ثانية بدل تصغير الخط، ويتكرر رأس الكشف وعناوين الأعمدة في كل صفحة
+    // بالخط الكامل: الباص الكبير يكمل على صفحة ثانية تتكرر فيها عناوين الأعمدة؛ لا يتجاوز صفحتين (يُصغَّر الخط عند الحاجة فقط)
     var head = reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', monthLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
         ['المشرف/ة', g.supervisor_name ? esc(g.supervisor_name) + (g.supervisor_phone ? ' (' + esc(g.supervisor_phone) + ')' : '') : dots], ['وقت التجمع', g.pickup_time || '']]).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
+    sheet.setAttribute('data-pages', '2');
     sheet.style.fontSize = '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<table class="rz bus"><thead><tr><td class="pg-space" colspan="7"></td></tr><tr><td class="ls-head" colspan="7">' + head + '</td></tr>' +
+      // رأس الكشف في الصفحة الأولى فقط؛ عناوين الأعمدة تتكرر في كل صفحة
+      // (الهامش السفلي السالب يلغي فراغ الهامش العلوي المتكرر في رأس الجدول تحته في الصفحة الأولى)
+      '<div style="padding-top:var(--pad-y);margin-bottom:calc(.3em - var(--pad-y));font-size:1.087em;position:relative">' + head + '</div>' +
+      '<table class="rz bus"><thead><tr><td class="pg-space" colspan="7"></td></tr>' +
       '<tr><th>م</th><th>اسم الطالب</th><th>الشعبة</th><th style="width:42%">العائلة والعنوان</th><th>هاتف ولي الأمر</th><th>جوال الطالب<br>/ واتساب</th><th>الاشتراك</th></tr></thead><tbody>' +
       (rows || '<tr><td colspan="7" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody><tfoot><tr><td class="pg-space" colspan="7"></td></tr></tfoot></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
         (list.some(function (r) { return isReserve(r.x); }) ? ' &nbsp;&nbsp;&nbsp; * احتياط' : '') + ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
+    fitPages(sheet);
   }
 
   // تفصيل وسائل الدفع لنقطة تجمع
@@ -8251,6 +8256,27 @@
     }
   }
 
+  // كشف متعدد الصفحات (ls) بحد أقصى data-pages صفحة، بخط مقروء:
+  // يُفضَّل صفحة واحدة إن اتسعت بتصغير طفيف (لا يذهب صف أو صفان وحدهما إلى صفحة ثانية)، وإلا يتمدد على الصفحات
+  // بالخط الكامل ويُصغَّر فقط إن تجاوزها، ولا ينزل عن 8pt (عندها تفضَّل صفحة زائدة على خط لا يُقرأ).
+  // كل صفحة إضافية تكرر رأس الجدول وذيله؛ وهامش أمان لأن الصف لا ينقسم بين صفحتين فيبقى فراغ أسفل الصفحة
+  function fitPages(el) {
+    var max = +el.getAttribute('data-pages') || 1, p = REPORT.page, mm = 96 / 25.4;
+    var pagePx = (printLandscape ? p.width : p.height) * mm;
+    var need = function (pages) {
+      var t = el.querySelector('table'), rep = t ? (t.tHead ? t.tHead.offsetHeight : 0) + (t.tFoot ? t.tFoot.offsetHeight : 0) : 0;
+      return el.offsetHeight + (pages - 1) * rep - (pages * pagePx - (12 + 14 * (pages - 1)) * mm);
+    };
+    var fit = function (pages, floor) {
+      var size = REPORT.baseSize;
+      el.style.fontSize = size + 'pt';
+      while (need(pages) > 0 && size > floor) { size -= 0.25; el.style.fontSize = size + 'pt'; }
+      return need(pages) <= 0;
+    };
+    if (max > 1 && fit(1, REPORT.baseSize - 1)) return;
+    fit(max, 8);
+  }
+
   function fitSheet() {
     sheet.setAttribute('data-fit', '1');
     fitElement(sheet, false);
@@ -8694,6 +8720,7 @@
     printLandscape = false;
     sheet.style.width = '';
     sheet.style.fontSize = '';
+    sheet.removeAttribute('data-pages');
     if (pendingLed) buildLedSheet();
     else if (pendingRep) buildRepSheet();
     else if (pendingAtt) buildAttSheet(pendingAtt);
@@ -8765,6 +8792,7 @@
     // القياس النهائي داخل الإطار نفسه بعد تحميل خطوطه: هو ما سيُطبع فعلًا
     var printed = doc.getElementById('print-sheet');
     if (printed.getAttribute('data-fit')) fitElement(printed, true);
+    else if (printed.getAttribute('data-pages')) fitPages(printed);
     else if (printed.classList.contains('att-regs')) fitRegisterPages(printed); // بخطوط الإطار نفسها
     frame.contentWindow.focus();
     frame.contentWindow.print();
