@@ -632,6 +632,14 @@
   .tt-mini th, .tt-mini td { border: 1px solid var(--line); padding: 2px 4px; min-width: 34px; text-align: center; white-space: nowrap; }
   .tt-mini thead th, .tt-mini tbody th { background: #f1f5f9; }
   .tt-mini td.mv { background: var(--amber-soft); font-weight: 700; box-shadow: inset 0 0 0 2px var(--amber); }
+  .tt-rule { border: 1px solid var(--line); border-inline-start: 4px solid var(--primary); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+  .tt-rule.hard { border-inline-start-color: var(--red); }
+  .tt-rule.off { opacity: .6; }
+  .tt-rf { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tt-rf > span:first-child { font-size: .85rem; color: var(--muted); }
+  .tt-rf select, .tt-rf input { width: auto; }
+  .tt-comp { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; background: var(--primary-soft); border-radius: 10px; padding: 8px 12px; }
+  .tt-comp b { color: var(--primary-dark); }
   .tt-checks { margin: 0; padding-inline-start: 20px; line-height: 1.9; }
   .tt-now { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
   .tt-now .clock { font-size: 1.9rem; font-weight: 800; color: var(--primary-dark); line-height: 1; }
@@ -1093,7 +1101,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 5';
+  var APP_BUILD = '19/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7065,7 +7073,7 @@
   }
 
   function ttNav(view, cf) {
-    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review' || ttPinBad(s); }).length + ttQuotaDiff().length;
+    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review' || ttLessonHard(s); }).length + ttQuotaDiff().length;
     var pend = (S.ttProposals || []).filter(function (p) { return p.status === 'pending'; }).length;
     var item = function (key, hash, label, n) {
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + (n ? '<b>' + n + '</b>' : '') + '</button>';
@@ -7145,14 +7153,14 @@
     if (!list.length) {
       return edit ? '<button type="button" class="tt-cell empty" data-ttnew="' + d + '|' + p + '" aria-label="إضافة حصة: ' + esc(ttCfg().days[d]) + '، الحصة ' + p + '">+</button>' : '<div class="tt-cell empty"></div>';
     }
-    var isC = list.some(function (s) { return cf.ids[s.id] || ttPinBad(s); }), isR = list.some(function (s) { return s.status === 'review'; });
+    var isC = list.some(function (s) { return cf.ids[s.id] || ttLessonHard(s); }), isR = list.some(function (s) { return s.status === 'review'; });
     var inner = list.map(function (s) {
       if (mode === 'c') return '<span class="m">' + esc(s.subject) + '</span><span class="s">' + esc(ttShortTName(s.teacher_id)) + '</span>';
       var pt = !ttCommonTime(p) && ttTimeFor(s.class_name, p);
       return '<span class="m">' + esc(s.class_name) + '</span><span class="s">' + esc(s.subject) + '</span>' + (pt ? '<span class="s" style="white-space:nowrap">' + ttRange(pt[0], pt[1]) + '</span>' : '');
     }).join('<hr>');
     var cls = 'tt-cell' + (isC ? ' conflict' : isR ? ' review' : '') + (list.length > 1 ? ' multi' : '');
-    var flag = isC ? '<span class="flag">' + (list.some(function (s) { return cf.ids[s.id]; }) ? 'تعارض' : 'خارج أول اليوم') + '</span>' : isR ? '<span class="flag">للتأكيد</span>' : '';
+    var flag = isC ? '<span class="flag">' + (list.some(function (s) { return cf.ids[s.id]; }) ? 'تعارض' : 'يخالف قاعدة') + '</span>' : isR ? '<span class="flag">للتأكيد</span>' : '';
     var note = list.map(function (s) { return s.note; }).filter(Boolean).join(' · ');
     var title = note ? ' title="' + esc(note) + '"' : '';
     return edit ? '<button type="button" class="' + cls + '" data-ttopen="' + list[0].id + '"' + title + '>' + flag + inner + '</button>' : '<div class="' + cls + '"' + title + '>' + flag + inner + '</div>';
@@ -7213,7 +7221,7 @@
     return '<div class="card">' + ttPicker('t', list, t.id, cf) + add +
       '<div class="tt-head" style="margin-top:10px"><div><h2>' + esc(t.name) + '</h2>' + (sub ? '<p class="hint" style="margin:0">' + sub + '</p>' : '') + '</div>' + ttTeacherStats(mine) + '</div>' +
       (function () {
-        var sc = ttScore(mine, ttRules(), ttPeriods());
+        var sc = ttEvalT(t.id, mine, ttRuleSet(), ttPeriods());
         return sc.notes.length ? '<p class="formhint" style="margin:0 0 10px">حسب قواعد الجدول: ' + sc.notes.map(esc).join('، ') +
           (canEditTT() && !S.ttPlanMissing ? ' — <a href="#/timetable/improve" data-ttimprove="' + t.id + '">ابحث عن تحسين</a>' : '') + '</p>' : '';
       })() +
@@ -7265,8 +7273,7 @@
   }
 
   function ttClashes(e) {
-    var out = [], r1 = ttRules().first;
-    if (ttPinBad({ subject: e.subject, period: e.period })) out.push('حصص ' + e.subject + ' لا تكون إلا في ' + ttFirstText(r1.v) + ' (شرط الأكاديمية)');
+    var out = ttLessonIssues(e).map(function (x) { return (x.hard ? 'قاعدة ملزمة: ' : 'قاعدة: ') + x.text; });
     ttLive().forEach(function (x) {
       if (x.id === e.id || x.day !== e.day || x.period !== e.period) return;
       if (x.class_name === e.class_name) out.push('الصف ' + x.class_name + ' عنده ' + x.subject + ' مع ' + ttTName(x.teacher_id) + ' في الوقت نفسه');
@@ -7407,7 +7414,8 @@
         : kind === 'gone' ? '<button type="button" class="btn" data-ttact="review" data-id="' + s.id + '">استعادة</button>'
         : '<button type="button" class="btn" data-ttopen="' + s.id + '">تعديل</button><button type="button" class="btn danger" data-ttact="removed" data-id="' + s.id + '">حذف هذه</button>';
       return '<div class="tt-item' + (kind === 'bad' ? ' bad' : kind === 'gone' ? ' gone' : '') + '"><span class="when">' + esc(days[s.day] || '') + ' — الحصة ' + s.period + '</span>' +
-        '<span class="what"><b>' + esc(s.class_name) + '</b> · ' + esc(s.subject) + ' · ' + esc(ttTName(s.teacher_id)) + (s.note ? '<span class="note">' + esc(s.note) + '</span>' : '') + '</span>' +
+        '<span class="what"><b>' + esc(s.class_name) + '</b> · ' + esc(s.subject) + ' · ' + esc(ttTName(s.teacher_id)) + (s.note ? '<span class="note">' + esc(s.note) + '</span>' : '') +
+          (kind === 'bad' && ttLessonIssues(s).length ? '<span class="note" style="color:var(--red)">' + ttLessonIssues(s).map(function (x) { return esc(x.text); }).join('، ') + '</span>' : '') + '</span>' +
         (acts ? '<span class="acts">' + acts + '</span>' : '') + '</div>';
     };
     var section = function (title, list, kind, emptyText, hint) {
@@ -7423,13 +7431,18 @@
         return '<div class="tt-item"><span class="what"><b>' + esc(p.from.name) + '</b> (' + p.n + ' حصة' + (p.from.category ? ' · ' + esc(p.from.category) : '') + ') ← هو نفسه <b>' + esc(p.to.name) + '</b>' + (p.to.category ? ' (' + esc(p.to.category) + ')' : '') + '؟</span>' +
           '<span class="acts"><button type="button" class="btn primary" data-ttmerge="' + p.from.id + '|' + p.to.id + '">دمج</button></span></div>';
       }).join('') + '</div></div>';
-    var qd = ttQuotaDiff(), r1 = ttRules().first;
-    var pins = r1.on ? live.filter(function (s) { return ttPinBad(s); }) : [];
+    var qd = ttQuotaDiff(), evr = ttEvalAll();
+    var pins = live.filter(function (s) { return (evr.bad[s.id] || []).some(function (x) { return x.hard; }); });
+    // مخالفات القواعد الملزمة على مستوى المعلم (أيام الدوام، الحصص الأولى والأخيرة) لا ترتبط بحصة واحدة
+    var tHard = Object.keys(evr.t).filter(function (t) { return evr.t[t].hard; }).map(function (t) {
+      return '<li><b>' + esc(ttTName(t)) + '</b>: ' + evr.t[t].notes.filter(function (n) { return /ملزمة/.test(n); }).map(esc).join('، ') + '</li>';
+    }).join('');
     var quota = !qd.length ? '' : '<div class="card"><h2>اختلاف عن النصاب (' + qd.length + ')</h2><p class="hint">عدد حصص المادة في الشعبة في الجدول غير ما في «النصاب والقواعد». عدّل الجدول أو النصاب.</p>' +
       '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>المادة</th><th>المعلم</th><th>النصاب</th><th>في الجدول</th></tr></thead><tbody>' +
       qd.map(function (x) { return '<tr><td>' + esc(x.class_name) + '</td><td>' + esc(x.subject) + '</td><td>' + esc(ttTName(x.teacher_id)) + '</td><td>' + x.need + '</td><td><b style="color:var(--red)">' + x.got + '</b></td></tr>'; }).join('') +
       '</tbody></table></div></div>';
-    return dups + quota + (pins.length ? section('حصص تخالف شرط أول اليوم', pins, 'bad', '', 'حصص ' + esc(r1.subjects) + ' لا تكون إلا في ' + ttFirstText(r1.v) + '. انقلها.') : '') + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
+    return dups + quota + (pins.length ? section('حصص تخالف قاعدة ملزمة', pins, 'bad', '', 'انقلها إلى حيث تسمح القاعدة، أو عدّل القاعدة في «النصاب والقواعد».') : '') +
+      (tHard ? '<div class="card"><h2>معلمون يخالفون قاعدة ملزمة</h2><ul class="tt-checks">' + tHard + '</ul></div>' : '') + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
       section('حصص تحتاج تأكيدًا', live.filter(function (s) { return s.status === 'review'; }), 'review', 'تم تأكيد كل الحصص.') +
       section('حصص لشعبة ليست في «إعداد الفصول»', live.filter(function (s) { return known.indexOf(s.class_name) < 0; }), 'bad', 'كل الحصص لشعب موجودة.', 'غُيّر اسم الشعبة أو حُذفت من «إعداد الفصول». عدّل الحصة إلى الشعبة الصحيحة.') +
       section('حصص بلا معلم', live.filter(function (s) { return !s.teacher_id || !find(s.teacher_id); }), 'bad', 'لكل حصة معلم.') +
@@ -7768,73 +7781,241 @@
 
   /* ----- النصاب والقواعد وتحسين الجدول -----
      النصاب: لكل شعبة ومادة عدد حصصها الأسبوعية ومعلمها؛ يُدخل في الإعدادات وينبَّه إلى كل اختلاف عنه في الجدول.
-     القواعد: ما يجعل جدول المعلم جيدًا (حصص متتالية، حمل اليوم، تكتل الحصص أول اليوم أو آخره، الفراغات).
+     القواعد: الأساسية (حصص متتالية، حمل اليوم، تكتل الحصص أول اليوم أو آخره، الفراغات) و«قواعدي» من النماذج،
+     لكل منها مستوى: ملزمة أو أولوية عالية/متوسطة/منخفضة، ونسبة التزام تُعرض.
      التحسين: بحث عن تبديل حصتين في الشعبة نفسها (فلا يتغير نصاب شعبة ولا معلم) يحسّن جدول معلم ولا يسيء
      إلى جدول أي معلم آخر ولا يصنع تعارضًا. النتيجة اقتراح يُحفظ، ولا يتغير الجدول إلا إذا اعتُمد.
      الجداول من supabase/timetable_plan.sql */
 
+  // القواعد الأساسية: تقيس جودة جدول المعلم، ولكل منها وزن في درجته
   var TT_RULES = {
     run: { on: true, v: 3, label: 'أقصى عدد حصص متتالية للمعلم', unit: 'حصص' },
     day: { on: true, v: 5, label: 'أقصى عدد حصص للمعلم في اليوم', unit: 'حصص' },
     side: { on: true, v: 65, label: 'أقصى نسبة من حصص المعلم في نصف واحد من اليوم (أوله أو آخره)', unit: '%' },
-    gaps: { on: true, v: 2, label: 'أقصى عدد حصص فراغ بين حصص المعلم في اليوم', unit: 'حصص' },
-    // شرط الأكاديمية: حصص القرآن الكريم لا تكون إلا في إحدى أول حصتين. ملزم: لا يقترح التحسين ما يخالفه ولا يُعتمد
-    first: { on: true, v: 2, subjects: 'قرآن', label: 'شرط ملزم: مواد لا تكون إلا في أول حصص اليوم', unit: 'حصص' }
+    gaps: { on: true, v: 2, label: 'أقصى عدد حصص فراغ بين حصص المعلم في اليوم', unit: 'حصص' }
   };
   var TT_WEIGHT = { run: 3, day: 3, side: 2, gaps: 1 };
+
+  // مستوى القاعدة: الملزمة لا يقترح التحسين ما يزيد مخالفتها ولا يُعتمد اقتراح يزيدها؛ وغيرها تُحسب مخالفتها في الدرجة بوزنها،
+  // فيبدأ التحسين بالأهم ويصل إلى أفضل ما يمكن. نسبة الالتزام تُعرض لكل قاعدة وللجدول كله
+  var TT_LEVELS = { hard: { label: 'ملزمة', w: 0 }, high: { label: 'أولوية عالية', w: 5 }, mid: { label: 'أولوية متوسطة', w: 2 }, low: { label: 'أولوية منخفضة', w: 1 } };
+
+  // نماذج «قواعدي»: scope «class» تُقيَّم على حصص الشعبة، و«teacher» على حصص المعلم
+  var TT_RTYPES = {
+    subjOnly: { label: 'مادة في حصص معيّنة فقط', scope: 'class', f: ['subjects', 'periods'], hint: 'مثل: القرآن في الحصة 1 أو 2 فقط' },
+    subjNot: { label: 'مادة لا تكون في حصص معيّنة', scope: 'class', f: ['subjects', 'periods'], hint: 'مثل: الرياضة ليست في الحصة الأولى' },
+    subjDayMax: { label: 'حد لتكرار المادة في الشعبة في اليوم', scope: 'class', f: ['subjects', 'n'], hint: 'مثل: الرياضيات لا تزيد عن حصة في اليوم' },
+    subjDouble: { label: 'حصتان متتاليتان للمادة في اليوم نفسه', scope: 'class', f: ['subjects'], hint: 'مثل: الفن حصتان متتاليتان؛ إن كان عدد حصصها فرديًا تبقى واحدة منفردة' },
+    teacherOff: { label: 'معلم غير متاح في أيام أو حصص', scope: 'teacher', f: ['teacher', 'days', 'periods'], hint: 'إن لم تختر حصصًا فاليوم كله غير متاح' },
+    tDaysMin: { label: 'أقل عدد أيام دوام للمعلم', scope: 'teacher', f: ['teacherAll', 'n'] },
+    tDaysMax: { label: 'أكثر عدد أيام دوام للمعلم', scope: 'teacher', f: ['teacherAll', 'n'] },
+    tLastMax: { label: 'أقصى عدد حصص أخيرة للمعلم في الأسبوع', scope: 'teacher', f: ['teacherAll', 'n'], hint: 'الحصة الأخيرة في مرحلة الشعبة' },
+    tFirstMin: { label: 'أقل عدد حصص أولى للمعلم في الأسبوع', scope: 'teacher', f: ['teacherAll', 'n'] }
+  };
 
   function ttRules() {
     var r = (S.ttConfig && S.ttConfig.rules) || {}, out = {};
     Object.keys(TT_RULES).forEach(function (k) {
       var x = r[k] || {};
       out[k] = { on: x.on == null ? TT_RULES[k].on : !!x.on, v: x.v == null || isNaN(Number(x.v)) ? TT_RULES[k].v : Number(x.v) };
-      if (TT_RULES[k].subjects != null) out[k].subjects = x.subjects == null ? TT_RULES[k].subjects : String(x.subjects);
     });
     return out;
   }
 
-  // مادة مقيدة بأول حصص اليوم (القرآن الكريم)، وحصة تخالف ذلك
-  function ttPinned(subject, rules) {
-    var r = (rules || ttRules()).first;
-    if (!r.on) return false;
-    var n = norm(ttFixSubject(subject));
-    return splitList(r.subjects).some(function (x) { return norm(ttFixSubject(x)) === n; });
+  // «1,2» أو «1-3» أو قائمة ← أرقام
+  function ttNums(x) {
+    if (Array.isArray(x)) return x.map(Number).filter(function (n) { return n >= 0; });
+    var out = [];
+    splitList(latinDigits(String(x || '')).replace(/[-–]/g, '-')).forEach(function (p) {
+      var m = p.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (m) for (var i = +m[1]; i <= +m[2]; i++) out.push(i); else if (/^\d+$/.test(p)) out.push(+p);
+    });
+    return out;
   }
-  function ttFirstText(v) { return v === 1 ? 'الحصة الأولى من اليوم' : v === 2 ? 'إحدى أول حصتين من اليوم' : 'إحدى أول ' + v + ' حصص من اليوم'; }
-  function ttPinBad(s, rules) { rules = rules || ttRules(); return ttPinned(s.subject, rules) && s.period > rules.first.v; }
-  function ttQuota() { return S.ttConfig && Array.isArray(S.ttConfig.quota) ? S.ttConfig.quota : []; }
 
-  // جودة جدول معلم حسب القواعد: الدرجة (صفر = لا مخالفة) وتفصيل كل مخالفة. list: حصصه {day, period}
-  // lean: بلا نصوص المخالفات (للبحث، حيث تُحسب الدرجة آلاف المرات)
-  function ttScore(list, rules, NP, lean) {
-    var days = {}, parts = { run: 0, day: 0, side: 0, gaps: 0 }, notes = [], dn = lean ? null : ttCfg().days;
+  // «قواعدي». قبل وجودها كان شرط القرآن قاعدة ثابتة (rules.first)، فيصير أول قاعدة فيها
+  function ttCustomRules() {
+    var r = (S.ttConfig && S.ttConfig.rules) || {};
+    if (Array.isArray(r.custom)) return r.custom;
+    var f = r.first || {}, n = Number(f.v) || 2, p = [];
+    for (var i = 1; i <= n; i++) p.push(i);
+    return [{ id: 'quran', type: 'subjOnly', on: f.on !== false, level: 'hard', subjects: f.subjects || 'قرآن', periods: p }];
+  }
+
+  function ttSubjKey(s) { return norm(ttFixSubject(s)); }
+
+  // القواعد مهيأة للتقييم السريع (تُحسب مرة لكل نسخة من الإعدادات)
+  var ttRSCache = { src: null, val: null };
+  function ttRuleSet(list) {
+    if (!list && ttRSCache.src === S.ttConfig && ttRSCache.val) return ttRSCache.val;
+    var set = function (arr) { var o = {}; arr.forEach(function (v) { o[v] = 1; }); return o; };
+    var c = (list || ttCustomRules()).filter(function (r) { return r.on !== false && TT_RTYPES[r.type]; }).map(function (r) {
+      var lv = TT_LEVELS[r.level] ? r.level : 'mid', subj = {}, periods = ttNums(r.periods), days = ttNums(r.days);
+      splitList(r.subjects).forEach(function (x) { subj[ttSubjKey(x)] = 1; });
+      return { id: r.id, type: r.type, raw: r, hard: lv === 'hard', w: TT_LEVELS[lv].w, subj: subj, periods: set(periods), np: periods.length, days: set(days), nd: days.length,
+        teacher_id: r.teacher_id || '', n: Math.max(0, Number(r.n) || 0) };
+    });
+    // مواد مقيدة بقاعدة ملزمة «في حصص معيّنة فقط»: لا يُحسب وجودها أول اليوم تكتلًا
+    var pin = {}, dbl = {};
+    c.forEach(function (r) {
+      if (r.type === 'subjOnly' && r.hard) Object.keys(r.subj).forEach(function (k) { pin[k] = 1; });
+      if (r.type === 'subjDouble') Object.keys(r.subj).forEach(function (k) { dbl[k] = 1; });
+    });
+    var last = {};
+    var R = { b: ttRules(), c: c, pin: pin, dbl: dbl,
+      lastP: function (cls) { if (!(cls in last)) { var st = ttStageOf(cls); last[cls] = st ? ttPTimes(st).length : ttPeriods(); } return last[cls]; } };
+    if (!list) ttRSCache = { src: S.ttConfig, val: R };
+    return R;
+  }
+
+  function ttPeriodsText(ps) {
+    ps = ttNums(ps);
+    return ps.length === 1 ? 'الحصة ' + ps[0] : 'الحصص ' + ps.join(' و');
+  }
+
+  // القاعدة بكلام مفهوم
+  function ttRuleText(r) {
+    var days = ttCfg().days, sub = splitList(r.subjects).join(' أو '), who = r.teacher_id ? ttTName(r.teacher_id) : 'كل معلم';
+    var dn = ttNums(r.days).map(function (d) { return days[d]; }).filter(Boolean);
+    switch (r.type) {
+      case 'subjOnly': return 'حصص ' + sub + ' في ' + ttPeriodsText(r.periods) + ' فقط';
+      case 'subjNot': return 'حصص ' + sub + ' ليست في ' + ttPeriodsText(r.periods);
+      case 'subjDayMax': return sub + ' لا تزيد في الشعبة عن ' + (Number(r.n) || 0) + ' في اليوم';
+      case 'subjDouble': return 'حصص ' + sub + ' حصتان متتاليتان في اليوم نفسه';
+      case 'teacherOff': return ttTName(r.teacher_id) + ' غير متاح ' + (dn.length ? 'يوم ' + dn.join(' و') : 'كل الأيام') + (ttNums(r.periods).length ? ' في ' + ttPeriodsText(r.periods) : '');
+      case 'tDaysMin': return who + ': أيام الدوام لا تقل عن ' + (Number(r.n) || 0);
+      case 'tDaysMax': return who + ': أيام الدوام لا تزيد عن ' + (Number(r.n) || 0);
+      case 'tLastMax': return who + ': الحصص الأخيرة في الأسبوع لا تزيد عن ' + (Number(r.n) || 0);
+      case 'tFirstMin': return who + ': الحصص الأولى في الأسبوع لا تقل عن ' + (Number(r.n) || 0);
+    }
+    return '';
+  }
+
+  // تقييم جدول معلم: القواعد الأساسية وقواعد المعلم من «قواعدي».
+  // soft: الدرجة (مجموع المخالفات بأوزانها)، hard: مخالفات القواعد الملزمة، checks: الفحوص لكل قاعدة [المستوفى، الكل]
+  // lean: بلا نصوص (للبحث، حيث يُقيَّم آلاف المرات)
+  function ttEvalT(tid, list, R, NP, lean) {
+    var b = R.b, days = {}, parts = { run: 0, day: 0, side: 0, gaps: 0 }, out = { soft: 0, hard: 0, notes: [], checks: {}, bad: {} }, dn = lean ? null : ttCfg().days;
+    var chk = function (id, ok) { var c = out.checks[id] || (out.checks[id] = [0, 0]); c[1]++; if (ok) c[0]++; };
     list.forEach(function (s) { (days[s.day] || (days[s.day] = {}))[s.period] = 1; });
     Object.keys(days).forEach(function (d) {
-      var ps = Object.keys(days[d]).map(Number).sort(function (a, b) { return a - b; }), run = 1, best = 1;
+      var ps = Object.keys(days[d]).map(Number).sort(function (a, c) { return a - c; }), run = 1, best = 1;
       for (var i = 1; i < ps.length; i++) { run = ps[i] === ps[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run); }
-      if (rules.run.on && best > rules.run.v) { parts.run += best - rules.run.v; lean || notes.push(best + ' حصص متتالية يوم ' + dn[d]); }
-      if (rules.day.on && ps.length > rules.day.v) { parts.day += ps.length - rules.day.v; lean || notes.push(ps.length + ' حصص يوم ' + dn[d]); }
+      if (b.run.on && best > b.run.v) { parts.run += best - b.run.v; lean || out.notes.push(best + ' حصص متتالية يوم ' + dn[d]); }
+      if (b.day.on && ps.length > b.day.v) { parts.day += ps.length - b.day.v; lean || out.notes.push(ps.length + ' حصص يوم ' + dn[d]); }
       var gaps = ps.length ? ps[ps.length - 1] - ps[0] + 1 - ps.length : 0;
-      if (rules.gaps.on && gaps > rules.gaps.v) { parts.gaps += gaps - rules.gaps.v; lean || notes.push(gaps + ' حصص فراغ يوم ' + dn[d]); }
+      if (b.gaps.on && gaps > b.gaps.v) { parts.gaps += gaps - b.gaps.v; lean || out.notes.push(gaps + ' حصص فراغ يوم ' + dn[d]); }
     });
-    // التكتل يُقاس على غير المواد المقيدة بأول اليوم (القرآن في أوله بالشرط لا بسوء التوزيع)
-    var free = rules.first.on ? list.filter(function (s) { return !ttPinned(s.subject, rules); }) : list;
-    if (rules.side.on && free.length >= 4) {
+    // التكتل يُقاس على غير المواد المقيدة بحصص معيّنة (القرآن أول اليوم بالشرط لا بسوء التوزيع)
+    var free = list.filter(function (s) { return !R.pin[ttSubjKey(s.subject)]; });
+    if (b.side.on && free.length >= 4) {
       var half = NP / 2, early = free.filter(function (s) { return s.period <= half; }).length, late = free.length - early;
-      var cap = Math.ceil(free.length * rules.side.v / 100), more = Math.max(early, late);
-      if (more > cap) { parts.side = more - cap; lean || notes.push(more + ' من ' + free.length + ' حصة في ' + (late > early ? 'آخر اليوم' : 'أول اليوم')); }
+      var cap = Math.ceil(free.length * b.side.v / 100), more = Math.max(early, late);
+      if (more > cap) { parts.side = more - cap; lean || out.notes.push(more + ' من ' + free.length + ' حصة في ' + (late > early ? 'آخر اليوم' : 'أول اليوم')); }
     }
-    var score = 0;
-    Object.keys(parts).forEach(function (k) { score += parts[k] * TT_WEIGHT[k]; });
-    return { score: score, parts: parts, notes: notes };
+    Object.keys(parts).forEach(function (k) { out.soft += parts[k] * TT_WEIGHT[k]; if (list.length && b[k].on) chk(k, !parts[k]); });
+    R.c.forEach(function (r) {
+      if (TT_RTYPES[r.type].scope !== 'teacher') return;
+      if (r.type === 'teacherOff' ? r.teacher_id !== tid : r.teacher_id && r.teacher_id !== tid) return;
+      if (!list.length) return;
+      var v = 0, txt = '', nd = Object.keys(days).length;
+      if (r.type === 'teacherOff') {
+        list.forEach(function (s) {
+          if ((!r.nd || r.days[s.day]) && (!r.np || r.periods[s.period])) { v++; if (!lean) (out.bad[s.id] || (out.bad[s.id] = [])).push({ hard: r.hard, text: ttRuleText(r.raw) }); }
+        });
+        txt = ttCount(v) + ' في وقت غير متاح';
+      } else if (r.type === 'tDaysMin') { v = Math.max(0, Math.min(r.n, list.length) - nd); txt = 'أيام الدوام ' + nd + ' والأقل ' + r.n; }
+      else if (r.type === 'tDaysMax') { v = Math.max(0, nd - r.n); txt = 'أيام الدوام ' + nd + ' والأكثر ' + r.n; }
+      else if (r.type === 'tLastMax') { var l = list.filter(function (s) { return s.period === R.lastP(s.class_name); }).length; v = Math.max(0, l - r.n); txt = l + ' حصص أخيرة في الأسبوع والأقصى ' + r.n; }
+      else { var f1 = list.filter(function (s) { return s.period === 1; }).length; v = Math.max(0, Math.min(r.n, list.length) - f1); txt = f1 + ' حصص أولى في الأسبوع والأقل ' + r.n; }
+      chk(r.id, !v);
+      if (!v) return;
+      if (r.hard) out.hard += v; else out.soft += v * r.w;
+      lean || out.notes.push((r.hard ? 'قاعدة ملزمة: ' : '') + txt);
+    });
+    out.score = out.soft;
+    return out;
   }
 
-  function ttTeacherScore(tid) { return ttScore(ttLive().filter(function (s) { return s.teacher_id === tid; }), ttRules(), ttPeriods()); }
+  // تقييم جدول شعبة بقواعد المواد من «قواعدي»؛ bad: الحصص المخالفة لكل منها
+  function ttEvalC(cls, list, R, lean) {
+    var out = { soft: 0, hard: 0, notes: [], checks: {}, bad: {} };
+    var chk = function (id, ok) { var c = out.checks[id] || (out.checks[id] = [0, 0]); c[1]++; if (ok) c[0]++; };
+    R.c.forEach(function (r) {
+      if (TT_RTYPES[r.type].scope !== 'class') return;
+      var mine = list.filter(function (s) { return r.subj[ttSubjKey(s.subject)]; }), v = 0, txt = '';
+      if (!mine.length) return;
+      if (r.type === 'subjOnly' || r.type === 'subjNot') {
+        mine.forEach(function (s) {
+          var badL = r.type === 'subjOnly' ? !r.periods[s.period] : !!r.periods[s.period];
+          chk(r.id, !badL);
+          if (badL) { v++; if (!lean) (out.bad[s.id] || (out.bad[s.id] = [])).push({ hard: r.hard, text: ttRuleText(r.raw) }); }
+        });
+        txt = ttCount(v) + ' تخالف: ' + (lean ? '' : ttRuleText(r.raw));
+      } else if (r.type === 'subjDayMax') {
+        var cnt = {};
+        mine.forEach(function (s) { cnt[s.day] = (cnt[s.day] || 0) + 1; });
+        Object.keys(cnt).forEach(function (d) { v += Math.max(0, cnt[d] - r.n); });
+        chk(r.id, !v);
+        txt = ttCount(v) + ' زائدة: ' + (lean ? '' : ttRuleText(r.raw));
+      } else {
+        // حصص المادة غير المجاورة لحصة منها في اليوم نفسه؛ واحدة منفردة مقبولة إن كان عددها فرديًا
+        var bySub = {};
+        mine.forEach(function (s) { var k = ttSubjKey(s.subject); (bySub[k] || (bySub[k] = [])).push(s); });
+        Object.keys(bySub).forEach(function (k) {
+          var ls = bySub[k], single = ls.filter(function (s) { return !ls.some(function (x) { return x !== s && x.day === s.day && Math.abs(x.period - s.period) === 1; }); }).length;
+          var e = Math.max(0, single - ls.length % 2);
+          v += e;
+          chk(r.id, !e);
+        });
+        txt = ttCount(v) + ' منفردة: ' + (lean ? '' : ttRuleText(r.raw));
+      }
+      if (!v) return;
+      if (r.hard) out.hard += v; else out.soft += v * r.w;
+      lean || out.notes.push((r.hard ? 'قاعدة ملزمة — ' : '') + 'الصف ' + cls + ': ' + txt);
+    });
+    return out;
+  }
 
-  // تكرار المادة في الشعبة في اليوم نفسه: لا يُقبل تبديل يزيده
-  function ttRepeats(list) {
+  // تقييم الجدول كله (أو نسخة منه): لكل معلم وشعبة، والمجاميع، ونسبة الالتزام، والحصص المخالفة
+  function ttEvalAll(list, R) {
+    list = list || ttLive(); R = R || ttRuleSet();
+    var NP = ttPeriods(), byT = {}, byC = {}, res = { t: {}, c: {}, hard: 0, soft: 0, ok: 0, total: 0, per: {}, bad: {} };
+    list.forEach(function (s) {
+      if (s.teacher_id) (byT[s.teacher_id] || (byT[s.teacher_id] = [])).push(s);
+      (byC[s.class_name] || (byC[s.class_name] = [])).push(s);
+    });
+    var add = function (e) {
+      res.hard += e.hard; res.soft += e.soft;
+      Object.keys(e.checks).forEach(function (k) { var p = res.per[k] || (res.per[k] = [0, 0]); p[0] += e.checks[k][0]; p[1] += e.checks[k][1]; res.ok += e.checks[k][0]; res.total += e.checks[k][1]; });
+      Object.keys(e.bad).forEach(function (id) { res.bad[id] = (res.bad[id] || []).concat(e.bad[id]); });
+    };
+    Object.keys(byT).forEach(function (t) { add(res.t[t] = ttEvalT(t, byT[t], R, NP)); });
+    Object.keys(byC).forEach(function (c) { add(res.c[c] = ttEvalC(c, byC[c], R)); });
+    // قواعد الأيام والحصص الأولى/الأخيرة لمعلم بعينه ليست له حصص بعد: لا تُفحص
+    return res;
+  }
+  // «حصة واحدة»، «حصتان»، «3 حصص»، «11 حصة»
+  function ttCount(n) { return n === 1 ? 'حصة واحدة' : n === 2 ? 'حصتان' : n <= 10 ? n + ' حصص' : n + ' حصة'; }
+  function ttPct(ok, total) { return total ? Math.round(ok / total * 1000) / 10 : 100; }
+
+  // مخالفات حصة واحدة (للتحذير عند التعديل وتعليم الخانة): قواعد المادة والحصة، وعدم إتاحة المعلم
+  function ttLessonIssues(s) {
+    var R = ttRuleSet(), out = [];
+    R.c.forEach(function (r) {
+      if ((r.type === 'subjOnly' || r.type === 'subjNot') && r.subj[ttSubjKey(s.subject)] && (r.type === 'subjOnly' ? !r.periods[s.period] : !!r.periods[s.period])) out.push({ hard: r.hard, text: ttRuleText(r.raw) });
+      if (r.type === 'teacherOff' && s.teacher_id && r.teacher_id === s.teacher_id && (!r.nd || r.days[s.day]) && (!r.np || r.periods[s.period])) out.push({ hard: r.hard, text: ttRuleText(r.raw) });
+    });
+    return out;
+  }
+  function ttLessonHard(s) { return ttLessonIssues(s).some(function (x) { return x.hard; }); }
+
+  function ttQuota() { return S.ttConfig && Array.isArray(S.ttConfig.quota) ? S.ttConfig.quota : []; }
+
+  // تكرار المادة في الشعبة في اليوم نفسه: لا يُقبل تبديل يزيده (إلا مواد «حصتان متتاليتان»)
+  function ttRepeats(list, R) {
     var c = {}, n = 0;
-    list.forEach(function (s) { var k = s.day + '|' + s.subject; c[k] = (c[k] || 0) + 1; });
+    list.forEach(function (s) { var k = ttSubjKey(s.subject); if (R && R.dbl[k]) return; k = s.day + '|' + k; c[k] = (c[k] || 0) + 1; });
     Object.keys(c).forEach(function (k) { if (c[k] > 1) n += c[k] - 1; });
     return n;
   }
@@ -7911,14 +8092,78 @@
       ttRulesHtml();
   }
 
+  // مسودة القواعد أثناء التعديل: { b: القواعد الأساسية، c: قواعدي }؛ لا يتغير شيء قبل «حفظ القواعد»
+  function ttRuleDraft() {
+    return ui.ttRuleDraft || (ui.ttRuleDraft = { b: JSON.parse(JSON.stringify(ttRules())), c: JSON.parse(JSON.stringify(ttCustomRules())) });
+  }
+
   function ttRulesHtml() {
-    var r = ttRules(), edit = canEditTT();
-    return '<div class="card"><h2>قواعد الجدول الجيد</h2><p class="hint">بها تُقاس جودة جدول كل معلم وتبحث أداة «تحسين الجدول» عن الأفضل. «النصف الأول من اليوم» هو الحصص الأولى حتى منتصف الدوام.</p>' +
-      Object.keys(TT_RULES).map(function (k) {
-        return '<div class="toolbar" style="align-items:center;margin:6px 0"><label class="check" style="padding:0;min-width:min(100%,460px)"><input type="checkbox" data-trule="' + k + '" data-f="on"' + (r[k].on ? ' checked' : '') + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].label + '</label>' +
-          '<input type="number" min="0" max="' + (k === 'side' ? 100 : 12) + '" data-trule="' + k + '" data-f="v" value="' + r[k].v + '" style="width:5em"' + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].unit +
-          (k === 'first' ? ' <label class="field" style="margin:0">المواد:</label><input type="text" data-trule="first" data-f="subjects" value="' + esc(r.first.subjects) + '" placeholder="قرآن" style="width:14em"' + (edit ? '' : ' disabled') + ' title="افصل بين المواد بفاصلة">' : '') + '</div>';
-      }).join('') + (edit ? '<button type="button" class="btn primary" data-trulesave style="margin-top:8px">حفظ القواعد</button>' : '') + '</div>';
+    var d = ttRuleDraft(), edit = canEditTT(), ev = ttEvalAll(), cfg = ttCfg(), NP = ttPeriods();
+    var saved = {};
+    ttCustomRules().forEach(function (r) { saved[r.id] = JSON.stringify(r); });
+    var dirty = JSON.stringify(d) !== JSON.stringify({ b: ttRules(), c: ttCustomRules() });
+    var dis = edit ? '' : ' disabled';
+    var comp = function (id) {
+      var p = ev.per[id];
+      return p && p[1] ? '<span class="badge ' + (p[0] === p[1] ? 'approved' : 'edit') + '" title="الفحوص المستوفاة من كل الفحوص">' + ttPct(p[0], p[1]) + '% · ' + p[0] + ' من ' + p[1] + '</span>' : '';
+    };
+    var builtins = Object.keys(TT_RULES).map(function (k) {
+      return '<div class="toolbar" style="align-items:center;margin:6px 0"><label class="check" style="padding:0;min-width:min(100%,460px)"><input type="checkbox" data-trb="' + k + '|on"' + (d.b[k].on ? ' checked' : '') + dis + '> ' + TT_RULES[k].label + '</label>' +
+        '<input type="number" min="0" max="' + (k === 'side' ? 100 : 12) + '" data-trb="' + k + '|v" value="' + d.b[k].v + '" style="width:5em"' + dis + '> ' + TT_RULES[k].unit + ' ' + comp(k) + '</div>';
+    }).join('');
+    var subs = cfg.subjects.slice();
+    ttLive().forEach(function (s) { if (subs.indexOf(s.subject) < 0) subs.push(s.subject); });
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (String(v) === String(cur == null ? '' : cur) ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var chips = function (i, f, n, label, list) {
+      var on = ttNums(list);
+      var items = [];
+      for (var k = 0; k < n; k++) items.push(k);
+      return '<span class="tt-chips" style="display:inline-flex">' + items.map(function (k) {
+        var v = f === 'periods' ? k + 1 : k;
+        return '<button type="button" data-trcx="' + i + '|' + f + '|' + v + '"' + (on.indexOf(v) > -1 ? ' class="on"' : '') + dis + '>' + esc(label(v)) + '</button>';
+      }).join('') + '</span>';
+    };
+    var custom = d.c.map(function (r, i) {
+      var T = TT_RTYPES[r.type] || {}, f = T.f || [];
+      var field = function (label, html) { return '<span class="tt-rf"><span>' + label + '</span>' + html + '</span>'; };
+      var body = f.map(function (k) {
+        if (k === 'subjects') return field('المادة', '<input type="text" list="tt-subjlist" data-trc="' + i + '|subjects" value="' + esc(r.subjects || '') + '" placeholder="مثال: قرآن" style="width:13em"' + dis + ' title="أكثر من مادة: افصل بفاصلة">');
+        if (k === 'periods') return field('الحصص', chips(i, 'periods', NP, function (v) { return v; }, r.periods));
+        if (k === 'days') return field('الأيام', chips(i, 'days', cfg.days.length, function (v) { return cfg.days[v]; }, r.days));
+        if (k === 'teacher') return field('المعلم', '<select data-trc="' + i + '|teacher_id"' + dis + '>' + opt('', '— اختر —', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, t.name, r.teacher_id); }).join('') + '</select>');
+        if (k === 'teacherAll') return field('المعلم', '<select data-trc="' + i + '|teacher_id"' + dis + '>' + opt('', 'كل المعلمين', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, t.name, r.teacher_id); }).join('') + '</select>');
+        if (k === 'n') return field('العدد', '<input type="number" min="0" max="30" data-trc="' + i + '|n" value="' + esc(r.n == null ? '' : r.n) + '" style="width:5em"' + dis + '>');
+        return '';
+      }).join('');
+      return '<div class="tt-rule' + (r.on === false ? ' off' : '') + (r.level === 'hard' ? ' hard' : '') + '">' +
+        '<div class="toolbar" style="align-items:center;margin:0 0 6px"><label class="check" style="padding:0"><input type="checkbox" data-trc="' + i + '|on"' + (r.on !== false ? ' checked' : '') + dis + '> <b>' + esc(T.label || r.type) + '</b></label>' +
+          '<select data-trc="' + i + '|level" style="width:auto"' + dis + '>' + Object.keys(TT_LEVELS).map(function (k) { return opt(k, TT_LEVELS[k].label, r.level || 'mid'); }).join('') + '</select>' +
+          (saved[r.id] === JSON.stringify(r) ? comp(r.id) : '<span class="badge new">لم تُحفظ</span>') +
+          '<span style="flex:1"></span>' + (edit ? '<button type="button" class="btn danger" data-trdel="' + i + '" title="حذف القاعدة">×</button>' : '') + '</div>' +
+        '<div class="toolbar" style="align-items:center;margin:0;gap:8px 14px">' + body + '</div>' +
+        '<p class="hint" style="margin:6px 0 0">' + esc(ttRuleText(r)) + (T.hint ? ' · ' + esc(T.hint) : '') + '</p></div>';
+    }).join('');
+    return '<div class="card"><h2>قواعد الجدول الجيد</h2>' +
+      '<div class="tt-comp"><b>نسبة الالتزام بالقواعد الآن: ' + ttPct(ev.ok, ev.total) + '%</b><span>' + ev.ok + ' من ' + ev.total + ' فحصًا مستوفى' + (ev.hard ? ' · <b style="color:var(--red)">مخالفات ملزمة: ' + ev.hard + '</b>' : ' · لا مخالفات ملزمة') + '</span></div>' +
+      '<h3 style="margin:14px 0 4px">القواعد الأساسية</h3><p class="hint" style="margin:0 0 6px">تقيس جودة جدول كل معلم. «النصف الأول من اليوم» هو الحصص حتى منتصف الدوام.</p>' + builtins +
+      '<h3 style="margin:18px 0 4px">قواعدي</h3><p class="hint" style="margin:0 0 8px">قواعد تضيفها من النماذج. <b>الملزمة</b> لا يقترح التحسين ما يزيد مخالفتها ولا يُعتمد؛ وغيرها يسعى التحسين لتقليل مخالفتها بقدر أولويتها، فيصل إلى أفضل ما يمكن. نسبة الالتزام لكل قاعدة بجانبها.</p>' +
+      (custom || '<p class="hint">لا قواعد بعد.</p>') +
+      '<datalist id="tt-subjlist">' + subs.map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
+      (edit ? '<div class="toolbar" style="align-items:center;margin:10px 0 0"><select id="tt-newrule" style="width:auto;max-width:340px">' + Object.keys(TT_RTYPES).map(function (k) { return opt(k, TT_RTYPES[k].label, ''); }).join('') + '</select>' +
+        '<button type="button" class="btn" data-traddrule>+ إضافة القاعدة</button><span style="flex:1"></span>' +
+        (dirty ? '<button type="button" class="btn" data-trreset>تراجع عن التعديلات</button>' : '') +
+        '<button type="button" class="btn primary" data-trulesave' + (dirty ? '' : ' disabled') + '>حفظ القواعد</button></div>' : '') + '</div>';
+  }
+
+  // التحقق قبل الحفظ: كل قاعدة مكتملة الخانات
+  function ttRuleProblem(r) {
+    var f = (TT_RTYPES[r.type] || {}).f || [];
+    if (f.indexOf('subjects') > -1 && !splitList(r.subjects).length) return 'اكتب المادة في قاعدة «' + TT_RTYPES[r.type].label + '»';
+    if (r.type === 'subjOnly' || r.type === 'subjNot') { if (!ttNums(r.periods).length) return 'اختر الحصص في قاعدة «' + TT_RTYPES[r.type].label + '»'; }
+    if (f.indexOf('teacher') > -1 && !r.teacher_id) return 'اختر المعلم في قاعدة «' + TT_RTYPES[r.type].label + '»';
+    if (r.type === 'teacherOff' && !ttNums(r.days).length && !ttNums(r.periods).length) return 'اختر الأيام أو الحصص في قاعدة «' + TT_RTYPES[r.type].label + '»';
+    if (f.indexOf('n') > -1 && !(Number(r.n) >= 0 && String(r.n) !== '')) return 'اكتب العدد في قاعدة «' + TT_RTYPES[r.type].label + '»';
+    return '';
   }
 
   function ttPlanMissingHtml() {
@@ -7926,9 +8171,12 @@
   }
 
   /* --- البحث عن تحسين --- */
-  // tid: المعلم المراد تحسين جدوله، أو '' لكل المعلمين (يقلّ المجموع ولا يسوء جدول أحد)
-  function ttOptimize(tid) {
-    var rules = ttRules(), NP = ttPeriods(), started = Date.now();
+  // tid: المعلم المراد تحسين جدوله، أو '' لكل المعلمين والشعب (يقلّ المجموع ولا يسوء جدول أحد).
+  // القيمة: المخالفات الملزمة أولًا (×1000) ثم الدرجة. لا تزيد المخالفات الملزمة في أي جدول، ولا تسوء درجة غير الهدف عن بدايتها
+  // tol: عند إصلاح مخالفة ملزمة يُقبل تراجع درجة كل معلم آخر حتى tol نقاط عن بدايتها (0: لا يسوء جدول أحد)
+  function ttOptimize(tid, tol) {
+    tol = Number(tol) || 0;
+    var R = ttRuleSet(), NP = ttPeriods(), started = Date.now();
     var S0 = ttLive().map(function (s) { return { id: s.id, day: s.day, period: s.period, class_name: s.class_name, teacher_id: s.teacher_id || '', subject: s.subject, d0: s.day, p0: s.period }; });
     var byT = {}, byC = {}, tBusy = {}, cBusy = {};
     S0.forEach(function (s) {
@@ -7937,11 +8185,11 @@
       if (s.teacher_id) tBusy[s.teacher_id + '|' + s.day + '|' + s.period] = (tBusy[s.teacher_id + '|' + s.day + '|' + s.period] || 0) + 1;
       cBusy[s.class_name + '|' + s.day + '|' + s.period] = (cBusy[s.class_name + '|' + s.day + '|' + s.period] || 0) + 1;
     });
-    var score = function (t) { return t ? ttScore(byT[t] || [], rules, NP, true).score : 0; };
-    var base = {}, cur = {}, baseRep = {};
-    Object.keys(byT).forEach(function (t) { base[t] = cur[t] = score(t); });
-    Object.keys(byC).forEach(function (c) { baseRep[c] = ttRepeats(byC[c]); });
-    var classPeriods = function (c) { var st = ttStageOf(c); return st ? ttPTimes(st).length : NP; };
+    var evT = function (t) { return ttEvalT(t, byT[t] || [], R, NP, true); }, evC = function (c) { return ttEvalC(c, byC[c], R, true); };
+    var val = function (e) { return e.hard * 1000 + e.soft; };
+    var baseT = {}, curT = {}, baseC = {}, curC = {}, baseRep = {};
+    Object.keys(byT).forEach(function (t) { baseT[t] = curT[t] = evT(t); });
+    Object.keys(byC).forEach(function (c) { baseC[c] = curC[c] = evC(c); baseRep[c] = ttRepeats(byC[c], R); });
     var days = ttCfg().days.length;
     var setSlot = function (s, d, p) {
       if (s.teacher_id) { tBusy[s.teacher_id + '|' + s.day + '|' + s.period]--; tBusy[s.teacher_id + '|' + d + '|' + p] = (tBusy[s.teacher_id + '|' + d + '|' + p] || 0) + 1; }
@@ -7954,32 +8202,36 @@
       if (b.id) { var bd = b.day, bp = b.period; setSlot(a, bd, bp); setSlot(b, ad, ap); } else setSlot(a, b.day, b.period);
       return function undo() { if (b.id) { var x = a.day, y = a.period; setSlot(a, b.day, b.period); setSlot(b, x, y); } else setSlot(a, ad, ap); };
     };
-    var pinned = {};
-    S0.forEach(function (s) { pinned[s.id] = ttPinned(s.subject, rules); });
     var valid = function (a, b) {
-      if (pinned[a.id] && b.period > rules.first.v) return false;
-      if (b.id && pinned[b.id] && a.period > rules.first.v) return false;
       // المعلم في الخانة الجديدة غير مشغول بغير الحصة المتبادلة
       if (a.teacher_id && (tBusy[a.teacher_id + '|' + b.day + '|' + b.period] || 0) - (b.id && b.teacher_id === a.teacher_id ? 1 : 0) > 0) return false;
       if (b.id && b.teacher_id && (tBusy[b.teacher_id + '|' + a.day + '|' + a.period] || 0) - (b.teacher_id === a.teacher_id ? 1 : 0) > 0) return false;
       return true;
     };
-    // بعد الحركة: درجات المعلمين المتأثرين وتكرار المواد في الشعبة. لا يسوء أحد عن بدايته، والهدف يتحسن
     var judge = function (a, b) {
-      var ts = [a.teacher_id, b.id ? b.teacher_id : ''].filter(Boolean), out = { ok: true, gain: 0, sc: {} };
-      ts.forEach(function (t) { if (!(t in out.sc)) out.sc[t] = score(t); });
-      if (ttRepeats(byC[a.class_name]) > baseRep[a.class_name]) out.ok = false;
-      Object.keys(out.sc).forEach(function (t) {
-        if (tid && t === tid) return;
-        if (out.sc[t] > base[t]) out.ok = false;
+      var out = { ok: true, gain: 0, t: {}, c: {} }, cls = a.class_name;
+      [a.teacher_id, b.id ? b.teacher_id : ''].forEach(function (t) { if (t && !out.t[t]) out.t[t] = evT(t); });
+      out.c[cls] = evC(cls);
+      // حركة تقلّل مخالفة ملزمة: يُقبل معها تراجع درجة الآخرين حتى tol عن بدايتها (إن اختير ذلك)
+      var hardBefore = curC[cls].hard, hardAfter = out.c[cls].hard;
+      Object.keys(out.t).forEach(function (t) { hardBefore += curT[t].hard; hardAfter += out.t[t].hard; });
+      var allow = hardAfter < hardBefore ? tol : 0;
+      if (ttRepeats(byC[cls], R) > baseRep[cls]) out.ok = false;
+      if (out.c[cls].hard > curC[cls].hard || out.c[cls].soft > baseC[cls].soft + allow) out.ok = false;
+      Object.keys(out.t).forEach(function (t) {
+        if (out.t[t].hard > curT[t].hard) out.ok = false;
+        if (!(tid && t === tid) && out.t[t].soft > baseT[t].soft + allow) out.ok = false;
       });
-      if (tid) out.gain = cur[tid] - (tid in out.sc ? out.sc[tid] : cur[tid]);
-      else Object.keys(out.sc).forEach(function (t) { out.gain += cur[t] - out.sc[t]; });
+      if (tid) out.gain = out.t[tid] ? val(curT[tid]) - val(out.t[tid]) : 0;
+      else {
+        Object.keys(out.t).forEach(function (t) { out.gain += val(curT[t]) - val(out.t[t]); });
+        out.gain += val(curC[cls]) - val(out.c[cls]);
+      }
       return out;
     };
     var candidates = function (s) {
       var list = byC[s.class_name].filter(function (x) { return x !== s && (x.day !== s.day || x.period !== s.period) && x.teacher_id !== s.teacher_id; });
-      var np = classPeriods(s.class_name);
+      var np = R.lastP(s.class_name);
       for (var d = 0; d < days; d++) for (var p = 1; p <= np; p++) if (!cBusy[s.class_name + '|' + d + '|' + p]) list.push({ day: d, period: p });
       return list;
     };
@@ -7989,19 +8241,22 @@
         candidates(a).forEach(function (b) {
           if (!valid(a, b)) return;
           var undo = doMove(a, b), j = judge(a, b);
-          if (j.ok && j.gain >= needGain && (!best || j.gain > best.gain)) best = { a: a, b: b, gain: j.gain, sc: j.sc };
+          if (j.ok && j.gain >= needGain && (!best || j.gain > best.gain)) best = { a: a, b: b, gain: j.gain, t: j.t, c: j.c };
           undo();
         });
       });
       return best;
     };
-    var apply = function (m) { doMove(m.a, m.b); Object.keys(m.sc).forEach(function (t) { cur[t] = m.sc[t]; }); };
-    var pool = function () { return tid ? (byT[tid] || []) : S0.filter(function (s) { return s.teacher_id && cur[s.teacher_id] > 0; }); };
-    for (var step = 0; step < 25 && Date.now() - started < 6000; step++) {
-      if (tid && cur[tid] === 0) break;
+    var commit = function (m) { Object.keys(m.t).forEach(function (t) { curT[t] = m.t[t]; }); Object.keys(m.c).forEach(function (c) { curC[c] = m.c[c]; }); };
+    var apply = function (m) { doMove(m.a, m.b); commit(m); };
+    var pool = function () {
+      return tid ? (byT[tid] || []) : S0.filter(function (s) { return (s.teacher_id && val(curT[s.teacher_id]) > 0) || val(curC[s.class_name]) > 0; });
+    };
+    for (var step = 0; step < 30 && Date.now() - started < 6000; step++) {
+      if (tid && (!curT[tid] || val(curT[tid]) === 0)) break;
       var m = bestSingle(pool(), 1);
       if (m) { apply(m); continue; }
-      // لا تبديل واحد يكفي: تبديل محايد في شعبة من شعب المعلم يفتح الطريق لتبديل ثانٍ يحسّن
+      // لا تبديل واحد يكفي: تبديل محايد في شعبة من شعب الهدف يفتح الطريق لتبديل ثانٍ يحسّن
       var two = null, classes = {};
       pool().forEach(function (s) { classes[s.class_name] = 1; });
       Object.keys(classes).some(function (c) {
@@ -8011,10 +8266,14 @@
             if ((b.id && tid && b.teacher_id === tid) || !valid(a, b)) return false;
             var undo = doMove(a, b), j = judge(a, b);
             if (j.ok && j.gain >= 0) {
-              var saved = {}; Object.keys(j.sc).forEach(function (t) { saved[t] = cur[t]; cur[t] = j.sc[t]; });
+              var savedT = {}, savedC = {};
+              Object.keys(j.t).forEach(function (t) { savedT[t] = curT[t]; });
+              Object.keys(j.c).forEach(function (k) { savedC[k] = curC[k]; });
+              commit(j);
               var m2 = bestSingle(pool(), 1);
-              Object.keys(saved).forEach(function (t) { cur[t] = saved[t]; });
-              if (m2) { two = [{ a: a, b: b, sc: j.sc }, m2]; undo(); return true; }
+              Object.keys(savedT).forEach(function (t) { curT[t] = savedT[t]; });
+              Object.keys(savedC).forEach(function (k) { curC[k] = savedC[k]; });
+              if (m2) { two = [{ a: a, b: b, t: j.t, c: j.c }, m2]; undo(); return true; }
             }
             undo();
             return Date.now() - started > 6000;
@@ -8026,8 +8285,8 @@
     }
     var changes = S0.filter(function (s) { return s.day !== s.d0 || s.period !== s.p0; }).map(function (s) { return { id: s.id, from: { d: s.d0, p: s.p0 }, to: { d: s.day, p: s.period } }; });
     var summary = {};
-    changes.forEach(function (c) { var s = S0.filter(function (x) { return x.id === c.id; })[0]; if (s.teacher_id) summary[s.teacher_id] = { before: base[s.teacher_id], after: cur[s.teacher_id] }; });
-    if (tid && !summary[tid]) summary[tid] = { before: base[tid] || 0, after: cur[tid] || 0 };
+    changes.forEach(function (c) { var s = S0.filter(function (x) { return x.id === c.id; })[0]; if (s.teacher_id) summary[s.teacher_id] = { before: val(baseT[s.teacher_id]), after: val(curT[s.teacher_id]) }; });
+    if (tid && !summary[tid] && baseT[tid]) summary[tid] = { before: val(baseT[tid]), after: val(curT[tid]) };
     return { changes: changes, summary: summary };
   }
 
@@ -8060,40 +8319,46 @@
     return '<b>' + esc(s.class_name) + '</b>: ' + esc(s.subject) + ' (' + esc(ttShortTName(s.teacher_id)) + ') من ' + esc(days[c.from.d]) + ' الحصة ' + c.from.p + ' إلى ' + esc(days[c.to.d]) + ' الحصة ' + c.to.p;
   }
 
-  // عرض اقتراح: التغييرات، ودرجة كل معلم متأثر قبل وبعد، وجداولهم قبل وبعد
+  // عرض اقتراح: التغييرات، ونسبة الالتزام قبل وبعد، ودرجة كل معلم متأثر قبل وبعد، وجداولهم قبل وبعد
   function ttProposalBody(changes, summary) {
-    var moved = {}, after = ttWithChanges(changes), rules = ttRules(), NP = ttPeriods();
+    var moved = {}, after = ttWithChanges(changes), R = ttRuleSet(), ev0 = ttEvalAll(ttLive(), R), ev1 = ttEvalAll(after, R);
     changes.forEach(function (c) { moved[c.id] = 1; });
     var teachers = Object.keys(summary);
+    changes.forEach(function (c) { var s = ttById(c.id); if (s && s.teacher_id && teachers.indexOf(s.teacher_id) < 0) teachers.push(s.teacher_id); });
+    var cell = function (e) {
+      if (!e) return '0';
+      return e.soft + (e.hard ? ' <b style="color:var(--red)">· ملزمة ' + e.hard + '</b>' : '') + '<br><small class="hint">' + (e.notes.length ? e.notes.map(esc).join('، ') : 'لا مخالفات') + '</small>';
+    };
+    var v = function (e) { return e ? e.hard * 1000 + e.soft : 0; };
     var rows = teachers.map(function (t) {
-      var b = ttScore(ttLive().filter(function (s) { return s.teacher_id === t; }), rules, NP), a = ttScore(after.filter(function (s) { return s.teacher_id === t; }), rules, NP);
-      return '<tr><td><b>' + esc(ttTName(t)) + '</b></td><td>' + b.score + (b.notes.length ? '<br><small class="hint">' + b.notes.map(esc).join('، ') + '</small>' : '') + '</td><td>' + a.score +
-        (a.notes.length ? '<br><small class="hint">' + a.notes.map(esc).join('، ') + '</small>' : '<br><small class="hint">لا مخالفات</small>') + '</td><td>' +
-        (a.score < b.score ? '<span class="badge approved">تحسّن</span>' : a.score === b.score ? '<span class="badge new">كما هو</span>' : '<span class="badge unpaid">ساء</span>') + '</td></tr>';
+      var b = ev0.t[t], a = ev1.t[t];
+      return '<tr><td><b>' + esc(ttTName(t)) + '</b></td><td>' + cell(b) + '</td><td>' + cell(a) + '</td><td>' +
+        (v(a) < v(b) ? '<span class="badge approved">تحسّن</span>' : v(a) === v(b) ? '<span class="badge new">كما هو</span>' : '<span class="badge unpaid">ساء</span>') + '</td></tr>';
     }).join('');
     var grids = teachers.map(function (t) {
       return '<div class="tt-minis">' + ttMiniGrid(ttLive().filter(function (s) { return s.teacher_id === t; }), moved, ttTName(t) + ' — قبل') +
         ttMiniGrid(after.filter(function (s) { return s.teacher_id === t; }), moved, ttTName(t) + ' — بعد') + '</div>';
     }).join('');
-    return '<ul class="tt-checks">' + changes.map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>' +
+    return '<div class="tt-comp"><b>الالتزام بالقواعد: ' + ttPct(ev0.ok, ev0.total) + '% ← ' + ttPct(ev1.ok, ev1.total) + '%</b><span>المخالفات الملزمة: ' + ev0.hard + ' ← ' + ev1.hard + '</span></div>' +
+      '<ul class="tt-checks">' + changes.map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>' +
       '<div class="table-wrap" style="margin-top:8px"><table class="grid"><thead><tr><th>المعلم</th><th>الدرجة قبل</th><th>الدرجة بعد</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<p class="hint" style="margin:6px 0">الدرجة مجموع مخالفات القواعد؛ الأقل أفضل، والصفر بلا مخالفات.</p>' +
+      '<p class="hint" style="margin:6px 0">الدرجة مجموع مخالفات القواعد بأوزانها؛ الأقل أفضل، والصفر بلا مخالفات.</p>' +
       '<details class="bank"><summary>الجداول قبل وبعد (الخانات الملوّنة هي المنقولة)</summary>' + grids + '</details>';
   }
 
   function ttImproveHtml() {
     if (S.ttPlanMissing) return ttPlanMissingHtml();
-    var edit = canEditTT(), list = ttTeachers(), rules = ttRules(), NP = ttPeriods();
-    var scored = list.map(function (t) { return { t: t, s: ttScore(ttLive().filter(function (x) { return x.teacher_id === t.id; }), rules, NP) }; })
-      .sort(function (a, b) { return b.s.score - a.s.score || a.t.name.localeCompare(b.t.name, 'ar'); });
-    var opts = '<option value="">كل المعلمين (يقلّ مجموع المخالفات ولا يسوء جدول أحد)</option>' + scored.map(function (x) {
-      return '<option value="' + x.t.id + '"' + (ui.ttImpT === x.t.id ? ' selected' : '') + '>' + esc(x.t.name) + ' — الدرجة ' + x.s.score + '</option>';
+    var edit = canEditTT(), ev = ttEvalAll();
+    var scored = ttTeachers().map(function (t) { var e = ev.t[t.id] || { soft: 0, hard: 0, notes: [] }; return { t: t, e: e }; })
+      .sort(function (a, b) { return (b.e.hard * 1000 + b.e.soft) - (a.e.hard * 1000 + a.e.soft) || a.t.name.localeCompare(b.t.name, 'ar'); });
+    var opts = '<option value="">كل المعلمين والشعب (يقلّ مجموع المخالفات ولا يسوء جدول أحد)</option>' + scored.map(function (x) {
+      return '<option value="' + x.t.id + '"' + (ui.ttImpT === x.t.id ? ' selected' : '') + '>' + esc(x.t.name) + ' — الدرجة ' + x.e.soft + (x.e.hard ? ' · ملزمة ' + x.e.hard : '') + '</option>';
     }).join('');
     var res = ui.ttOpt, card = '';
-    if (res && res.tid === (ui.ttImpT || '')) {
+    if (res && res.tid === (ui.ttImpT || '') && (res.tol || 0) === (ui.ttTol || 0)) {
       card = !res.changes.length
-        ? '<div class="card"><h2>النتيجة</h2><p class="hint" style="margin:0">لم أجد تبديلًا يحسّن ' + (res.tid ? 'جدول «' + esc(ttTName(res.tid)) + '»' : 'الجدول') + ' دون أن يسيء إلى جدول معلم آخر أو يصنع تعارضًا. ' +
-          'يمكنك تخفيف القواعد في «النصاب والقواعد»، أو تعديل حصص يدويًا ثم إعادة البحث.</p></div>'
+        ? '<div class="card"><h2>النتيجة</h2><p class="hint" style="margin:0">لم أجد تبديلًا يحسّن ' + (res.tid ? 'جدول «' + esc(ttTName(res.tid)) + '»' : 'الجدول') + ' دون أن يسيء إلى جدول معلم آخر أو يزيد مخالفة قاعدة ملزمة أو يصنع تعارضًا. ' +
+          'هذا أفضل ما يمكن بالقواعد الحالية؛ يمكنك خفض أولوية قاعدة أو تخفيفها في «النصاب والقواعد»، أو تعديل حصص يدويًا ثم إعادة البحث.</p></div>'
         : '<div class="card" style="border:2px solid var(--primary)"><h2>الاقتراح: ' + res.changes.length + ' حصة تنتقل</h2>' + ttProposalBody(res.changes, res.summary) +
           (edit ? '<div class="toolbar" style="margin:12px 0 0"><input type="text" id="tt-proptitle" placeholder="عنوان الاقتراح (اختياري)" value="' + esc(res.title || '') + '" style="flex:1;min-width:200px"><button type="button" class="btn primary" data-ttpropsave>حفظ كاقتراح للاعتماد</button><button type="button" class="btn" data-ttoptclear>إلغاء</button></div>' : '') + '</div>';
     }
@@ -8101,17 +8366,20 @@
     var pend = props.filter(function (p) { return p.status === 'pending'; }), done = props.filter(function (p) { return p.status !== 'pending'; }).slice(0, 15);
     var propCard = function (p) {
       var st = p.status === 'approved' ? '<span class="badge approved">اعتُمد</span>' : p.status === 'rejected' ? '<span class="badge unpaid">رُفض</span>' : '<span class="badge edit">بانتظار الاعتماد</span>';
-      return '<div class="card"><h2>' + esc(p.title || 'اقتراح تحسين') + ' ' + st + '</h2><p class="hint">' + esc(p.goal || '') + ' · أعدّه ' + esc(p.created_by || '') + ' في ' + dmy(String(p.created_at || '').slice(0, 10)) +
+      return '<div class="card"><h2>' + esc(p.title || 'اقتراح تحسين') + ' ' + st + '</h2><p class="hint">' + (p.goal ? esc(p.goal.split('. ')[0]) + ' · ' : '') + 'أعدّه ' + esc(p.created_by || '') + ' في ' + dmy(String(p.created_at || '').slice(0, 10)) +
         (p.decided_by ? ' · ' + (p.status === 'approved' ? 'اعتمده ' : 'رفضه ') + esc(p.decided_by) : '') + '</p>' +
         (p.status === 'pending' ? ttProposalBody(p.changes || [], p.summary || {}) +
           (edit ? '<div class="toolbar" style="margin:12px 0 0"><button type="button" class="btn primary" data-ttpropok="' + p.id + '">اعتماد وتطبيق</button><button type="button" class="btn danger" data-ttpropno="' + p.id + '">رفض</button></div>' : '')
           : '<ul class="tt-checks">' + (p.changes || []).map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>') + '</div>';
     };
-    return '<div class="card"><h2>تحسين الجدول</h2><p class="hint">يبحث البرنامج عن تبديل حصتين في الشعبة نفسها يحسّن جدول المعلم المختار حسب «قواعد الجدول الجيد»، بشرط ألا يصنع تعارضًا، ولا يغيّر النصاب، ولا يسيء إلى جدول أي معلم آخر. ' +
+    var me = ui.ttImpT && ev.t[ui.ttImpT];
+    return '<div class="card"><h2>تحسين الجدول</h2><p class="hint">يبحث البرنامج عن تبديل حصتين في الشعبة نفسها يحسّن الجدول حسب القواعد، فيبدأ بالقواعد الملزمة ثم الأعلى أولوية، بشرط ألا يصنع تعارضًا، ولا يغيّر النصاب، ولا يزيد مخالفة قاعدة ملزمة، ولا يسيء إلى جدول أي معلم آخر. ' +
         'لا يتغير الجدول قبل أن يُعتمد الاقتراح.</p>' +
-        '<div class="toolbar" style="align-items:center;margin:0"><select id="tt-impt" style="width:auto;max-width:420px">' + opts + '</select>' +
+        '<div class="tt-comp" style="margin-bottom:10px"><b>الالتزام بالقواعد الآن: ' + ttPct(ev.ok, ev.total) + '%</b><span>' + (ev.hard ? '<b style="color:var(--red)">مخالفات ملزمة: ' + ev.hard + '</b>' : 'لا مخالفات ملزمة') + '</span></div>' +
+        '<div class="toolbar" style="align-items:center;margin:0"><select id="tt-impt" style="width:auto;max-width:440px">' + opts + '</select>' +
+        '<select id="tt-tol" style="width:auto" title="عند إصلاح مخالفة قاعدة ملزمة">' + [[0, 'صارم: لا يسوء جدول أحد'], [3, 'لإصلاح الملزمة: تراجع بسيط مقبول (حتى 3 نقاط للمعلم)'], [6, 'لإصلاح الملزمة: تراجع متوسط مقبول (حتى 6 نقاط)']].map(function (o) { return '<option value="' + o[0] + '"' + ((ui.ttTol || 0) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
         '<button type="button" class="btn primary" data-ttopt' + (edit ? '' : ' disabled') + '>ابحث عن تحسين</button></div>' +
-        (ui.ttImpT ? (function () { var s = ttTeacherScore(ui.ttImpT); return '<p class="hint" style="margin:8px 0 0">المخالفات الآن: ' + (s.notes.length ? s.notes.map(esc).join('، ') : 'لا شيء') + '</p>'; })() : '') + '</div>' +
+        (ui.ttImpT ? '<p class="hint" style="margin:8px 0 0">المخالفات الآن: ' + (me && me.notes.length ? me.notes.map(esc).join('، ') : 'لا شيء') + '</p>' : '') + '</div>' +
       card +
       (pend.length ? '<h3 style="margin:18px 0 8px">اقتراحات بانتظار الاعتماد (' + pend.length + ')</h3>' + pend.map(propCard).join('') : '') +
       (done.length ? '<details class="bank" style="margin-top:14px"><summary>اقتراحات سابقة (' + done.length + ')</summary>' + done.map(propCard).join('') + '</details>' : '');
@@ -8120,7 +8388,7 @@
   async function ttSaveProposal() {
     var res = ui.ttOpt, t = res.tid ? ttTName(res.tid) : '';
     var row = { title: (document.getElementById('tt-proptitle') || {}).value || (t ? 'تحسين جدول ' + t : 'تحسين الجدول لكل المعلمين'),
-      goal: 'حسب القواعد: ' + Object.keys(TT_RULES).filter(function (k) { return ttRules()[k].on; }).map(function (k) { return TT_RULES[k].label + ' ' + ttRules()[k].v + (k === 'side' ? '%' : ''); }).join('؛ '),
+      goal: (res.tol ? 'سُمح بتراجع حتى ' + res.tol + ' نقاط في جداول الآخرين لإصلاح القواعد الملزمة. ' : 'صارم: لم يسُؤ جدول أحد. ') + 'القواعد المفعّلة: ' + ttCustomRules().filter(function (r) { return r.on !== false; }).map(function (r) { return ttRuleText(r) + ' (' + (TT_LEVELS[r.level] || TT_LEVELS.mid).label + ')'; }).join('؛ '),
       teacher_id: res.tid || null, changes: res.changes, summary: res.summary, status: 'pending', created_by: ttWho() };
     var r = await sb.from('timetable_proposals').insert(row).select().single();
     if (r.error) return fail(r.error);
@@ -8130,7 +8398,8 @@
     toast('حُفظ الاقتراح بانتظار الاعتماد');
   }
 
-  // الاعتماد: يُتحقق أن الحصص ما زالت حيث كانت عند إعداد الاقتراح وأن التطبيق لا يصنع تعارضًا جديدًا، ثم تُنقل
+  // الاعتماد: يُتحقق أن الحصص ما زالت حيث كانت عند إعداد الاقتراح، وأن التطبيق لا يصنع تعارضًا جديدًا
+  // ولا يزيد مخالفة قاعدة ملزمة، ثم تُنقل
   async function ttDecideProposal(id, approve) {
     var now = new Date().toISOString(), who = ttWho();
     // الجدول والاقتراحات كما هي الآن في القاعدة، لا كما حُمّلت (قد يكون غيرك عدّل الجدول أو بتّ في الاقتراح)
@@ -8141,7 +8410,7 @@
       var stale = (p.changes || []).filter(function (c) { var s = ttById(c.id); return !s || s.status === 'removed' || s.day !== c.from.d || s.period !== c.from.p; });
       if (stale.length) return alert('تغيّر الجدول منذ إعداد هذا الاقتراح (' + stale.length + ' من حصصه لم تعد في مكانها). ارفضه وأعد البحث عن تحسين.');
       if (ttConflicts(ttWithChanges(p.changes)).groups.length > ttConflicts().groups.length) return alert('تطبيق هذا الاقتراح الآن يصنع تعارضًا. ارفضه وأعد البحث عن تحسين.');
-      if (ttWithChanges(p.changes).filter(function (s) { return ttPinBad(s); }).length > ttLive().filter(function (s) { return ttPinBad(s); }).length) return alert('هذا الاقتراح ينقل حصة ' + ttRules().first.subjects + ' إلى ما بعد الحصة ' + ttRules().first.v + '، وهذا يخالف شرط الأكاديمية. ارفضه وأعد البحث عن تحسين.');
+      if (ttEvalAll(ttWithChanges(p.changes)).hard > ttEvalAll().hard) return alert('تطبيق هذا الاقتراح يزيد مخالفة قاعدة ملزمة (ربما تغيّرت القواعد بعد إعداده). ارفضه وأعد البحث عن تحسين.');
       if (!confirm('اعتماد الاقتراح ونقل ' + p.changes.length + ' حصة؟')) return;
       var done = [];
       for (var i = 0; i < p.changes.length; i++) {
@@ -8349,20 +8618,31 @@
       return;
     }
     if (e.target.closest('[data-trulesave]')) {
-      var rules = {};
-      Object.keys(TT_RULES).forEach(function (k) {
-        rules[k] = { on: app.querySelector('[data-trule="' + k + '"][data-f="on"]').checked, v: Number(app.querySelector('[data-trule="' + k + '"][data-f="v"]').value) || 0 };
-        var subj = app.querySelector('[data-trule="' + k + '"][data-f="subjects"]');
-        if (subj) rules[k].subjects = subj.value.trim();
-      });
-      ttSaveConfig({ rules: rules }).then(function (ok) { if (ok) { ui.ttOpt = null; render(); toast('حُفظت القواعد'); } });
+      var dr = ttRuleDraft();
+      for (var ri = 0; ri < dr.c.length; ri++) { var pr = ttRuleProblem(dr.c[ri]); if (pr) return toast(pr, true); }
+      // القواعد الأساسية في مفاتيحها، و«قواعدي» في custom (شرط القرآن القديم rules.first صار منها)
+      ttSaveConfig({ rules: Object.assign({}, dr.b, { custom: dr.c }) }).then(function (ok) { if (ok) { ui.ttRuleDraft = null; ui.ttOpt = null; render(); toast('حُفظت القواعد'); } });
       return;
+    }
+    if (e.target.closest('[data-trreset]')) { ui.ttRuleDraft = null; return render(); }
+    if (e.target.closest('[data-traddrule]')) {
+      var type = document.getElementById('tt-newrule').value, nr = { id: 'r' + Date.now().toString(36), type: type, on: true, level: 'mid' };
+      if (TT_RTYPES[type].f.indexOf('n') > -1) nr.n = type === 'subjDayMax' ? 1 : type === 'tLastMax' ? 2 : type === 'tFirstMin' ? 1 : 4;
+      ttRuleDraft().c.push(nr);
+      return render();
+    }
+    if ((el = e.target.closest('[data-trdel]'))) { ttRuleDraft().c.splice(+el.getAttribute('data-trdel'), 1); return render(); }
+    if ((el = e.target.closest('[data-trcx]'))) {
+      var px = el.getAttribute('data-trcx').split('|'), rr = ttRuleDraft().c[+px[0]], list = ttNums(rr[px[1]]), v = +px[2], at = list.indexOf(v);
+      if (at > -1) list.splice(at, 1); else list.push(v);
+      rr[px[1]] = list.sort(function (a, b) { return a - b; });
+      return render();
     }
     if (e.target.closest('[data-ttopt]')) {
       var btn = e.target.closest('[data-ttopt]');
       btn.disabled = true;
       btn.textContent = 'جارٍ البحث…';
-      setTimeout(function () { var r = ttOptimize(ui.ttImpT || ''); r.tid = ui.ttImpT || ''; ui.ttOpt = r; render(); }, 30);
+      setTimeout(function () { var r = ttOptimize(ui.ttImpT || '', ui.ttTol || 0); r.tid = ui.ttImpT || ''; r.tol = ui.ttTol || 0; ui.ttOpt = r; render(); }, 30);
       return;
     }
     if (e.target.closest('[data-ttoptclear]')) { ui.ttOpt = null; return render(); }
@@ -8387,6 +8667,7 @@
     var el = e.target;
     if (el.id === 'tt-addteacher' && el.value) { ui.ttTeacher = el.value; return render(); }
     if (el.id === 'tt-impt') { ui.ttImpT = el.value; ui.ttOpt = null; return render(); }
+    if (el.id === 'tt-tol') { ui.ttTol = Number(el.value) || 0; ui.ttOpt = null; return render(); }
     if (el.id === 'tt-sign') { try { localStorage.setItem('tt-sign', el.checked ? '1' : '0'); } catch (err) {} return; }
     if (!canEditTT()) return;
     if (/^tte-(day|period|class|teacher|subject)$/.test(el.id)) {
@@ -8408,6 +8689,16 @@
       };
       reader.readAsText(file, 'utf-8');
       return;
+    }
+    if (el.hasAttribute('data-trb')) {
+      var bp = el.getAttribute('data-trb').split('|');
+      ttRuleDraft().b[bp[0]][bp[1]] = bp[1] === 'on' ? el.checked : Number(el.value) || 0;
+      return render();
+    }
+    if (el.hasAttribute('data-trc')) {
+      var cp = el.getAttribute('data-trc').split('|'), cr = ttRuleDraft().c[+cp[0]];
+      cr[cp[1]] = cp[1] === 'on' ? el.checked : cp[1] === 'n' ? el.value : el.value.trim();
+      return render();
     }
     if (el.hasAttribute('data-tq')) {
       var row = ui.ttQuota[+el.getAttribute('data-tq')], f = el.getAttribute('data-f');
