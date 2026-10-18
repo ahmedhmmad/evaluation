@@ -379,6 +379,43 @@
   #print-sheet .warn { color: var(--warn); }
   #print-sheet .bad { color: var(--bad); }
 
+  /* جدول الحصص المطبوع: كل صفحة تُضبط وحدها، والصفحات بعد الأولى تبدأ بهامش الورقة نفسه */
+  #print-sheet.tt-pages .tt-page + .tt-page { break-before: page; page-break-before: always; padding-top: var(--pad-y); }
+  #print-sheet.tt-pages .tt-page { break-inside: avoid; }
+  #print-sheet.tt-pages .rh-banner { width: 100%; height: 19mm; object-fit: contain; margin: 0; }
+  #print-sheet.tt-pages .rh { margin-bottom: .2em; }
+  #print-sheet .tt-ptitle { text-align: center; font-family: var(--font-head); font-weight: 800; color: var(--navy); font-size: 1.4em; line-height: 1.3; }
+  #print-sheet .tt-pmeta { text-align: center; color: #5e6b80; font-size: .8em; margin-bottom: .4em; }
+  #print-sheet table.tt-ptable { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #print-sheet table.tt-ptable th, #print-sheet table.tt-ptable td { border: 1px solid #9aa3b5; text-align: center; padding: .2em .15em; vertical-align: middle; }
+  #print-sheet table.tt-ptable thead th { background: var(--navy-dark); color: #fff; font-family: var(--font-head); font-size: .8em; line-height: 1.3; }
+  #print-sheet table.tt-ptable thead small { display: block; font-weight: 400; font-size: .85em; direction: ltr; }
+  #print-sheet table.tt-ptable thead th:first-child, #print-sheet table.tt-ptable tbody th { width: 5.2em; }
+  #print-sheet table.tt-ptable tbody th { background: var(--gold-soft); color: var(--navy); font-family: var(--font-head); font-size: .95em; }
+  #print-sheet table.tt-ptable td b { display: block; font-family: var(--font-head); font-size: 1em; line-height: 1.25; }
+  #print-sheet table.tt-ptable td small { display: block; color: #5e6b80; font-size: .72em; line-height: 1.25; }
+  #print-sheet table.tt-ptable td hr { border: 0; border-top: 1px dashed var(--gold); margin: .1em 0; }
+  #print-sheet .tt-sig { display: flex; justify-content: space-between; margin-top: .6em; color: #5e6b80; font-size: .75em; }
+  #print-sheet .tt-mtitle { text-align: center; font-family: var(--font-head); font-weight: 700; font-size: 1.45em; margin-bottom: .3em; }
+  #print-sheet table.tt-mtable { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1.6pt solid #111; }
+  #print-sheet table.tt-mtable col.c0 { width: 17mm; }
+  #print-sheet table.tt-mtable.wide col.c0 { width: 30mm; }
+  #print-sheet table.tt-mtable th, #print-sheet table.tt-mtable td { border: .6pt solid #555; text-align: center; padding: 0; line-height: 1.15; overflow-wrap: normal; }
+  #print-sheet table.tt-mtable th.day { font-family: var(--font-head); font-size: 1em; padding: .15em 0; }
+  #print-sheet table.tt-mtable th.per { font-size: .85em; }
+  #print-sheet table.tt-mtable th.rh { font-family: var(--font-head); font-size: .95em; padding: 0 .2em; }
+  #print-sheet table.tt-mtable td { font-size: .78em; }
+  #print-sheet table.tt-mtable td .sm { font-size: .82em; letter-spacing: -.2pt; }
+  #print-sheet table.tt-mtable .ds { border-right: 1.6pt solid #111; }
+  #print-sheet .tt-mfoot { display: flex; justify-content: space-between; gap: 1em; font-size: .7em; color: #444; margin-top: .4em; }
+  #print-sheet .tt-btitle { text-align: center; font-family: var(--font-head); font-size: 1.1em; font-weight: 700; color: #333; }
+  #print-sheet .tt-bgroup { text-align: center; margin: .4em 0 .7em; }
+  #print-sheet .tt-bgroup span { display: inline-block; font-family: var(--font-head); font-size: 1.8em; font-weight: 800; line-height: 1.35; padding: .15em .7em; border: 2.4pt solid #111; border-radius: 4mm; background: var(--gold-soft); }
+  #print-sheet table.tt-btable { width: 100%; border-collapse: collapse; }
+  #print-sheet table.tt-btable th, #print-sheet table.tt-btable td { border: .8pt solid #444; padding: 0 .5em; font-size: 1.1em; text-align: start; }
+  #print-sheet table.tt-btable th { background: #eee; color: #111; font-family: var(--font-head); font-size: .8em; padding: .3em .5em; }
+  #print-sheet table.tt-btable .t { text-align: center; width: 30%; font-weight: 700; direction: ltr; }
+  #print-sheet table.tt-btable tr.k-a td, #print-sheet table.tt-btable tr.k-b td { background: var(--gold-soft); font-weight: 800; }
   /* التوقيعات والختم */
   #print-sheet .rs { display: flex; gap: .9em; align-items: stretch; justify-content: flex-end; margin-top: 1.5em; break-inside: avoid; }
   #print-sheet .rs > div { flex: 1; padding: .45em .7em .6em; border: .5pt solid var(--rule); border-top: 1.5pt solid var(--navy); }
@@ -542,6 +579,99 @@
   .simset:first-of-type { border-top: 0; }
   .simset label.check { display: inline-flex; margin-inline-end: 18px; }
 
+  /* جدول الحصص */
+  .tt-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .tt-picker button { font: inherit; font-size: .88rem; border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 4px 12px; cursor: pointer; }
+  .tt-picker button.on { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-dark); font-weight: 700; }
+  .tt-picker .warn { color: var(--red); font-weight: 800; margin-inline-start: 4px; }
+  .tt-head { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: flex-end; margin-bottom: 12px; }
+  .tt-head h2 { margin: 0; font-size: 1.25rem; }
+  .tt-stats { display: flex; gap: 18px; margin-inline-start: auto; }
+  .tt-stats div { text-align: center; }
+  .tt-stats b { display: block; font-size: 1.35rem; color: var(--primary-dark); line-height: 1.1; }
+  .tt-stats span { font-size: .75rem; color: var(--muted); }
+  table.tt-grid { border-collapse: collapse; width: 100%; min-width: 720px; table-layout: fixed; }
+  .tt-grid th, .tt-grid td { border: 1px solid var(--line); }
+  .tt-grid thead th { background: var(--primary-dark); color: #fff; padding: 8px 4px; font-weight: 700; font-size: .9rem; }
+  .tt-grid thead th small { display: block; font-weight: 400; font-size: .72rem; opacity: .85; direction: ltr; }
+  .tt-grid thead th.corner, .tt-grid tbody th { width: 84px; }
+  .tt-grid tbody th { background: var(--primary-soft); color: var(--primary-dark); font-weight: 800; }
+  .tt-grid td { height: 76px; padding: 0; vertical-align: top; }
+  .tt-cell { box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; width: 100%; height: 100%; min-height: 76px; padding: 6px; text-align: center; position: relative; border: 0; background: none; font: inherit; color: inherit; }
+  button.tt-cell { cursor: pointer; }
+  button.tt-cell:hover { background: #f8fafc; }
+  .tt-cell .m { font-size: 1.02rem; font-weight: 700; line-height: 1.3; }
+  .tt-cell .s { font-size: .78rem; color: var(--muted); }
+  .tt-cell.multi .m { font-size: .9rem; }
+  .tt-cell hr { width: 70%; border: 0; border-top: 1px dashed var(--line); margin: 2px 0; }
+  .tt-cell.empty { color: transparent; font-size: 1.3rem; }
+  button.tt-cell.empty:hover { color: var(--muted); }
+  .tt-cell.review { background: var(--amber-soft); box-shadow: inset 0 0 0 2px var(--amber); }
+  .tt-cell.conflict { background: var(--red-soft); box-shadow: inset 0 0 0 2px var(--red); }
+  .tt-cell .flag { position: absolute; top: 3px; inset-inline-end: 6px; font-size: .66rem; font-weight: 700; }
+  .tt-cell.review .flag { color: var(--amber); }
+  .tt-cell.conflict .flag { color: var(--red); }
+  .tt-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: .82rem; color: var(--muted); }
+  .tt-legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-inline-end: 5px; }
+  .tt-legend .r { background: var(--amber-soft); box-shadow: inset 0 0 0 2px var(--amber); }
+  .tt-legend .c { background: var(--red-soft); box-shadow: inset 0 0 0 2px var(--red); }
+  .tt-subjects { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tt-subjects span { background: #f1f5f9; border-radius: 99px; padding: 2px 10px; font-size: .85rem; }
+  .tt-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 12px; margin-bottom: 6px; }
+  .tt-items { display: grid; gap: 8px; }
+  .tt-item { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; border: 1px solid var(--line); border-inline-start: 4px solid var(--amber); border-radius: 10px; padding: 10px 12px; }
+  .tt-item.bad { border-inline-start-color: var(--red); }
+  .tt-item.gone { border-inline-start-color: var(--line); opacity: .85; }
+  .tt-item .when { font-weight: 800; min-width: 150px; }
+  .tt-item .what { flex: 1; min-width: 0; }
+  .tt-item .note { display: block; color: var(--muted); font-size: .82rem; }
+  .tt-item .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tt-checks { margin: 0; padding-inline-start: 20px; line-height: 1.9; }
+  .tt-now { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+  .tt-now .clock { font-size: 1.9rem; font-weight: 800; color: var(--primary-dark); line-height: 1; }
+  .tt-now .date { color: var(--muted); font-size: .88rem; }
+  .tt-now .st { display: grid; gap: 2px; flex: 1 1 220px; border-inline-start: 3px solid var(--primary); padding-inline-start: 12px; }
+  .tt-now .st b { font-size: .8rem; color: var(--muted); }
+  .tt-now .st small { color: var(--muted); }
+  .tt-stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; margin-top: 16px; }
+  .tt-stages .card + .card { margin-top: 0; }
+  .card.tt-stage { padding: 0; overflow: hidden; }
+  .tt-stage header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+  .tt-stage h3 { margin: 0; font-size: 1.1rem; }
+  .tt-stage .cls { font-size: .82rem; color: var(--muted); }
+  .tt-stage footer { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
+  .tt-stage footer b { color: var(--ink); }
+  .tt-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tt-chips button { font: inherit; font-size: .8rem; border: 1px solid var(--line); background: var(--bg); border-radius: 99px; padding: 2px 10px; cursor: pointer; }
+  .tt-chips button.on { background: var(--primary-soft); border-color: var(--primary); font-weight: 700; }
+  table.tt-bt { width: 100%; border-collapse: collapse; }
+  .tt-bt th, .tt-bt td { padding: 7px 14px; border-bottom: 1px solid var(--line); text-align: start; }
+  .tt-bt th { font-size: .82rem; color: var(--muted); }
+  .tt-bt td.t { direction: ltr; text-align: center; width: 5.5em; font-variant-numeric: tabular-nums; }
+  .tt-bt tr.k-a td, .tt-bt tr.k-b td { background: #f8fafc; font-weight: 700; }
+  .tt-bt tr.now td { background: var(--primary-soft); font-weight: 800; }
+  .tt-bt tr.past td { color: var(--muted); }
+  .tt-bt input.tin { width: 4.8em; text-align: center; padding: 4px; }
+  .tt-bt input[type=text]:not(.tin), .tt-stage h3 input { padding: 4px 6px; }
+  .tt-disp { position: fixed; inset: 0; z-index: 300; background: #0f2647; color: #fff; overflow: auto; padding: 3vh 3vw; font-family: "Cairo", system-ui, sans-serif; }
+  .tt-disp .dtop { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 2vh; }
+  .tt-disp .dtop img { width: clamp(48px, 6vw, 84px); border-radius: 50%; background: #fff; }
+  .tt-disp .dtop h2 { margin: 0; font-size: clamp(1.2rem, 2.4vw, 2.2rem); color: #c5a46d; }
+  .tt-disp .dtop p { margin: 0; opacity: .85; font-size: clamp(.9rem, 1.4vw, 1.3rem); }
+  .tt-disp .dclock { margin-inline-start: auto; text-align: center; }
+  .tt-disp .dclock b { display: block; font-size: clamp(2rem, 5vw, 4.5rem); line-height: 1; }
+  .tt-disp .dx { position: absolute; top: 12px; inset-inline-start: 12px; font: inherit; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  .tt-disp .dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 2.5vw; }
+  .tt-disp .dst { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); border-radius: 16px; padding: 2vh 1.6vw; }
+  .tt-disp .dst h3 { margin: 0 0 1vh; color: #c5a46d; font-size: clamp(1.1rem, 2vw, 1.9rem); }
+  .tt-disp .dnow { font-size: clamp(1.1rem, 2.2vw, 2.1rem); font-weight: 700; margin-bottom: 1vh; }
+  .tt-disp .dnow em { font-style: normal; color: #c5a46d; }
+  .tt-disp .dbar { height: 10px; background: rgba(255,255,255,.15); border-radius: 99px; overflow: hidden; margin-bottom: 1.5vh; }
+  .tt-disp .dbar i { display: block; height: 100%; background: #c5a46d; }
+  .tt-disp .drow { display: flex; justify-content: space-between; padding: .6vh .4vw; font-size: clamp(1rem, 1.8vw, 1.7rem); border-bottom: 1px solid rgba(255,255,255,.08); }
+  .tt-disp .drow.k-a, .tt-disp .drow.k-b { color: #e9dcc3; }
+  .tt-disp .drow.now { background: #c5a46d; color: #0f2647; font-weight: 800; border-radius: 8px; }
+  .tt-disp .drow.past { opacity: .45; }
   nav.pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   nav.pills button {
     font: inherit; cursor: pointer; padding: 7px 16px; border-radius: 999px; font-weight: 700;
@@ -908,6 +1038,7 @@
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
     S.tGroups = []; S.tMembers = []; S.tPay = {}; S.transportMissing = false;
+    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -935,9 +1066,12 @@
         await loadStudents();
         await loadTransport();
       }
+      await loadTimetable();
       S.visitsMissing = !!(vis[0].error || vis[1].error);
       S.visits = vis[0].data || [];
       S.statements = vis[1].data || [];
+    } else if (isTeacherRole()) {
+      await loadTimetable(); // «جدولي»
     } else if (isRegistrar()) {
       var cfg = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
       S.settings = cfg.data || null;
@@ -953,7 +1087,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 17';
+  var APP_BUILD = '19/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -969,7 +1103,7 @@
       return false;
     }
     var KEYS = ['settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
-      'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
+      'ttSessions', 'ttConfig', 'ttMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
     if (!quiet) toast('جارٍ مزامنة البيانات…');
@@ -991,6 +1125,7 @@
       await complete('students', loadStudents, function () { return S.students.length; });
       if (S.studentsMissing && !keep.studentsMissing) throw new Error('تعذر جلب الطلاب');
       await complete('transport_members', loadTransport, function () { return S.tMembers.length; });
+      if (isStaff()) await loadTimetable();
       if (S.transportMissing && !keep.transportMissing) throw new Error('تعذر جلب المواصلات');
       if (ui.tMonth && !S.transportMissing) {
         var month = ui.tMonth;
@@ -1178,16 +1313,17 @@
     admin: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
     rooms: 'M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8 9h2M14 9h2M8 12h2M14 12h2',
     attendance: 'M8 3v3M16 3v3M4 7h16v13H4zM8 14l3 3 5-6',
-    reports: 'M5 3h10l4 4v14H5zM14 3v5h5M8 17v-3M12 17v-6M16 17v-4'
+    reports: 'M5 3h10l4 4v14H5zM14 3v5h5M8 17v-3M12 17v-6M16 17v-4',
+    timetable: 'M4 5h16v15H4zM4 10h16M9 5v15M14 5v15M8 3v4M16 3v4'
   };
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
     if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير']] }];
-    if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']] }];
+    if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']].concat(isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
     var groups = [
       { items: [['#/', 'home', 'الرئيسية']] },
-      { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة']] }
+      { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة'], ['#/timetable', 'timetable', 'جدول الحصص']] }
     ];
     if (canView()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
@@ -1203,6 +1339,7 @@
   function activeKey() {
     var h = location.hash;
     if (isRegistrar()) return /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
+    if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
     if (!isStaff()) return 'results';
     if (h === '#/teachers' || /^#\/t\//.test(h)) return 'teachers';
     if (h === '#/visits' || /^#\/v\//.test(h)) return 'visits';
@@ -6733,6 +6870,7 @@
       if (h !== '#/students') return go('#/students');
       return renderStudents();
     }
+    if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return renderTimetable();
     if (!isStaff()) return renderResults(r && r[1]);
 
     var t = currentTeacher();
@@ -6752,6 +6890,958 @@
     if (h === '#/teachers') return renderList();
     renderHome();
   }
+
+  /* ---------- جدول الحصص ----------
+     كل حصة: يوم × رقم حصة × شعبة، بمعلمها ومادتها. وقتها الفعلي من مواعيد مرحلة الشعبة.
+     المعلمون هم سجلات «بيانات العاملين»، والشعب من «إعداد الفصول». يعدّله المدير العام والمشرف، ويراه المدير،
+     ويرى المعلم صاحب الحساب جدوله («جدولي»). الحذف لا يمسح الحصة بل يجعلها «محذوفة» تُستعاد من المراجعة.
+     الجداول من supabase/timetable.sql، وشاشة الممر للمشاهدة فقط في bells.html */
+
+  var TT_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+  var TT_ORD = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة', 'الحادية عشرة', 'الثانية عشرة'];
+
+  function canEditTT() { return isAdmin() || role() === 'supervisor'; }
+  function isTeacherRole() { return role() === 'teacher'; }
+
+  async function loadTimetable() {
+    var rows = await fetchAll(function () { return sb.from('timetable_sessions').select('*').order('created_at').order('id'); });
+    S.ttMissing = !rows;
+    S.ttSessions = rows || [];
+    var c = rows ? await sb.from('timetable_config').select('*').eq('id', 1).maybeSingle() : { data: null };
+    S.ttConfig = c.data || null;
+    // المعلم صاحب الحساب لا تُجلب له بيانات العاملين؛ يكفيه سجله
+    if (isTeacherRole() && S.profile && S.profile.teacher_id && !find(S.profile.teacher_id)) {
+      var me = await sb.from('teachers').select('*').eq('id', S.profile.teacher_id).maybeSingle();
+      if (me.data) S.teachers = [me.data];
+    }
+  }
+
+  function ttCfg() {
+    var c = S.ttConfig || {};
+    return {
+      days: Array.isArray(c.days) && c.days.length ? c.days : TT_DAYS,
+      subjects: Array.isArray(c.subjects) ? c.subjects : [],
+      bells: c.bells && Array.isArray(c.bells.stages) ? c.bells : { auto: true, stages: [] }
+    };
+  }
+
+  function ttLive() { return S.ttSessions.filter(function (s) { return s.status !== 'removed'; }); }
+  function ttById(id) { for (var i = 0; i < S.ttSessions.length; i++) if (S.ttSessions[i].id === id) return S.ttSessions[i]; return null; }
+
+  // «8:40» ↔ دقائق؛ الأوقات بنظام 24 ساعة بلا صفر بادئ
+  function ttMins(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? +m[1] * 60 + +m[2] : NaN; }
+  function ttHm(m) { m = ((m % 1440) + 1440) % 1440; return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); }
+
+  // مواعيد الحصص في مرحلة: الحصة رقم p = البند رقم p من نوع «حصة»
+  function ttPTimes(st) { return st.rows.filter(function (r) { return r.k === 'p'; }).map(function (r) { return [r.f, r.t]; }); }
+  // مرحلة الشعبة؛ الشعبة التي لم تُضف إلى مرحلة تتبع آخر مرحلة
+  function ttStageOf(cls, bells) {
+    var s = (bells || ttCfg().bells).stages;
+    for (var i = 0; i < s.length; i++) if (s[i].classes.indexOf(cls) > -1) return s[i];
+    return s[s.length - 1] || null;
+  }
+  function ttTimeFor(cls, p) { var st = ttStageOf(cls); return st ? ttPTimes(st)[p - 1] || null : null; }
+  function ttCommonTime(p) {
+    var v = ttCfg().bells.stages.map(function (s) { return ttPTimes(s)[p - 1]; }).filter(Boolean);
+    if (!v.length) return null;
+    for (var i = 1; i < v.length; i++) if (v[i][0] !== v[0][0] || v[i][1] !== v[0][1]) return null;
+    return v[0];
+  }
+  // وقت الحصة في رأس العمود: لشعبة بعينها وقتها، ولجدول معلم الوقت المشترك أو «حسب المرحلة»
+  function ttHeadTime(cls, p) {
+    var t = cls ? ttTimeFor(cls, p) : ttCommonTime(p);
+    return t ? t[0] + ' – ' + t[1] : ttCfg().bells.stages.length ? 'حسب المرحلة' : '';
+  }
+  // عدد الحصص في اليوم: أكثرها بين المراحل، ولا يقل عن آخر حصة مستعملة
+  function ttPeriods() {
+    var n = 0;
+    ttCfg().bells.stages.forEach(function (s) { n = Math.max(n, ttPTimes(s).length); });
+    S.ttSessions.forEach(function (s) { if (s.status !== 'removed') n = Math.max(n, s.period); });
+    return n || 6;
+  }
+  function ttRowLabel(st, i) {
+    var r = st.rows[i];
+    if (r.k !== 'p') return r.l || (r.k === 'a' ? 'الطابور' : 'الاستراحة');
+    var n = 0;
+    for (var j = 0; j <= i; j++) if (st.rows[j].k === 'p') n++;
+    return 'الحصة ' + (TT_ORD[n - 1] || n);
+  }
+  function ttDayBounds() {
+    var a = 1e9, b = -1;
+    ttCfg().bells.stages.forEach(function (s) { s.rows.forEach(function (r) { a = Math.min(a, ttMins(r.f)); b = Math.max(b, ttMins(r.t)); }); });
+    return a < 1e9 ? [ttHm(a), ttHm(b)] : ['', ''];
+  }
+
+  function ttTName(id) { var t = id && find(id); return t ? t.name : 'بدون معلم'; }
+  function ttWho() { return (S.profile && S.profile.full_name) || displayName(S.email); }
+  // الشعب: من إعداد الفصول، ومعها أي شعبة في الجدول لم تعد في الإعداد (تظهر في المراجعة)
+  function ttClasses() {
+    var names = classConfig().names.slice();
+    S.ttSessions.forEach(function (s) { if (s.status !== 'removed' && names.indexOf(s.class_name) < 0) names.push(s.class_name); });
+    return names;
+  }
+  // معلمو الجدول: من له حصص، بالترتيب الأبجدي
+  function ttTeachers() {
+    var has = {};
+    S.ttSessions.forEach(function (s) { if (s.teacher_id && s.status !== 'removed') has[s.teacher_id] = 1; });
+    return S.teachers.filter(function (t) { return has[t.id]; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+  }
+  // من يُختار معلمًا لحصة: هيئة التدريس والمحفظون، ومن هو معلم الحصة أصلًا
+  function ttTeacherChoices(cur) {
+    return S.teachers.filter(function (t) { return t.id === cur || !t.category || t.category === 'هيئة تدريس' || t.category === 'محفظون'; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+  }
+
+  // التعارض: الشعبة أو المعلم في حصتين بنفس اليوم والحصة. يُعرض ولا يمنع الحفظ
+  function ttConflicts(list) {
+    var byC = {}, byT = {}, ids = {}, groups = [];
+    var add = function (map, k, s) { (map[k] || (map[k] = [])).push(s); };
+    (list || ttLive()).forEach(function (s) {
+      add(byC, s.day + '|' + s.period + '|' + s.class_name, s);
+      if (s.teacher_id) add(byT, s.day + '|' + s.period + '|' + s.teacher_id, s);
+    });
+    [[byC, 'class'], [byT, 'teacher']].forEach(function (p) {
+      Object.keys(p[0]).forEach(function (k) {
+        if (p[0][k].length < 2) return;
+        groups.push({ kind: p[1], list: p[0][k] });
+        p[0][k].forEach(function (s) { ids[s.id] = 1; });
+      });
+    });
+    return { ids: ids, groups: groups };
+  }
+
+  function ttView() {
+    if (isTeacherRole()) return 'mine';
+    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|import)$/);
+    return m ? m[1] : 'classes';
+  }
+
+  function ttNav(view, cf) {
+    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review'; }).length;
+    var item = function (key, hash, label, n) {
+      return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + (n ? '<b>' + n + '</b>' : '') + '</button>';
+    };
+    return '<nav class="pills" aria-label="أقسام جدول الحصص">' + item('classes', '#/timetable', 'جداول الصفوف') + item('teachers', '#/timetable/teachers', 'جداول المعلمين') +
+      item('bells', '#/timetable/bells', 'مواعيد الدوام') + item('review', '#/timetable/review', 'المراجعة', badge) +
+      (canEditTT() ? item('import', '#/timetable/import', 'استيراد من ملف') : '') + '</nav>';
+  }
+
+  // أزرار الطباعة: الجدول المعروض، والكل، والجدولان العامان، ومواعيد الدوام
+  function ttPrintBar(view) {
+    var b = function (attr, label) { return '<button type="button" class="btn" ' + attr + ' data-ro-ok>' + label + '</button>'; };
+    var one = view === 'classes' && ui.ttClass ? b('data-ttprint="c|' + esc(ui.ttClass) + '"', 'طباعة جدول الصف') :
+      view === 'teachers' && ui.ttTeacher ? b('data-ttprint="t|' + esc(ui.ttTeacher) + '"', 'طباعة جدول المعلم') : '';
+    return '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b style="font-size:.95rem">طباعة / PDF:</b>' + one +
+      b('data-ttprint="c|"', 'جداول كل الصفوف') + b('data-ttprint="t|"', 'جداول كل المعلمين') +
+      b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + '</div></div>';
+  }
+
+  function renderTimetable() {
+    if (S.ttMissing) {
+      app.innerHTML = tabs('timetable') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لجدول الحصص بعد.<br>' +
+        'شغّل الملف <code dir="ltr">supabase/timetable.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    var view = ttView(), cf = ttConflicts(), body;
+    if (view === 'import' && !canEditTT()) return go('#/timetable');
+    if (view === 'mine') body = ttMineHtml(cf);
+    else if (view === 'import') body = ttImportHtml();
+    else if (view === 'bells') body = ttBellsHtml();
+    else if (view === 'review') body = ttReviewHtml(cf);
+    else if (view === 'teachers') body = ttTeacherHtml(cf);
+    else body = ttClassHtml(cf);
+    var empty = !S.ttSessions.length && view !== 'import' && view !== 'bells'
+      ? '<div class="card empty">لا توجد حصص بعد.' + (canEditTT() ? ' استوردها من ملف الجدول من «استيراد من ملف»، أو أضفها بالضغط على خانات الجدول.' : '') + '</div>' : '';
+    app.innerHTML = tabs('timetable') + (view === 'mine' ? '' : ttNav(view, cf)) + empty + ttEditorHtml() + body +
+      (view === 'import' || view === 'review' ? '' : ttPrintBar(view));
+  }
+
+  /* ----- الشبكة ----- */
+  function ttPicker(kind, items, cur, cf) {
+    return '<div class="tt-picker" role="group" aria-label="' + (kind === 't' ? 'المعلمون' : 'الصفوف') + '">' + items.map(function (x) {
+      var id = kind === 't' ? x.id : x, label = kind === 't' ? x.name : x;
+      var bad = S.ttSessions.some(function (s) {
+        return s.status !== 'removed' && (kind === 't' ? s.teacher_id === id : s.class_name === id) && (cf.ids[s.id] || s.status === 'review');
+      });
+      return '<button type="button" data-ttpick="' + kind + '" data-id="' + esc(id) + '" data-ro-ok aria-pressed="' + (id === cur) + '"' + (id === cur ? ' class="on"' : '') + '>' +
+        esc(label) + (bad ? '<span class="warn" title="فيه ما يحتاج مراجعة">•</span>' : '') + '</button>';
+    }).join('') + '</div>';
+  }
+
+  // شبكة أيام × حصص. mode: 'c' جدول شعبة (المادة والمعلم)، 't' جدول معلم (الشعبة والمادة)، 'mine' جدول المعلم صاحب الحساب
+  function ttGridHtml(mine, mode, cls, cf) {
+    var cfg = ttCfg(), NP = ttPeriods(), edit = canEditTT() && mode !== 'mine';
+    var h = '<div class="table-wrap"><table class="tt-grid"><thead><tr><th class="corner">اليوم</th>';
+    for (var p = 1; p <= NP; p++) h += '<th>الحصة ' + p + '<small>' + esc(ttHeadTime(cls, p)) + '</small></th>';
+    h += '</tr></thead><tbody>';
+    cfg.days.forEach(function (dn, d) {
+      h += '<tr><th>' + esc(dn) + '</th>';
+      for (var q = 1; q <= NP; q++) {
+        var list = mine.filter(function (s) { return s.day === d && s.period === q; });
+        h += '<td>' + ttCellHtml(list, d, q, mode, cf, edit) + '</td>';
+      }
+      h += '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+
+  function ttCellHtml(list, d, p, mode, cf, edit) {
+    if (!list.length) {
+      return edit ? '<button type="button" class="tt-cell empty" data-ttnew="' + d + '|' + p + '" aria-label="إضافة حصة: ' + esc(ttCfg().days[d]) + '، الحصة ' + p + '">+</button>' : '<div class="tt-cell empty"></div>';
+    }
+    var isC = list.some(function (s) { return cf.ids[s.id]; }), isR = list.some(function (s) { return s.status === 'review'; });
+    var inner = list.map(function (s) {
+      if (mode === 'c') return '<span class="m">' + esc(s.subject) + '</span><span class="s">' + esc(ttTName(s.teacher_id)) + '</span>';
+      var pt = !ttCommonTime(p) && ttTimeFor(s.class_name, p);
+      return '<span class="m">' + esc(s.class_name) + '</span><span class="s">' + esc(s.subject) + (pt ? ' · ' + pt[0] + ' – ' + pt[1] : '') + '</span>';
+    }).join('<hr>');
+    var cls = 'tt-cell' + (isC ? ' conflict' : isR ? ' review' : '') + (list.length > 1 ? ' multi' : '');
+    var flag = isC ? '<span class="flag">تعارض</span>' : isR ? '<span class="flag">للتأكيد</span>' : '';
+    var note = list.map(function (s) { return s.note; }).filter(Boolean).join(' · ');
+    var title = note ? ' title="' + esc(note) + '"' : '';
+    return edit ? '<button type="button" class="' + cls + '" data-ttopen="' + list[0].id + '"' + title + '>' + flag + inner + '</button>' : '<div class="' + cls + '"' + title + '>' + flag + inner + '</div>';
+  }
+
+  function ttStat(n, label) { return '<div><b>' + n + '</b><span>' + label + '</span></div>'; }
+
+  function ttSubjects(mine) {
+    var c = {};
+    mine.forEach(function (s) { c[s.subject] = (c[s.subject] || 0) + 1; });
+    var keys = Object.keys(c).sort(function (a, b) { return c[b] - c[a] || a.localeCompare(b, 'ar'); });
+    return keys.length ? '<div class="tt-subjects">' + keys.map(function (k) { return '<span>' + esc(k) + ': ' + c[k] + '</span>'; }).join('') + '</div>' : '';
+  }
+
+  function ttLegend() {
+    return '<div class="tt-legend"><span><i class="r"></i>حصة تحتاج تأكيدًا</span><span><i class="c"></i>تعارض: الصف أو المعلم في حصتين بنفس الوقت</span>' +
+      (canEditTT() ? '<span>اضغط أي خانة للتعديل، أو خانة فارغة للإضافة</span>' : '') + '</div>';
+  }
+
+  function ttTeacherStats(mine) {
+    var NP = ttPeriods(), days = {}, first = 0, last = 0;
+    mine.forEach(function (s) { days[s.day] = 1; if (s.period === 1) first++; if (s.period === NP) last++; });
+    return '<div class="tt-stats">' + ttStat(mine.length, 'حصة أسبوعيًا') + ttStat(Object.keys(days).length, 'أيام دوام') + ttStat(first, 'حصة أولى') + ttStat(last, 'حصة أخيرة') + '</div>';
+  }
+
+  function ttClassHtml(cf) {
+    var list = ttClasses();
+    if (!list.length) return '<div class="card empty">لا توجد شعب في «إعداد الفصول».</div>';
+    if (list.indexOf(ui.ttClass) < 0) ui.ttClass = list[0];
+    var c = ui.ttClass, mine = ttLive().filter(function (s) { return s.class_name === c; }), st = ttStageOf(c);
+    var used = {};
+    mine.forEach(function (s) { used[s.day + '|' + s.period] = 1; });
+    var free = ttCfg().days.length * ttPeriods() - Object.keys(used).length;
+    return '<div class="card">' + ttPicker('c', list, c, cf) +
+      '<div class="tt-head"><div><h2>الصف ' + esc(c) + '</h2><p class="hint" style="margin:0">' + (classTeacher(c) ? 'مربي الصف: ' + esc(classTeacher(c)) + ' · ' : '') +
+        (st ? 'المواعيد حسب «' + esc(st.name) + '»' : 'لم تُحدَّد مواعيد الدوام بعد') + (classConfig().names.indexOf(c) < 0 ? ' · <b style="color:var(--red)">ليست في «إعداد الفصول»</b>' : '') + '</p></div>' +
+        '<div class="tt-stats">' + ttStat(mine.length, 'حصة أسبوعيًا') + ttStat(Math.max(0, free), 'حصة فارغة') + '</div></div>' +
+      ttGridHtml(mine, 'c', c, cf) + ttSubjects(mine) + ttLegend() + '</div>';
+  }
+
+  function ttTeacherHtml(cf) {
+    var list = ttTeachers();
+    if (ui.ttTeacher && !list.some(function (t) { return t.id === ui.ttTeacher; }) && find(ui.ttTeacher)) list.push(find(ui.ttTeacher));
+    // معلم ليست له حصص بعد: يُختار من القائمة لتُضاف له حصص
+    var others = canEditTT() ? ttTeacherChoices().filter(function (t) { return list.indexOf(t) < 0; }) : [];
+    var add = others.length ? '<label class="field" for="tt-addteacher" style="margin:8px 0 0">معلم ليست له حصص بعد</label><select id="tt-addteacher" style="width:auto;max-width:320px">' +
+      '<option value="">— اختر لعرض جدوله وإضافة حصص —</option>' + others.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + '</option>'; }).join('') + '</select>' : '';
+    if (!list.length) return '<div class="card">' + (add || '<div class="empty">لا يوجد معلمون في الجدول بعد.</div>') + '</div>';
+    if (!list.some(function (t) { return t.id === ui.ttTeacher; })) ui.ttTeacher = list[0].id;
+    var t = find(ui.ttTeacher), mine = ttLive().filter(function (s) { return s.teacher_id === t.id; });
+    var sub = [t.job_title || t.subject, t.category].filter(Boolean).map(esc).join(' · ');
+    return '<div class="card">' + ttPicker('t', list, t.id, cf) + add +
+      '<div class="tt-head" style="margin-top:10px"><div><h2>' + esc(t.name) + '</h2>' + (sub ? '<p class="hint" style="margin:0">' + sub + '</p>' : '') + '</div>' + ttTeacherStats(mine) + '</div>' +
+      ttGridHtml(mine, 't', null, cf) + ttSubjects(mine) + ttLegend() + '</div>';
+  }
+
+  // «جدولي»: المعلم صاحب الحساب يرى جدوله فقط
+  function ttMineHtml(cf) {
+    var t = S.profile && S.profile.teacher_id && find(S.profile.teacher_id);
+    if (!t) return '<div class="card empty">حسابك غير مربوط بسجل معلم. راجع إدارة الأكاديمية.</div>';
+    var mine = ttLive().filter(function (s) { return s.teacher_id === t.id; });
+    if (!mine.length) return '<div class="card empty">لا توجد حصص مسجلة لك في جدول الحصص.</div>';
+    return '<div class="card"><div class="tt-head"><div><h2>' + esc(t.name) + '</h2></div>' + ttTeacherStats(mine) + '</div>' +
+      ttGridHtml(mine, 'mine', null, cf) + ttSubjects(mine) + '</div>' +
+      '<div class="card no-print"><div class="toolbar" style="margin:0"><button type="button" class="btn" data-ttprint="t|' + t.id + '" data-ro-ok>طباعة جدولي / PDF</button></div></div>';
+  }
+
+  /* ----- تحرير حصة ----- */
+  function ttGuessSubject(tid) {
+    var c = {}, best = '', n = 0;
+    ttLive().forEach(function (s) { if (s.teacher_id === tid) c[s.subject] = (c[s.subject] || 0) + 1; });
+    Object.keys(c).forEach(function (k) { if (c[k] > n) { n = c[k]; best = k; } });
+    var t = tid && find(tid);
+    return best || (t && t.subject && ttCfg().subjects.indexOf(t.subject) > -1 ? t.subject : '') || ttCfg().subjects[0] || '';
+  }
+
+  function ttOpenEditor(opts) {
+    var s = opts.id ? ttById(opts.id) : null, v = ttView();
+    ui.ttEdit = s ? { id: s.id, day: s.day, period: s.period, class_name: s.class_name, teacher_id: s.teacher_id || '', subject: s.subject, status: s.status === 'review' ? 'review' : 'ok', note: s.note || '' }
+      : { id: null, day: opts.day, period: opts.period, class_name: v === 'classes' ? ui.ttClass : '', teacher_id: v === 'teachers' ? ui.ttTeacher || '' : '', subject: '', status: 'ok', note: '' };
+    if (!ui.ttEdit.subject) ui.ttEdit.subject = ttGuessSubject(ui.ttEdit.teacher_id);
+    render();
+    var box = document.getElementById('tt-editor');
+    if (box) { box.scrollIntoView({ block: 'start', behavior: 'smooth' }); var f = document.getElementById('tte-subject'); if (f) f.focus({ preventScroll: true }); }
+  }
+
+  function ttReadEditor() {
+    var e = ui.ttEdit, v = function (id) { var el = document.getElementById(id); return el ? el.value : null; };
+    if (!e || !document.getElementById('tte-day')) return;
+    e.day = Number(v('tte-day'));
+    e.period = Number(v('tte-period'));
+    e.class_name = v('tte-class');
+    e.teacher_id = v('tte-teacher');
+    var sub = v('tte-subject');
+    if (sub === '__new') { e.newSubject = true; sub = (v('tte-subnew') || '').trim(); } else e.newSubject = false;
+    e.subject = sub;
+    e.note = (v('tte-note') || '').trim();
+    e.status = document.getElementById('tte-review').checked ? 'review' : 'ok';
+  }
+
+  function ttClashes(e) {
+    var out = [];
+    ttLive().forEach(function (x) {
+      if (x.id === e.id || x.day !== e.day || x.period !== e.period) return;
+      if (x.class_name === e.class_name) out.push('الصف ' + x.class_name + ' عنده ' + x.subject + ' مع ' + ttTName(x.teacher_id) + ' في الوقت نفسه');
+      else if (e.teacher_id && x.teacher_id === e.teacher_id) out.push(ttTName(x.teacher_id) + ' عنده حصة مع ' + x.class_name + ' في الوقت نفسه');
+    });
+    return out;
+  }
+
+  function ttEditorHtml() {
+    var e = ui.ttEdit;
+    if (!e || !canEditTT()) return '';
+    var cfg = ttCfg(), NP = ttPeriods();
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (String(v) === String(cur) ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var field = function (id, label, inner) { return '<div><label class="field" for="' + id + '">' + label + '</label>' + inner + '</div>'; };
+    var subs = cfg.subjects.slice();
+    ttLive().forEach(function (s) { if (s.subject && subs.indexOf(s.subject) < 0) subs.push(s.subject); });
+    if (e.subject && !e.newSubject && subs.indexOf(e.subject) < 0) subs.push(e.subject);
+    var periods = [];
+    for (var p = 1; p <= NP + 1; p++) periods.push(p);
+    var t = e.class_name && ttTimeFor(e.class_name, e.period), cl = ttClashes(e);
+    // حصص أخرى في الخانة نفسها (تعارض): يُنتقل بينها
+    var sib = e.id ? ttLive().filter(function (x) {
+      return x.day === e.day && x.period === e.period && (ttView() === 'teachers' ? x.teacher_id === ui.ttTeacher : x.class_name === ui.ttClass);
+    }) : [];
+    return '<div class="card" id="tt-editor" style="border:2px solid var(--primary)"><h2>' + (e.id ? 'تعديل الحصة' : 'إضافة حصة') + '</h2>' +
+      '<p class="hint">' + esc(cfg.days[e.day] || '') + ' · الحصة ' + e.period + (t ? ' · ' + t[0] + ' – ' + t[1] : '') + '</p>' +
+      (sib.length > 1 ? '<div class="tt-picker">' + sib.map(function (x) { return '<button type="button" data-ttopen="' + x.id + '"' + (x.id === e.id ? ' class="on"' : '') + '>' + esc(x.class_name) + ' · ' + esc(ttTName(x.teacher_id)) + '</button>'; }).join('') + '</div>' : '') +
+      '<div class="tt-form">' +
+        field('tte-day', 'اليوم', '<select id="tte-day">' + cfg.days.map(function (n, i) { return opt(i, n, e.day); }).join('') + '</select>') +
+        field('tte-period', 'الحصة', '<select id="tte-period">' + periods.map(function (q) { var tm = e.class_name && ttTimeFor(e.class_name, q); return opt(q, 'الحصة ' + q + (tm ? ' (' + tm[0] + ')' : ''), e.period); }).join('') + '</select>') +
+        field('tte-class', 'الصف', '<select id="tte-class">' + (e.class_name ? '' : opt('', '— اختر —', '')) + ttClasses().map(function (c) { return opt(c, c, e.class_name); }).join('') + '</select>') +
+        field('tte-subject', 'المادة', '<select id="tte-subject">' + (e.subject || e.newSubject ? '' : opt('', '— اختر —', '')) + subs.map(function (x) { return opt(x, x, e.newSubject ? '' : e.subject); }).join('') + opt('__new', 'مادة أخرى…', e.newSubject ? '__new' : '') + '</select>' +
+          (e.newSubject ? '<input type="text" id="tte-subnew" placeholder="اسم المادة" value="' + esc(e.subject) + '" style="margin-top:6px">' : '')) +
+        field('tte-teacher', 'المعلم', '<select id="tte-teacher">' + opt('', 'بدون معلم', e.teacher_id) + ttTeacherChoices(e.teacher_id).map(function (x) { return opt(x.id, x.name, e.teacher_id); }).join('') + '</select>') +
+        field('tte-note', 'ملاحظة', '<input type="text" id="tte-note" placeholder="اختياري" value="' + esc(e.note) + '">') +
+      '</div>' +
+      '<label class="check"><input type="checkbox" id="tte-review"' + (e.status === 'review' ? ' checked' : '') + '> تحتاج تأكيدًا</label>' +
+      (cl.length ? '<p class="formhint" style="margin-top:6px">' + cl.map(esc).join('<br>') + ' — يمكنك الحفظ، وتظهر في المراجعة.</p>' : '') +
+      '<div class="toolbar" style="margin:12px 0 0"><button type="button" class="btn primary" data-ttsave>' + (e.id ? 'حفظ التعديل' : 'إضافة') + '</button><button type="button" class="btn" data-ttcancel>إلغاء</button>' +
+        (e.id ? '<span style="flex:1"></span><button type="button" class="btn danger" data-ttremove="' + e.id + '">حذف الحصة</button>' : '') + '</div></div>';
+  }
+
+  function ttPut(id, data) {
+    for (var i = 0; i < S.ttSessions.length; i++) if (S.ttSessions[i].id === id) { S.ttSessions[i] = Object.assign({}, S.ttSessions[i], data); return; }
+    S.ttSessions.push(data);
+  }
+
+  async function ttSaveConfig(patch) {
+    patch.updated_by = ttWho();
+    patch.updated_at = new Date().toISOString();
+    var r = await sb.from('timetable_config').update(patch).eq('id', 1);
+    if (r.error) { fail(r.error); return false; }
+    S.ttConfig = Object.assign({ id: 1 }, S.ttConfig || {}, patch);
+    return true;
+  }
+
+  async function ttSaveEditor() {
+    ttReadEditor();
+    var e = ui.ttEdit;
+    if (!e.class_name) return toast('اختر الصف', true);
+    if (!e.subject) return toast('اختر المادة أو اكتب اسمها', true);
+    var row = { day: e.day, period: e.period, class_name: e.class_name, teacher_id: e.teacher_id || null, subject: e.subject, status: e.status, note: e.note,
+      updated_by: ttWho(), updated_at: new Date().toISOString() };
+    var r = e.id ? await sb.from('timetable_sessions').update(row).eq('id', e.id).select().maybeSingle()
+      : await sb.from('timetable_sessions').insert(row).select().single();
+    if (r.error) return fail(r.error);
+    var added = !e.id;
+    if (added) S.ttSessions.push(r.data || row); else ttPut(e.id, r.data || row);
+    if (ttCfg().subjects.indexOf(e.subject) < 0) await ttSaveConfig({ subjects: ttCfg().subjects.concat([e.subject]) });
+    ui.ttEdit = null;
+    render();
+    toast(added ? 'أُضيفت الحصة' : 'حُفظ التعديل');
+  }
+
+  // تأكيد الحصة، أو حذفها (تبقى «محذوفة» تُستعاد)، أو استعادتها (تعود «تحتاج تأكيدًا» لتُراجع)
+  async function ttSetStatus(id, status) {
+    var s = ttById(id);
+    if (!s) return;
+    var patch = { status: status, updated_by: ttWho(), updated_at: new Date().toISOString() };
+    var r = await sb.from('timetable_sessions').update(patch).eq('id', id);
+    if (r.error) return fail(r.error);
+    Object.assign(s, patch);
+    if (ui.ttEdit && ui.ttEdit.id === id) ui.ttEdit = null;
+    render();
+    toast(status === 'removed' ? 'حُذفت الحصة — تُستعاد من «المراجعة»' : status === 'ok' ? 'تم التأكيد' : 'استُعيدت الحصة، وهي تحتاج تأكيدًا');
+  }
+
+  /* ----- المراجعة ----- */
+  function ttReviewHtml(cf) {
+    var days = ttCfg().days, editor = canEditTT();
+    var item = function (s, kind) {
+      var acts = !editor ? '' : kind === 'review' ? '<button type="button" class="btn" data-ttact="ok" data-id="' + s.id + '">تأكيد</button><button type="button" class="btn" data-ttopen="' + s.id + '">تعديل</button><button type="button" class="btn danger" data-ttact="removed" data-id="' + s.id + '">حذف</button>'
+        : kind === 'gone' ? '<button type="button" class="btn" data-ttact="review" data-id="' + s.id + '">استعادة</button>'
+        : '<button type="button" class="btn" data-ttopen="' + s.id + '">تعديل</button><button type="button" class="btn danger" data-ttact="removed" data-id="' + s.id + '">حذف هذه</button>';
+      return '<div class="tt-item' + (kind === 'bad' ? ' bad' : kind === 'gone' ? ' gone' : '') + '"><span class="when">' + esc(days[s.day] || '') + ' — الحصة ' + s.period + '</span>' +
+        '<span class="what"><b>' + esc(s.class_name) + '</b> · ' + esc(s.subject) + ' · ' + esc(ttTName(s.teacher_id)) + (s.note ? '<span class="note">' + esc(s.note) + '</span>' : '') + '</span>' +
+        (acts ? '<span class="acts">' + acts + '</span>' : '') + '</div>';
+    };
+    var section = function (title, list, kind, emptyText, hint) {
+      return '<div class="card"><h2>' + title + ' (' + list.length + ')</h2>' + (hint ? '<p class="hint">' + hint + '</p>' : '') +
+        (list.length ? '<div class="tt-items">' + list.map(function (s) { return item(s, kind); }).join('') + '</div>' : '<p class="hint" style="margin:0">' + emptyText + '</p>') + '</div>';
+    };
+    var bad = [];
+    cf.groups.forEach(function (g) { g.list.forEach(function (s) { if (bad.indexOf(s) < 0) bad.push(s); }); });
+    var known = classConfig().names, live = ttLive();
+    return section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
+      section('حصص تحتاج تأكيدًا', live.filter(function (s) { return s.status === 'review'; }), 'review', 'تم تأكيد كل الحصص.') +
+      section('حصص لشعبة ليست في «إعداد الفصول»', live.filter(function (s) { return known.indexOf(s.class_name) < 0; }), 'bad', 'كل الحصص لشعب موجودة.', 'غُيّر اسم الشعبة أو حُذفت من «إعداد الفصول». عدّل الحصة إلى الشعبة الصحيحة.') +
+      section('حصص بلا معلم', live.filter(function (s) { return !s.teacher_id || !find(s.teacher_id); }), 'bad', 'لكل حصة معلم.') +
+      section('الحصص المحذوفة', S.ttSessions.filter(function (s) { return s.status === 'removed'; }), 'gone', 'لا توجد حصص محذوفة.', 'المحذوفة لا تظهر في الجداول، وتُستعاد من هنا.');
+  }
+
+  /* ----- مواعيد الدوام ----- */
+  // حال المرحلة الآن: قبل الدوام، في بند، بين بندين، بعد الدوام، أو عطلة نهاية الأسبوع
+  function ttNowInfo(st, d) {
+    d = d || new Date();
+    var wd = d.getDay(), R = st.rows;
+    if (wd === 5 || wd === 6) return { state: 'off', text: 'عطلة نهاية الأسبوع' };
+    if (!R.length) return { state: 'off', text: '' };
+    var m = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+    if (m < ttMins(R[0].f)) return { state: 'before', next: 0, text: 'يبدأ الدوام الساعة ' + R[0].f };
+    for (var i = 0; i < R.length; i++) {
+      var a = ttMins(R[i].f), b = ttMins(R[i].t);
+      if (m >= a && m < b) {
+        var left = Math.ceil(b - m);
+        return { state: 'in', cur: i, pct: (m - a) / (b - a), left: left, text: ttRowLabel(st, i) + ' — متبقٍ ' + left + ' دقيقة',
+          sub: i + 1 < R.length ? 'بعدها: ' + ttRowLabel(st, i + 1) + ' الساعة ' + R[i + 1].f : 'آخر الدوام' };
+      }
+      if (i + 1 < R.length && m >= b && m < ttMins(R[i + 1].f)) return { state: 'gap', next: i + 1, text: 'بين الحصص — ' + ttRowLabel(st, i + 1) + ' تبدأ الساعة ' + R[i + 1].f };
+    }
+    return { state: 'after', text: 'انتهى الدوام' };
+  }
+  function ttIsPast(ni, i) { return ni.state === 'after' || (ni.state === 'in' && i < ni.cur) || (ni.state === 'gap' && i < ni.next); }
+
+  function ttStageErr(st) {
+    for (var i = 0; i < st.rows.length; i++) {
+      var r = st.rows[i], a = ttMins(r.f), b = ttMins(r.t);
+      if (isNaN(a) || isNaN(b)) return 'أكمل وقت «' + ttRowLabel(st, i) + '» في «' + st.name + '»';
+      if (b <= a) return 'نهاية «' + ttRowLabel(st, i) + '» قبل بدايتها في «' + st.name + '»';
+      if (i && a < ttMins(st.rows[i - 1].t)) return '«' + ttRowLabel(st, i) + '» تبدأ قبل انتهاء «' + ttRowLabel(st, i - 1) + '» في «' + st.name + '»';
+    }
+    return '';
+  }
+
+  // آخر رقم حصة له دروس في شعب المرحلة: لا يُحذف بند حصة إن صارت الحصص أقل منه
+  function ttStageMaxUsed(st, bells) {
+    var m = 0;
+    ttLive().forEach(function (s) { if (ttStageOf(s.class_name, bells) === st && s.period > m) m = s.period; });
+    return m;
+  }
+
+  function ttNowbarHtml(bells, now) {
+    var h = '<div class="clock" dir="ltr">' + ttHm(now.getHours() * 60 + now.getMinutes()) + '</div><div class="date">' +
+      esc(now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</div>';
+    bells.stages.forEach(function (st) {
+      var ni = ttNowInfo(st, now);
+      h += '<div class="st"><b>' + esc(st.name) + '</b><span>' + esc(ni.text) + '</span>' + (ni.sub ? '<small>' + esc(ni.sub) + '</small>' : '') + '</div>';
+    });
+    return h;
+  }
+
+  function ttStageHtml(st, si, now, E) {
+    var ni = ttNowInfo(st, now), classes = ttClasses();
+    var h = '<div class="card tt-stage"><header><h3>' + (E ? '<input type="text" data-tbst="' + si + '" data-tbf="name" value="' + esc(st.name) + '" aria-label="اسم المرحلة">' : esc(st.name)) + '</h3>';
+    h += E ? '<div class="tt-chips" role="group" aria-label="الصفوف التابعة">' + classes.map(function (c) {
+      return '<button type="button" data-tbcls="' + esc(c) + '" data-tbst="' + si + '" aria-pressed="' + (st.classes.indexOf(c) > -1) + '"' + (st.classes.indexOf(c) > -1 ? ' class="on"' : '') + '>' + esc(c) + '</button>';
+    }).join('') + '</div>' : '<span class="cls">الصفوف: ' + (st.classes.length ? st.classes.map(esc).join('، ') : 'لا يوجد') + '</span>';
+    h += '</header><div class="table-wrap"><table class="tt-bt"><thead><tr><th>البند</th><th>من</th><th>إلى</th><th>المدة</th>' + (E ? '<th><span class="sr-only">إجراء</span></th>' : '') + '</tr></thead><tbody>';
+    st.rows.forEach(function (r, i) {
+      var cls = 'k-' + r.k + (!E && ni.state === 'in' && ni.cur === i ? ' now' : '') + (!E && ttIsPast(ni, i) ? ' past' : '');
+      var dur = ttMins(r.t) - ttMins(r.f), lbl = ttRowLabel(st, i);
+      var tin = function (f) { return E ? '<input type="text" class="tin" inputmode="numeric" maxlength="5" dir="ltr" data-tbst="' + si + '" data-tbr="' + i + '" data-tbf="' + f + '" value="' + esc(r[f]) + '" aria-label="' + (f === 'f' ? 'بداية ' : 'نهاية ') + esc(lbl) + '">' : esc(r[f]); };
+      h += '<tr class="' + cls + '"><td>' + (E && r.k !== 'p' ? '<input type="text" data-tbst="' + si + '" data-tbr="' + i + '" data-tbf="l" value="' + esc(r.l || '') + '" aria-label="اسم البند">' : esc(lbl)) + '</td>' +
+        '<td class="t">' + tin('f') + '</td><td class="t">' + tin('t') + '</td><td class="t">' + (dur > 0 ? dur + ' د' : '—') + '</td>' +
+        (E ? '<td><select data-tbst="' + si + '" data-tbr="' + i + '" data-tbact="1" aria-label="إجراء على ' + esc(lbl) + '"><option value="">إجراء…</option><option value="ip">إدراج حصة بعدها</option><option value="ib">إدراج استراحة بعدها</option><option value="del">حذف</option></select></td>' : '') + '</tr>';
+    });
+    h += '</tbody></table></div>';
+    var err = ttStageErr(st);
+    if (err) h += '<p class="formhint" style="margin:8px 16px">' + esc(err) + '</p>';
+    if (E) h += '<div class="toolbar" style="padding:0 16px;margin:10px 0"><button type="button" class="btn" data-tbadd="p" data-tbst="' + si + '">+ حصة في النهاية</button><button type="button" class="btn" data-tbadd="b" data-tbst="' + si + '">+ استراحة في النهاية</button>' +
+      ('<span style="flex:1"></span><button type="button" class="btn danger" data-tbdelstage="' + si + '">حذف المرحلة</button>') + '</div>';
+    var R = st.rows;
+    h += '<footer><span>بداية الدوام <b>' + esc(R.length ? R[0].f : '—') + '</b></span><span>نهاية الدوام <b>' + esc(R.length ? R[R.length - 1].t : '—') + '</b></span><span><b>' + ttPTimes(st).length + '</b> حصص</span></footer></div>';
+    return h;
+  }
+
+  function ttBellsLink() { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'bells.html'; }
+
+  function ttBellsHtml() {
+    var draft = ui.ttBell, bells = draft || ttCfg().bells, now = new Date(), E = !!draft;
+    if (!bells.stages.length && !E) {
+      return '<div class="card empty">لم تُحدَّد مواعيد الدوام بعد.' + (canEditTT() ? '<br><button type="button" class="btn primary" data-tbstart style="margin-top:10px">إنشاء مواعيد الدوام</button>' : '') + '</div>';
+    }
+    var bar = E
+      ? '<button type="button" class="btn primary" data-tbsave>حفظ المواعيد</button><button type="button" class="btn" data-tbcancel>إلغاء</button>' +
+        '<label class="check" style="padding:0"><input type="checkbox" id="tb-auto"' + (bells.auto ? ' checked' : '') + '> ترحيل ما بعد البند تلقائيًا عند تغيير وقته</label>' +
+        '<span style="flex:1"></span><button type="button" class="btn" data-tbaddstage>+ مرحلة</button>'
+      : (canEditTT() ? '<button type="button" class="btn" data-tbedit>تعديل المواعيد</button>' : '') +
+        '<span style="flex:1"></span><button type="button" class="btn primary" data-tbshow data-ro-ok>عرض على الشاشة</button>' +
+        '<button type="button" class="btn" data-tbcopy data-ro-ok title="صفحة مشاهدة فقط بلا تسجيل دخول، لشاشة الممر">نسخ رابط شاشة الممر</button>';
+    return '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0">' + bar + '</div></div>' +
+      (E ? '' : '<div class="card tt-now" id="tt-nowbar" aria-live="polite">' + ttNowbarHtml(bells, now) + '</div>') +
+      '<div class="tt-stages">' + bells.stages.map(function (st, si) { return ttStageHtml(st, si, now, E); }).join('') + '</div>';
+  }
+
+  function ttDefaultStage(name, classes) {
+    var A = function (f, t) { return { k: 'a', l: 'الطابور', f: f, t: t }; }, P = function (f, t) { return { k: 'p', f: f, t: t }; }, B = function (f, t) { return { k: 'b', l: 'الاستراحة', f: f, t: t }; };
+    return { id: 'st' + Date.now().toString(36), name: name, classes: classes,
+      rows: [A('7:45', '8:00'), P('8:00', '8:40'), P('8:40', '9:20'), P('9:20', '10:00'), B('10:00', '10:25'), P('10:25', '11:05'), P('11:05', '11:45'), P('11:45', '12:25')] };
+  }
+
+  function ttShiftAfter(st, i, delta) {
+    for (var j = i + 1; j < st.rows.length; j++) { st.rows[j].f = ttHm(ttMins(st.rows[j].f) + delta); st.rows[j].t = ttHm(ttMins(st.rows[j].t) + delta); }
+  }
+
+  // تعديل وقت أو اسم في مسودة المواعيد
+  function ttBellInput(el) {
+    var b = ui.ttBell, st = b.stages[+el.getAttribute('data-tbst')], f = el.getAttribute('data-tbf');
+    if (f === 'name') { st.name = el.value.trim() || st.name; return; }
+    var r = st.rows[+el.getAttribute('data-tbr')], i = +el.getAttribute('data-tbr');
+    if (f === 'l') { r.l = el.value.trim(); return; }
+    var v = latinDigits(el.value).replace(/[.٫،]/g, ':');
+    if (/^\d{3,4}$/.test(v)) v = v.slice(0, -2) + ':' + v.slice(-2);
+    v = v.replace(/^0(\d)/, '$1');
+    if (!/^\d{1,2}:\d{2}$/.test(v) || +v.split(':')[0] > 23 || +v.split(':')[1] > 59) { toast('اكتب الوقت بالشكل 8:40', true); return render(); }
+    var delta = ttMins(v) - ttMins(r[f]);
+    if (!delta) return;
+    if (f === 'f') { r.f = v; if (b.auto) { r.t = ttHm(ttMins(r.t) + delta); ttShiftAfter(st, i, delta); } }
+    else { r.t = v; if (b.auto) ttShiftAfter(st, i, delta); }
+    render();
+  }
+
+  function ttBellAction(si, i, act) {
+    var b = ui.ttBell, st = b.stages[si], r = st.rows[i];
+    if (act === 'del') {
+      if (r.k === 'p' && ttPTimes(st).length <= ttStageMaxUsed(st, b)) return toast('صفوف هذه المرحلة لها دروس في الحصة ' + ttPTimes(st).length + ' — انقلها أو احذفها أولًا', true);
+      var gap = i + 1 < st.rows.length ? ttMins(st.rows[i + 1].f) - ttMins(r.f) : 0;
+      st.rows.splice(i, 1);
+      if (b.auto && gap > 0) ttShiftAfter(st, i - 1, -gap);
+    } else {
+      var k = act === 'ip' ? 'p' : 'b', len = k === 'p' ? 40 : 15, start = ttMins(r.t), nr = { k: k, f: ttHm(start), t: ttHm(start + len) };
+      if (k === 'b') nr.l = 'الاستراحة';
+      st.rows.splice(i + 1, 0, nr);
+      if (b.auto) ttShiftAfter(st, i + 1, len);
+    }
+    render();
+  }
+
+  // نقل شعبة إلى مرحلة: تخرج من غيرها. إزالتها من مرحلتها تنقلها إلى مرحلة أخرى (كل شعبة في مرحلة)
+  function ttToggleStageClass(si, cls) {
+    var stages = ui.ttBell.stages, st = stages[si], on = st.classes.indexOf(cls) > -1;
+    if (on) {
+      if (stages.length < 2) return toast('كل شعبة تتبع مرحلة؛ أضف مرحلة أخرى أولًا', true);
+      st.classes.splice(st.classes.indexOf(cls), 1);
+      var other = stages[si === 0 ? 1 : 0];
+      other.classes.push(cls);
+      toast('نُقل ' + cls + ' إلى «' + other.name + '»');
+    } else {
+      stages.forEach(function (s) { var k = s.classes.indexOf(cls); if (k > -1) s.classes.splice(k, 1); });
+      st.classes.push(cls);
+    }
+    var order = ttClasses();
+    stages.forEach(function (s) { s.classes.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); }); });
+    render();
+  }
+
+  async function ttSaveBells() {
+    var b = ui.ttBell;
+    for (var i = 0; i < b.stages.length; i++) { var err = ttStageErr(b.stages[i]); if (err) return toast(err, true); }
+    if (await ttSaveConfig({ bells: b })) { ui.ttBell = null; render(); toast('حُفظت مواعيد الدوام'); }
+  }
+
+  /* ----- شاشة العرض (ملء الشاشة) ----- */
+  function ttDisplayHtml(bells, now) {
+    var h = '<div class="dtop"><img src="' + REPORT.logo + '" alt=""><div><h2>' + esc(schoolName()) + '</h2><p>مواعيد الدوام المدرسي</p></div>' +
+      '<button type="button" class="dx" data-tbclose>إغلاق</button><div class="dclock"><b dir="ltr">' + ttHm(now.getHours() * 60 + now.getMinutes()) + '</b><span>' +
+      esc(now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></div></div><div class="dgrid">';
+    bells.stages.forEach(function (st) {
+      var ni = ttNowInfo(st, now);
+      h += '<section class="dst"><h3>' + esc(st.name) + '</h3><div class="dnow">' + (ni.state === 'in' ? 'الآن: <em>' + esc(ttRowLabel(st, ni.cur)) + '</em> · متبقٍ ' + ni.left + ' دقيقة' : esc(ni.text)) + '</div>' +
+        (ni.state === 'in' ? '<div class="dbar"><i style="width:' + Math.round(ni.pct * 100) + '%"></i></div>' : '') + '<div class="drows">' +
+        st.rows.map(function (r, i) {
+          return '<div class="drow k-' + r.k + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (ttIsPast(ni, i) ? ' past' : '') + '"><span>' + esc(ttRowLabel(st, i)) + '</span><span dir="ltr">' + esc(r.f) + ' – ' + esc(r.t) + '</span></div>';
+        }).join('') + '</div></section>';
+    });
+    return h + '</div>';
+  }
+  function ttOpenDisplay() {
+    if (document.getElementById('tt-disp')) return;
+    document.body.insertAdjacentHTML('beforeend', '<div class="tt-disp" id="tt-disp" role="dialog" aria-label="مواعيد الدوام">' + ttDisplayHtml(ttCfg().bells, new Date()) + '</div>');
+    var el = document.getElementById('tt-disp');
+    try { var p = el.requestFullscreen && el.requestFullscreen(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+  }
+  function ttCloseDisplay() {
+    var el = document.getElementById('tt-disp');
+    if (el) el.remove();
+    try { if (document.fullscreenElement) document.exitFullscreen().catch(function () {}); } catch (e) {}
+  }
+  document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement) { var el = document.getElementById('tt-disp'); if (el) el.remove(); } });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') ttCloseDisplay(); });
+  // كل 20 ثانية: تتحدث شاشة العرض والحصة الجارية في صفحة المواعيد (إن لم يكن المستخدم يكتب أو يعدّل)
+  setInterval(function () {
+    var disp = document.getElementById('tt-disp');
+    if (disp) disp.innerHTML = ttDisplayHtml(ttCfg().bells, new Date());
+    var nb = document.getElementById('tt-nowbar');
+    if (nb && location.hash === '#/timetable/bells' && !ui.ttBell && !ui.ttEdit) {
+      var a = document.activeElement;
+      if (!a || !/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) { var y = window.scrollY; render(); window.scrollTo(0, y); }
+    }
+  }, 20000);
+
+  /* ----- الاستيراد من ملف الجدول (timetable-data.json) -----
+     يُطابق كل معلم في الملف بسجله في «بيانات العاملين» وكل صف بشعبته في «إعداد الفصول»، ويعرض الأعداد والتعارضات
+     قبل الحفظ. الحصص تُحفظ بمعرّفها في الملف، فإعادة الاستيراد تحدّثها ولا تكررها. «قرأن» تُصحَّح إلى «قرآن» */
+  function ttFixSubject(s) { return String(s || '').trim() === 'قرأن' ? 'قرآن' : String(s || '').trim(); }
+
+  function ttImpPrepare(data, fileName) {
+    if (!data || !Array.isArray(data.sessions) || !Array.isArray(data.teachers) || !Array.isArray(data.classes)) throw new Error('الملف ليس ملف جدول حصص (ينقصه المعلمون أو الصفوف أو الحصص)');
+    var names = classConfig().names, classMap = {}, teacherMap = {};
+    data.classes.forEach(function (c) { classMap[c.id] = names.filter(function (n) { return norm(n) === norm(c.name); })[0] || ''; });
+    // المطابقة بالاسم كما هو، وإلا بالاسم الأول واسم العائلة إن دلّا على شخص واحد. «prev» اسم من حلّ المعلم محله فلا يُطابق به
+    var ends = function (x) { var w = norm(x).split(' '); return w[0] + ' ' + w[w.length - 1]; };
+    data.teachers.forEach(function (t) {
+      var hit = S.teachers.filter(function (x) { return norm(x.name) === norm(t.name); });
+      if (!hit.length) hit = S.teachers.filter(function (x) { return ends(x.name) === ends(t.name); });
+      teacherMap[t.id] = hit.length === 1 ? hit[0].id : '__new';
+    });
+    ui.ttImp = { data: data, fileName: fileName, classMap: classMap, teacherMap: teacherMap };
+  }
+
+  // صفوف الحصص كما ستُحفظ (teacher_id للمعلم الجديد «new:معرّفه في الملف» إلى أن يُنشأ)
+  function ttImpRows() {
+    var imp = ui.ttImp;
+    return imp.data.sessions.filter(function (s) { return imp.classMap[s.c] && imp.classMap[s.c] !== '__skip'; }).map(function (s) {
+      var tm = s.t ? imp.teacherMap[s.t] : '';
+      return { id: s.id, legacy_id: s.id, day: Number(s.d), period: Number(s.p), class_name: imp.classMap[s.c],
+        teacher_id: !tm ? null : tm === '__new' ? 'new:' + s.t : tm, subject: ttFixSubject(s.s),
+        status: s.st === 'removed' || s.st === 'review' ? s.st : 'ok', note: String(s.n || '') };
+    });
+  }
+
+  function ttImportHtml() {
+    var imp = ui.ttImp;
+    var intro = '<div class="card"><h2>استيراد جدول الحصص من ملف</h2><p class="hint">اختر ملف الجدول (<span dir="ltr">timetable-data.json</span>). لا يُحفظ شيء قبل أن تراجع المطابقة وتضغط «استيراد».' +
+      (S.ttSessions.length ? ' في الجدول الآن ' + S.ttSessions.length + ' حصة؛ ما استُورد سابقًا من الملف نفسه يُستبدل بما في الملف، وما أضفته يدويًا يبقى.' : '') + '</p>' +
+      '<input type="file" id="tt-file" accept=".json,application/json">' + (imp ? '<p class="hint" style="margin:8px 0 0">الملف: ' + esc(imp.fileName) + (imp.data.saved ? ' · آخر حفظ فيه: <span dir="ltr">' + esc(imp.data.saved) + '</span>' : '') + '</p>' : '') + '</div>';
+    if (!imp) return intro;
+    var d = imp.data, names = classConfig().names, opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var uses = {};
+    d.sessions.forEach(function (s) { if (s.st !== 'removed') { uses['c' + s.c] = (uses['c' + s.c] || 0) + 1; if (s.t) uses['t' + s.t] = (uses['t' + s.t] || 0) + 1; } });
+    var classRows = d.classes.map(function (c) {
+      var v = imp.classMap[c.id];
+      return '<tr><td>' + esc(c.name) + '</td><td>' + (uses['c' + c.id] || 0) + '</td><td><select data-ttimpc="' + esc(c.id) + '">' + opt('', '— اختر الشعبة —', v) + names.map(function (n) { return opt(n, n, v); }).join('') + opt('__skip', 'لا تُستورد حصصه', v) + '</select>' +
+        (v ? '' : ' <span class="badge unpaid">غير مطابق</span>') + '</td></tr>';
+    }).join('');
+    var staff = S.teachers.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    var teacherRows = d.teachers.map(function (t) {
+      var v = imp.teacherMap[t.id];
+      return '<tr><td><b>' + esc(t.name) + '</b>' + (t.prev ? '<br><small class="hint">بدلًا من: ' + esc(t.prev) + '</small>' : '') + '</td><td>' + esc(t.role || '') + '</td><td>' + (uses['t' + t.id] || 0) + '</td><td><select data-ttimpt="' + esc(t.id) + '">' +
+        opt('__new', '+ إضافته إلى بيانات العاملين', v) + opt('', 'بدون معلم', v) + staff.map(function (x) { return opt(x.id, x.name + (x.category ? ' — ' + x.category : ''), v); }).join('') + '</select>' +
+        (v === '__new' ? ' <span class="badge edit">جديد</span>' : '') + '</td></tr>';
+    }).join('');
+    var rows = ttImpRows(), live = rows.filter(function (s) { return s.status !== 'removed'; }), cf = ttConflicts(live);
+    var unmapped = d.classes.filter(function (c) { return !imp.classMap[c.id]; });
+    var newT = d.teachers.filter(function (t) { return imp.teacherMap[t.id] === '__new'; });
+    var subjects = [];
+    (d.subjects || []).concat(rows.map(function (s) { return s.subject; })).forEach(function (s) { s = ttFixSubject(s); if (s && subjects.indexOf(s) < 0) subjects.push(s); });
+    var days = Array.isArray(d.days) && d.days.length ? d.days : TT_DAYS;
+    var conflictList = cf.groups.slice(0, 8).map(function (g) {
+      var s = g.list[0];
+      return '<li>' + esc(days[s.day] || '') + ' — الحصة ' + s.period + ': ' + (g.kind === 'class' ? 'الصف ' + esc(s.class_name) : 'المعلم ' + esc(ttImpTName(s.teacher_id))) + ' في ' + g.list.length + ' حصص</li>';
+    }).join('');
+    var check = function (ok, text) { return '<li style="color:' + (ok ? 'var(--green)' : 'var(--red)') + '">' + (ok ? '✓ ' : '✗ ') + text + '</li>'; };
+    return intro +
+      '<div class="card"><h2>الصفوف (' + d.classes.length + ')</h2><p class="hint">يُطابق كل صف في الملف بشعبته في «إعداد الفصول».</p><div class="table-wrap"><table class="grid"><thead><tr><th>في الملف</th><th>حصصه</th><th>الشعبة في البرنامج</th></tr></thead><tbody>' + classRows + '</tbody></table></div></div>' +
+      '<div class="card"><h2>المعلمون (' + d.teachers.length + ')</h2><p class="hint">يُطابق كل معلم بسجله في «بيانات العاملين». من لا سجل له يُضاف إليها (المحفظون بفئة «محفظون»، والباقون «هيئة تدريس»)، ويمكنك اختيار سجله إن كان مكتوبًا باسم آخر.</p>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>في الملف</th><th>التخصص</th><th>حصصه</th><th>السجل في البرنامج</th></tr></thead><tbody>' + teacherRows + '</tbody></table></div></div>' +
+      '<div class="card"><h2>قبل الاستيراد</h2><ul class="tt-checks">' +
+        check(!unmapped.length, unmapped.length ? 'صفوف غير مطابقة: ' + unmapped.map(function (c) { return esc(c.name); }).join('، ') + ' — اختر شعبتها أو «لا تُستورد حصصه»' : 'كل الصفوف مطابقة') +
+        check(true, 'الحصص الفعّالة: <b>' + live.length + '</b>' + (live.filter(function (s) { return s.status === 'review'; }).length ? ' (منها ' + live.filter(function (s) { return s.status === 'review'; }).length + ' تحتاج تأكيدًا)' : '') + ' · المحذوفة: ' + (rows.length - live.length) + ' (تُحفظ لتُستعاد عند الحاجة)') +
+        check(!cf.groups.length, cf.groups.length ? 'تعارضات: ' + cf.groups.length + '<ul>' + conflictList + '</ul>' : 'لا توجد تعارضات') +
+        check(true, newT.length ? 'يُضاف إلى بيانات العاملين ' + newT.length + ': ' + newT.map(function (t) { return esc(t.name); }).join('، ') : 'كل المعلمين لهم سجلات') +
+        check(true, 'المواد (' + subjects.length + '): ' + subjects.map(esc).join('، ') + ((d.subjects || []).indexOf('قرأن') > -1 ? ' — صُحّحت «قرأن» إلى «قرآن»' : '')) +
+        check(!!(d.bells && d.bells.stages && d.bells.stages.length), d.bells && d.bells.stages ? 'مواعيد الدوام: ' + d.bells.stages.map(function (st) { return esc(st.name); }).join('، ') : 'لا توجد مواعيد دوام في الملف') +
+      '</ul><div class="toolbar" style="margin:12px 0 0"><button type="button" class="btn primary" data-ttimprun' + (unmapped.length ? ' disabled' : '') + '>استيراد ' + rows.length + ' حصة</button><button type="button" class="btn" data-ttimpcancel>إلغاء</button></div></div>';
+  }
+
+  function ttImpTName(tid) {
+    if (tid && /^new:/.test(tid)) { var id = tid.slice(4), t = ui.ttImp.data.teachers.filter(function (x) { return x.id === id; })[0]; return t ? t.name : ''; }
+    return ttTName(tid);
+  }
+
+  async function ttRunImport(btn) {
+    var imp = ui.ttImp, d = imp.data;
+    btn.disabled = true;
+    btn.textContent = 'جارٍ الاستيراد…';
+    try {
+      // 1) المعلمون الجدد إلى بيانات العاملين
+      var created = {};
+      for (var i = 0; i < d.teachers.length; i++) {
+        var t = d.teachers[i];
+        if (imp.teacherMap[t.id] !== '__new') continue;
+        var quran = /قرآن|قران|تحفيظ/.test(t.role || '');
+        var data = { name: String(t.name || '').trim(), subject: quran ? 'قرآن' : String(t.role || '') };
+        if (!S.staffMissing) { data.category = quran ? 'محفظون' : 'هيئة تدريس'; data.job_title = String(t.role || ''); }
+        var ins = await sb.from('teachers').insert(data).select().single();
+        if (ins.error) throw new Error('تعذرت إضافة ' + data.name + ': ' + ins.error.message);
+        S.teachers.push(ins.data);
+        created[t.id] = ins.data.id;
+        imp.teacherMap[t.id] = ins.data.id;
+      }
+      // 2) الحصص على دفعات، بمعرّفها في الملف
+      var who = ttWho(), now = new Date().toISOString();
+      var rows = ttImpRows().map(function (s) {
+        return { legacy_id: s.legacy_id, day: s.day, period: s.period, class_name: s.class_name, teacher_id: s.teacher_id, subject: s.subject, status: s.status, note: s.note, updated_by: who, updated_at: now };
+      });
+      for (var k = 0; k < rows.length; k += 200) {
+        var up = await sb.from('timetable_sessions').upsert(rows.slice(k, k + 200), { onConflict: 'legacy_id' });
+        if (up.error) throw new Error(up.error.message);
+      }
+      // 3) الأيام والمواد ومواعيد الدوام (شعب كل مرحلة بأسمائها في البرنامج)
+      var subjects = [];
+      (d.subjects || []).concat(rows.map(function (s) { return s.subject; })).forEach(function (s) { s = ttFixSubject(s); if (s && subjects.indexOf(s) < 0) subjects.push(s); });
+      var patch = { subjects: subjects };
+      if (Array.isArray(d.days) && d.days.length) patch.days = d.days;
+      if (d.bells && Array.isArray(d.bells.stages)) {
+        patch.bells = { auto: d.bells.auto !== false, stages: d.bells.stages.map(function (st) {
+          return { id: st.id, name: st.name, rows: st.rows, classes: (st.classes || []).map(function (c) { return imp.classMap[c]; }).filter(function (c) { return c && c !== '__skip'; }) };
+        }) };
+      }
+      if (!(await ttSaveConfig(patch))) throw new Error('تعذر حفظ المواعيد');
+      await loadTimetable();
+      ui.ttImp = null;
+      go('#/timetable/review');
+      toast('تم الاستيراد: ' + rows.length + ' حصة' + (Object.keys(created).length ? ' · أُضيف ' + Object.keys(created).length + ' إلى بيانات العاملين' : ''));
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'استيراد';
+      toast(err.message, true);
+    }
+  }
+
+  /* ----- الطباعة -----
+     جدول لكل معلم أو صف: صفحة A4 أفقية بالترويسة ومكان التوقيع. الجدولان العامان: صفحة أفقية واحدة بلا شعار،
+     الأحد يبدأ من اليمين. مواعيد الدوام: صفحة طولية لكل مرحلة. كل صفحة تُضبط وحدها (fitTtPages) */
+  var pendingTT = null;
+
+  function ttShortSub(s) { return { 'إنجليزي': 'E', 'انجليزي': 'E', 'تكنولوجيا': 'تك' }[s] || s; }
+  function ttShortCls(c) { return String(c).replace(/^ال/, ''); }
+
+  function ttEntityPage(kind, x) {
+    var isT = kind === 't', cfg = ttCfg(), NP = ttPeriods();
+    var mine = ttLive().filter(function (s) { return isT ? s.teacher_id === x.id : s.class_name === x; });
+    var st = !isT && ttStageOf(x);
+    var meta = isT ? [x.job_title || x.subject || '', 'عدد الحصص الأسبوعية: ' + mine.length]
+      : ['عدد الحصص الأسبوعية: ' + mine.length, classTeacher(x) ? 'مربي الصف: ' + classTeacher(x) : '', st ? 'المواعيد: ' + st.name : ''];
+    var head = '<tr><th>اليوم</th>';
+    for (var p = 1; p <= NP; p++) head += '<th>الحصة ' + (TT_ORD[p - 1] || p) + '<small>' + esc(ttHeadTime(isT ? null : x, p)) + '</small></th>';
+    var body = cfg.days.map(function (dn, d) {
+      var r = '<tr class="tt-r"><th>' + esc(dn) + '</th>';
+      for (var q = 1; q <= NP; q++) {
+        var c = mine.filter(function (s) { return s.day === d && s.period === q; });
+        r += '<td>' + c.map(function (s) {
+          if (!isT) return '<b>' + esc(s.subject) + '</b><small>' + esc(ttTName(s.teacher_id)) + '</small>';
+          var pt = !ttCommonTime(q) && ttTimeFor(s.class_name, q);
+          return '<b>' + esc(s.class_name) + '</b><small>' + esc(s.subject) + (pt ? ' · ' + pt[0] : '') + '</small>';
+        }).join('<hr>') + '</td>';
+      }
+      return r + '</tr>';
+    }).join('');
+    return '<section class="tt-page" data-base="13">' + letterhead() +
+      '<div class="tt-ptitle">' + (isT ? 'جدول المعلم/ة: ' + esc(x.name) : 'جدول الصف ' + esc(x)) + '</div>' +
+      '<div class="tt-pmeta">' + meta.filter(Boolean).map(esc).join(' · ') + '</div>' +
+      '<table class="tt-ptable"><thead>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
+      '<div class="tt-sig"><span>' + (isT ? 'توقيع المعلم/ة' : 'توقيع مربي الصف') + ': ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div></section>';
+  }
+
+  function ttMasterPage(byCls) {
+    var cfg = ttCfg(), NP = ttPeriods(), ND = cfg.days.length, rows = byCls ? ttClasses() : ttTeachers(), map = {};
+    ttLive().forEach(function (s) {
+      var k = (byCls ? s.class_name : s.teacher_id) + '|' + s.day + '|' + s.period;
+      (map[k] || (map[k] = [])).push(byCls ? ttShortSub(s.subject) : ttShortCls(s.class_name));
+    });
+    var title = byCls ? 'الجدول العام للشعب الدراسية' : 'الجدول العام للمعلمين';
+    var head1 = '<tr><th class="corner" rowspan="2"></th>' + cfg.days.map(function (n) { return '<th class="day ds" colspan="' + NP + '">' + esc(n) + '</th>'; }).join('') + '</tr>';
+    var head2 = '<tr>';
+    for (var d = 0; d < ND; d++) for (var p = 1; p <= NP; p++) head2 += '<th class="per' + (p === 1 ? ' ds' : '') + '">' + p + '</th>';
+    var body = rows.map(function (r) {
+      var id = byCls ? r : r.id, tr = '<tr class="tt-r"><th class="rh">' + esc(byCls ? ttShortCls(r) : r.name) + '</th>';
+      for (var d2 = 0; d2 < ND; d2++) for (var q = 1; q <= NP; q++) {
+        var v = map[id + '|' + d2 + '|' + q], tx = v ? v.join(' / ') : '';
+        tr += '<td' + (q === 1 ? ' class="ds"' : '') + '>' + (tx.length > 6 ? '<span class="sm">' + esc(tx) + '</span>' : esc(tx)) + '</td>';
+      }
+      return tr + '</tr>';
+    }).join('');
+    var b = ttDayBounds();
+    return '<section class="tt-page tt-master" data-base="10"><div class="tt-mtitle">' + title + '</div>' +
+      '<table class="tt-mtable' + (byCls ? '' : ' wide') + '"><colgroup><col class="c0">' + new Array(ND * NP + 1).join('<col>') + '</colgroup><thead>' + head1 + head2 + '</tr></thead><tbody>' + body + '</tbody></table>' +
+      '<div class="tt-mfoot"><span>تاريخ الإصدار: ' + dmy(todayISO()) + '</span><span>' + NP + ' حصص يوميًا' + (b[0] ? ' · الطابور ' + b[0] + ' · نهاية الدوام ' + b[1] : '') + '</span></div></section>';
+  }
+
+  function ttBellsPages() {
+    return ttCfg().bells.stages.map(function (st) {
+      var R = st.rows;
+      return '<section class="tt-page tt-bellpage" data-base="16"><div class="tt-btitle">مواعيد الدوام المدرسي</div><div class="tt-bgroup"><span>' + esc(st.name) + '</span></div>' +
+        '<table class="tt-btable"><thead><tr><th>البند</th><th class="t">من</th><th class="t">إلى</th></tr></thead><tbody>' +
+        R.map(function (r, i) { return '<tr class="tt-r k-' + r.k + '"><td>' + esc(ttRowLabel(st, i)) + '</td><td class="t">' + esc(r.f) + '</td><td class="t">' + esc(r.t) + '</td></tr>'; }).join('') +
+        '</tbody></table><div class="tt-mfoot"><span>بداية الدوام: ' + esc(R.length ? R[0].f : '') + '</span><span>عدد الحصص: ' + ttPTimes(st).length + '</span><span>نهاية الدوام: ' + esc(R.length ? R[R.length - 1].t : '') + '</span></div></section>';
+    }).join('');
+  }
+
+  function buildTtSheet(q) {
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    if (q.kind === 'bells') {
+      printLandscape = false;
+      sheet.className = 'tt-pages';
+      sheet.innerHTML = ttBellsPages() || '<p>لم تُحدَّد مواعيد الدوام.</p>';
+    } else {
+      printLandscape = true;
+      sheet.style.width = '267mm';
+      if (q.kind === 'gc' || q.kind === 'gt') {
+        sheet.className = 'tt-pages land';
+        sheet.innerHTML = ttMasterPage(q.kind === 'gc');
+      } else {
+        var list = q.kind === 't' ? (q.id ? [find(q.id)] : ttTeachers()) : (q.id ? [q.id] : ttClasses());
+        sheet.className = 'tt-pages land';
+        sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + list.filter(Boolean).map(function (x) { return ttEntityPage(q.kind, x); }).join('');
+      }
+    }
+    fitTtPages(sheet);
+  }
+
+  // كل صفحة وحدها: يُصغَّر خطها حتى تتسع طولًا ولا تفيض خانة، ثم تطول صفوف جدولها لتملأ الصفحة.
+  // هامش أمان لحافة الطابعة غير القابلة للطباعة
+  function fitTtPages(root) {
+    var p = REPORT.page, land = root.classList.contains('land');
+    var maxPx = ((land ? p.width : p.height) - 2 * p.marginY - 20) * 96 / 25.4;
+    Array.prototype.forEach.call(root.querySelectorAll('.tt-page'), function (pg) {
+      var pad = parseFloat(pg.ownerDocument.defaultView.getComputedStyle(pg).paddingTop) || 0;
+      var rows = pg.querySelectorAll('tr.tt-r'), cells = pg.querySelectorAll('td, th');
+      Array.prototype.forEach.call(rows, function (tr) { tr.style.height = ''; });
+      var over = function () {
+        if (pg.offsetHeight - pad > maxPx) return true;
+        for (var i = 0; i < cells.length; i++) if (cells[i].scrollWidth > cells[i].clientWidth + 1) return true;
+        return false;
+      };
+      var size = Number(pg.getAttribute('data-base')) || REPORT.baseSize;
+      pg.style.fontSize = size + 'pt';
+      while (over() && size > 5) { size -= 0.25; pg.style.fontSize = size + 'pt'; }
+      var spare = maxPx - (pg.offsetHeight - pad);
+      if (rows.length && spare > rows.length) {
+        var add = Math.floor(spare / rows.length) - 1;
+        Array.prototype.forEach.call(rows, function (tr) { tr.style.height = (tr.offsetHeight + add) + 'px'; });
+      }
+    });
+  }
+
+  /* ----- الأحداث ----- */
+  app.addEventListener('click', function (e) {
+    if (!/^#\/timetable/.test(location.hash)) return;
+    var el;
+    if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
+    if ((el = e.target.closest('[data-ttpick]'))) {
+      if (el.getAttribute('data-ttpick') === 't') ui.ttTeacher = el.getAttribute('data-id'); else ui.ttClass = el.getAttribute('data-id');
+      ui.ttEdit = null;
+      return render();
+    }
+    if ((el = e.target.closest('[data-ttprint]'))) {
+      var q = el.getAttribute('data-ttprint').split('|');
+      pendingTT = { kind: q[0], id: q.slice(1).join('|') };
+      return printNow();
+    }
+    if (e.target.closest('[data-tbshow]')) return ttOpenDisplay();
+    if (e.target.closest('[data-tbcopy]')) {
+      var link = ttBellsLink();
+      if (navigator.clipboard) navigator.clipboard.writeText(link).then(function () { toast('نُسخ رابط شاشة الممر'); }, function () { prompt('انسخ الرابط:', link); });
+      else prompt('انسخ الرابط:', link);
+      return;
+    }
+    if (!canEditTT()) return;
+    if ((el = e.target.closest('[data-ttnew]'))) { var dp = el.getAttribute('data-ttnew').split('|'); return ttOpenEditor({ day: +dp[0], period: +dp[1] }); }
+    if ((el = e.target.closest('[data-ttopen]'))) return ttOpenEditor({ id: el.getAttribute('data-ttopen') });
+    if (e.target.closest('[data-ttsave]')) return ttSaveEditor();
+    if (e.target.closest('[data-ttcancel]')) { ui.ttEdit = null; return render(); }
+    if ((el = e.target.closest('[data-ttremove]'))) return ttSetStatus(el.getAttribute('data-ttremove'), 'removed');
+    if ((el = e.target.closest('[data-ttact]'))) return ttSetStatus(el.getAttribute('data-id'), el.getAttribute('data-ttact'));
+    if (e.target.closest('[data-tbedit]')) { ui.ttBell = JSON.parse(JSON.stringify(ttCfg().bells)); return render(); }
+    if (e.target.closest('[data-tbstart]')) { ui.ttBell = { auto: true, stages: [ttDefaultStage('كل الصفوف', ttClasses())] }; return render(); }
+    if (e.target.closest('[data-tbcancel]')) { ui.ttBell = null; return render(); }
+    if (e.target.closest('[data-tbsave]')) return ttSaveBells();
+    if (e.target.closest('[data-tbaddstage]')) { ui.ttBell.stages.push(ttDefaultStage('مرحلة جديدة', [])); return render(); }
+    if ((el = e.target.closest('[data-tbdelstage]'))) {
+      var stages = ui.ttBell.stages, si = +el.getAttribute('data-tbdelstage');
+      if (stages.length < 2) return toast('لا بد من مرحلة واحدة على الأقل', true);
+      var moved = stages[si].classes;
+      stages.splice(si, 1);
+      stages[0].classes = stages[0].classes.concat(moved);
+      return render();
+    }
+    if ((el = e.target.closest('[data-tbcls]'))) return ttToggleStageClass(+el.getAttribute('data-tbst'), el.getAttribute('data-tbcls'));
+    if ((el = e.target.closest('[data-tbadd]'))) {
+      var st = ui.ttBell.stages[+el.getAttribute('data-tbst')], k = el.getAttribute('data-tbadd'), last = st.rows[st.rows.length - 1];
+      var s0 = last ? ttMins(last.t) : 8 * 60, len = k === 'p' ? 40 : 15, nr = { k: k, f: ttHm(s0), t: ttHm(s0 + len) };
+      if (k === 'b') nr.l = 'الاستراحة';
+      st.rows.push(nr);
+      return render();
+    }
+    if (e.target.closest('[data-ttimprun]')) return ttRunImport(e.target.closest('[data-ttimprun]'));
+    if (e.target.closest('[data-ttimpcancel]')) { ui.ttImp = null; return render(); }
+  });
+
+  // إغلاق شاشة العرض (خارج منطقة التطبيق)
+  document.addEventListener('click', function (e) { if (e.target.closest('[data-tbclose]')) ttCloseDisplay(); });
+
+  app.addEventListener('change', function (e) {
+    if (!/^#\/timetable/.test(location.hash)) return;
+    var el = e.target;
+    if (el.id === 'tt-addteacher' && el.value) { ui.ttTeacher = el.value; return render(); }
+    if (!canEditTT()) return;
+    if (/^tte-(day|period|class|teacher|subject)$/.test(el.id)) {
+      ttReadEditor();
+      if (el.id === 'tte-teacher' && !ui.ttEdit.id && !ui.ttEdit.newSubject) ui.ttEdit.subject = ttGuessSubject(ui.ttEdit.teacher_id) || ui.ttEdit.subject;
+      render();
+      var f = document.getElementById(el.id === 'tte-subject' && ui.ttEdit.newSubject ? 'tte-subnew' : el.id);
+      if (f) f.focus();
+      return;
+    }
+    if (el.id === 'tb-auto' && ui.ttBell) { ui.ttBell.auto = el.checked; return; }
+    if (el.hasAttribute('data-tbact')) { var a = el.value; el.value = ''; if (a) ttBellAction(+el.getAttribute('data-tbst'), +el.getAttribute('data-tbr'), a); return; }
+    if (el.hasAttribute('data-tbf') && ui.ttBell) return ttBellInput(el);
+    if (el.id === 'tt-file' && el.files && el.files[0]) {
+      var file = el.files[0], reader = new FileReader();
+      reader.onload = function () {
+        try { ttImpPrepare(JSON.parse(String(reader.result).replace(/^﻿/, '')), file.name); render(); }
+        catch (err) { toast('تعذرت قراءة الملف: ' + err.message, true); }
+      };
+      reader.readAsText(file, 'utf-8');
+      return;
+    }
+    if (el.hasAttribute('data-ttimpc')) { ui.ttImp.classMap[el.getAttribute('data-ttimpc')] = el.value; return render(); }
+    if (el.hasAttribute('data-ttimpt')) { ui.ttImp.teacherMap[el.getAttribute('data-ttimpt')] = el.value; return render(); }
+  });
 
   /* ---------- الحضور والغياب ----------
      يُسجَّل لكل شعبة يومًا بيوم: صف لكل طالب في جدول attendance (supabase/attendance.sql).
@@ -8894,7 +9984,8 @@
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.removeAttribute('data-pages');
-    if (pendingLed) buildLedSheet();
+    if (pendingTT) buildTtSheet(pendingTT);
+    else if (pendingLed) buildLedSheet();
     else if (pendingRep) buildRepSheet();
     else if (pendingAtt) buildAttSheet(pendingAtt);
     else if (pendingBus) buildBusSheet(pendingBus);
@@ -8910,6 +10001,7 @@
     else if (o) buildEvalSheet(o);
     else return false;
     if (sheet.className === 'ls') { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
+    pendingTT = null;
     pendingReceipt = null;
     pendingProfile = null;
     pendingBlank = false;
@@ -8972,6 +10064,7 @@
     if (printed.getAttribute('data-fit')) fitElement(printed, true);
     else if (printed.getAttribute('data-pages')) fitPages(printed);
     else if (printed.classList.contains('att-regs')) fitRegisterPages(printed); // بخطوط الإطار نفسها
+    else if (printed.classList.contains('tt-pages')) fitTtPages(printed);
     frame.contentWindow.focus();
     frame.contentWindow.print();
     printLandscape = false; // طباعة الصفحة العادية بعدها تعود عمودية

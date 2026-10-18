@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>مواعيد الدوام</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&display=swap">
+<style>
+  /* شاشة الممر: مواعيد الدوام والحصة الجارية، للمشاهدة فقط وبلا تسجيل دخول (الأوقات وأسماء المراحل فقط) */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: #0f2647; color: #fff; font-family: "Cairo", system-ui, "Segoe UI", Tahoma, sans-serif; padding: 3vh 3vw; }
+  .top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 2.5vh; }
+  .top img { width: clamp(48px, 6vw, 90px); height: auto; border-radius: 50%; background: #fff; }
+  .top h1 { margin: 0; font-size: clamp(1.3rem, 2.6vw, 2.4rem); color: #c5a46d; line-height: 1.3; }
+  .top p { margin: 0; opacity: .85; font-size: clamp(.9rem, 1.5vw, 1.4rem); }
+  .clock { margin-inline-start: auto; text-align: center; }
+  .clock b { display: block; font-size: clamp(2.2rem, 6vw, 5rem); line-height: 1; font-variant-numeric: tabular-nums; }
+  .clock span { opacity: .85; font-size: clamp(.9rem, 1.4vw, 1.3rem); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 2.5vw; }
+  .stage { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); border-radius: 16px; padding: 2vh 1.6vw; }
+  .stage h2 { margin: 0 0 1vh; color: #c5a46d; font-size: clamp(1.1rem, 2vw, 1.9rem); }
+  .now { font-size: clamp(1.1rem, 2.3vw, 2.2rem); font-weight: 700; margin-bottom: 1vh; }
+  .now em { font-style: normal; color: #c5a46d; }
+  .bar { height: 10px; background: rgba(255,255,255,.15); border-radius: 99px; overflow: hidden; margin-bottom: 1.5vh; }
+  .bar i { display: block; height: 100%; background: #c5a46d; }
+  .row { display: flex; justify-content: space-between; padding: .7vh .5vw; font-size: clamp(1rem, 1.9vw, 1.8rem); border-bottom: 1px solid rgba(255,255,255,.08); }
+  .row.k-a, .row.k-b { color: #e9dcc3; }
+  .row.now { background: #c5a46d; color: #0f2647; font-weight: 800; border-radius: 8px; }
+  .row.past { opacity: .45; }
+  .row span:last-child { direction: ltr; font-variant-numeric: tabular-nums; }
+  .msg { text-align: center; font-size: 1.3rem; opacity: .85; padding: 15vh 0; }
+  .fs { position: fixed; bottom: 12px; inset-inline-start: 12px; font: inherit; font-size: .9rem; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  :fullscreen .fs { display: none; }
+</style>
+</head>
+<body>
+<div class="top">
+  <img src="logo.png" alt="">
+  <div><h1>أكاديمية الركيزة الثالثة</h1><p>مواعيد الدوام المدرسي</p></div>
+  <div class="clock"><b id="clock">—</b><span id="date"></span></div>
+</div>
+<div id="main"><p class="msg">جارٍ التحميل…</p></div>
+<button type="button" class="fs" id="fs">ملء الشاشة</button>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  var ORD = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة', 'الحادية عشرة', 'الثانية عشرة'];
+  var bells = null, main = document.getElementById('main');
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  function mins(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? +m[1] * 60 + +m[2] : NaN; }
+  function hm(m) { m = ((m % 1440) + 1440) % 1440; return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); }
+  function label(st, i) {
+    var r = st.rows[i];
+    if (r.k !== 'p') return r.l || (r.k === 'a' ? 'الطابور' : 'الاستراحة');
+    var n = 0;
+    for (var j = 0; j <= i; j++) if (st.rows[j].k === 'p') n++;
+    return 'الحصة ' + (ORD[n - 1] || n);
+  }
+  // كما في البرنامج: قبل الدوام، في بند، بين بندين، بعد الدوام، أو عطلة نهاية الأسبوع
+  function nowInfo(st, d) {
+    var wd = d.getDay(), R = st.rows;
+    if (wd === 5 || wd === 6) return { state: 'off', text: 'عطلة نهاية الأسبوع' };
+    if (!R.length) return { state: 'off', text: '' };
+    var m = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+    if (m < mins(R[0].f)) return { state: 'before', next: 0, text: 'يبدأ الدوام الساعة ' + R[0].f };
+    for (var i = 0; i < R.length; i++) {
+      var a = mins(R[i].f), b = mins(R[i].t);
+      if (m >= a && m < b) return { state: 'in', cur: i, pct: (m - a) / (b - a), left: Math.ceil(b - m) };
+      if (i + 1 < R.length && m >= b && m < mins(R[i + 1].f)) return { state: 'gap', next: i + 1, text: 'بين الحصص — ' + label(st, i + 1) + ' تبدأ الساعة ' + R[i + 1].f };
+    }
+    return { state: 'after', text: 'انتهى الدوام' };
+  }
+  function past(ni, i) { return ni.state === 'after' || (ni.state === 'in' && i < ni.cur) || (ni.state === 'gap' && i < ni.next); }
+
+  function draw() {
+    var now = new Date();
+    document.getElementById('clock').textContent = hm(now.getHours() * 60 + now.getMinutes());
+    document.getElementById('date').textContent = now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (!bells) return;
+    if (!bells.stages.length) { main.innerHTML = '<p class="msg">لم تُحدَّد مواعيد الدوام بعد.</p>'; return; }
+    main.innerHTML = '<div class="grid">' + bells.stages.map(function (st) {
+      var ni = nowInfo(st, now);
+      return '<section class="stage"><h2>' + esc(st.name) + '</h2><div class="now">' + (ni.state === 'in' ? 'الآن: <em>' + esc(label(st, ni.cur)) + '</em> · متبقٍ ' + ni.left + ' دقيقة' : esc(ni.text)) + '</div>' +
+        (ni.state === 'in' ? '<div class="bar"><i style="width:' + Math.round(ni.pct * 100) + '%"></i></div>' : '') +
+        st.rows.map(function (r, i) {
+          return '<div class="row k-' + esc(r.k) + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (past(ni, i) ? ' past' : '') + '"><span>' + esc(label(st, i)) + '</span><span>' + esc(r.f) + ' – ' + esc(r.t) + '</span></div>';
+        }).join('') + '</section>';
+    }).join('') + '</div>';
+  }
+
+  async function load() {
+    if (!sb) { main.innerHTML = '<p class="msg">لم يُضبط الاتصال بقاعدة البيانات.</p>'; return; }
+    var r = await sb.rpc('public_bells');
+    if (r.error) { if (!bells) main.innerHTML = '<p class="msg">تعذر جلب المواعيد. تُعاد المحاولة تلقائيًا.</p>'; return; }
+    var b = r.data && r.data.bells;
+    bells = b && Array.isArray(b.stages) ? b : { stages: [] };
+    draw();
+  }
+
+  document.getElementById('fs').addEventListener('click', function () {
+    var p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    if (p && p.catch) p.catch(function () {});
+    try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {}
+  });
+  load();
+  setInterval(draw, 20000);
+  setInterval(load, 10 * 60000); // تعديل المواعيد في البرنامج يظهر هنا خلال عشر دقائق
+})();
+</script>
+</body>
+</html>
