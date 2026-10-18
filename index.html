@@ -626,6 +626,12 @@
   .tt-item .what { flex: 1; min-width: 0; }
   .tt-item .note { display: block; color: var(--muted); font-size: .82rem; }
   .tt-item .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tt-minis { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; }
+  .tt-mini b { display: block; font-size: .85rem; margin-bottom: 4px; }
+  .tt-mini table { border-collapse: collapse; font-size: .72rem; }
+  .tt-mini th, .tt-mini td { border: 1px solid var(--line); padding: 2px 4px; min-width: 34px; text-align: center; white-space: nowrap; }
+  .tt-mini thead th, .tt-mini tbody th { background: #f1f5f9; }
+  .tt-mini td.mv { background: var(--amber-soft); font-weight: 700; box-shadow: inset 0 0 0 2px var(--amber); }
   .tt-checks { margin: 0; padding-inline-start: 20px; line-height: 1.9; }
   .tt-now { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
   .tt-now .clock { font-size: 1.9rem; font-weight: 800; color: var(--primary-dark); line-height: 1; }
@@ -1087,7 +1093,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 3';
+  var APP_BUILD = '19/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1103,7 +1109,7 @@
       return false;
     }
     var KEYS = ['settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
-      'ttSessions', 'ttConfig', 'ttMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
+      'ttSessions', 'ttConfig', 'ttMissing', 'ttProposals', 'ttPlanMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
     if (!quiet) toast('جارٍ مزامنة البيانات…');
@@ -6909,6 +6915,10 @@
     S.ttSessions = rows || [];
     var c = rows ? await sb.from('timetable_config').select('*').eq('id', 1).maybeSingle() : { data: null };
     S.ttConfig = c.data || null;
+    // النصاب والقواعد والاقتراحات: من supabase/timetable_plan.sql
+    var pr = rows && !isTeacherRole() ? await sb.from('timetable_proposals').select('*').order('created_at', { ascending: false }) : { data: [], error: null };
+    S.ttPlanMissing = !!rows && !isTeacherRole() && (!!pr.error || !(S.ttConfig && 'quota' in S.ttConfig));
+    S.ttProposals = pr.data || [];
     // المعلم صاحب الحساب لا تُجلب له بيانات العاملين؛ يكفيه سجله
     if (isTeacherRole() && S.profile && S.profile.teacher_id && !find(S.profile.teacher_id)) {
       var me = await sb.from('teachers').select('*').eq('id', S.profile.teacher_id).maybeSingle();
@@ -7050,17 +7060,19 @@
 
   function ttView() {
     if (isTeacherRole()) return 'mine';
-    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|import)$/);
+    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|import|quota|improve)$/);
     return m ? m[1] : 'classes';
   }
 
   function ttNav(view, cf) {
-    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review'; }).length;
+    var badge = cf.groups.length + ttLive().filter(function (s) { return s.status === 'review'; }).length + ttQuotaDiff().length;
+    var pend = (S.ttProposals || []).filter(function (p) { return p.status === 'pending'; }).length;
     var item = function (key, hash, label, n) {
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + (n ? '<b>' + n + '</b>' : '') + '</button>';
     };
     return '<nav class="pills" aria-label="أقسام جدول الحصص">' + item('classes', '#/timetable', 'جداول الصفوف') + item('teachers', '#/timetable/teachers', 'جداول المعلمين') +
       item('bells', '#/timetable/bells', 'مواعيد الدوام') + item('review', '#/timetable/review', 'المراجعة', badge) +
+      item('quota', '#/timetable/quota', 'النصاب والقواعد') + item('improve', '#/timetable/improve', 'تحسين الجدول', pend) +
       (canEditTT() ? item('import', '#/timetable/import', 'استيراد من ملف') : '') + '</nav>';
   }
 
@@ -7089,13 +7101,15 @@
     if (view === 'mine') body = ttMineHtml(cf);
     else if (view === 'import') body = ttImportHtml();
     else if (view === 'bells') body = ttBellsHtml();
+    else if (view === 'quota') body = ttQuotaHtml();
+    else if (view === 'improve') body = ttImproveHtml();
     else if (view === 'review') body = ttReviewHtml(cf);
     else if (view === 'teachers') body = ttTeacherHtml(cf);
     else body = ttClassHtml(cf);
-    var empty = !S.ttSessions.length && view !== 'import' && view !== 'bells'
+    var empty = !S.ttSessions.length && !/^(import|bells|quota)$/.test(view)
       ? '<div class="card empty">لا توجد حصص بعد.' + (canEditTT() ? ' استوردها من ملف الجدول من «استيراد من ملف»، أو أضفها بالضغط على خانات الجدول.' : '') + '</div>' : '';
     app.innerHTML = tabs('timetable') + (view === 'mine' ? '' : ttNav(view, cf)) + empty + ttEditorHtml() + body +
-      (view === 'import' || view === 'review' ? '' : ttPrintBar(view));
+      (/^(import|review|quota|improve)$/.test(view) ? '' : ttPrintBar(view));
   }
 
   /* ----- الشبكة ----- */
@@ -7198,6 +7212,11 @@
       '<button type="button" class="btn" data-ttmoveto="' + t.id + '">نقل الحصص</button></details>' : '';
     return '<div class="card">' + ttPicker('t', list, t.id, cf) + add +
       '<div class="tt-head" style="margin-top:10px"><div><h2>' + esc(t.name) + '</h2>' + (sub ? '<p class="hint" style="margin:0">' + sub + '</p>' : '') + '</div>' + ttTeacherStats(mine) + '</div>' +
+      (function () {
+        var sc = ttScore(mine, ttRules(), ttPeriods());
+        return sc.notes.length ? '<p class="formhint" style="margin:0 0 10px">حسب قواعد الجدول: ' + sc.notes.map(esc).join('، ') +
+          (canEditTT() && !S.ttPlanMissing ? ' — <a href="#/timetable/improve" data-ttimprove="' + t.id + '">ابحث عن تحسين</a>' : '') + '</p>' : '';
+      })() +
       ttGridHtml(mine, 't', null, cf) + ttSubjects(mine) + ttLegend() + move + '</div>';
   }
 
@@ -7403,7 +7422,12 @@
         return '<div class="tt-item"><span class="what"><b>' + esc(p.from.name) + '</b> (' + p.n + ' حصة' + (p.from.category ? ' · ' + esc(p.from.category) : '') + ') ← هو نفسه <b>' + esc(p.to.name) + '</b>' + (p.to.category ? ' (' + esc(p.to.category) + ')' : '') + '؟</span>' +
           '<span class="acts"><button type="button" class="btn primary" data-ttmerge="' + p.from.id + '|' + p.to.id + '">دمج</button></span></div>';
       }).join('') + '</div></div>';
-    return dups + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
+    var qd = ttQuotaDiff();
+    var quota = !qd.length ? '' : '<div class="card"><h2>اختلاف عن النصاب (' + qd.length + ')</h2><p class="hint">عدد حصص المادة في الشعبة في الجدول غير ما في «النصاب والقواعد». عدّل الجدول أو النصاب.</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>المادة</th><th>المعلم</th><th>النصاب</th><th>في الجدول</th></tr></thead><tbody>' +
+      qd.map(function (x) { return '<tr><td>' + esc(x.class_name) + '</td><td>' + esc(x.subject) + '</td><td>' + esc(ttTName(x.teacher_id)) + '</td><td>' + x.need + '</td><td><b style="color:var(--red)">' + x.got + '</b></td></tr>'; }).join('') +
+      '</tbody></table></div></div>';
+    return dups + quota + section('التعارضات', bad, 'bad', 'لا توجد تعارضات.', 'الصف أو المعلم في حصتين بنفس اليوم والحصة. عدّل إحداهما أو احذفها.') +
       section('حصص تحتاج تأكيدًا', live.filter(function (s) { return s.status === 'review'; }), 'review', 'تم تأكيد كل الحصص.') +
       section('حصص لشعبة ليست في «إعداد الفصول»', live.filter(function (s) { return known.indexOf(s.class_name) < 0; }), 'bad', 'كل الحصص لشعب موجودة.', 'غُيّر اسم الشعبة أو حُذفت من «إعداد الفصول». عدّل الحصة إلى الشعبة الصحيحة.') +
       section('حصص بلا معلم', live.filter(function (s) { return !s.teacher_id || !find(s.teacher_id); }), 'bad', 'لكل حصة معلم.') +
@@ -7740,6 +7764,382 @@
     }
   }
 
+  /* ----- النصاب والقواعد وتحسين الجدول -----
+     النصاب: لكل شعبة ومادة عدد حصصها الأسبوعية ومعلمها؛ يُدخل في الإعدادات وينبَّه إلى كل اختلاف عنه في الجدول.
+     القواعد: ما يجعل جدول المعلم جيدًا (حصص متتالية، حمل اليوم، تكتل الحصص أول اليوم أو آخره، الفراغات).
+     التحسين: بحث عن تبديل حصتين في الشعبة نفسها (فلا يتغير نصاب شعبة ولا معلم) يحسّن جدول معلم ولا يسيء
+     إلى جدول أي معلم آخر ولا يصنع تعارضًا. النتيجة اقتراح يُحفظ، ولا يتغير الجدول إلا إذا اعتُمد.
+     الجداول من supabase/timetable_plan.sql */
+
+  var TT_RULES = {
+    run: { on: true, v: 3, label: 'أقصى عدد حصص متتالية للمعلم', unit: 'حصص' },
+    day: { on: true, v: 5, label: 'أقصى عدد حصص للمعلم في اليوم', unit: 'حصص' },
+    side: { on: true, v: 65, label: 'أقصى نسبة من حصص المعلم في نصف واحد من اليوم (أوله أو آخره)', unit: '%' },
+    gaps: { on: true, v: 2, label: 'أقصى عدد حصص فراغ بين حصص المعلم في اليوم', unit: 'حصص' }
+  };
+  var TT_WEIGHT = { run: 3, day: 3, side: 2, gaps: 1 };
+
+  function ttRules() {
+    var r = (S.ttConfig && S.ttConfig.rules) || {}, out = {};
+    Object.keys(TT_RULES).forEach(function (k) {
+      var x = r[k] || {};
+      out[k] = { on: x.on == null ? TT_RULES[k].on : !!x.on, v: x.v == null || isNaN(Number(x.v)) ? TT_RULES[k].v : Number(x.v) };
+    });
+    return out;
+  }
+  function ttQuota() { return S.ttConfig && Array.isArray(S.ttConfig.quota) ? S.ttConfig.quota : []; }
+
+  // جودة جدول معلم حسب القواعد: الدرجة (صفر = لا مخالفة) وتفصيل كل مخالفة. list: حصصه {day, period}
+  // lean: بلا نصوص المخالفات (للبحث، حيث تُحسب الدرجة آلاف المرات)
+  function ttScore(list, rules, NP, lean) {
+    var days = {}, parts = { run: 0, day: 0, side: 0, gaps: 0 }, notes = [], dn = lean ? null : ttCfg().days;
+    list.forEach(function (s) { (days[s.day] || (days[s.day] = {}))[s.period] = 1; });
+    Object.keys(days).forEach(function (d) {
+      var ps = Object.keys(days[d]).map(Number).sort(function (a, b) { return a - b; }), run = 1, best = 1;
+      for (var i = 1; i < ps.length; i++) { run = ps[i] === ps[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run); }
+      if (rules.run.on && best > rules.run.v) { parts.run += best - rules.run.v; lean || notes.push(best + ' حصص متتالية يوم ' + dn[d]); }
+      if (rules.day.on && ps.length > rules.day.v) { parts.day += ps.length - rules.day.v; lean || notes.push(ps.length + ' حصص يوم ' + dn[d]); }
+      var gaps = ps.length ? ps[ps.length - 1] - ps[0] + 1 - ps.length : 0;
+      if (rules.gaps.on && gaps > rules.gaps.v) { parts.gaps += gaps - rules.gaps.v; lean || notes.push(gaps + ' حصص فراغ يوم ' + dn[d]); }
+    });
+    if (rules.side.on && list.length >= 4) {
+      var half = NP / 2, early = list.filter(function (s) { return s.period <= half; }).length, late = list.length - early;
+      var cap = Math.ceil(list.length * rules.side.v / 100), more = Math.max(early, late);
+      if (more > cap) { parts.side = more - cap; lean || notes.push(more + ' من ' + list.length + ' حصة في ' + (late > early ? 'آخر اليوم' : 'أول اليوم')); }
+    }
+    var score = 0;
+    Object.keys(parts).forEach(function (k) { score += parts[k] * TT_WEIGHT[k]; });
+    return { score: score, parts: parts, notes: notes };
+  }
+
+  function ttTeacherScore(tid) { return ttScore(ttLive().filter(function (s) { return s.teacher_id === tid; }), ttRules(), ttPeriods()); }
+
+  // تكرار المادة في الشعبة في اليوم نفسه: لا يُقبل تبديل يزيده
+  function ttRepeats(list) {
+    var c = {}, n = 0;
+    list.forEach(function (s) { var k = s.day + '|' + s.subject; c[k] = (c[k] || 0) + 1; });
+    Object.keys(c).forEach(function (k) { if (c[k] > 1) n += c[k] - 1; });
+    return n;
+  }
+
+  /* --- النصاب --- */
+  function ttQKey(c, s, t) { return c + '\u0001' + s + '\u0001' + (t || ''); }
+  function ttActualLoad() {
+    var a = {};
+    ttLive().forEach(function (s) { var k = ttQKey(s.class_name, s.subject, s.teacher_id); a[k] = (a[k] || 0) + 1; });
+    return a;
+  }
+  // الاختلافات عن النصاب: [{ class_name, subject, teacher_id, need, got }]
+  function ttQuotaDiff() {
+    var q = ttQuota();
+    if (!q.length) return [];
+    var a = ttActualLoad(), seen = {}, out = [];
+    q.forEach(function (r) {
+      var k = ttQKey(r.class_name, r.subject, r.teacher_id);
+      seen[k] = (seen[k] || 0) + Number(r.count || 0);
+    });
+    Object.keys(seen).forEach(function (k) { if ((a[k] || 0) !== seen[k]) out.push(k); });
+    Object.keys(a).forEach(function (k) { if (seen[k] == null) out.push(k); });
+    return out.map(function (k) { var p = k.split('\u0001'); return { class_name: p[0], subject: p[1], teacher_id: p[2], need: seen[k] || 0, got: a[k] || 0 }; })
+      .sort(function (x, y) { var c = ttClasses(); return c.indexOf(x.class_name) - c.indexOf(y.class_name) || x.subject.localeCompare(y.subject, 'ar'); });
+  }
+
+  function ttQuotaHtml() {
+    if (S.ttPlanMissing) return ttPlanMissingHtml();
+    var draft = ui.ttQuota || (ui.ttQuota = JSON.parse(JSON.stringify(ttQuota())));
+    var classes = ttClasses();
+    if (classes.indexOf(ui.ttQClass) < 0) ui.ttQClass = classes[0];
+    var c = ui.ttQClass, edit = canEditTT(), a = ttActualLoad(), cfg = ttCfg();
+    var subs = cfg.subjects.slice();
+    ttLive().forEach(function (s) { if (subs.indexOf(s.subject) < 0) subs.push(s.subject); });
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (String(v) === String(cur || '') ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var need = {};
+    draft.forEach(function (r) { var k = ttQKey(r.class_name, r.subject, r.teacher_id); need[k] = (need[k] || 0) + Number(r.count || 0); });
+    var rows = draft.map(function (r, i) { return { r: r, i: i }; }).filter(function (x) { return x.r.class_name === c; }).map(function (x) {
+      var r = x.r, got = a[ttQKey(r.class_name, r.subject, r.teacher_id)] || 0, ok = got === need[ttQKey(r.class_name, r.subject, r.teacher_id)];
+      var s2 = subs.slice();
+      if (r.subject && s2.indexOf(r.subject) < 0) s2.push(r.subject);
+      return '<tr><td>' + (edit ? '<select data-tq="' + x.i + '" data-f="subject">' + opt('', '— المادة —', r.subject) + s2.map(function (s) { return opt(s, s, r.subject); }).join('') + '</select>' : esc(r.subject)) + '</td>' +
+        '<td>' + (edit ? '<select data-tq="' + x.i + '" data-f="teacher_id">' + opt('', 'بدون معلم', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, t.name, r.teacher_id); }).join('') + '</select>' : esc(ttTName(r.teacher_id))) + '</td>' +
+        '<td>' + (edit ? '<input type="number" min="0" max="30" step="1" data-tq="' + x.i + '" data-f="count" value="' + esc(r.count) + '" style="width:5em">' : esc(r.count)) + '</td>' +
+        '<td style="white-space:nowrap">' + got + '</td><td>' + (ok ? '<span class="badge approved">مطابق</span>' : '<span class="badge unpaid">في الجدول ' + got + '</span>') + '</td>' +
+        (edit ? '<td><button type="button" class="btn danger" data-tqdel="' + x.i + '" title="حذف السطر">×</button></td>' : '') + '</tr>';
+    }).join('');
+    // ما في الجدول لهذه الشعبة وليس في النصاب
+    var extra = Object.keys(a).filter(function (k) { return k.split('\u0001')[0] === c && need[k] == null; }).map(function (k) {
+      var p = k.split('\u0001');
+      return '<tr style="background:var(--amber-soft)"><td>' + esc(p[1]) + '</td><td>' + esc(ttTName(p[2])) + '</td><td>—</td><td>' + a[k] + '</td><td><span class="badge edit">ليست في النصاب</span></td>' + (edit ? '<td></td>' : '') + '</tr>';
+    }).join('');
+    var sumNeed = draft.filter(function (r) { return r.class_name === c; }).reduce(function (t, r) { return t + Number(r.count || 0); }, 0);
+    var sumGot = ttLive().filter(function (s) { return s.class_name === c; }).length;
+    // نصاب كل معلم: مجموع حصصه في النصاب وفي الجدول
+    var tl = {};
+    draft.forEach(function (r) { if (r.teacher_id) (tl[r.teacher_id] || (tl[r.teacher_id] = { need: 0, got: 0 })).need += Number(r.count || 0); });
+    ttLive().forEach(function (s) { if (s.teacher_id) (tl[s.teacher_id] || (tl[s.teacher_id] = { need: 0, got: 0 })).got++; });
+    var tRows = Object.keys(tl).map(function (id) { return { id: id, x: tl[id] }; }).sort(function (p, q) { return ttTName(p.id).localeCompare(ttTName(q.id), 'ar'); }).map(function (p) {
+      return '<tr><td>' + esc(ttTName(p.id)) + '</td><td>' + p.x.need + '</td><td>' + p.x.got + '</td><td>' + (p.x.need === p.x.got ? '<span class="badge approved">مطابق</span>' : '<span class="badge unpaid">فرق ' + (p.x.got - p.x.need > 0 ? '+' : '') + (p.x.got - p.x.need) + '</span>') + '</td></tr>';
+    }).join('');
+    var diff = ttQuotaDiff().length, dirty = JSON.stringify(draft) !== JSON.stringify(ttQuota());
+    return '<div class="card"><h2>توزيع النصاب</h2><p class="hint">لكل شعبة: المواد، وعدد حصص كل مادة في الأسبوع، ومعلمها. يُقارن الجدول بالنصاب، وكل اختلاف يظهر هنا وفي «المراجعة».' +
+        (draft.length ? (diff ? ' <b style="color:var(--red)">اختلافات في الجدول: ' + diff + '</b>' : ' <b style="color:var(--green)">الجدول مطابق للنصاب.</b>') : ' لم يُدخل النصاب بعد.') + '</p>' +
+        (edit ? '<div class="toolbar" style="margin:0 0 10px"><button type="button" class="btn primary" data-tqsave' + (dirty ? '' : ' disabled') + '>حفظ النصاب</button>' +
+          (dirty ? '<button type="button" class="btn" data-tqreset>تراجع عن التعديلات</button>' : '') +
+          '<button type="button" class="btn" data-tqfill>تعبئة من الجدول الحالي</button></div>' : '') +
+        ttPicker('c', classes, c, { ids: {} }).replace(/data-ttpick="c"/g, 'data-tqpick="c"') +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>المادة</th><th>المعلم</th><th>النصاب الأسبوعي</th><th>في الجدول</th><th>الحالة</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        (rows + extra || '<tr><td colspan="6" class="hint">لا يوجد نصاب لهذه الشعبة.</td></tr>') +
+        '</tbody><tfoot><tr><td colspan="2"><b>المجموع</b></td><td><b>' + sumNeed + '</b></td><td><b>' + sumGot + '</b></td><td colspan="2"></td></tr></tfoot></table></div>' +
+        (edit ? '<button type="button" class="btn" data-tqadd style="margin-top:8px">+ مادة لهذه الشعبة</button>' : '') + '</div>' +
+      (tRows ? '<div class="card"><h2>نصاب المعلمين</h2><div class="table-wrap"><table class="grid"><thead><tr><th>المعلم</th><th>في النصاب</th><th>في الجدول</th><th>الحالة</th></tr></thead><tbody>' + tRows + '</tbody></table></div></div>' : '') +
+      ttRulesHtml();
+  }
+
+  function ttRulesHtml() {
+    var r = ttRules(), edit = canEditTT();
+    return '<div class="card"><h2>قواعد الجدول الجيد</h2><p class="hint">بها تُقاس جودة جدول كل معلم وتبحث أداة «تحسين الجدول» عن الأفضل. «النصف الأول من اليوم» هو الحصص الأولى حتى منتصف الدوام.</p>' +
+      Object.keys(TT_RULES).map(function (k) {
+        return '<div class="toolbar" style="align-items:center;margin:6px 0"><label class="check" style="padding:0;min-width:min(100%,460px)"><input type="checkbox" data-trule="' + k + '" data-f="on"' + (r[k].on ? ' checked' : '') + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].label + '</label>' +
+          '<input type="number" min="0" max="' + (k === 'side' ? 100 : 12) + '" data-trule="' + k + '" data-f="v" value="' + r[k].v + '" style="width:5em"' + (edit ? '' : ' disabled') + '> ' + TT_RULES[k].unit + '</div>';
+      }).join('') + (edit ? '<button type="button" class="btn primary" data-trulesave style="margin-top:8px">حفظ القواعد</button>' : '') + '</div>';
+  }
+
+  function ttPlanMissingHtml() {
+    return '<div class="card empty">هذا الجزء يحتاج تجهيز قاعدة البيانات أولًا.<br>شغّل الملف <code dir="ltr">supabase/timetable_plan.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+  }
+
+  /* --- البحث عن تحسين --- */
+  // tid: المعلم المراد تحسين جدوله، أو '' لكل المعلمين (يقلّ المجموع ولا يسوء جدول أحد)
+  function ttOptimize(tid) {
+    var rules = ttRules(), NP = ttPeriods(), started = Date.now();
+    var S0 = ttLive().map(function (s) { return { id: s.id, day: s.day, period: s.period, class_name: s.class_name, teacher_id: s.teacher_id || '', subject: s.subject, d0: s.day, p0: s.period }; });
+    var byT = {}, byC = {}, tBusy = {}, cBusy = {};
+    S0.forEach(function (s) {
+      if (s.teacher_id) (byT[s.teacher_id] || (byT[s.teacher_id] = [])).push(s);
+      (byC[s.class_name] || (byC[s.class_name] = [])).push(s);
+      if (s.teacher_id) tBusy[s.teacher_id + '|' + s.day + '|' + s.period] = (tBusy[s.teacher_id + '|' + s.day + '|' + s.period] || 0) + 1;
+      cBusy[s.class_name + '|' + s.day + '|' + s.period] = (cBusy[s.class_name + '|' + s.day + '|' + s.period] || 0) + 1;
+    });
+    var score = function (t) { return t ? ttScore(byT[t] || [], rules, NP, true).score : 0; };
+    var base = {}, cur = {}, baseRep = {};
+    Object.keys(byT).forEach(function (t) { base[t] = cur[t] = score(t); });
+    Object.keys(byC).forEach(function (c) { baseRep[c] = ttRepeats(byC[c]); });
+    var classPeriods = function (c) { var st = ttStageOf(c); return st ? ttPTimes(st).length : NP; };
+    var days = ttCfg().days.length;
+    var setSlot = function (s, d, p) {
+      if (s.teacher_id) { tBusy[s.teacher_id + '|' + s.day + '|' + s.period]--; tBusy[s.teacher_id + '|' + d + '|' + p] = (tBusy[s.teacher_id + '|' + d + '|' + p] || 0) + 1; }
+      cBusy[s.class_name + '|' + s.day + '|' + s.period]--; cBusy[s.class_name + '|' + d + '|' + p] = (cBusy[s.class_name + '|' + d + '|' + p] || 0) + 1;
+      s.day = d; s.period = p;
+    };
+    // تبديل a مع b (أو نقل a إلى خانة فارغة في شعبته إن كان b خانة {day, period})
+    var doMove = function (a, b) {
+      var ad = a.day, ap = a.period;
+      if (b.id) { var bd = b.day, bp = b.period; setSlot(a, bd, bp); setSlot(b, ad, ap); } else setSlot(a, b.day, b.period);
+      return function undo() { if (b.id) { var x = a.day, y = a.period; setSlot(a, b.day, b.period); setSlot(b, x, y); } else setSlot(a, ad, ap); };
+    };
+    var valid = function (a, b) {
+      // المعلم في الخانة الجديدة غير مشغول بغير الحصة المتبادلة
+      if (a.teacher_id && (tBusy[a.teacher_id + '|' + b.day + '|' + b.period] || 0) - (b.id && b.teacher_id === a.teacher_id ? 1 : 0) > 0) return false;
+      if (b.id && b.teacher_id && (tBusy[b.teacher_id + '|' + a.day + '|' + a.period] || 0) - (b.teacher_id === a.teacher_id ? 1 : 0) > 0) return false;
+      return true;
+    };
+    // بعد الحركة: درجات المعلمين المتأثرين وتكرار المواد في الشعبة. لا يسوء أحد عن بدايته، والهدف يتحسن
+    var judge = function (a, b) {
+      var ts = [a.teacher_id, b.id ? b.teacher_id : ''].filter(Boolean), out = { ok: true, gain: 0, sc: {} };
+      ts.forEach(function (t) { if (!(t in out.sc)) out.sc[t] = score(t); });
+      if (ttRepeats(byC[a.class_name]) > baseRep[a.class_name]) out.ok = false;
+      Object.keys(out.sc).forEach(function (t) {
+        if (tid && t === tid) return;
+        if (out.sc[t] > base[t]) out.ok = false;
+      });
+      if (tid) out.gain = cur[tid] - (tid in out.sc ? out.sc[tid] : cur[tid]);
+      else Object.keys(out.sc).forEach(function (t) { out.gain += cur[t] - out.sc[t]; });
+      return out;
+    };
+    var candidates = function (s) {
+      var list = byC[s.class_name].filter(function (x) { return x !== s && (x.day !== s.day || x.period !== s.period) && x.teacher_id !== s.teacher_id; });
+      var np = classPeriods(s.class_name);
+      for (var d = 0; d < days; d++) for (var p = 1; p <= np; p++) if (!cBusy[s.class_name + '|' + d + '|' + p]) list.push({ day: d, period: p });
+      return list;
+    };
+    var bestSingle = function (pool, needGain) {
+      var best = null;
+      pool.forEach(function (a) {
+        candidates(a).forEach(function (b) {
+          if (!valid(a, b)) return;
+          var undo = doMove(a, b), j = judge(a, b);
+          if (j.ok && j.gain >= needGain && (!best || j.gain > best.gain)) best = { a: a, b: b, gain: j.gain, sc: j.sc };
+          undo();
+        });
+      });
+      return best;
+    };
+    var apply = function (m) { doMove(m.a, m.b); Object.keys(m.sc).forEach(function (t) { cur[t] = m.sc[t]; }); };
+    var pool = function () { return tid ? (byT[tid] || []) : S0.filter(function (s) { return s.teacher_id && cur[s.teacher_id] > 0; }); };
+    for (var step = 0; step < 25 && Date.now() - started < 6000; step++) {
+      if (tid && cur[tid] === 0) break;
+      var m = bestSingle(pool(), 1);
+      if (m) { apply(m); continue; }
+      // لا تبديل واحد يكفي: تبديل محايد في شعبة من شعب المعلم يفتح الطريق لتبديل ثانٍ يحسّن
+      var two = null, classes = {};
+      pool().forEach(function (s) { classes[s.class_name] = 1; });
+      Object.keys(classes).some(function (c) {
+        return byC[c].some(function (a) {
+          if (tid && a.teacher_id === tid) return false;
+          return candidates(a).some(function (b) {
+            if ((b.id && tid && b.teacher_id === tid) || !valid(a, b)) return false;
+            var undo = doMove(a, b), j = judge(a, b);
+            if (j.ok && j.gain >= 0) {
+              var saved = {}; Object.keys(j.sc).forEach(function (t) { saved[t] = cur[t]; cur[t] = j.sc[t]; });
+              var m2 = bestSingle(pool(), 1);
+              Object.keys(saved).forEach(function (t) { cur[t] = saved[t]; });
+              if (m2) { two = [{ a: a, b: b, sc: j.sc }, m2]; undo(); return true; }
+            }
+            undo();
+            return Date.now() - started > 6000;
+          });
+        });
+      });
+      if (!two) break;
+      apply(two[0]); apply(two[1]);
+    }
+    var changes = S0.filter(function (s) { return s.day !== s.d0 || s.period !== s.p0; }).map(function (s) { return { id: s.id, from: { d: s.d0, p: s.p0 }, to: { d: s.day, p: s.period } }; });
+    var summary = {};
+    changes.forEach(function (c) { var s = S0.filter(function (x) { return x.id === c.id; })[0]; if (s.teacher_id) summary[s.teacher_id] = { before: base[s.teacher_id], after: cur[s.teacher_id] }; });
+    if (tid && !summary[tid]) summary[tid] = { before: base[tid] || 0, after: cur[tid] || 0 };
+    return { changes: changes, summary: summary };
+  }
+
+  // الجدول بعد تطبيق تغييرات اقتراح (نسخة، لا يمس البيانات)
+  function ttWithChanges(changes) {
+    var to = {};
+    changes.forEach(function (c) { to[c.id] = c.to; });
+    return ttLive().map(function (s) { return to[s.id] ? Object.assign({}, s, { day: to[s.id].d, period: to[s.id].p }) : s; });
+  }
+
+  // شبكة صغيرة لجدول معلم قبل/بعد، الحصص المنقولة ملوّنة
+  function ttMiniGrid(list, moved, title) {
+    var cfg = ttCfg(), NP = ttPeriods(), h = '<div class="tt-mini"><b>' + esc(title) + '</b><table><thead><tr><th></th>';
+    for (var p = 1; p <= NP; p++) h += '<th>' + p + '</th>';
+    h += '</tr></thead><tbody>';
+    cfg.days.forEach(function (dn, d) {
+      h += '<tr><th>' + esc(dn) + '</th>';
+      for (var q = 1; q <= NP; q++) {
+        var c = list.filter(function (s) { return s.day === d && s.period === q; });
+        h += '<td' + (c.some(function (s) { return moved[s.id]; }) ? ' class="mv"' : '') + '>' + c.map(function (s) { return esc(ttShortCls(s.class_name)); }).join('/') + '</td>';
+      }
+      h += '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+
+  function ttChangeText(c) {
+    var s = ttById(c.id), days = ttCfg().days;
+    if (!s) return 'حصة لم تعد موجودة';
+    return '<b>' + esc(s.class_name) + '</b>: ' + esc(s.subject) + ' (' + esc(ttShortTName(s.teacher_id)) + ') من ' + esc(days[c.from.d]) + ' الحصة ' + c.from.p + ' إلى ' + esc(days[c.to.d]) + ' الحصة ' + c.to.p;
+  }
+
+  // عرض اقتراح: التغييرات، ودرجة كل معلم متأثر قبل وبعد، وجداولهم قبل وبعد
+  function ttProposalBody(changes, summary) {
+    var moved = {}, after = ttWithChanges(changes), rules = ttRules(), NP = ttPeriods();
+    changes.forEach(function (c) { moved[c.id] = 1; });
+    var teachers = Object.keys(summary);
+    var rows = teachers.map(function (t) {
+      var b = ttScore(ttLive().filter(function (s) { return s.teacher_id === t; }), rules, NP), a = ttScore(after.filter(function (s) { return s.teacher_id === t; }), rules, NP);
+      return '<tr><td><b>' + esc(ttTName(t)) + '</b></td><td>' + b.score + (b.notes.length ? '<br><small class="hint">' + b.notes.map(esc).join('، ') + '</small>' : '') + '</td><td>' + a.score +
+        (a.notes.length ? '<br><small class="hint">' + a.notes.map(esc).join('، ') + '</small>' : '<br><small class="hint">لا مخالفات</small>') + '</td><td>' +
+        (a.score < b.score ? '<span class="badge approved">تحسّن</span>' : a.score === b.score ? '<span class="badge new">كما هو</span>' : '<span class="badge unpaid">ساء</span>') + '</td></tr>';
+    }).join('');
+    var grids = teachers.map(function (t) {
+      return '<div class="tt-minis">' + ttMiniGrid(ttLive().filter(function (s) { return s.teacher_id === t; }), moved, ttTName(t) + ' — قبل') +
+        ttMiniGrid(after.filter(function (s) { return s.teacher_id === t; }), moved, ttTName(t) + ' — بعد') + '</div>';
+    }).join('');
+    return '<ul class="tt-checks">' + changes.map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>' +
+      '<div class="table-wrap" style="margin-top:8px"><table class="grid"><thead><tr><th>المعلم</th><th>الدرجة قبل</th><th>الدرجة بعد</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p class="hint" style="margin:6px 0">الدرجة مجموع مخالفات القواعد؛ الأقل أفضل، والصفر بلا مخالفات.</p>' +
+      '<details class="bank"><summary>الجداول قبل وبعد (الخانات الملوّنة هي المنقولة)</summary>' + grids + '</details>';
+  }
+
+  function ttImproveHtml() {
+    if (S.ttPlanMissing) return ttPlanMissingHtml();
+    var edit = canEditTT(), list = ttTeachers(), rules = ttRules(), NP = ttPeriods();
+    var scored = list.map(function (t) { return { t: t, s: ttScore(ttLive().filter(function (x) { return x.teacher_id === t.id; }), rules, NP) }; })
+      .sort(function (a, b) { return b.s.score - a.s.score || a.t.name.localeCompare(b.t.name, 'ar'); });
+    var opts = '<option value="">كل المعلمين (يقلّ مجموع المخالفات ولا يسوء جدول أحد)</option>' + scored.map(function (x) {
+      return '<option value="' + x.t.id + '"' + (ui.ttImpT === x.t.id ? ' selected' : '') + '>' + esc(x.t.name) + ' — الدرجة ' + x.s.score + '</option>';
+    }).join('');
+    var res = ui.ttOpt, card = '';
+    if (res && res.tid === (ui.ttImpT || '')) {
+      card = !res.changes.length
+        ? '<div class="card"><h2>النتيجة</h2><p class="hint" style="margin:0">لم أجد تبديلًا يحسّن ' + (res.tid ? 'جدول «' + esc(ttTName(res.tid)) + '»' : 'الجدول') + ' دون أن يسيء إلى جدول معلم آخر أو يصنع تعارضًا. ' +
+          'يمكنك تخفيف القواعد في «النصاب والقواعد»، أو تعديل حصص يدويًا ثم إعادة البحث.</p></div>'
+        : '<div class="card" style="border:2px solid var(--primary)"><h2>الاقتراح: ' + res.changes.length + ' حصة تنتقل</h2>' + ttProposalBody(res.changes, res.summary) +
+          (edit ? '<div class="toolbar" style="margin:12px 0 0"><input type="text" id="tt-proptitle" placeholder="عنوان الاقتراح (اختياري)" value="' + esc(res.title || '') + '" style="flex:1;min-width:200px"><button type="button" class="btn primary" data-ttpropsave>حفظ كاقتراح للاعتماد</button><button type="button" class="btn" data-ttoptclear>إلغاء</button></div>' : '') + '</div>';
+    }
+    var props = S.ttProposals || [];
+    var pend = props.filter(function (p) { return p.status === 'pending'; }), done = props.filter(function (p) { return p.status !== 'pending'; }).slice(0, 15);
+    var propCard = function (p) {
+      var st = p.status === 'approved' ? '<span class="badge approved">اعتُمد</span>' : p.status === 'rejected' ? '<span class="badge unpaid">رُفض</span>' : '<span class="badge edit">بانتظار الاعتماد</span>';
+      return '<div class="card"><h2>' + esc(p.title || 'اقتراح تحسين') + ' ' + st + '</h2><p class="hint">' + esc(p.goal || '') + ' · أعدّه ' + esc(p.created_by || '') + ' في ' + dmy(String(p.created_at || '').slice(0, 10)) +
+        (p.decided_by ? ' · ' + (p.status === 'approved' ? 'اعتمده ' : 'رفضه ') + esc(p.decided_by) : '') + '</p>' +
+        (p.status === 'pending' ? ttProposalBody(p.changes || [], p.summary || {}) +
+          (edit ? '<div class="toolbar" style="margin:12px 0 0"><button type="button" class="btn primary" data-ttpropok="' + p.id + '">اعتماد وتطبيق</button><button type="button" class="btn danger" data-ttpropno="' + p.id + '">رفض</button></div>' : '')
+          : '<ul class="tt-checks">' + (p.changes || []).map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>') + '</div>';
+    };
+    return '<div class="card"><h2>تحسين الجدول</h2><p class="hint">يبحث البرنامج عن تبديل حصتين في الشعبة نفسها يحسّن جدول المعلم المختار حسب «قواعد الجدول الجيد»، بشرط ألا يصنع تعارضًا، ولا يغيّر النصاب، ولا يسيء إلى جدول أي معلم آخر. ' +
+        'لا يتغير الجدول قبل أن يُعتمد الاقتراح.</p>' +
+        '<div class="toolbar" style="align-items:center;margin:0"><select id="tt-impt" style="width:auto;max-width:420px">' + opts + '</select>' +
+        '<button type="button" class="btn primary" data-ttopt' + (edit ? '' : ' disabled') + '>ابحث عن تحسين</button></div>' +
+        (ui.ttImpT ? (function () { var s = ttTeacherScore(ui.ttImpT); return '<p class="hint" style="margin:8px 0 0">المخالفات الآن: ' + (s.notes.length ? s.notes.map(esc).join('، ') : 'لا شيء') + '</p>'; })() : '') + '</div>' +
+      card +
+      (pend.length ? '<h3 style="margin:18px 0 8px">اقتراحات بانتظار الاعتماد (' + pend.length + ')</h3>' + pend.map(propCard).join('') : '') +
+      (done.length ? '<details class="bank" style="margin-top:14px"><summary>اقتراحات سابقة (' + done.length + ')</summary>' + done.map(propCard).join('') + '</details>' : '');
+  }
+
+  async function ttSaveProposal() {
+    var res = ui.ttOpt, t = res.tid ? ttTName(res.tid) : '';
+    var row = { title: (document.getElementById('tt-proptitle') || {}).value || (t ? 'تحسين جدول ' + t : 'تحسين الجدول لكل المعلمين'),
+      goal: 'حسب القواعد: ' + Object.keys(TT_RULES).filter(function (k) { return ttRules()[k].on; }).map(function (k) { return TT_RULES[k].label + ' ' + ttRules()[k].v + (k === 'side' ? '%' : ''); }).join('؛ '),
+      teacher_id: res.tid || null, changes: res.changes, summary: res.summary, status: 'pending', created_by: ttWho() };
+    var r = await sb.from('timetable_proposals').insert(row).select().single();
+    if (r.error) return fail(r.error);
+    (S.ttProposals || (S.ttProposals = [])).unshift(r.data || row);
+    ui.ttOpt = null;
+    render();
+    toast('حُفظ الاقتراح بانتظار الاعتماد');
+  }
+
+  // الاعتماد: يُتحقق أن الحصص ما زالت حيث كانت عند إعداد الاقتراح وأن التطبيق لا يصنع تعارضًا جديدًا، ثم تُنقل
+  async function ttDecideProposal(id, approve) {
+    var now = new Date().toISOString(), who = ttWho();
+    // الجدول والاقتراحات كما هي الآن في القاعدة، لا كما حُمّلت (قد يكون غيرك عدّل الجدول أو بتّ في الاقتراح)
+    await loadTimetable();
+    var p = (S.ttProposals || []).filter(function (x) { return x.id === id; })[0];
+    if (!p || p.status !== 'pending') { render(); return toast('بُتّ في هذا الاقتراح من قبل', true); }
+    if (approve) {
+      var stale = (p.changes || []).filter(function (c) { var s = ttById(c.id); return !s || s.status === 'removed' || s.day !== c.from.d || s.period !== c.from.p; });
+      if (stale.length) return alert('تغيّر الجدول منذ إعداد هذا الاقتراح (' + stale.length + ' من حصصه لم تعد في مكانها). ارفضه وأعد البحث عن تحسين.');
+      if (ttConflicts(ttWithChanges(p.changes)).groups.length > ttConflicts().groups.length) return alert('تطبيق هذا الاقتراح الآن يصنع تعارضًا. ارفضه وأعد البحث عن تحسين.');
+      if (!confirm('اعتماد الاقتراح ونقل ' + p.changes.length + ' حصة؟')) return;
+      var done = [];
+      for (var i = 0; i < p.changes.length; i++) {
+        var c = p.changes[i], r = await sb.from('timetable_sessions').update({ day: c.to.d, period: c.to.p, updated_by: who, updated_at: now }).eq('id', c.id);
+        if (r.error) {
+          // تُعاد الحصص التي نُقلت حتى لا يبقى الجدول نصف مطبَّق
+          for (var j = 0; j < done.length; j++) await sb.from('timetable_sessions').update({ day: done[j].from.d, period: done[j].from.p }).eq('id', done[j].id);
+          return fail(r.error);
+        }
+        done.push(c);
+      }
+      p.changes.forEach(function (c) { var s = ttById(c.id); s.day = c.to.d; s.period = c.to.p; s.updated_by = who; s.updated_at = now; });
+    } else if (!confirm('رفض الاقتراح؟ لا يتغير الجدول.')) return;
+    var patch = { status: approve ? 'approved' : 'rejected', decided_by: who, decided_at: now };
+    var u = await sb.from('timetable_proposals').update(patch).eq('id', id);
+    if (u.error) fail(u.error);
+    Object.assign(p, patch);
+    render();
+    toast(approve ? 'اعتُمد الاقتراح وطُبّق على الجدول' : 'رُفض الاقتراح');
+  }
+
   /* ----- الطباعة -----
      جدول لكل معلم أو صف: صفحة A4 أفقية بالترويسة ومكان التوقيع. الجدولان العامان: صفحة أفقية واحدة بلا شعار،
      الأحد يبدأ من اليمين. مواعيد الدوام: صفحة طولية لكل مرحلة. كل صفحة تُضبط وحدها (fitTtPages) */
@@ -7866,6 +8266,8 @@
       ui.ttEdit = null;
       return render();
     }
+    if ((el = e.target.closest('[data-tqpick]'))) { ui.ttQClass = el.getAttribute('data-id'); return render(); }
+    if ((el = e.target.closest('[data-ttimprove]'))) { e.preventDefault(); ui.ttImpT = el.getAttribute('data-ttimprove'); ui.ttOpt = null; return go('#/timetable/improve'); }
     if ((el = e.target.closest('[data-ttprint]'))) {
       var q = el.getAttribute('data-ttprint').split('|');
       pendingTT = { kind: q[0], id: q.slice(1).join('|') };
@@ -7906,6 +8308,42 @@
       st.rows.push(nr);
       return render();
     }
+    if (e.target.closest('[data-tqadd]')) { ui.ttQuota.push({ class_name: ui.ttQClass, subject: '', teacher_id: '', count: 1 }); return render(); }
+    if ((el = e.target.closest('[data-tqdel]'))) { ui.ttQuota.splice(+el.getAttribute('data-tqdel'), 1); return render(); }
+    if (e.target.closest('[data-tqreset]')) { ui.ttQuota = null; return render(); }
+    if (e.target.closest('[data-tqfill]')) {
+      if (ui.ttQuota.length && !confirm('استبدال النصاب المكتوب بما في الجدول الحالي؟ (لا يُحفظ قبل «حفظ النصاب»)')) return;
+      var act = ttActualLoad();
+      ui.ttQuota = Object.keys(act).map(function (k) { var p = k.split('\u0001'); return { class_name: p[0], subject: p[1], teacher_id: p[2], count: act[k] }; })
+        .sort(function (a, b) { var c = ttClasses(); return c.indexOf(a.class_name) - c.indexOf(b.class_name) || a.subject.localeCompare(b.subject, 'ar'); });
+      return render();
+    }
+    if (e.target.closest('[data-tqsave]')) {
+      var bad = ui.ttQuota.filter(function (r) { return !r.subject || !(Number(r.count) >= 0); });
+      if (bad.length) return toast('أكمل المادة والعدد في كل سطر، أو احذف السطر الناقص', true);
+      ui.ttQuota.forEach(function (r) { r.count = Math.round(Number(r.count)); r.teacher_id = r.teacher_id || ''; });
+      ttSaveConfig({ quota: ui.ttQuota }).then(function (ok) { if (ok) { ui.ttQuota = null; render(); toast('حُفظ النصاب'); } });
+      return;
+    }
+    if (e.target.closest('[data-trulesave]')) {
+      var rules = {};
+      Object.keys(TT_RULES).forEach(function (k) {
+        rules[k] = { on: app.querySelector('[data-trule="' + k + '"][data-f="on"]').checked, v: Number(app.querySelector('[data-trule="' + k + '"][data-f="v"]').value) || 0 };
+      });
+      ttSaveConfig({ rules: rules }).then(function (ok) { if (ok) { ui.ttOpt = null; render(); toast('حُفظت القواعد'); } });
+      return;
+    }
+    if (e.target.closest('[data-ttopt]')) {
+      var btn = e.target.closest('[data-ttopt]');
+      btn.disabled = true;
+      btn.textContent = 'جارٍ البحث…';
+      setTimeout(function () { var r = ttOptimize(ui.ttImpT || ''); r.tid = ui.ttImpT || ''; ui.ttOpt = r; render(); }, 30);
+      return;
+    }
+    if (e.target.closest('[data-ttoptclear]')) { ui.ttOpt = null; return render(); }
+    if (e.target.closest('[data-ttpropsave]')) return ttSaveProposal();
+    if ((el = e.target.closest('[data-ttpropok]'))) return ttDecideProposal(el.getAttribute('data-ttpropok'), true);
+    if ((el = e.target.closest('[data-ttpropno]'))) return ttDecideProposal(el.getAttribute('data-ttpropno'), false);
     if ((el = e.target.closest('[data-ttmerge]'))) { var mp = el.getAttribute('data-ttmerge').split('|'); return ttMergeTeacher(mp[0], mp[1]); }
     if ((el = e.target.closest('[data-ttmoveto]'))) {
       var to = document.getElementById('tt-moveto').value;
@@ -7923,6 +8361,7 @@
     if (!/^#\/timetable/.test(location.hash)) return;
     var el = e.target;
     if (el.id === 'tt-addteacher' && el.value) { ui.ttTeacher = el.value; return render(); }
+    if (el.id === 'tt-impt') { ui.ttImpT = el.value; ui.ttOpt = null; return render(); }
     if (el.id === 'tt-sign') { try { localStorage.setItem('tt-sign', el.checked ? '1' : '0'); } catch (err) {} return; }
     if (!canEditTT()) return;
     if (/^tte-(day|period|class|teacher|subject)$/.test(el.id)) {
@@ -7944,6 +8383,11 @@
       };
       reader.readAsText(file, 'utf-8');
       return;
+    }
+    if (el.hasAttribute('data-tq')) {
+      var row = ui.ttQuota[+el.getAttribute('data-tq')], f = el.getAttribute('data-f');
+      row[f] = f === 'count' ? el.value : el.value;
+      return render();
     }
     if (el.hasAttribute('data-ttimpc')) { ui.ttImp.classMap[el.getAttribute('data-ttimpc')] = el.value; return render(); }
     if (el.hasAttribute('data-ttimpt')) { ui.ttImp.teacherMap[el.getAttribute('data-ttimpt')] = el.value; return render(); }
