@@ -394,6 +394,9 @@
   #print-sheet .pe-summary .k { display: block; font-size: .9em; color: var(--navy); }
   #print-sheet .pe-summary .v { display: block; font-family: var(--font-head); font-size: 1.5em; font-weight: 800; color: var(--navy-dark); line-height: 1.25; }
   #print-sheet table.rz td.big { font-size: 1.25em; }
+  #print-sheet table.rz.bus { table-layout: auto; }
+  #print-sheet table.rz.bus th { white-space: nowrap; }
+  #print-sheet table.rz.bus .addr { font-size: .72em; font-weight: 400; color: #374151; }
   #print-sheet .att-notes { margin-top: 1.2em; border: 1px solid #b9c0cc; border-radius: 6px; padding: .6em .9em; min-height: 85mm; box-sizing: border-box; }
   #print-sheet .att-notes .att-lines { white-space: pre-wrap; min-height: 72mm; line-height: 2.2em; margin-top: .3em;
     background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(2.2em - 1px), #c9ced8 calc(2.2em - 1px), #c9ced8 2.2em); }
@@ -945,7 +948,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '16/10 — 5';
+  var APP_BUILD = '18/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -3816,10 +3819,21 @@
 
   var pendingBus = null;
 
+  // أجزاء الاسم: كل «عبد» أو «أبو» ونحوهما يُضم إلى الكلمة التي بعده
+  function nameParts(full) {
+    var w = String(full || '').trim().split(/\s+/), out = [];
+    for (var i = 0; i < w.length; i++) {
+      if (/^(عبد|عبدال|أبو|ابو|أبي|ابي|بن|ابن|آل|ال)$/.test(w[i]) && i + 1 < w.length) { out.push(w[i] + ' ' + w[i + 1]); i++; }
+      else out.push(w[i]);
+    }
+    return out;
+  }
+
   function buildBusSheet(g) {
     var pay = S.tPay[ui.tMonth] || {}, paidN = 0, exemptN = 0;
     var list = busRiders(g).map(function (m) {
-      var x = findStudent(m.student_id), nm = splitFamily(x.full_name), first = String(x.full_name || '').trim().split(/\s+/)[0] || '';
+      // الاسم الأول واسم الأب كما يُكتبان: «عبد الرحمن» و«أبو بكر» اسم واحد من كلمتين
+      var x = findStudent(m.student_id), nm = splitFamily(x.full_name), parts = nameParts(x.full_name), first = parts[0] || '';
       var gid = latinDigits(String((x.details || {}).guardian_id || '')).replace(/\D/g, ''), ph = latinDigits(String(x.phone || '')).replace(/\D/g, '').slice(-10);
       // خانة الاشتراك: تُعلَّم لمن دفع عن الشهر، والفارغة لم يدفع
       var paid = (pay[x.id] || {}).amount || 0, share = shareOf(m, g);
@@ -3827,7 +3841,7 @@
       var mark = ex ? '✓ إعفاء' : paid > 0 && paid >= share ? '✓ مدفوع' : paid > 0 ? 'جزئي ' + plainNum(paid) : '';
       if (ex) exemptN++;
       else if (paid > 0 && paid >= share) paidN++;
-      var father = String(x.full_name || '').trim().split(/\s+/)[1] || '';
+      var father = parts[1] || '';
       return { x: x, m: m, name: nm.family ? first : x.full_name, family: nm.family, father: father, mark: mark, full: ex || (paid > 0 && paid >= share), exempt: ex,
         key: gid.length >= 5 ? 'g' + gid : ph.length >= 8 ? 'p' + ph : 'n' + norm(nm.family) + x.id };
     });
@@ -3854,19 +3868,20 @@
       var first = r.key !== prev, n = size[r.key];
       prev = r.key;
       var famCell = first ? '<td class="big"' + (n > 1 ? ' rowspan="' + n + '" style="vertical-align:middle;background:#eef2f7"' : '') + '><b>' + esc(head[r.key] || '—') + '</b>' +
-        (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') + '</td>' : '';
+        (r.father ? '<br><span style="font-size:.85em">الأب: ' + esc(r.father) + (n > 1 ? ' · ' + n + ' إخوة' : '') + '</span>' : '') +
+        (stVal(r.x, 'address') ? '<br><span class="addr">العنوان: ' + esc(stVal(r.x, 'address')) + '</span>' : '') + '</td>' : '';
       return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '><td class="c" style="white-space:nowrap;padding-inline:.2em">' + (i + 1) + '</td><td class="big" style="white-space:nowrap"><b>' + esc(r.name) + '</b>' + rsvMark(r.x) + '</td><td class="c" style="white-space:nowrap">' + esc(r.x.class_name || '—') + '</td>' + famCell +
-        '<td>' + esc(r.m.pickup || '') + '</td>' + (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + secondPhone(r.x) +
-        '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td><td></td></tr>';
+        (first ? phone(r.x.phone || r.x.whatsapp, n) : '') + secondPhone(r.x) +
+        '<td class="c" style="white-space:nowrap' + (r.full ? ';font-weight:700' : '') + (r.exempt ? ';color:#6d28d9' : '') + '">' + esc(r.mark) + '</td></tr>';
     }).join('');
     var dots = '............................';
     sheet.className = 'rm';
     sheet.innerHTML =
       reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', monthLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
         ['المشرف/ة', g.supervisor_name ? esc(g.supervisor_name) + (g.supervisor_phone ? ' (' + esc(g.supervisor_phone) + ')' : '') : dots], ['وقت التجمع', g.pickup_time || '']]) +
-      '<table class="rz"><colgroup><col style="width:5.5%"><col style="width:9.5%"><col style="width:9%"><col style="width:17%"><col style="width:13%"><col style="width:13%"><col style="width:14%"><col style="width:10%"><col style="width:9%"></colgroup>' +
-      '<thead><tr><th>م</th><th>اسم الطالب</th><th>الشعبة</th><th>العائلة</th><th>نقطة الركوب</th><th>هاتف ولي الأمر</th><th>جوال الطالب / واتساب</th><th>الاشتراك</th><th style="white-space:nowrap">الحضور</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="9" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
+      '<table class="rz bus">' +
+      '<thead><tr><th>م</th><th>اسم الطالب</th><th>الشعبة</th><th>العائلة والعنوان</th><th>هاتف ولي الأمر</th><th>جوال الطالب / واتساب</th><th>الاشتراك</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="7" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + '</tbody></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
         (list.some(function (r) { return isReserve(r.x); }) ? ' &nbsp;&nbsp;&nbsp; * احتياط' : '') + ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
     fitSheet();
