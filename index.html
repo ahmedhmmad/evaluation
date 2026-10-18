@@ -480,6 +480,7 @@
   #print-sheet td.ls-head { border: 0; padding: 0 0 .3em; background: #fff; font-size: 1.087em; }
   #print-sheet td.pg-space { border: 0; padding: 0; background: none; height: 0; }
   #print-sheet table.newpage { break-before: page; }
+  #print-sheet.one-page table.newpage { break-before: auto; }
   /* الاستمارة الورقية الفارغة: خانات عالية للكتابة باليد */
   /* ارتفاع الخانة ثابت بالمليمتر: تصغير الخط ليتسع الكل في صفحة لا يضيّق مكان الكتابة */
   #print-sheet table.bf th, #print-sheet table.bf td { height: 5.8mm; padding: 0 .5em; line-height: 1.2; }
@@ -950,7 +951,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 9';
+  var APP_BUILD = '18/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7501,7 +7502,26 @@
      يختار المستخدم من يشملهم التقرير، وشروطًا على أي حقل (الصف، الجنس، لديه كتب…)، ومتغيرًا أو اثنين للإحصائية،
      وأعمدة الكشف. يُطبع (PDF) ويُصدَّر (Excel) بما يظهر على الشاشة */
 
-  var REP_SCOPES = { enrolled: 'المسجَّلون (نهائي واحتياط)', final: 'التسجيل النهائي', reserve: 'الاحتياط', pending: 'التسجيل المبدئي', all: 'كل الطلاب' };
+  var REP_SCOPES = { enrolled: 'المسجَّلون (نهائي واحتياط)', final: 'التسجيل النهائي', reserve: 'الاحتياط', pending: 'التسجيل المبدئي', all: 'كل الطلاب', bus: 'المضافون إلى باص' };
+
+  // متغيرات دفع المواصلات تُحسب لشهر المواصلات المختار (ui.tMonth، المشترك مع شاشة المواصلات)
+  var REP_TPAY = ['_tpay', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon'];
+  var TPAY_ORDER = ['دفع', 'دفع جزئيًا', 'لم يدفع', 'معفى'];
+
+  function repUsesTpay() {
+    var r = repState(), used = [r.g1, r.g2].concat(r.cols, r.filters.map(function (f) { return f.k; }));
+    return r.scope === 'bus' || used.some(function (k) { return REP_TPAY.indexOf(k) > -1; });
+  }
+
+  // حالة دفع طالب في باص عن شهر المواصلات: { state, due, paid, rec } أو null لغير المضاف إلى باص
+  function repTpayOf(x) {
+    var m = memberOf(x.id);
+    if (!m || !findGroup(m.group_id)) return null;
+    var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, paid = rec.amount || 0;
+    if (exemptIn(m, ui.tMonth)) return { state: 'معفى', due: 0, paid: paid, rec: rec };
+    var due = shareOf(m);
+    return { state: paid > 0 && paid >= due ? 'دفع' : paid > 0 ? 'دفع جزئيًا' : 'لم يدفع', due: due, paid: paid, rec: rec };
+  }
 
   function repState() {
     if (!ui.rep) ui.rep = { scope: 'enrolled', filters: [], g1: 'class_name', g2: 'gender', cols: ['full_name', 'national_id', 'class_name', 'gender'], title: '' };
@@ -7523,6 +7543,12 @@
       { k: '_status', label: 'حالة التسجيل', cat: true, get: function (x) { return ST_STATUS[stStatus(x)]; } },
       { k: '_ride', label: 'المواصلات', cat: true, get: function (x) { return groupOf[x.id] || x.wants_transport === true ? 'يحتاج' : x.wants_transport === false ? 'لا يحتاج' : 'لم يُحدَّد'; } },
       { k: '_bus', label: 'الباص', cat: true, get: function (x) { var g = findGroup(groupOf[x.id]); return g ? g.assembly_point : ''; } },
+      { k: '_tpay', label: 'دفع المواصلات', cat: true, order: TPAY_ORDER, get: function (x) { var t = repTpayOf(x); return t ? t.state : ''; } },
+      { k: '_tdue', label: 'المطلوب', get: function (x) { var t = repTpayOf(x); return t ? (t.state === 'معفى' ? '—' : plainNum(t.due)) : ''; } },
+      { k: '_tpaid', label: 'المدفوع', get: function (x) { var t = repTpayOf(x); return t ? plainNum(t.paid) : ''; } },
+      { k: '_tleft', label: 'المتبقي', get: function (x) { var t = repTpayOf(x); return t ? (t.state === 'معفى' ? '—' : plainNum(Math.max(0, t.due - t.paid))) : ''; } },
+      { k: '_treceipt', label: 'رقم الإيصال', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 && t.rec.receipt_no != null ? String(t.rec.receipt_no) : ''; } },
+      { k: '_tpaidon', label: 'تاريخ الدفع', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 && t.rec.paid_on ? dmy(t.rec.paid_on) : ''; } },
       { k: '_age', label: 'العمر عند بداية العام', cat: true, get: function (x) {
         if (!x.birth_date) return '';
         var a = Math.floor((start - new Date(String(x.birth_date).slice(0, 10) + 'T00:00')) / (365.25 * 864e5));
@@ -7541,6 +7567,11 @@
     var r = repState();
     return S.students.filter(function (x) {
       var st = stStatus(x);
+      if (r.scope === 'bus') {
+        // كما في كشف الباص: المسجَّل (نهائي أو احتياط) المضاف إلى باص، ما لم يُوقَف اشتراكه قبل الشهر
+        var m = memberOf(x.id);
+        return !!m && !!findGroup(m.group_id) && enrolled(x) && (owesThisMonth(m) || subscribedIn(m, ui.tMonth));
+      }
       return r.scope === 'all' || (r.scope === 'enrolled' ? enrolled(x) : st === r.scope);
     });
   }
@@ -7552,6 +7583,7 @@
     var vals = Object.keys(seen);
     if (fd.k === 'class_name') vals.sort(function (a, b) { return classRank(a) - classRank(b) || a.localeCompare(b, 'ar'); });
     else if (fd.f && fd.f.options) vals.sort(function (a, b) { var i = fd.f.options.indexOf(a), j = fd.f.options.indexOf(b); return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || a.localeCompare(b, 'ar'); });
+    else if (fd.order) vals.sort(function (a, b) { return (fd.order.indexOf(a) + 1 || 99) - (fd.order.indexOf(b) + 1 || 99); });
     else if (fd.k === '_age') vals.sort(function (a, b) { return (parseInt(a, 10) || 999) - (parseInt(b, 10) || 999); });
     else vals.sort(function (a, b) { return seen[b] - seen[a] || a.localeCompare(b, 'ar'); });
     // الفارغ آخرًا
@@ -7594,6 +7626,7 @@
 
   function repDesc(res) {
     var r = repState(), parts = [['يشمل', REP_SCOPES[r.scope]]];
+    if (repUsesTpay()) parts.push(['شهر المواصلات', monthLabel(ui.tMonth)]);
     r.filters.forEach(function (fl) {
       var fd = repField(fl.k, res.fields);
       if (fd && fl.v != null) parts.push([fd.label, fl.v === '' ? '(فارغ)' : fl.v]);
@@ -7616,6 +7649,13 @@
   }
 
   function renderReports() {
+    if (!ui.tMonth) ui.tMonth = thisMonth();
+    // دفعات شهر المواصلات تُجلب أولًا إن كان التقرير يستعملها
+    if (repUsesTpay() && !S.tPay[ui.tMonth]) {
+      app.innerHTML = tabs('reports') + '<div class="card empty">جارٍ تحميل دفعات المواصلات…</div>';
+      loadPayments(ui.tMonth);
+      return;
+    }
     var r = repState(), res = repResult(), scoped = repScoped(), cats = repCatFields(res.fields, scoped);
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
     var fieldSel = function (id, cur, none) {
@@ -7643,7 +7683,10 @@
       '<div class="card"><h2>التقرير</h2>' +
         '<div class="toolbar" style="align-items:center">' +
           '<label class="field" for="rep-scope" style="margin:0">يشمل</label><select id="rep-scope" data-ro-ok style="width:auto">' + Object.keys(REP_SCOPES).map(function (k) { return opt(k, REP_SCOPES[k], r.scope); }).join('') + '</select>' +
+          (repUsesTpay() ? '<label class="field" for="rep-month" style="margin:0">شهر المواصلات</label><input type="month" id="rep-month" data-ro-ok value="' + ui.tMonth + '" style="width:auto">' : '') +
           '<input type="text" id="rep-title" data-ro-ok placeholder="عنوان التقرير (اختياري)" value="' + esc(r.title) + '" style="flex:1;min-width:200px"></div>' +
+          '<div class="toolbar" style="align-items:center;margin-top:8px"><span class="hint" style="margin:0">تقارير جاهزة:</span>' +
+          '<button type="button" class="btn" data-reppreset="tpay" data-ro-ok>دفع رسوم المواصلات (المضافون إلى باص)</button></div>' +
         '<h3 style="margin:14px 0 4px">الشروط</h3>' + (filters || '<p class="hint" style="margin:0">بلا شروط: كل من يشملهم التقرير.</p>') +
         '<button type="button" class="btn" data-repaddf data-ro-ok>+ إضافة شرط</button>' +
         '<h3 style="margin:14px 0 4px">الإحصائية</h3>' +
@@ -7710,7 +7753,11 @@
   app.addEventListener('click', function (e) {
     if (location.hash !== '#/reports' || !canStudents()) return;
     var el, r = repState();
-    if (e.target.closest('[data-repaddf]')) {
+    if ((el = e.target.closest('[data-reppreset]'))) {
+      // من دفع ومن لم يدفع عن الشهر، من المضافين إلى باص فقط: إحصائية حسب الحالة والباص، والكشف بالمبالغ
+      ui.rep = { scope: 'bus', filters: [], g1: '_tpay', g2: '_bus', cols: ['full_name', 'class_name', 'phone', '_bus', '_tpay', '_tdue', '_tpaid', '_tleft', '_treceipt'], title: 'دفع رسوم المواصلات' };
+      render();
+    } else if (e.target.closest('[data-repaddf]')) {
       var fields = repFields(), cats = repCatFields(fields, repScoped()), used = r.filters.map(function (f) { return f.k; });
       var next = cats.filter(function (fd) { return used.indexOf(fd.k) < 0; })[0];
       if (next) r.filters.push({ k: next.k, v: null });
@@ -7729,6 +7776,7 @@
     if (location.hash !== '#/reports' || !canStudents()) return;
     var el = e.target, r = repState();
     if (el.id === 'rep-scope') r.scope = el.value;
+    else if (el.id === 'rep-month') { if (!/^\d{4}-\d{2}$/.test(el.value)) return; ui.tMonth = el.value; }
     else if (el.id === 'rep-title') { r.title = el.value.trim(); return; }
     else if (el.id === 'rep-g1') r.g1 = el.value;
     else if (el.id === 'rep-g2') r.g2 = el.value;
@@ -8265,7 +8313,10 @@
     var size = REPORT.baseSize;
     el.style.fontSize = size + 'pt';
     while (el.offsetHeight > maxPx && size > REPORT.minSize) { size -= 0.25; el.style.fontSize = size + 'pt'; }
-    if (el.offsetHeight > maxPx) el.style.fontSize = REPORT.baseSize + 'pt';
+    var fits = el.offsetHeight <= maxPx;
+    if (!fits) el.style.fontSize = REPORT.baseSize + 'pt';
+    // اتسع في صفحة: لا يبدأ جدول بعده صفحة جديدة (الإحصائية والكشف معًا في الورقة نفسها)
+    el.classList.toggle('one-page', fits);
   }
 
   function fitSheet() {
