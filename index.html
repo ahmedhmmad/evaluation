@@ -951,7 +951,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '18/10 — 11';
+  var APP_BUILD = '18/10 — 12';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7634,6 +7634,11 @@
     return parts;
   }
 
+  // أعمدة أرقام لا تنقسم على سطرين
+  function repNoWrap(k) {
+    return ['national_id', 'guardian_id', 'phone', 'alt_phone', 'whatsapp', 'student_phone', 'birth_date', '_age', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon'].indexOf(k) > -1;
+  }
+
   function repPct(n, total) { return total ? Math.round(n / total * 1000) / 10 + '%' : '—'; }
 
   // جدول الإحصائية: صفوف المتغير الأول، وأعمدة الثاني (أو العدد والنسبة)
@@ -7676,7 +7681,7 @@
     var cols = r.cols.map(function (k) { return repField(k, res.fields); }).filter(Boolean), LIMIT = 300;
     var listHtml = res.list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       res.list.slice(0, LIMIT).map(function (x, i) {
-        return '<tr><td>' + (i + 1) + '</td>' + cols.map(function (c) { return '<td>' + esc(c.get(x)) + (c.k === 'full_name' ? rsvMark(x) : '') + '</td>'; }).join('') + '</tr>';
+        return '<tr><td style="white-space:nowrap">' + (i + 1) + '</td>' + cols.map(function (c) { return '<td' + (repNoWrap(c.k) ? ' style="white-space:nowrap"' : '') + '>' + esc(c.get(x)) + (c.k === 'full_name' ? rsvMark(x) : '') + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody></table></div>' + (res.list.length > LIMIT ? '<p class="st-count">يُعرض أول ' + LIMIT + ' من ' + res.list.length + '؛ الطباعة والتصدير يشملان الجميع.</p>' : '')
       : '<div class="empty">لا يوجد طلاب مطابقون.</div>';
     app.innerHTML = tabs('reports') +
@@ -7740,9 +7745,10 @@
       '<tr class="total">' + st[st.length - 1].map(function (v, j) { return '<td' + (j ? ' class="c"' : '') + '>' + esc(v) + '</td>'; }).join('') + '</tr></tbody></table>' : '';
     var listTable = '<table class="rz' + (st.length ? ' newpage' : '') + '"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr>' +
       (st.length ? '' : '<tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>') +
-      '<tr><th>م</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      '<tr><th style="white-space:nowrap;padding-inline:.25em">م</th>' + cols.map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       res.list.map(function (x, i) {
-        return '<tr><td class="c">' + (i + 1) + '</td>' + cols.map(function (c) { return '<td' + (c.k === 'full_name' || c.k === 'address' ? '' : ' class="c"') + '>' + esc(c.get(x)) + (c.k === 'full_name' ? rsvMark(x) : '') + '</td>'; }).join('') + '</tr>';
+        // الترقيم والأرقام والمبالغ في سطر واحد دائمًا
+        return '<tr><td class="c" style="white-space:nowrap;padding-inline:.25em">' + (i + 1) + '</td>' + cols.map(function (c) { return '<td' + (c.k === 'full_name' || c.k === 'address' ? '' : ' class="c"') + (repNoWrap(c.k) ? ' style="white-space:nowrap"' : '') + '>' + esc(c.get(x)) + (c.k === 'full_name' ? rsvMark(x) : '') + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
