@@ -1131,7 +1131,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 7';
+  var APP_BUILD = '20/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4510,6 +4510,8 @@
     if (!x) return;
     if (!(amount > 0)) return toast('اكتب مبلغًا أكبر من صفر.', true);
     var prev = (S.tPay[ui.tMonth] || {})[x.id];
+    // جدول الإيصالات المكمِّلة قد يكون جُهّز بعد فتح الصفحة: يُفحص من جديد قبل الدمج بالطريقة القديمة
+    if (prev && prev.amount > 0 && S.topupMissing) await loadTopups(ui.tMonth);
     if (prev && prev.amount > 0 && !S.topupMissing) return deskTopup(x, prev, amount, print);
     if (prev && prev.amount > 0) {
       // قبل supabase/transport_topups.sql: الدفعة المكمِّلة تُضاف إلى الإيصال القائم بوسيلته نفسها
