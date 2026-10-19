@@ -497,10 +497,6 @@
   #print-sheet .rc-2 .rh-banner { margin-top: 0; }
   /* كلمة «أصل» / «نسخة» في أعلى الإيصال، فوق طرف الترويسة */
   #print-sheet .rv-tag { position: absolute; z-index: 3; top: 5mm; inset-inline-start: 0; padding: .05em 1.3em .15em; border: 1pt solid var(--gold); border-radius: .4em; background: #fff; font-family: var(--font-head); font-size: 1.15em; font-weight: 800; color: var(--navy); }
-  #print-sheet .rv-tag small { font-family: var(--font-en); font-size: .55em; font-weight: 700; letter-spacing: .08em; margin-inline-start: .3em; }
-  #print-sheet .rv-tag span { display: block; font-family: var(--font-body); font-size: .6em; font-weight: 600; text-align: center; }
-  #print-sheet .rv-tag.orig { background: var(--navy-dark); border: 1.5pt solid var(--navy-dark); color: #fff; }
-  #print-sheet .rv-tag.copy { background: #fff; border: 1.5pt dashed #555; color: #444; }
   /* «نسخة» كبيرة مائلة باهتة على جسم النسخة */
   #print-sheet .rv-copymark { position: absolute; z-index: 2; top: 52%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); font-family: var(--font-head); font-weight: 800;
     font-size: 8em; line-height: 1; color: rgba(0, 0, 0, .1); border: .06em solid rgba(0, 0, 0, .1); border-radius: .12em; padding: 0 .3em; pointer-events: none; white-space: nowrap; }
@@ -1138,7 +1134,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 10';
+  var APP_BUILD = '20/10 — 12';
 
   var syncing = null;
   function syncData(quiet) {
@@ -5128,6 +5124,21 @@
       var k = p.student_id + '|' + p.month;
       return mk(p, k in firstOf ? firstOf[k] : Number(p.amount) || 0);
     }).concat(tops.filter(function (t) { var d = String(t.paid_on || '').slice(0, 10); return d >= from && d <= to; }).map(function (t) { return mk(t, Number(t.amount) || 0); }));
+    // إيصال أول صدر قبل الإيصالات المكمِّلة، وأُكمل بالطريقة القديمة فكُتب تاريخ الإكمال فوق تاريخه: تاريخه الآن يوم إكماله أو بعده،
+    // فيُحسب مبلغه في يوم الإكمال مرة ثانية. يُنبَّه إليه ليُصحَّح تاريخه
+    var firstTop = {};
+    tops.forEach(function (t) { var k = t.student_id + '|' + t.month, d = String(t.paid_on || '').slice(0, 10); if (!firstTop[k] || d < firstTop[k]) firstTop[k] = d; });
+    // ولا يُعدّ دفعُ الأول والمكمِّل في يوم واحد خطأً: يُنبَّه فقط إن صدر بعده إيصال برقم أكبر وتاريخ أقدم (تاريخه كُتب فوقه لاحقاً)
+    var cand = rows.filter(function (p) { var k = p.student_id + '|' + p.month; return Number(p.amount) > 0 && firstTop[k] && String(p.paid_on || '').slice(0, 10) >= firstTop[k]; });
+    var seq = {};
+    for (var ci = 0; ci < cand.length; ci++) {
+      var m = cand[ci].month;
+      if (!seq[m]) seq[m] = await fetchAll(function () { return sb.from('transport_payments').select('receipt_no,paid_on').eq('month', m).order('receipt_no'); }) || [];
+    }
+    l.dateWarn = cand.filter(function (p) {
+      var d = String(p.paid_on || '').slice(0, 10), n = Number(p.receipt_no) || 0;
+      return seq[p.month].some(function (o) { return (Number(o.receipt_no) || 0) > n && String(o.paid_on || '').slice(0, 10) < d; });
+    }).map(function (p) { var x = findStudent(p.student_id); return { no: p.receipt_no, name: x ? x.full_name : '', day: String(p.paid_on || '').slice(0, 10) }; });
     l.loadedFrom = from; l.loadedTo = to;
     render();
   }
@@ -5185,7 +5196,9 @@
       '<p class="hint" style="margin:8px 0 0">بتاريخ السداد المكتوب في الإيصال. المبالغ صافية بعد أي استرداد.</p></div>';
     if (!l.rows) return head + '<div class="card empty">اختر الفترة ثم «عرض الدفعات».</div>';
     var list = ledFiltered(), t = ledTotals(list);
-    var filters = '<div class="toolbar" style="align-items:center">' +
+    var warn = (l.dateWarn || []).length ? '<p class="formhint">' + l.dateWarn.map(function (w) { return 'الإيصال رقم ' + w.no + (w.name ? ' (' + esc(w.name) + ')' : ''); }).join('، ') +
+      ': التاريخ المكتوب فيه هو يوم إكماله لا يوم صدوره، لأنه أُكمل بالطريقة القديمة، فيُحسب مبلغه الأول مرة ثانية في يوم الإكمال. صحّح تاريخه إلى تاريخه الأصلي (المكتوب في نسخة الإيصال) لتصح حصيلة الأيام.</p>' : '';
+    var filters = warn + '<div class="toolbar" style="align-items:center">' +
       '<select id="led-method" data-ro-ok style="width:auto">' + opt('', 'كل وسائل الدفع', l.method) + Object.keys(PAY_METHODS).map(function (k) { return opt(k, PAY_METHODS[k], l.method); }).join('') + '</select>' +
       '<select id="led-bus" data-ro-ok style="width:auto;max-width:220px">' + opt('', 'كل الباصات', l.bus) + uniq('bus').map(function (v) { return opt(v, v, l.bus); }).join('') + '</select>' +
       '<select id="led-cls" data-ro-ok style="width:auto">' + opt('', 'كل الشعب', l.cls) + uniq('cls').map(function (v) { return opt(v, v, l.cls); }).join('') + '</select>' +
@@ -10901,19 +10914,11 @@
   /* ----- إيصال اشتراك المواصلات -----
      ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والنسخة لسجل المدرسة.
      على هيئة الإيصالات المتداولة: رقم الإيصال، خانة المبلغ، المبلغ كتابةً، البيان، طريقة الدفع، التوقيعات والختم */
-  // الأصل والنسخة في الإيصال وسند الاسترداد: يُميَّزان بالشكل لا بالكلمة وحدها، ويظهر الفرق في الطباعة بالأبيض والأسود.
-  // الأصل: شارة مملوءة داكنة. النسخة: شارة بإطار متقطع، وكلمة «نسخة» كبيرة مائلة باهتة على جسم الإيصال.
-  // في الإيصال الأصل لولي الأمر والنسخة للأكاديمية؛ وفي سند الاسترداد العكس (الأصل بتوقيع ولي الأمر يبقى في الأكاديمية)
-  function rvTag(second, kind) {
-    var forGuardian = kind === 'refund' ? second : !second;
-    var who = forGuardian ? 'لولي الأمر' : 'تُحفظ في الأكاديمية';
-    return second
-      ? '<div class="rv-tag copy">نسخة <small>COPY</small><span>' + who + '</span></div><div class="rv-copymark" aria-hidden="true">نسخة</div>'
-      : '<div class="rv-tag orig">الأصل <small>ORIGINAL</small><span>' + who + '</span></div>';
+  // كلمة «أصل» / «نسخة» أعلى الإيصال وسند الاسترداد، وعلى النسخة كلمة «نسخة» كبيرة مائلة باهتة تمنع الخلط بينهما
+  function rvTag(second) {
+    return '<div class="rv-tag">' + (second ? 'نسخة' : 'أصل') + '</div>' + (second ? '<div class="rv-copymark" aria-hidden="true">نسخة</div>' : '');
   }
-  function rvCut(kind) {
-    return '<div class="rc-cut">✂ قصّ هنا — ' + (kind === 'refund' ? 'الأعلى (الأصل) للأكاديمية، والأسفل (النسخة) لولي الأمر' : 'الأعلى (الأصل) لولي الأمر، والأسفل (النسخة) للأكاديمية') + '</div>';
-  }
+  function rvCut() { return '<div class="rc-cut">✂</div>'; }
 
   function buildReceiptSheet(q) {
     var x = findStudent(q.sid), recs = payReceipts(q.sid);
