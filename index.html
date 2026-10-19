@@ -521,6 +521,7 @@
   /* سطور البيان: العنوان، ثم القيمة فوق خط منقّط يمتد إلى آخر السطر، ثم المقابل الإنجليزي */
   #print-sheet .rv-body { padding: .1em .2em; }
   #print-sheet .rv-line { display: flex; align-items: baseline; gap: .5em; margin: .8em 0; }
+  #print-sheet .rv-line.full .v { font-weight: 800; color: var(--ok); }
   #print-sheet .rv-line.ref .v { direction: ltr; text-align: right; font-family: var(--font-en); letter-spacing: .04em; }
   #print-sheet .rv-line .k { flex: none; color: var(--navy); font-weight: 600; }
   #print-sheet .rv-line .v { flex: 1; min-height: 1.35em; padding: 0 .5em; border-bottom: .75pt dotted #666; font-weight: 600; color: #000; }
@@ -1078,7 +1079,7 @@
     S.teachers = []; S.users = []; S.settings = null; S.results = null;
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
-    S.tGroups = []; S.tMembers = []; S.tPay = {}; S.transportMissing = false;
+    S.tGroups = []; S.tMembers = []; S.tPay = {}; S.tTop = {}; S.transportMissing = false;
     S.ttSessions = []; S.ttConfig = null; S.ttMissing = false;
 
     if (isStaff()) {
@@ -1130,7 +1131,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 6';
+  var APP_BUILD = '20/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1146,7 +1147,7 @@
       return false;
     }
     var KEYS = ['settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
-      'ttSessions', 'ttConfig', 'ttMissing', 'ttProposals', 'ttPlanMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
+      'tTop', 'topupMissing', 'ttSessions', 'ttConfig', 'ttMissing', 'ttProposals', 'ttPlanMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
     if (!quiet) toast('جارٍ مزامنة البيانات…');
@@ -1177,6 +1178,7 @@
         var map = {};
         rows.forEach(function (p) { p.amount = Number(p.amount) || 0; map[p.student_id] = p; });
         S.tPay[month] = map;
+        await loadTopups(month);
       }
     } catch (err) {
       KEYS.forEach(function (k) { S[k] = keep[k]; });
@@ -1250,6 +1252,37 @@
     S.tVoided = null;
   }
 
+  /* إيصالات الدفعات المكمِّلة: من دفع جزءًا ثم أكمل يصدر له عن الإكمال إيصال جديد برقمه ومبلغه ووسيلته،
+     ويبقى إيصاله الأول كما صدر. مجموع الشهر يبقى في transport_payments.amount (supabase/transport_topups.sql).
+     S.tTop: { month: { studentId: [إيصالات مكمِّلة بترتيب الرقم] } } */
+  S.tTop = {};
+  S.topupMissing = false;
+  async function loadTopups(month) {
+    var rows = await fetchAll(function () { return sb.from('transport_topups').select('*').eq('month', month).order('receipt_no'); });
+    S.topupMissing = !rows;
+    var map = {};
+    (rows || []).forEach(function (t) { t.amount = Number(t.amount) || 0; t.paid_before = Number(t.paid_before) || 0; (map[t.student_id] || (map[t.student_id] = [])).push(t); });
+    S.tTop[month] = map;
+  }
+  function topupsOf(sid, month) { return (S.tTop[month || ui.tMonth] || {})[sid] || []; }
+  // إيصالات الطالب عن الشهر: الأول بمبلغه وقت صدوره (قبل أي دفعة مكمِّلة)، ثم المكمِّلة
+  function payReceipts(sid, month) {
+    month = month || ui.tMonth;
+    var rec = (S.tPay[month] || {})[sid], tops = topupsOf(sid, month);
+    if (!rec || !(rec.amount > 0)) return [];
+    return [{ kind: 'main', receipt_no: rec.receipt_no, amount: tops.length ? tops[0].paid_before : rec.amount, paid_before: 0,
+      method: PAY_METHODS[rec.method] ? rec.method : 'cash', method_note: rec.method_note || '', paid_on: rec.paid_on, issued_by: rec.issued_by, issued_at: rec.issued_at }]
+      .concat(tops.map(function (t) { return Object.assign({ kind: 'topup' }, t, { method: PAY_METHODS[t.method] ? t.method : 'cash' }); }));
+  }
+  // المحصَّل عن الشهر موزّعًا على الإيصالات (لتفصيل وسائل الدفع): المكمِّلة بمبالغها، والأول بالباقي من المجموع
+  // (المجموع بعد أي استرداد). [{ method, ref, amount }]
+  function payParts(sid, paid, month) {
+    var recs = payReceipts(sid, month), top = 0, parts = [];
+    recs.forEach(function (p) { if (p.kind === 'topup') { top += p.amount; parts.push({ method: p.method, ref: p.method === 'cash' ? '' : p.method_note, amount: p.amount }); } });
+    if (recs.length) parts.unshift({ method: recs[0].method, ref: recs[0].method === 'cash' ? '' : recs[0].method_note, amount: Math.max(0, paid - top) });
+    return parts.filter(function (p) { return p.amount > 0; });
+  }
+
   // مدفوعات الشهر تُجلب عند أول عرض له ثم تُحفظ: { studentId: صف الدفعة }
   var loadingPay = {};
   async function loadPayments(month) {
@@ -1259,6 +1292,7 @@
     loadingPay[month] = false;
     var map = {};
     (rows || []).forEach(function (p) { p.amount = Number(p.amount) || 0; map[p.student_id] = p; });
+    await loadTopups(month);
     S.tPay[month] = map;
     render();
   }
@@ -4158,7 +4192,7 @@
       if (r.exempt) { t.exempt++; t.n--; return; }
       t.due += r.share; t.paid += r.paid; t.left += r.left;
       if (r.left > 0) t.owing++;
-      if (r.paid > 0) { var k = PAY_METHODS[r.rec.method] ? r.rec.method : 'cash'; t.by[k] += r.paid; t.byCount[k]++; }
+      if (r.paid > 0) payParts(r.x.id, r.paid).forEach(function (p) { t.by[p.method] += p.amount; t.byCount[p.method]++; });
     });
     return t;
   }
@@ -4395,18 +4429,26 @@
       (notStarted ? '<p class="formhint" style="margin-top:10px">لم يبدأ اشتراك هذا الطالب بعد: اختيرت له نقطة التجمع فقط. يبدأ اشتراكه من ' + monthLabel(ui.tMonth) + ' عند تسجيل هذه الدفعة.</p>' : '') +
       '<div class="stats" style="margin:14px 0 6px">' +
         '<div class="card stat"><span class="lbl">اشتراك ' + monthLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
-        '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? 'إيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' · ' + esc(issuedNote(rec)) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
+        '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? receiptsNote(x.id) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
         '<div class="card stat"><span class="lbl">المتبقي</span><span class="num"' + (left ? ' style="color:var(--red)"' : '') + '>' + plainNum(left) + ' <small>ج.م</small></span><span class="sub">' + (left ? 'يُسدَّد بتسجيل المبلغ كاملًا' : 'مسدَّد') + '</span></div>' +
       '</div>' +
       '<div class="grid2">' +
-      (paid ? '<p class="formhint" style="margin:0 0 10px">صدر لهذا الشهر الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' بمبلغ ' + money(paid) + ' (' + esc(payMethodLabel(rec)) + '). ' +
+      (paid ? '<p class="formhint" style="margin:0 0 10px">صدر لهذا الشهر ' + payReceipts(x.id).map(function (p) { return 'الإيصال رقم ' + (p.receipt_no != null ? p.receipt_no : '—') + ' بمبلغ ' + money(p.amount) + ' (' + esc(PAY_METHODS[p.method]) + ')'; }).join('، و') + '. ' +
           'الإيصال المسجَّل لا يُعدَّل: للتخفيض «استرداد مبلغ»، وللتصحيح «حذف» الإيصال (يُحفظ في الأرشيف) ثم إصدار إيصال جديد.' + (left ? ' ويمكن تسجيل دفعة مكمِّلة بالمبلغ المتبقي.' : '') + '</p>' : '') +
       (paid && !left ? '' :
       '<div class="grid2">' +
         (paid
-          ? '<div><label class="field" for="rc-amount">دفعة مكمِّلة الآن (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + left + '">' +
-              '<div class="day">تُضاف إلى الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' فيصير ' + money(paid + left) + '، بوسيلة الدفع نفسها.</div></div>' +
-            '<div><label class="field">طريقة الدفع</label><div style="padding:10px 0"><b>' + esc(payMethodLabel(rec)) + '</b></div></div>'
+          ? (S.topupMissing
+            ? '<div><label class="field" for="rc-amount">دفعة مكمِّلة الآن (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + left + '">' +
+                '<div class="day">تُضاف إلى الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' فيصير ' + money(paid + left) + '، بوسيلة الدفع نفسها. ليصدر لها إيصال مستقل شغّل الملف supabase/transport_topups.sql.</div></div>' +
+              '<div><label class="field">طريقة الدفع</label><div style="padding:10px 0"><b>' + esc(payMethodLabel(rec)) + '</b></div></div>'
+            : '<div><label class="field" for="rc-amount">دفعة مكمِّلة الآن (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + left + '">' +
+                '<div class="day">يصدر لها إيصال جديد برقم جديد بالمبلغ المدفوع الآن فقط، مع الباقي أو «استيفاء كامل الاشتراك»، ويبقى الإيصال السابق كما هو.</div></div>' +
+              '<div><label class="field" for="rc-method">طريقة الدفع</label><select id="rc-method">' + Object.keys(PAY_METHODS).map(function (k) {
+                return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
+              }).join('') + '</select></div>' +
+              (method === 'cash' ? '' : '<div style="grid-column:1/-1"><label class="field" for="rc-note">' + (ref ? 'رقم الدفع (' + PAY_METHODS[method] + ')' : 'حدّد طريقة الدفع') + '</label>' +
+                '<input type="text" id="rc-note"' + (ref ? ' dir="ltr" inputmode="numeric" style="text-align:right"' : '') + ' value=""></div>'))
           : '<div><label class="field" for="rc-amount">المبلغ المدفوع عن الشهر (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + share + '"></div>' +
             '<div><label class="field" for="rc-method">طريقة الدفع</label><select id="rc-method">' + Object.keys(PAY_METHODS).map(function (k) {
               return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
@@ -4416,7 +4458,7 @@
       '</div>') +
       '<div class="actions">' + (paid && !left ? '' : '<button type="button" class="btn primary" data-rcsave="print">' + (paid ? 'تسجيل الدفعة المكمِّلة وطباعة الإيصال' : 'تسجيل الدفعة وطباعة الإيصال') + '</button>' +
         '<button type="button" class="btn" data-rcsave="save">تسجيل دون طباعة</button>') +
-        (paid ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إعادة طباعة الإيصال الحالي</button>' +
+        (paid ? payReceipts(x.id).map(function (p) { return '<button type="button" class="btn" data-mreceipt="' + x.id + '|' + (p.receipt_no != null ? p.receipt_no : '') + '">طباعة الإيصال رقم ' + (p.receipt_no != null ? p.receipt_no : '—') + '</button>'; }).join('') +
           '<button type="button" class="btn" data-rcrefund>استرداد مبلغ</button>' +
           '<button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : notStarted ? '' : '<button type="button" class="btn" data-mstop="' + x.id + '">إيقاف الاشتراك من هذا الشهر</button>') + '</div>' +
       (function () {
@@ -4429,6 +4471,13 @@
         return '<div class="cand"><span><b>' + esc(o.full_name) + '</b><br><span class="meta">' + esc(o.class_name || 'بدون شعبة') + ' · الاشتراك ' + plainNum(os) + ' · المدفوع ' + plainNum(op) + '</span></span>' +
           '<button type="button" class="btn" data-rcpick="' + o.id + '">فتح إيصاله</button></div>';
       }).join('') + '</div>' : '') + '</div>';
+  }
+
+  // سطر إيصالات الشهر تحت «المدفوع»: رقم كل إيصال ومبلغه
+  function receiptsNote(sid) {
+    var recs = payReceipts(sid);
+    if (recs.length < 2) { var r = (S.tPay[ui.tMonth] || {})[sid] || {}; return 'إيصال رقم ' + (r.receipt_no != null ? r.receipt_no : '—') + ' · ' + esc(issuedNote(r)); }
+    return recs.map(function (p) { return 'إيصال ' + (p.receipt_no != null ? p.receipt_no : '—') + ': ' + plainNum(p.amount); }).join(' · ');
   }
 
   // ما تحت خانة البحث: الطالب المختار، أو قائمة المطابقين، أو رسالة
@@ -4461,8 +4510,9 @@
     if (!x) return;
     if (!(amount > 0)) return toast('اكتب مبلغًا أكبر من صفر.', true);
     var prev = (S.tPay[ui.tMonth] || {})[x.id];
+    if (prev && prev.amount > 0 && !S.topupMissing) return deskTopup(x, prev, amount, print);
     if (prev && prev.amount > 0) {
-      // دفعة مكمِّلة: تُضاف إلى الإيصال القائم بوسيلته نفسها
+      // قبل supabase/transport_topups.sql: الدفعة المكمِّلة تُضاف إلى الإيصال القائم بوسيلته نفسها
       amount = prev.amount + amount;
       await setPayment(x.id, { amount: amount });
     } else {
@@ -4475,6 +4525,36 @@
     document.getElementById('rc-body').innerHTML = deskBodyHtml();
     if (print) { pendingReceipt = { sid: x.id }; printNow(); }
     // جاهز للطالب التالي
+    var box = document.getElementById('rc-id');
+    box.focus(); box.select();
+  }
+
+  // دفعة مكمِّلة: إيصال جديد برقم جديد بمبلغها ووسيلتها، ويُرفع مجموع الشهر؛ الإيصال الأول لا يتغير
+  async function deskTopup(x, prev, add, print) {
+    var method = document.getElementById('rc-method').value, note = document.getElementById('rc-note');
+    var now = new Date().toISOString(), who = (S.profile && S.profile.full_name) || displayName(S.email), m = memberOf(x.id);
+    var due = !S.dueMissing && prev.due != null && prev.due !== '' ? Number(prev.due) : shareOf(m);
+    var row = { student_id: x.id, month: ui.tMonth, amount: add, method: method, method_note: method === 'cash' ? '' : (note ? note.value.trim() : ''),
+      paid_before: prev.amount, due: due, paid_on: todayISO(), issued_by: who, issued_at: now };
+    var ins = await sb.from('transport_topups').insert(row).select().single();
+    if (ins.error) return fail(ins.error);
+    var top = ins.data || row, total = prev.amount + add;
+    var up = await sb.from('transport_payments').update({ amount: total, updated_at: now }).eq('student_id', x.id).eq('month', ui.tMonth);
+    if (up.error) {
+      // لم يُرفع مجموع الشهر: يُلغى الإيصال المكمِّل (إلى الأرشيف) فلا يبقى إيصال بلا أثر
+      var g0 = m && findGroup(m.group_id);
+      await sb.from('transport_voided').insert({ receipt_no: top.receipt_no, student_id: x.id, student_name: x.full_name, class_name: x.class_name || '', assembly_point: g0 ? g0.assembly_point : '',
+        month: ui.tMonth, amount: add, method: row.method, method_note: row.method_note, paid_on: row.paid_on, reason: 'أُلغي تلقائيًا: تعذّر تحديث مجموع الشهر', voided_by: who, voided_at: now });
+      await sb.from('transport_topups').delete().eq('id', top.id);
+      return fail(up.error);
+    }
+    prev.amount = total;
+    var map = S.tTop[ui.tMonth] || (S.tTop[ui.tMonth] = {});
+    (map[x.id] || (map[x.id] = [])).push(top);
+    ui.rcMethod = '';
+    document.getElementById('rc-body').innerHTML = deskBodyHtml();
+    toast('صدر إيصال الدفعة المكمِّلة رقم ' + (top.receipt_no != null ? top.receipt_no : '—') + ' بمبلغ ' + money(add));
+    if (print) { pendingReceipt = { sid: x.id, no: top.receipt_no }; printNow(); }
     var box = document.getElementById('rc-id');
     box.focus(); box.select();
   }
@@ -4500,14 +4580,29 @@
       assembly_point: g ? g.assembly_point : '', month: ui.tMonth, amount: rec.amount, method: rec.method || 'cash', method_note: rec.method_note || '',
       paid_on: rec.paid_on || null, reason: reason, voided_by: (S.profile && S.profile.full_name) || displayName(S.email), voided_at: new Date().toISOString()
     };
-    // النسخة أولًا ثم حذف الدفعة: إن تعذّر الحذف تُسحب النسخة فلا يبقى إيصال في المكانين
-    var ins = await sb.from('transport_voided').insert(copy).select().single();
+    // الإيصالات المكمِّلة تُحذف معه، كلٌّ بنسخته في الأرشيف؛ والإيصال الأول بمبلغه هو
+    var recs = payReceipts(sid), tops = recs.slice(1);
+    if (tops.length) {
+      if (!confirm('لهذا الشهر ' + recs.length + ' إيصالات (' + recs.map(function (p) { return p.receipt_no; }).join('، ') + '). تُحذف كلها معًا إلى الأرشيف. متابعة؟')) return;
+      copy.amount = recs[0].amount;
+    }
+    var copies = [copy].concat(tops.map(function (p) {
+      return Object.assign({}, copy, { receipt_no: p.receipt_no, amount: p.amount, method: p.method, method_note: p.method_note || '', paid_on: p.paid_on || null });
+    }));
+    // النسخ أولًا ثم حذف الإيصالات: إن تعذّر الحذف تُسحب النسخ فلا يبقى إيصال في المكانين
+    var ins = await sb.from('transport_voided').insert(copies).select();
     if (ins.error) return fail(ins.error);
+    var undo = async function () { for (var i = 0; i < (ins.data || []).length; i++) await sb.from('transport_voided').delete().eq('id', ins.data[i].id); };
+    if (tops.length) {
+      var dt = await sb.from('transport_topups').delete().eq('student_id', sid).eq('month', ui.tMonth);
+      if (dt.error) { await undo(); return fail(dt.error); }
+    }
     var del = await sb.from('transport_payments').delete().eq('student_id', sid).eq('month', ui.tMonth);
     if (del.error) {
-      if (ins.data) await sb.from('transport_voided').delete().eq('id', ins.data.id);
+      if (!tops.length) await undo();
       return fail(del.error);
     }
+    if (S.tTop[ui.tMonth]) delete S.tTop[ui.tMonth][sid];
     delete S.tPay[ui.tMonth][sid];
     await refreshFirstPaid(sid);
     S.tVoided = null;
@@ -5012,11 +5107,18 @@
     l.loading = false;
     if (!rows) { toast('تعذر جلب الدفعات', true); render(); return; }
     var groupOf = transportGroupOf();
-    l.rows = rows.filter(function (p) { return Number(p.amount) > 0; }).map(function (p) {
+    // الإيصالات المكمِّلة: تُعرض بتاريخها ووسيلتها، والإيصال الأول بمبلغه قبلها
+    var tops = S.topupMissing ? [] : await fetchAll(function () { return sb.from('transport_topups').select('*').order('receipt_no'); }) || [], firstOf = {};
+    tops.forEach(function (t) { var k = t.student_id + '|' + t.month; if (!(k in firstOf)) firstOf[k] = Number(t.paid_before) || 0; });
+    var mk = function (p, amount) {
       var x = findStudent(p.student_id), g = findGroup(groupOf[p.student_id]);
-      return { p: p, x: x, name: x ? x.full_name : '(طالب محذوف)', cls: x ? x.class_name || '' : '', bus: g ? g.assembly_point : '', amount: Number(p.amount) || 0,
+      return { p: p, x: x, name: x ? x.full_name : '(طالب محذوف)', cls: x ? x.class_name || '' : '', bus: g ? g.assembly_point : '', amount: amount,
         method: PAY_METHODS[p.method] ? p.method : 'cash', ref: p.method_note || '', who: p.issued_by || '', day: String(p.paid_on || '').slice(0, 10) };
-    });
+    };
+    l.rows = rows.filter(function (p) { return Number(p.amount) > 0; }).map(function (p) {
+      var k = p.student_id + '|' + p.month;
+      return mk(p, k in firstOf ? firstOf[k] : Number(p.amount) || 0);
+    }).concat(tops.filter(function (t) { var d = String(t.paid_on || '').slice(0, 10); return d >= from && d <= to; }).map(function (t) { return mk(t, Number(t.amount) || 0); }));
     l.loadedFrom = from; l.loadedTo = to;
     render();
   }
@@ -5411,7 +5513,8 @@
       var mem = S.tMembers.filter(function (m) { return m.student_id === fid; })[0];
       setPayment(fid, { amount: shareOf(mem, findGroup(mem.group_id)) });
     } else if ((el = e.target.closest('[data-mreceipt]'))) {
-      pendingReceipt = { sid: el.getAttribute('data-mreceipt') };
+      var rq = el.getAttribute('data-mreceipt').split('|');
+      pendingReceipt = { sid: rq[0], no: rq[1] || '' };
       printNow();
     }
   });
@@ -9746,14 +9849,17 @@
     res.list.forEach(function (x) {
       var t = repTpayOf(x);
       if (!t || !(t.paid > 0)) return;
-      var k = repPayMethod(t.rec), ref = repPayRef(t.rec), key = k + '\u0001' + ref;
-      var g = groups[key] || (groups[key] = { k: k, ref: ref, n: 0, sum: 0, names: [] });
       // الاسم الأول والعائلة: يكفي للتعرف ويُبقي الجدول قصيرًا
-      var nm = splitFamily(x.full_name);
-      g.n++; g.sum += t.paid; g.names.push(nm.family ? (nameParts(x.full_name)[0] || '') + ' ' + nm.family : x.full_name);
-      byMethod[k] = byMethod[k] || { n: 0, sum: 0 };
-      byMethod[k].n++; byMethod[k].sum += t.paid;
-      total += t.paid; count++;
+      var nm = splitFamily(x.full_name), short = nm.family ? (nameParts(x.full_name)[0] || '') + ' ' + nm.family : x.full_name;
+      payParts(x.id, t.paid).forEach(function (part) {
+        var k = part.method, ref = part.ref, key = k + '\u0001' + ref;
+        var g = groups[key] || (groups[key] = { k: k, ref: ref, n: 0, sum: 0, names: [] });
+        g.n++; g.sum += part.amount;
+        if (g.names.indexOf(short) < 0) g.names.push(short);
+        byMethod[k] = byMethod[k] || { n: 0, sum: 0 };
+        byMethod[k].n++; byMethod[k].sum += part.amount;
+        total += part.amount; count++;
+      });
     });
     if (!count) return [];
     var order = Object.keys(PAY_METHODS);
@@ -9774,8 +9880,7 @@
     res.list.forEach(function (x) {
       var t = repTpayOf(x);
       if (!t || !(t.paid > 0)) return;
-      var k = repPayMethod(t.rec);
-      by[k].n++; by[k].sum += t.paid; total += t.paid; count++;
+      payParts(x.id, t.paid).forEach(function (part) { by[part.method].n++; by[part.method].sum += part.amount; total += part.amount; count++; });
     });
     if (!count) return [];
     return [['وسيلة الدفع', 'عدد الدفعات', 'المجموع (ج.م)', 'النسبة']].concat(Object.keys(PAY_METHODS).map(function (k) {
@@ -10784,10 +10889,15 @@
      ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والنسخة لسجل المدرسة.
      على هيئة الإيصالات المتداولة: رقم الإيصال، خانة المبلغ، المبلغ كتابةً، البيان، طريقة الدفع، التوقيعات والختم */
   function buildReceiptSheet(q) {
-    var x = findStudent(q.sid), rec = S.tPay[ui.tMonth][q.sid];
+    var x = findStudent(q.sid), recs = payReceipts(q.sid);
     var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0], g = findGroup(mem.group_id);
-    var share = shareOf(mem, g), left = Math.max(0, share - rec.amount), method = rec.method || 'cash';
+    // الإيصال المطلوب: برقمه، وإلا الأول. كلٌّ بمبلغه هو، والمتبقي بعده كما كان يوم صدوره
+    var rec = (q.no != null && q.no !== '' ? recs.filter(function (p) { return String(p.receipt_no) === String(q.no); })[0] : null) || recs[0];
+    var share = rec.kind === 'topup' && rec.due != null ? Number(rec.due) : shareOf(mem, g), before = rec.paid_before || 0;
+    var left = Math.max(0, share - before - rec.amount), method = rec.method || 'cash';
     var no = rec.receipt_no != null ? ('00000' + rec.receipt_no).slice(-Math.max(6, String(rec.receipt_no).length)) : '—';
+    // الإيصالات التي سبقت هذا الإيصال عن الشهر نفسه (للإشارة إليها عند استيفاء الاشتراك)
+    var earlier = recs.slice(0, recs.indexOf(rec)).map(function (p) { return p.receipt_no != null ? p.receipt_no : '—'; });
     var fixed = function (v) { return (Number(v) || 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
     var line = function (ar, en, value, cls) {
       return '<div class="rv-line' + (cls ? ' ' + cls : '') + '"><span class="k">' + ar + '</span><span class="v">' + esc(value || '') + '</span><span class="e">' + en + '</span></div>';
@@ -10807,11 +10917,14 @@
           line('استلمنا من السيد/ة', 'Received from', x.guardian_name) +
           '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', x.full_name) + line('الشعبة', 'Class', x.class_name, 'short') + '</div>' +
           line('مبلغًا وقدره', 'The sum of', amountInWords(rec.amount)) +
-          line('وذلك عن', 'Being for', 'اشتراك المواصلات لشهر ' + monthLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
+          line('وذلك عن', 'Being for', (rec.kind === 'topup' ? 'دفعة مكمِّلة لاشتراك المواصلات لشهر ' : 'اشتراك المواصلات لشهر ') + monthLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
           '<div class="rv-line"><span class="k">طريقة الدفع</span><span class="rv-ms">' + methods + '</span><span class="e">Payment</span></div>' +
           (hasPayRef(method) ? line('رقم الدفع (' + PAY_METHODS[method] + ')', 'Ref. No.', rec.method_note, 'ref') : '') +
+          // الباقي بعد هذا الإيصال، أو استيفاء الاشتراك كاملًا
+          line('ملاحظة', 'Note', left > 0 ? 'الباقي من اشتراك الشهر: ' + money(left) : 'استيفاء كامل اشتراك الشهر' + (rec.kind === 'topup' ? ' (مع ' + (earlier.length > 1 ? 'الإيصالات ' : 'الإيصال رقم ') + earlier.join(' و') + ')' : ''), left > 0 ? '' : 'full') +
         '</div>' +
-        '<div class="rv-end"><div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div><div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>' +
+        '<div class="rv-end"><div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div>' +
+          (rec.kind === 'topup' ? '<div><span>المدفوع سابقًا</span><b>' + money(before) + '</b></div>' : '<div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>') +
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + money(left) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
     };
