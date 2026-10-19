@@ -1131,7 +1131,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 8';
+  var APP_BUILD = '20/10 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4336,7 +4336,7 @@
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') +
           (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
         '<td><div class="acts">' + (r.paid > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> ' : '') +
-        (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
+        (r.left > 0 ? '<button type="button" class="btn" data-mfull="' + x.id + '">' + (r.paid > 0 ? 'إكمال الدفع (إيصال جديد)' : 'دفع كامل') + '</button> ' : '') +
         (r.paid > 0 ? '<button type="button" class="btn" data-mrefund="' + x.id + '">استرداد</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button>' : '<button type="button" class="btn" data-mstop="' + x.id + '" title="إيقاف الاشتراك">إيقاف</button>') +
         ' <button type="button" class="btn" data-mexempt="' + x.id + '" data-mexemptg="' + r.g.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button></div></td></tr>';
     }).join('');
@@ -5346,6 +5346,8 @@
   function receiptChangeBlocked(old, patch) {
     if (!(old.amount > 0)) return '';
     if ('amount' in patch && Number(patch.amount) < old.amount) return 'لا يُخفَّض مبلغ إيصال مسجَّل. استخدم «استرداد»، أو احذف الإيصال (يُحفظ في الأرشيف) وأصدر إيصالًا جديدًا.';
+    // بعد supabase/transport_topups.sql: الباقي إيصال جديد بمبلغه، لا رفعًا لمبلغ الإيصال الأول
+    if (!S.topupMissing && 'amount' in patch && Number(patch.amount) > old.amount) return 'الباقي يُسجَّل بإيصال جديد: افتح «إصدار إيصال» على الطالب وسجّل الدفعة المكمِّلة.';
     if ('method' in patch && patch.method !== (old.method || 'cash')) return 'لا تُغيَّر وسيلة دفع إيصال مسجَّل. احذف الإيصال (يُحفظ في الأرشيف) وأصدر إيصالًا جديدًا بالوسيلة الصحيحة.';
     if ('method_note' in patch && String(patch.method_note || '') !== String(old.method_note || '')) return 'لا يُغيَّر رقم الدفع في إيصال مسجَّل. احذف الإيصال (يُحفظ في الأرشيف) وأصدر إيصالًا جديدًا.';
     return '';
@@ -5513,6 +5515,8 @@
     } else if ((el = e.target.closest('[data-mfull]'))) {
       var fid = el.getAttribute('data-mfull');
       var mem = S.tMembers.filter(function (m) { return m.student_id === fid; })[0];
+      // دفع جزءًا من قبل: الباقي إيصال جديد يصدر من شاشة الإيصال (بالمبلغ الباقي جاهزًا)، لا يُرفع الإيصال الأول
+      if ((((S.tPay[ui.tMonth] || {})[fid] || {}).amount || 0) > 0) return openDesk(fid);
       setPayment(fid, { amount: shareOf(mem, findGroup(mem.group_id)) });
     } else if ((el = e.target.closest('[data-mreceipt]'))) {
       var rq = el.getAttribute('data-mreceipt').split('|');
