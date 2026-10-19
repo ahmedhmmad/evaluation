@@ -416,6 +416,25 @@
   #print-sheet table.tt-btable th { background: #eee; color: #111; font-family: var(--font-head); font-size: .8em; padding: .3em .5em; }
   #print-sheet table.tt-btable .t { text-align: center; width: 30%; font-weight: 700; direction: ltr; }
   #print-sheet table.tt-btable tr.k-a td, #print-sheet table.tt-btable tr.k-b td { background: var(--gold-soft); font-weight: 800; }
+  #print-sheet .tt-pbox { display: flex; flex-wrap: wrap; gap: .3em 1.5em; align-items: baseline; background: var(--gold-soft); border: 1pt solid var(--gold); border-radius: 2mm; padding: .4em .8em; margin: .3em 0 .5em; }
+  #print-sheet .tt-pbox b { font-family: var(--font-head); color: var(--navy); font-size: 1.15em; }
+  #print-sheet .tt-pnote { color: #5e6b80; font-size: .8em; margin: .3em 0; }
+  #print-sheet table.tt-ptab { width: 100%; border-collapse: collapse; margin: .3em 0; }
+  #print-sheet table.tt-ptab th, #print-sheet table.tt-ptab td { border: .6pt solid #9aa3b5; padding: .25em .4em; font-size: .9em; }
+  #print-sheet table.tt-ptab th { background: var(--navy-dark); color: #fff; font-family: var(--font-head); }
+  #print-sheet table.tt-ptab td.c { text-align: center; white-space: nowrap; }
+  #print-sheet .tt-pdecide { border: 1pt solid #444; border-radius: 2mm; padding: .5em .8em; margin-top: .6em; display: flex; flex-wrap: wrap; gap: .4em 2em; }
+  #print-sheet .tt-pdecide > b { font-family: var(--font-head); }
+  #print-sheet .tt-plines { flex-basis: 100%; color: #444; line-height: 2.2; }
+  #print-sheet .tt-psig { flex-basis: 100%; display: flex; justify-content: space-between; color: #444; margin-top: .3em; }
+  #print-sheet .tt-pmrow { display: flex; gap: 4%; margin: .4em 0 .7em; }
+  #print-sheet .tt-pm { flex: 1; }
+  #print-sheet .tt-pm > b { display: block; font-family: var(--font-head); color: var(--navy); margin-bottom: .2em; }
+  #print-sheet .tt-pm table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #print-sheet .tt-pm th, #print-sheet .tt-pm td { border: .6pt solid #9aa3b5; text-align: center; padding: .15em 0; font-size: .85em; white-space: nowrap; overflow: hidden; }
+  #print-sheet .tt-pm thead th, #print-sheet .tt-pm tbody th { background: var(--gold-soft); color: var(--navy); }
+  #print-sheet .tt-pm tbody th { width: 4.6em; }
+  #print-sheet .tt-pm td.mv { background: #fde68a; font-weight: 700; box-shadow: inset 0 0 0 1.2pt #b45309; }
   /* التوقيعات والختم */
   #print-sheet .rs { display: flex; gap: .9em; align-items: stretch; justify-content: flex-end; margin-top: 1.5em; break-inside: avoid; }
   #print-sheet .rs > div { flex: 1; padding: .45em .7em .6em; border: .5pt solid var(--rule); border-top: 1.5pt solid var(--navy); }
@@ -1101,7 +1120,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 7';
+  var APP_BUILD = '19/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8360,7 +8379,7 @@
         ? '<div class="card"><h2>النتيجة</h2><p class="hint" style="margin:0">لم أجد تبديلًا يحسّن ' + (res.tid ? 'جدول «' + esc(ttTName(res.tid)) + '»' : 'الجدول') + ' دون أن يسيء إلى جدول معلم آخر أو يزيد مخالفة قاعدة ملزمة أو يصنع تعارضًا. ' +
           'هذا أفضل ما يمكن بالقواعد الحالية؛ يمكنك خفض أولوية قاعدة أو تخفيفها في «النصاب والقواعد»، أو تعديل حصص يدويًا ثم إعادة البحث.</p></div>'
         : '<div class="card" style="border:2px solid var(--primary)"><h2>الاقتراح: ' + res.changes.length + ' حصة تنتقل</h2>' + ttProposalBody(res.changes, res.summary) +
-          (edit ? '<div class="toolbar" style="margin:12px 0 0"><input type="text" id="tt-proptitle" placeholder="عنوان الاقتراح (اختياري)" value="' + esc(res.title || '') + '" style="flex:1;min-width:200px"><button type="button" class="btn primary" data-ttpropsave>حفظ كاقتراح للاعتماد</button><button type="button" class="btn" data-ttoptclear>إلغاء</button></div>' : '') + '</div>';
+          (edit ? '<div class="toolbar" style="margin:12px 0 0"><input type="text" id="tt-proptitle" placeholder="عنوان الاقتراح (اختياري)" value="' + esc(res.title || '') + '" style="flex:1;min-width:200px"><button type="button" class="btn primary" data-ttpropsave>حفظ كاقتراح للاعتماد</button><button type="button" class="btn" data-ttprint="prop|" data-ro-ok>طباعة / PDF</button><button type="button" class="btn" data-ttoptclear>إلغاء</button></div>' : '') + '</div>';
     }
     var props = S.ttProposals || [];
     var pend = props.filter(function (p) { return p.status === 'pending'; }), done = props.filter(function (p) { return p.status !== 'pending'; }).slice(0, 15);
@@ -8369,8 +8388,10 @@
       return '<div class="card"><h2>' + esc(p.title || 'اقتراح تحسين') + ' ' + st + '</h2><p class="hint">' + (p.goal ? esc(p.goal.split('. ')[0]) + ' · ' : '') + 'أعدّه ' + esc(p.created_by || '') + ' في ' + dmy(String(p.created_at || '').slice(0, 10)) +
         (p.decided_by ? ' · ' + (p.status === 'approved' ? 'اعتمده ' : 'رفضه ') + esc(p.decided_by) : '') + '</p>' +
         (p.status === 'pending' ? ttProposalBody(p.changes || [], p.summary || {}) +
-          (edit ? '<div class="toolbar" style="margin:12px 0 0"><button type="button" class="btn primary" data-ttpropok="' + p.id + '">اعتماد وتطبيق</button><button type="button" class="btn danger" data-ttpropno="' + p.id + '">رفض</button></div>' : '')
-          : '<ul class="tt-checks">' + (p.changes || []).map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>') + '</div>';
+          '<div class="toolbar" style="margin:12px 0 0">' + (edit ? '<button type="button" class="btn primary" data-ttpropok="' + p.id + '">اعتماد وتطبيق</button><button type="button" class="btn danger" data-ttpropno="' + p.id + '">رفض</button>' : '') +
+            '<button type="button" class="btn" data-ttprint="prop|' + p.id + '" data-ro-ok>طباعة / PDF</button></div>'
+          : '<ul class="tt-checks">' + (p.changes || []).map(function (c) { return '<li>' + ttChangeText(c) + '</li>'; }).join('') + '</ul>' +
+            '<button type="button" class="btn" data-ttprint="prop|' + p.id + '" data-ro-ok>طباعة / PDF</button>') + '</div>';
     };
     var me = ui.ttImpT && ev.t[ui.ttImpT];
     return '<div class="card"><h2>تحسين الجدول</h2><p class="hint">يبحث البرنامج عن تبديل حصتين في الشعبة نفسها يحسّن الجدول حسب القواعد، فيبدأ بالقواعد الملزمة ثم الأعلى أولوية، بشرط ألا يصنع تعارضًا، ولا يغيّر النصاب، ولا يزيد مخالفة قاعدة ملزمة، ولا يسيء إلى جدول أي معلم آخر. ' +
@@ -8430,6 +8451,79 @@
     Object.assign(p, patch);
     render();
     toast(approve ? 'اعتُمد الاقتراح وطُبّق على الجدول' : 'رُفض الاقتراح');
+  }
+
+  /* --- طباعة اقتراح تحسين (لعرضه على المشرف قبل الاعتماد) ---
+     الصفحة الأولى: الملخص ونسبة الالتزام والمعلمون المتأثرون وخانة القرار؛ ثم جدول التغييرات؛ ثم جداول المعلمين
+     قبل وبعد (الحصص المنقولة مظللة). الاقتراح المعتمد أو المرفوض يُطبع بتغييراته وقراره فقط، لأن الجدول تغيّر بعده */
+  function ttPropPages(p) {
+    var pending = p.status !== 'approved' && p.status !== 'rejected', changes = p.changes || [], days = ttCfg().days;
+    var R = ttRuleSet(), ev0 = pending ? ttEvalAll(ttLive(), R) : null, after = pending ? ttWithChanges(changes) : null, ev1 = pending ? ttEvalAll(after, R) : null;
+    var moved = {};
+    changes.forEach(function (c) { moved[c.id] = 1; });
+    var teachers = Object.keys(p.summary || {});
+    changes.forEach(function (c) { var s = ttById(c.id); if (s && s.teacher_id && teachers.indexOf(s.teacher_id) < 0) teachers.push(s.teacher_id); });
+    var st = p.status === 'approved' ? 'اعتُمد' + (p.decided_by ? ' — ' + p.decided_by : '') : p.status === 'rejected' ? 'رُفض' + (p.decided_by ? ' — ' + p.decided_by : '') : 'بانتظار الاعتماد';
+    var meta = [['الحالة', st], ['أعدّه', p.created_by || ttWho()], ['تاريخ الإعداد', dmy(String(p.created_at || todayISO()).slice(0, 10))]];
+    var head = function (sub) {
+      return letterhead() + '<div class="tt-ptitle">' + esc(p.title || 'اقتراح تحسين جدول الحصص') + '</div>' +
+        '<div class="tt-pmeta">' + (sub ? esc(sub) + ' · ' : '') + meta.map(function (m) { return m[0] + ': ' + esc(m[1]); }).join(' · ') + '</div>';
+    };
+    var v = function (e) { return e ? e.hard * 1000 + e.soft : 0; };
+    var pages = [];
+    // 1) الملخص
+    var sum = '';
+    if (pending) {
+      sum = '<div class="tt-pbox"><b>الالتزام بالقواعد: ' + ttPct(ev0.ok, ev0.total) + '% ← ' + ttPct(ev1.ok, ev1.total) + '%</b><span>المخالفات الملزمة: ' + ev0.hard + ' ← ' + ev1.hard + '</span><span>الحصص التي تنتقل: ' + changes.length + '</span></div>' +
+        (p.goal ? '<p class="tt-pnote">' + esc(p.goal) + '</p>' : '') +
+        '<table class="tt-ptab"><thead><tr><th>المعلم</th><th>الدرجة قبل</th><th>الدرجة بعد</th><th>المخالفات بعد الاقتراح</th><th>النتيجة</th></tr></thead><tbody>' +
+        teachers.map(function (t) {
+          var b = ev0.t[t], a = ev1.t[t];
+          return '<tr><td><b>' + esc(ttTName(t)) + '</b></td><td class="c">' + (b ? b.soft + (b.hard ? ' · ملزمة ' + b.hard : '') : 0) + '</td><td class="c">' + (a ? a.soft + (a.hard ? ' · ملزمة ' + a.hard : '') : 0) + '</td>' +
+            '<td>' + (a && a.notes.length ? a.notes.map(esc).join('، ') : 'لا مخالفات') + '</td><td class="c">' + (v(a) < v(b) ? 'تحسّن' : v(a) === v(b) ? 'كما هو' : '<b>ساء</b>') + '</td></tr>';
+        }).join('') + '</tbody></table>' +
+        '<p class="tt-pnote">الدرجة مجموع مخالفات قواعد الجدول بأوزانها؛ الأقل أفضل. الاقتراح لا يصنع تعارضًا ولا يغيّر نصاب أي شعبة أو معلم.</p>';
+    } else sum = '<div class="tt-pbox"><b>' + esc(st) + '</b><span>الحصص التي نُقلت: ' + changes.length + '</span></div>';
+    sum += '<div class="tt-pdecide"><b>القرار:</b><span>☐ اعتماد</span><span>☐ رفض</span><span>☐ تعديل ثم إعادة العرض</span>' +
+      '<div class="tt-plines">ملاحظات: ......................................................................................................................................................</div>' +
+      '<div class="tt-psig"><span>المشرف التربوي: ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div></div>';
+    pages.push('<section class="tt-page" data-base="11">' + head('الملخص') + sum + '</section>');
+    // 2) التغييرات (على صفحات من 26 سطرًا)
+    for (var k = 0; k < changes.length; k += 26) {
+      pages.push('<section class="tt-page" data-base="11">' + head('التغييرات' + (changes.length > 26 ? ' (' + (k + 1) + '–' + Math.min(changes.length, k + 26) + ' من ' + changes.length + ')' : '')) +
+        '<table class="tt-ptab"><thead><tr><th>م</th><th>الشعبة</th><th>المادة</th><th>المعلم</th><th>من</th><th>إلى</th></tr></thead><tbody>' +
+        changes.slice(k, k + 26).map(function (c, i) {
+          var s = ttById(c.id) || {};
+          return '<tr><td class="c">' + (k + i + 1) + '</td><td>' + esc(s.class_name || '') + '</td><td>' + esc(s.subject || '') + '</td><td>' + esc(ttTName(s.teacher_id)) + '</td>' +
+            '<td class="c">' + esc(days[c.from.d] || '') + ' — الحصة ' + c.from.p + '</td><td class="c"><b>' + esc(days[c.to.d] || '') + ' — الحصة ' + c.to.p + '</b></td></tr>';
+        }).join('') + '</tbody></table></section>');
+    }
+    // 3) جداول المعلمين قبل وبعد: معلمان في الصفحة
+    if (pending) {
+      for (var j = 0; j < teachers.length; j += 2) {
+        pages.push('<section class="tt-page" data-base="11">' + head('الجداول قبل وبعد — الخانات المظللة هي الحصص المنقولة') +
+          teachers.slice(j, j + 2).map(function (t) {
+            return '<div class="tt-pmrow">' + ttPrintMini(ttLive().filter(function (s) { return s.teacher_id === t; }), moved, ttTName(t) + ' — قبل') +
+              ttPrintMini(after.filter(function (s) { return s.teacher_id === t; }), moved, ttTName(t) + ' — بعد') + '</div>';
+          }).join('') + '</section>');
+      }
+    }
+    return pages.join('');
+  }
+
+  function ttPrintMini(list, moved, title) {
+    var cfg = ttCfg(), NP = ttPeriods(), h = '<div class="tt-pm"><b>' + esc(title) + '</b><table><thead><tr><th></th>';
+    for (var p = 1; p <= NP; p++) h += '<th>' + p + '</th>';
+    h += '</tr></thead><tbody>';
+    cfg.days.forEach(function (dn, d) {
+      h += '<tr class="tt-r"><th>' + esc(dn) + '</th>';
+      for (var q = 1; q <= NP; q++) {
+        var c = list.filter(function (s) { return s.day === d && s.period === q; });
+        h += '<td' + (c.some(function (s) { return moved[s.id]; }) ? ' class="mv"' : '') + '>' + c.map(function (s) { return esc(ttShortCls(s.class_name)); }).join('/') + '</td>';
+      }
+      h += '</tr>';
+    });
+    return h + '</tbody></table></div>';
   }
 
   /* ----- الطباعة -----
@@ -8504,7 +8598,15 @@
   function buildTtSheet(q) {
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    if (q.kind === 'bells') {
+    if (q.kind === 'prop') {
+      var pr = q.id ? (S.ttProposals || []).filter(function (x) { return x.id === q.id; })[0] : ui.ttOpt && { title: ((document.getElementById('tt-proptitle') || {}).value || '') || (ui.ttOpt.tid ? 'تحسين جدول ' + ttTName(ui.ttOpt.tid) : 'تحسين الجدول لكل المعلمين') + ' (مسودة)',
+        changes: ui.ttOpt.changes, summary: ui.ttOpt.summary, status: 'draft', created_by: ttWho(), created_at: new Date().toISOString(),
+        goal: ui.ttOpt.tol ? 'سُمح بتراجع حتى ' + ui.ttOpt.tol + ' نقاط في جداول الآخرين لإصلاح القواعد الملزمة.' : 'صارم: لم يسُؤ جدول أحد.' };
+      printLandscape = true;
+      sheet.style.width = '267mm';
+      sheet.className = 'tt-pages land';
+      sheet.innerHTML = pr ? '<img class="wm" src="' + REPORT.logo + '" alt="">' + ttPropPages(pr) : '<p>لا يوجد اقتراح.</p>';
+    } else if (q.kind === 'bells') {
       printLandscape = false;
       sheet.className = 'tt-pages';
       sheet.innerHTML = ttBellsPages() || '<p>لم تُحدَّد مواعيد الدوام.</p>';
