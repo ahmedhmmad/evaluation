@@ -379,6 +379,8 @@
   #print-sheet .warn { color: var(--warn); }
   #print-sheet .bad { color: var(--bad); }
 
+  /* كشف الغياب المفصّل (أفقي): الترويسة بارتفاع محدود حتى يبقى للجدول مكانه */
+  #print-sheet.att-detail .rh-banner { width: 100%; height: 22mm; object-fit: contain; margin: 0; }
   /* جدول الحصص المطبوع: كل صفحة تُضبط وحدها، والصفحات بعد الأولى تبدأ بهامش الورقة نفسه */
   #print-sheet.tt-pages .tt-page + .tt-page { break-before: page; page-break-before: always; padding-top: var(--pad-y); }
   #print-sheet.tt-pages .tt-page { break-inside: avoid; }
@@ -1003,6 +1005,9 @@
   // مسجِّل الطلاب: يسجّل الطلاب ويعدّل بياناتهم ويرى الشعب فقط؛ لا حذف ولا مدفوعات ولا تقييمات (supabase/registrar.sql)
   function isRegistrar() { return role() === 'registrar'; }
   function canStudents() { return isAdmin() || isRegistrar() || isManager(); }
+  // شاشة الحضور والغياب: يراها ويصدّر كشوفها من يرى الطلاب والمشرف (supabase/attendance_supervisor.sql)؛ ويسجّل الحضور المدير العام والمسجِّل فقط
+  function canAttView() { return canStudents() || role() === 'supervisor'; }
+  function canRecordAtt() { return isAdmin() || isRegistrar(); }
 
   // «علوم عامة، رياضيات» → ['علوم عامة', 'رياضيات']
   function splitList(text) {
@@ -1101,6 +1106,8 @@
         S.defaultPw = (ps.data && ps.data.default_password) || '';
         await loadStudents();
         await loadTransport();
+      } else if (role() === 'supervisor') {
+        await loadStudents(); // للحضور والغياب (قراءة فقط)
       }
       await loadTimetable();
       S.visitsMissing = !!(vis[0].error || vis[1].error);
@@ -1123,7 +1130,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 4';
+  var APP_BUILD = '20/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1361,6 +1368,7 @@
       { items: [['#/', 'home', 'الرئيسية']] },
       { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة'], ['#/timetable', 'timetable', 'جدول الحصص']] }
     ];
+    if (role() === 'supervisor') groups.push({ title: 'الطلاب', items: [['#/attendance', 'attendance', 'الحضور والغياب']] });
     if (canView()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
       groups.push(
@@ -1376,6 +1384,7 @@
     var h = location.hash;
     if (isRegistrar()) return /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
+    if (h === '#/attendance' && canAttView()) return 'attendance';
     if (!isStaff()) return 'results';
     if (h === '#/teachers' || /^#\/t\//.test(h)) return 'teachers';
     if (h === '#/visits' || /^#\/v\//.test(h)) return 'visits';
@@ -6927,7 +6936,7 @@
     if (/^#\/transport/.test(h) && canView()) return renderTransport();
     if (h === '#/admin' && canView()) return renderAdmin();
     if (h === '#/rooms' && canView()) return renderRooms();
-    if (h === '#/attendance' && canView()) return renderAttendance();
+    if (h === '#/attendance' && canAttView()) return renderAttendance();
     if (h === '#/reports' && canView()) return renderReports();
     if (h === '#/results' || r) return renderResults(r && r[1]);
     if (h === '#/teachers') return renderList();
@@ -8932,6 +8941,18 @@
     taken.forEach(function (x) { if (!last || String(saved[x.id].updated_at) > String(last.updated_at)) last = saved[x.id]; });
     var dirty = Object.keys(a.draft).length, future = a.day > todayISO();
     var n = attCounts(roll, function (x) { return attOf(x.id).status; });
+    var rec = canRecordAtt();
+    if (!rec) {
+      // عرض فقط (المشرف والمدير): الحالة كما سُجّلت، بلا أزرار ولا حفظ
+      return attStatsHtml(n, cls) + '<div class="card"><h2>حضور ' + esc(cls) + ' — ' + dmy(a.day) + '</h2>' +
+        '<p class="hint">' + (taken.length ? 'سُجّل حضور هذا اليوم' + (last && last.recorded_by ? ' بواسطة ' + esc(last.recorded_by) : '') + '.' : 'لم يُسجَّل حضور هذا اليوم بعد.') + '</p>' +
+        '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الطالب</th><th>الحالة</th><th>ملاحظة</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' +
+        roll.map(function (x, i) {
+          var st = attOf(x.id);
+          return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + (st.saved ? '<span class="badge ' + ATT_BADGE[st.status] + '">' + ATT[st.status] + '</span>' : '<span class="badge new">لم يُسجَّل</span>') + '</td>' +
+            '<td>' + esc(st.note) + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
     var rows = roll.map(function (x, i) {
       var st = attOf(x.id);
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td><div class="acts">' + Object.keys(ATT).map(function (k) {
@@ -9013,7 +9034,13 @@
       '<span class="monthpick"><label class="field" for="att-from">من</label><input type="date" id="att-from" value="' + a.from + '"></span>' +
       '<span class="monthpick"><label class="field" for="att-to">إلى</label><input type="date" id="att-to" value="' + a.to + '"></span>' +
       '<button type="button" class="btn primary" data-attrun' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'جارٍ الجلب…' : 'عرض التقرير') + '</button>' +
-      (a.report ? '<button type="button" class="btn" data-attrepxlsx>تصدير Excel</button>' : '') + '</div></div>';
+      (a.report ? '<button type="button" class="btn" data-attrepxlsx>تصدير Excel</button>' : '') + '</div>' +
+      (a.report ? '<div class="toolbar" style="align-items:center;margin:10px 0 0"><b style="font-size:.95rem">كشف الغياب المفصّل' + (a.cls ? ' — ' + esc(a.cls) : '') + ':</b>' +
+        '<label class="field" for="att-min" style="margin:0">من غاب</label><select id="att-min" style="width:auto">' + [1, 2, 3, 4, 5, 7, 10].map(function (n) {
+          return '<option value="' + n + '"' + ((a.minAbs || 1) === n ? ' selected' : '') + '>' + (n === 1 ? 'يومًا فأكثر' : n + ' أيام فأكثر') + '</option>';
+        }).join('') + '</select>' +
+        '<button type="button" class="btn" data-attdetail="pdf">PDF</button><button type="button" class="btn" data-attdetail="xlsx">Excel</button>' +
+        '<span class="hint" style="margin:0">الشعبة، وأيام الغياب وتواريخها، وأطول غياب متصل، والملاحظات، ووسائل الاتصال بولي الأمر والطالب</span></div>' : '') + '</div>';
     if (!a.report) return head + '<div class="card empty">اختر الفترة ثم «عرض التقرير».</div>';
     var d = attReportData();
     if (a.cls) {
@@ -9043,6 +9070,86 @@
             return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
               '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
+  }
+
+  /* ----- كشف الغياب المفصّل -----
+     لكل طالب غاب في فترة التقرير (أو الحد الأدنى المختار من الأيام): الشعبة، وأيام الغياب من الأيام المسجّلة لشعبته ونسبة الحضور،
+     وتواريخ الغياب، وأطول غياب متصل (أيام دراسية متتالية سُجّل فيها غائبًا)، وآخر غياب، والملاحظات، وولي الأمر وهاتفه وواتسابه وجوال الطالب.
+     مرتّب بالشعبة ثم بالأكثر غيابًا */
+  function attDetailData() {
+    var a = attState(), d = attReportData(), min = a.minAbs || 1, rows = [];
+    var classes = (a.cls ? [a.cls] : attClasses()).filter(function (c) { return classRoll(c).length; });
+    classes.forEach(function (cls) {
+      var cdays = Object.keys((d.byClass[cls] || {}).days || {}).sort();
+      classRoll(cls).forEach(function (x) {
+        var p = d.per[x.id];
+        if (!p || p.absent < min) return;
+        var abs = Object.keys(p.days).filter(function (dd) { return p.days[dd] === 'absent'; }).sort();
+        var run = 0, best = 0;
+        cdays.forEach(function (dd) { if (p.days[dd] === 'absent') { run++; best = Math.max(best, run); } else if (p.days[dd]) run = 0; });
+        rows.push({ x: x, cls: cls, absent: p.absent, present: p.present, pct: attPct(p), dates: abs, streak: best, last: abs[abs.length - 1] || '', notes: p.notes,
+          guardian: stVal(x, 'guardian_name') || '', phone: plainPhone(x.phone), whatsapp: plainPhone(x.whatsapp), student: plainPhone(stVal(x, 'student_phone')) });
+      });
+    });
+    rows.sort(function (p, q) { return classRank(p.cls) - classRank(q.cls) || p.cls.localeCompare(q.cls, 'ar') || q.absent - p.absent || p.x.full_name.localeCompare(q.x.full_name, 'ar'); });
+    var sum = classes.map(function (cls) {
+      var c = d.byClass[cls];
+      return { cls: cls, students: classRoll(cls).length, days: c ? Object.keys(c.days).length : 0, absent: c ? c.n.absent : 0, pct: c ? attPct(c.n) : '—',
+        listed: rows.filter(function (r) { return r.cls === cls; }).length };
+    });
+    return { rows: rows, sum: sum, min: min, from: a.report.from, to: a.report.to, cls: a.cls };
+  }
+  function attDates(list) { return list.map(function (dd) { return dmy(dd).slice(0, 5); }).join('، '); }
+
+  async function attDetail(fmt) {
+    var a = attState();
+    if (!a.report) return toast('اعرض تقرير الفترة أولًا', true);
+    var D = attDetailData();
+    if (!D.rows.length) return toast('لا يوجد من غاب ' + (D.min > 1 ? D.min + ' أيام فأكثر' : '') + ' في هذه الفترة', true);
+    if (fmt === 'pdf') { pendingAtt = { kind: 'detail', D: D }; return printNow(); }
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var top = [[schoolName()], ['كشف الغياب المفصّل — من ' + dmy(D.from) + ' إلى ' + dmy(D.to)], ['الشعبة: ' + (D.cls || 'كل المدرسة') + ' · من غاب ' + (D.min > 1 ? D.min + ' أيام فأكثر' : 'يومًا فأكثر') + ' · عدد الطلاب: ' + D.rows.length], []];
+      xlsxSheet(wb, used, 'كشف الغياب', top.concat([['م', 'الطالب', 'الشعبة', 'أيام الغياب', 'الأيام المسجّلة', 'نسبة الحضور', 'أطول غياب متصل', 'آخر غياب', 'تواريخ الغياب', 'ملاحظات الغياب', 'ولي الأمر', 'هاتف ولي الأمر', 'واتساب ولي الأمر', 'جوال الطالب']],
+        D.rows.map(function (r, i) {
+          return [i + 1, r.x.full_name + rsvText(r.x), r.cls, r.absent, r.absent + r.present, r.pct, r.streak, r.last ? dmy(r.last) : '', attDates(r.dates), r.notes.join(' · '), r.guardian, r.phone, r.whatsapp, r.student];
+        })), [5, 32, 12, 10, 12, 11, 13, 12, 40, 30, 28, 15, 15, 15]);
+      xlsxSheet(wb, used, 'ملخص الشعب', top.concat([['الشعبة', 'الطلاب', 'أيام التسجيل', 'الغياب (طالب×يوم)', 'نسبة الحضور', 'في الكشف']], D.sum.map(function (c) {
+        return [c.cls, c.students, c.days, c.absent, c.pct, c.listed];
+      })), [16, 9, 12, 16, 12, 10]);
+      XLSX.writeFile(wb, ('كشف-الغياب-المفصل-' + (D.cls || 'المدرسة') + '-' + D.from + '-' + D.to).replace(/\s+/g, '-') + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // الطباعة: أفقية، رأس الجدول يتكرر إن امتد الكشف إلى أكثر من صفحة
+  function buildAttDetailSheet(D) {
+    var head = reportHead('كشف الغياب المفصّل', [['الفترة', 'من ' + dmy(D.from) + ' إلى ' + dmy(D.to)], ['الشعبة', D.cls || 'كل المدرسة'],
+      ['الكشف', 'من غاب ' + (D.min > 1 ? D.min + ' أيام فأكثر' : 'يومًا فأكثر')], ['عدد الطلاب', D.rows.length]]).replace(/^<img class="wm"[^>]*>/, '');
+    var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
+    var n = 13, prev = '';
+    var body = D.rows.map(function (r, i) {
+      var first = r.cls !== prev;
+      prev = r.cls;
+      return '<tr' + (first && i ? ' style="border-top:2px solid #7d8597"' : '') + '>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.x.full_name) + '</b>' + rsvMark(r.x) + '</td>' + c(esc(r.cls)) +
+        c(r.absent, true) + c(r.pct) + c(r.streak > 1 ? r.streak + ' أيام' : r.streak) + '<td style="font-size:.85em">' + esc(attDates(r.dates)) + '</td><td style="font-size:.85em">' + esc(r.notes.join(' · ')) + '</td>' +
+        '<td style="font-size:.9em">' + esc(r.guardian) + '</td>' + c('<span dir="ltr">' + esc(r.phone) + '</span>') + c('<span dir="ltr">' + esc(r.whatsapp) + '</span>') + c('<span dir="ltr">' + esc(r.student) + '</span>') + '<td></td></tr>';
+    }).join('');
+    printLandscape = true;
+    sheet.style.width = '267mm';
+    sheet.className = 'ls att-detail';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام<br>الغياب</th><th>نسبة<br>الحضور</th><th>أطول غياب<br>متصل</th><th>تواريخ الغياب</th><th>ملاحظات</th><th>ولي الأمر</th><th>هاتف ولي الأمر</th><th>واتساب</th><th>جوال الطالب</th><th>المتابعة</th></tr></thead>' +
+      '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
+      '<table class="rz" style="margin-top:.8em"><thead><tr><th>الشعبة</th><th>الطلاب</th><th>أيام التسجيل</th><th>الغياب (طالب×يوم)</th><th>نسبة الحضور</th><th>في الكشف</th></tr></thead><tbody>' +
+        D.sum.map(function (s2) { return '<tr><td><b>' + esc(s2.cls) + '</b></td>' + c(s2.students) + c(s2.days) + c(s2.absent) + c(s2.pct) + c(s2.listed, true) + '</tr>'; }).join('') + '</tbody></table>' +
+      '<p style="font-size:.8em;color:#5e6b80;margin:.5em 0 0">أيام الغياب ونسبة الحضور من الأيام التي سُجّل فيها حضور شعبة الطالب. أطول غياب متصل: أيام دراسية متتالية سُجّل فيها غائبًا. خانة «المتابعة» للكتابة (اتصال، زيارة، إجراء). تاريخ الإصدار: ' + dmy(todayISO()) + '</p>';
   }
 
   /* ----- كشوف الحضور: Excel و PDF -----
@@ -9223,6 +9330,7 @@
 
   function buildAttSheet(p) {
     if (p.kind === 'register') return buildAttRegisterSheet(p);
+    if (p.kind === 'detail') return buildAttDetailSheet(p.D);
     var d = p.d, all = { present: 0, absent: 0 }, total = 0;
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
     var rows = attClasses().filter(function (cls) { return classRoll(cls).length; }).map(function (cls, i) {
@@ -9441,6 +9549,10 @@
       return;
     }
     var classes = attClasses();
+    if (role() === 'supervisor' && !S.students.length) {
+      app.innerHTML = tabs('attendance') + '<div class="card empty">لا تظهر بيانات الطلاب لحساب المشرف بعد.<br>يشغّل المدير العام الملف <code dir="ltr">supabase/attendance_supervisor.sql</code> في محرر SQL، ثم تُحدَّث الصفحة.</div>';
+      return;
+    }
     app.innerHTML = tabs('attendance') +
       '<div class="toolbar" style="align-items:center"><nav class="pills" style="margin:0">' +
         '<button type="button" data-attview="day"' + (a.view === 'day' ? ' class="on"' : '') + '>الحضور اليومي</button>' +
@@ -9514,8 +9626,10 @@
   }
 
   app.addEventListener('click', function (e) {
-    if (location.hash !== '#/attendance' || !canStudents()) return;
+    if (location.hash !== '#/attendance' || !canAttView()) return;
     var el, a = attState();
+    if (!canRecordAtt() && e.target.closest('[data-attset], [data-attall], [data-attsave]')) return;
+    if ((el = e.target.closest('[data-attdetail]'))) return attDetail(el.getAttribute('data-attdetail'));
     if ((el = e.target.closest('[data-attset]'))) {
       var sid = el.getAttribute('data-attset'), cur = attOf(sid);
       a.draft[sid] = { status: el.getAttribute('data-attv'), note: cur.note };
@@ -9562,8 +9676,10 @@
   });
 
   app.addEventListener('change', function (e) {
-    if (location.hash !== '#/attendance' || !canStudents()) return;
+    if (location.hash !== '#/attendance' || !canAttView()) return;
     var el = e.target, a = attState();
+    if (el.id === 'att-min') { a.minAbs = Number(el.value) || 1; return render(); }
+    if (el.hasAttribute('data-attnote') && !canRecordAtt()) return;
     if (el.id === 'att-cls') {
       if (!leaveAttDraft()) { el.value = a.cls; return; }
       a.draft = {};
@@ -11003,7 +11119,7 @@
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
     else return false;
-    if (sheet.className === 'ls') { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
+    if (sheet.classList.contains('ls')) { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
     pendingTT = null;
     pendingReceipt = null;
     pendingProfile = null;
