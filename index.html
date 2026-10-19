@@ -1083,7 +1083,7 @@
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
     S.tGroups = []; S.tMembers = []; S.tPay = {}; S.tTop = {}; S.transportMissing = false;
-    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null;
+    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null; S.pLinks = null;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -1136,7 +1136,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 15';
+  var APP_BUILD = '20/10 — 16';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1411,7 +1411,7 @@
     if (canView()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
       groups.push(
-        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']] },
+        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']].concat(isAdmin() ? [['#/parents', 'parents', 'روابط أولياء الأمور']] : []) },
         { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']].concat(isAdmin() ? [['#/audit', 'audit', 'سجل التعديلات']] : []) }
       );
     }
@@ -1431,6 +1431,7 @@
     if (/^#\/transport/.test(h)) return 'transport';
     if (/^#\/classes/.test(h) && canView()) return 'classes';
     if (h === '#/audit' && isAdmin()) return 'audit';
+    if (h === '#/parents' && isAdmin()) return 'parents';
     var m = h.match(/^#\/(staff|students|admin|rooms|attendance|reports)$/);
     return m && canView() ? m[1] : 'home';
   }
@@ -7445,6 +7446,7 @@
     if (h === '#/admin' && canView()) return renderAdmin();
     if (h === '#/rooms' && canView()) return renderRooms();
     if (h === '#/audit' && isAdmin()) return renderAudit();
+    if (h === '#/parents' && isAdmin()) return renderParents();
     if (h === '#/attendance' && canAttView()) return renderAttendance();
     if (h === '#/reports' && canView()) return renderReports();
     if (h === '#/results' || r) return renderResults(r && r[1]);
@@ -9998,6 +10000,170 @@
         '<div class="toolbar" style="align-items:center"><code dir="ltr" style="flex:1;overflow-wrap:anywhere">' + esc(S.attBotKey ? S.attBotKey.slice(0, 6) + '…' + S.attBotKey.slice(-4) : '—') + '</code>' +
         '<button type="button" class="btn" data-alkeycopy>نسخ المفتاح</button><button type="button" class="btn danger" data-alkeynew>تغيير المفتاح</button></div></details></div>';
   }
+
+  /* ---------- روابط أولياء الأمور (المدير العام) ----------
+     لكل ولي أمر رابط سري واحد (parent.html) يرى منه أبناءه المسجلين: الغياب، وإيصالات المواصلات، وجدول الحصص.
+     ولي الأمر يُعرف برقم هويته، وإلا بالجوال، وإلا فالرابط للطالب وحده (supabase/parent_links.sql) */
+
+  // يجب أن يطابق public.parent_key() في supabase/parent_links.sql
+  function guardianKey(x) {
+    var d = function (s) { return latinDigits(String(s || '')).replace(/\D/g, ''); };
+    var gid = d((x.details || {}).guardian_id), tel = d(x.phone);
+    if (gid.length >= 5) return 'id:' + gid;
+    if (tel.length >= 8) return 'tel:' + (/^0\d{10}$/.test(tel) ? '2' + tel : /^00/.test(tel) ? tel.slice(2) : tel);
+    return 'st:' + x.id;
+  }
+
+  // الأسر: أبناء كل ولي أمر من المسجلين (نهائي أو احتياط)، بترتيب اسم أول الأبناء
+  function parentFamilies() {
+    var by = {}, out = [];
+    S.students.forEach(function (x) {
+      if (!enrolled(x)) return;
+      var k = guardianKey(x);
+      if (!by[k]) { by[k] = { key: k, kids: [] }; out.push(by[k]); }
+      by[k].kids.push(x);
+    });
+    out.forEach(function (f) {
+      f.kids.sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
+      var x = f.kids[0];
+      f.guardian = x.guardian_name || '';
+      f.phone = f.kids.map(function (k) { return k.whatsapp || k.phone; }).filter(Boolean)[0] || '';
+      f.link = (S.pLinks || []).filter(function (l) { return l.guardian_key === f.key; })[0] || null;
+    });
+    return out.sort(function (a, b) { return a.kids[0].full_name.localeCompare(b.kids[0].full_name, 'ar'); });
+  }
+
+  function parentLink(token) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'parent.html?t=' + token; }
+  function waNumber(phone) { var t = latinDigits(String(phone || '')).replace(/\D/g, ''); return /^0\d{10}$/.test(t) ? '2' + t : /^00/.test(t) ? t.slice(2) : t; }
+  function parentMsg(f) {
+    return 'السلام عليكم ' + (f.guardian ? 'ولي الأمر ' + f.guardian : 'ولي أمر ' + f.kids.map(function (k) { return k.full_name.split(/\s+/)[0]; }).join(' و')) + '،\n' +
+      'هذا رابط متابعة ' + (f.kids.length > 1 ? 'أبنائكم' : 'ابنكم/ابنتكم') + ' في ' + schoolName() + ': الغياب، وإيصالات المواصلات، وجدول الحصص.\n' +
+      parentLink(f.link.token) + '\nالرابط خاص بكم، فلا ترسلوه لغيركم.';
+  }
+
+  async function loadParentLinks() {
+    var r = await sb.from('parent_links').select('*');
+    S.pLinksMissing = !!r.error;
+    S.pLinks = r.data || [];
+    render();
+  }
+
+  function renderParents() {
+    if (S.pLinks == null) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadParentLinks(); return; }
+    var head = '<div class="page-head"><div><h1>روابط أولياء الأمور</h1><p>لكل ولي أمر رابط خاص يرى منه أبناءه فقط: الغياب، وإيصالات المواصلات، وجدول الحصص. بلا حساب ولا كلمة مرور.</p></div></div>';
+    if (S.pLinksMissing) {
+      app.innerHTML = head + '<div class="card empty">روابط أولياء الأمور تحتاج إلى جدول جديد في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/parent_links.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    var fams = parentFamilies(), q = norm(ui.plSearch || ''), digits = latinDigits(ui.plSearch || '').replace(/\D/g, '');
+    var shown = fams.filter(function (f) {
+      if (ui.plFilter === 'none' && f.link) return false;
+      if (ui.plFilter === 'off' && !(f.link && !f.link.active)) return false;
+      if (ui.plFilter === 'seen' && !(f.link && f.link.views)) return false;
+      if (!q) return true;
+      return norm(f.guardian + ' ' + f.kids.map(function (k) { return k.full_name + ' ' + (k.class_name || ''); }).join(' ')).indexOf(q) > -1 || (digits && waNumber(f.phone).indexOf(digits) > -1);
+    });
+    var made = fams.filter(function (f) { return f.link; }).length, seen = fams.filter(function (f) { return f.link && f.link.views; }).length;
+    var rows = shown.map(function (f) {
+      var l = f.link, wa = waNumber(f.phone), key = esc(f.key);
+      var acts = !l
+        ? '<button type="button" class="btn primary" data-plmake="' + key + '">إنشاء رابط</button>'
+        : '<button type="button" class="btn" data-plcopy="' + key + '">نسخ الرسالة</button>' +
+          (wa && l.active ? '<a class="btn" target="_blank" rel="noopener" href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent(parentMsg(f)) + '">إرسال واتساب</a>' : '') +
+          '<button type="button" class="btn" data-pltoggle="' + key + '">' + (l.active ? 'إيقاف' : 'تفعيل') + '</button>' +
+          '<button type="button" class="btn danger" data-plnew="' + key + '" title="يتوقف الرابط القديم ويُنشأ غيره">رابط جديد</button>';
+      return '<tr' + (l && !l.active ? ' style="color:var(--muted)"' : '') + '><td>' + f.kids.map(function (k) { return '<div><b>' + esc(k.full_name) + '</b> <span class="hint" style="margin:0">' + esc(k.class_name || '—') + '</span></div>'; }).join('') +
+        (f.key.indexOf('st:') === 0 ? '<div class="hint" style="margin:2px 0 0">لا رقم هوية ولي أمر ولا جوال: الرابط لهذا الطالب وحده</div>' : '') + '</td>' +
+        '<td>' + esc(f.guardian || '—') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(f.phone || '—') + '</td>' +
+        '<td>' + (!l ? '<span class="badge pending">بلا رابط</span>' : !l.active ? '<span class="badge unpaid">موقوف</span>' :
+          l.views ? '<span class="badge paid">فُتح ' + l.views + ' مرة</span><div class="hint" style="margin:2px 0 0">آخر فتح ' + dmy(String(l.last_seen).slice(0, 10)) + '</div>' : '<span class="badge part">لم يُفتح بعد</span>') + '</td>' +
+        '<td><div class="acts">' + acts + '</div></td></tr>';
+    }).join('');
+    var opt = function (v, label) { return '<option value="' + v + '"' + ((ui.plFilter || '') === v ? ' selected' : '') + '>' + label + '</option>'; };
+    app.innerHTML = head +
+      '<div class="stats"><div class="card stat"><span class="lbl">أولياء الأمور</span><span class="num">' + fams.length + '</span><span class="sub">بحسب رقم هوية ولي الأمر أو الجوال</span></div>' +
+        '<div class="card stat"><span class="lbl">لهم روابط</span><span class="num">' + made + '</span><span class="sub">بلا رابط: ' + (fams.length - made) + '</span></div>' +
+        '<div class="card stat"><span class="lbl">فتحوا الرابط</span><span class="num">' + seen + '</span><span class="sub">مرة واحدة على الأقل</span></div></div>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<input type="search" id="pl-search" placeholder="اسم الطالب أو ولي الأمر أو الجوال" aria-label="بحث" value="' + esc(ui.plSearch || '') + '" style="max-width:280px">' +
+        '<select id="pl-filter" style="width:auto">' + opt('', 'الكل') + opt('none', 'بلا رابط') + opt('seen', 'فتحوا الرابط') + opt('off', 'موقوفة') + '</select>' +
+        '<button type="button" class="btn primary" data-plall' + (fams.length - made ? '' : ' disabled') + '>إنشاء روابط لكل من ليس له رابط (' + (fams.length - made) + ')</button>' +
+        '<button type="button" class="btn" data-plxlsx' + (made ? '' : ' disabled') + '>تصدير الروابط (Excel)</button></div>' +
+      '<p class="hint">«إرسال واتساب» يفتح واتساب برسالة جاهزة فيها الرابط، فترسلها أنت. الإيقاف يمنع فتح الرابط فورًا، و«رابط جديد» يلغي القديم إن وصل لغير صاحبه. ' +
+        'الإخوة يجمعهم رقم هوية ولي الأمر في ملف التسجيل؛ ومن نقص رقمه يُجمع بالجوال.</p>' +
+      '<div class="card">' + (rows
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الأبناء</th><th>ولي الأمر</th><th>الجوال / واتساب</th><th>الحالة</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا يوجد ما يطابق البحث.</div>') + '</div>';
+  }
+
+  async function makeParentLinks(keys) {
+    if (!keys.length) return;
+    for (var i = 0; i < keys.length; i += 200) {
+      var r = await sb.from('parent_links').insert(keys.slice(i, i + 200).map(function (k) { return { guardian_key: k }; }));
+      if (r.error) { await loadParentLinks(); return fail(r.error); }
+    }
+    await loadParentLinks();
+    toast(keys.length === 1 ? 'أُنشئ الرابط' : 'أُنشئت ' + keys.length + ' روابط');
+  }
+
+  function famByKey(key) { return parentFamilies().filter(function (f) { return f.key === key; })[0]; }
+
+  async function exportParentLinks() {
+    try {
+      await loadXlsx();
+      var fams = parentFamilies().filter(function (f) { return f.link; });
+      var wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['روابط أولياء الأمور — ' + dmy(todayISO())], ['الروابط سرية: كل رابط يكشف بيانات أبناء صاحبه، فلا تنشر هذا الملف.'], [],
+        ['م', 'الأبناء', 'الشعب', 'ولي الأمر', 'الجوال / واتساب', 'الحالة', 'الرابط']].concat(fams.map(function (f, i) {
+          return [i + 1, f.kids.map(function (k) { return k.full_name; }).join('، '), f.kids.map(function (k) { return k.class_name || ''; }).join('، '), f.guardian, f.phone,
+            f.link.active ? (f.link.views ? 'فُتح ' + f.link.views + ' مرة' : 'لم يُفتح') : 'موقوف', parentLink(f.link.token)];
+        })));
+      ws['!cols'] = [5, 40, 18, 24, 16, 12, 80].map(function (w) { return { wch: w }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'الروابط');
+      XLSX.writeFile(wb, 'روابط-أولياء-الأمور-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/parents' || !isAdmin()) return;
+    var el, f, r;
+    if ((el = e.target.closest('[data-plmake]'))) makeParentLinks([el.getAttribute('data-plmake')]);
+    else if (e.target.closest('[data-plall]')) {
+      var keys = parentFamilies().filter(function (x) { return !x.link; }).map(function (x) { return x.key; });
+      if (confirm('إنشاء ' + keys.length + ' رابطًا لأولياء الأمور الذين ليس لهم رابط؟\nلا يُرسل شيء لأحد؛ الإرسال من زر «إرسال واتساب» لكل ولي أمر.')) makeParentLinks(keys);
+    }
+    else if ((el = e.target.closest('[data-plcopy]'))) { f = famByKey(el.getAttribute('data-plcopy')); if (f && f.link) copyText(parentMsg(f), 'نُسخت الرسالة مع الرابط'); }
+    else if ((el = e.target.closest('[data-pltoggle]'))) {
+      f = famByKey(el.getAttribute('data-pltoggle'));
+      if (!f || !f.link) return;
+      r = await sb.from('parent_links').update({ active: !f.link.active }).eq('token', f.link.token);
+      if (r.error) return fail(r.error);
+      await loadParentLinks();
+      toast(f.link.active ? 'أُوقف الرابط' : 'فُعّل الرابط');
+    }
+    else if ((el = e.target.closest('[data-plnew]'))) {
+      f = famByKey(el.getAttribute('data-plnew'));
+      if (!f || !f.link || !confirm('إلغاء الرابط الحالي وإنشاء رابط جديد؟\nالرابط القديم يتوقف فورًا، فيجب إرسال الجديد لولي الأمر.')) return;
+      r = await sb.from('parent_links').delete().eq('token', f.link.token);
+      if (r.error) return fail(r.error);
+      makeParentLinks([f.key]);
+    }
+    else if (e.target.closest('[data-plxlsx]')) exportParentLinks();
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash === '#/parents' && e.target.id === 'pl-filter') { ui.plFilter = e.target.value; render(); }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/parents' || e.target.id !== 'pl-search') return;
+    ui.plSearch = e.target.value;
+    var pos = e.target.selectionStart;
+    render();
+    var q = document.getElementById('pl-search');
+    if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+  });
 
   async function copyText(text, done) {
     try { await navigator.clipboard.writeText(text); toast(done); } catch (err) { prompt('انسخ:', text); }

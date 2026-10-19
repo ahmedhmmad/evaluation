@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>متابعة ولي الأمر</title>
+<style>
+  :root { --navy: #1b2a6b; --red: #b42318; --red-soft: #fde8e7; --green: #067647; --green-soft: #e3f5ec; --amber: #b54708; --amber-soft: #fef0c7; --line: #e2e6ee; --muted: #667085; --bg: #f5f7fb; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "Segoe UI", Tahoma, sans-serif; background: var(--bg); color: #1d2433; font-size: 17px; }
+  header { background: var(--navy); color: #fff; padding: 14px 16px; }
+  header h1 { margin: 0; font-size: 1.15rem; }
+  header .sub { font-size: .85rem; opacity: .85; margin-top: 2px; }
+  main { padding: 14px 16px 40px; max-width: 680px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .card h2 { margin: 0 0 10px; font-size: 1.05rem; }
+  .msg { text-align: center; color: var(--muted); padding: 30px 10px; }
+  .err { color: var(--red); }
+  .kids { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .kids button { font: inherit; padding: 10px 16px; border-radius: 99px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  .kids button[aria-pressed="true"] { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .kid-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .kid-head b { font-size: 1.2rem; }
+  .kid-head span { color: var(--muted); }
+  .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .num { background: var(--bg); border-radius: 10px; padding: 10px; text-align: center; }
+  .num b { display: block; font-size: 1.6rem; }
+  .num span { font-size: .8rem; color: var(--muted); }
+  .num.bad b { color: var(--red); }
+  ul.plain { list-style: none; margin: 0; padding: 0; }
+  ul.plain li { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; }
+  ul.plain li:last-child { border-bottom: 0; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .tag { font-size: .8rem; padding: 2px 10px; border-radius: 99px; white-space: nowrap; }
+  .tag.ok { background: var(--green-soft); color: var(--green); }
+  .tag.part { background: var(--amber-soft); color: var(--amber); }
+  .month { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .month .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 700; }
+  .month .rc { font-size: .9rem; color: var(--muted); margin-top: 6px; }
+  details.day { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+  details.day summary { padding: 10px 12px; cursor: pointer; font-weight: 700; }
+  details.day[open] summary { border-bottom: 1px solid var(--line); }
+  details.day.today summary::after { content: " — اليوم"; color: var(--green); font-weight: 400; }
+  .lesson { display: grid; grid-template-columns: 112px 1fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .lesson:last-child { border-bottom: 0; }
+  .lesson .p { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+  .lesson.brk > div:first-child { white-space: nowrap; }
+  .lesson .s { font-weight: 700; }
+  .lesson .t { color: var(--muted); font-size: .85rem; }
+  .lesson.brk { background: var(--bg); color: var(--muted); font-size: .9rem; }
+  button.more { font: inherit; background: none; border: 0; color: var(--navy); cursor: pointer; padding: 6px 0 0; }
+</style>
+</head>
+<body>
+<header><h1 id="title">متابعة ولي الأمر</h1><div class="sub" id="sub"></div></header>
+<main id="main"><div class="msg">جارٍ التحميل…</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>/* مكتبة الاتصال بإصدار ثابت يعمل على المتصفحات القديمة؛ إن حُجب مصدرها تُحمَّل من مصدر احتياطي */ window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"><\/script>');</script>
+<script>
+(function () {
+  'use strict';
+  var main = document.getElementById('main'), sub = document.getElementById('sub');
+  var token = new URLSearchParams(location.search).get('t') || '';
+  var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  var WEEK = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  var ORD = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة', 'الحادية عشرة', 'الثانية عشرة'];
+  var data = null, cur = 0, allAbs = false;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function today() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function dmy(iso) { iso = String(iso || '').slice(0, 10); return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
+  function dayName(iso) { return WEEK[new Date(iso + 'T00:00').getDay()]; }
+  function monthLabel(m) { return new Date(m + '-01T00:00').toLocaleDateString('ar-u-nu-latn', { month: 'long', year: 'numeric' }); }
+  function money(x) { return (Math.round(Number(x) * 100) / 100).toLocaleString('en') + ' ج.م'; }
+  // فترة زمنية تُقرأ من اليمين: البداية ثم النهاية
+  function range(f, t) { return '⁧' + f + ' – ' + t + '⁩'; }
+
+  // اسم المعلم كما في جداول البرنامج: الأول واسم العائلة، والمركّب يبقى كاملًا
+  function nameParts(full) {
+    var w = String(full || '').trim().split(/\s+/), out = [];
+    for (var i = 0; i < w.length; i++) {
+      if (/^(عبد|عبدال|أبو|ابو|أبي|ابي|بن|ابن|آل|ال)$/.test(w[i]) && i + 1 < w.length) { out.push(w[i] + ' ' + w[i + 1]); i++; }
+      else out.push(w[i]);
+    }
+    return out;
+  }
+  function shortName(full) {
+    var words = String(full || '').trim().split(/\s+/), n = words.length, last = words[n - 1];
+    if (n <= 2) return String(full || '').trim();
+    var fam = /^(الله|الدين|الرحمن|الرحيم)$/.test(last) || /^(أبو|ابو|آل|بن|ابن|بني)$/.test(words[n - 2]) ? words[n - 2] + ' ' + last : last;
+    var short = (nameParts(full)[0] || '') + ' ' + fam;
+    return short.split(' ').length >= n ? String(full).trim() : short;
+  }
+
+  // مواعيد الشعبة: مرحلتها، وإن لم تُضف إلى مرحلة فآخر مرحلة (كما في البرنامج)
+  function stageOf(cls) {
+    var s = (data.bells && Array.isArray(data.bells.stages)) ? data.bells.stages : [];
+    for (var i = 0; i < s.length; i++) if ((s[i].classes || []).indexOf(cls) > -1) return s[i];
+    return s[s.length - 1] || null;
+  }
+
+  function absHtml(k) {
+    var month = today().slice(0, 7), list = k.absences || [];
+    var inMonth = list.filter(function (d) { return d.slice(0, 7) === month; }).length;
+    var shown = allAbs ? list : list.slice(0, 8);
+    return '<div class="card"><h2>الغياب</h2>' +
+      '<div class="nums"><div class="num' + (inMonth ? ' bad' : '') + '"><b>' + inMonth + '</b><span>أيام غياب هذا الشهر</span></div>' +
+      '<div class="num' + (list.length ? ' bad' : '') + '"><b>' + list.length + '</b><span>منذ بداية العام الدراسي</span></div></div>' +
+      (list.length
+        ? '<ul class="plain">' + shown.map(function (d) { return '<li><span>' + dayName(d) + '</span><span>' + dmy(d) + '</span></li>'; }).join('') + '</ul>' +
+          (list.length > 8 ? '<button type="button" class="more" data-allabs>' + (allAbs ? 'عرض أقل' : 'عرض كل الأيام (' + list.length + ')') + '</button>' : '')
+        : '<p class="muted" style="margin:0">' + (k.recorded_days ? 'لا غياب مسجّل منذ بداية العام الدراسي.' : 'لم يُسجَّل حضور بعد هذا العام.') + '</p>') +
+      '</div>';
+  }
+
+  function busHtml(k) {
+    var months = k.months || [];
+    if (!k.bus && !months.length) return '';
+    return '<div class="card"><h2>المواصلات</h2>' +
+      (k.bus ? '<p style="margin:0 0 10px">نقطة التجمع: <b>' + esc(k.bus) + '</b></p>' : '<p class="muted" style="margin:0 0 10px">غير مشترك في المواصلات حاليًا.</p>') +
+      (months.length
+        ? months.map(function (m) {
+            var left = m.due != null && Number(m.due) > Number(m.paid) ? Number(m.due) - Number(m.paid) : 0;
+            return '<div class="month"><div class="top"><span>' + monthLabel(m.month) + '</span>' +
+              (left ? '<span class="tag part">المتبقي ' + money(left) + '</span>' : '<span class="tag ok">مسدَّد ' + money(m.paid) + '</span>') + '</div>' +
+              (m.receipts || []).map(function (r) {
+                return '<div class="rc">إيصال رقم ' + esc(r.no) + ' · ' + money(r.amount) + ' · ' + dmy(r.on) + '</div>';
+              }).join('') + '</div>';
+          }).join('')
+        : '<p class="muted" style="margin:0">لا إيصالات هذا العام الدراسي بعد.</p>') +
+      '</div>';
+  }
+
+  function ttHtml(k) {
+    var tt = k.timetable || [];
+    if (!tt.length) return '<div class="card"><h2>جدول الحصص</h2><p class="muted" style="margin:0">لم يُنشر جدول شعبة ' + esc(k.class_name) + ' بعد.</p></div>';
+    var st = stageOf(k.class_name), rows = st ? st.rows || [] : [];
+    var days = Array.isArray(data.days) && data.days.length ? data.days : WEEK.slice(0, 5);
+    // اليوم الدراسي المفتوح افتراضيًا: اليوم، وإلا أول يوم بعده
+    var wd = new Date().getDay(), openIdx = -1;
+    for (var s = 0; s < 7 && openIdx < 0; s++) { var w = (wd + s) % 7, i = days.indexOf(WEEK[w]); if (i > -1) openIdx = i; }
+    return '<div class="card"><h2>جدول حصص شعبة ' + esc(k.class_name) + '</h2>' +
+      days.map(function (dname, di) {
+        var lessons = tt.filter(function (x) { return x.day === di; });
+        if (!lessons.length) return '';
+        var maxP = Math.max.apply(null, lessons.map(function (x) { return x.period; }));
+        var body = '', p = 0;
+        if (rows.length) {
+          rows.forEach(function (r) {
+            if (r.k === 'p') {
+              p++;
+              if (p > maxP) return;
+              var ls = lessons.filter(function (x) { return x.period === p; });
+              body += '<div class="lesson"><div class="p">الحصة ' + (ORD[p - 1] || p) + '<br>' + range(r.f, r.t) + '</div><div>' +
+                (ls.length ? ls.map(function (x) { return '<div class="s">' + esc(x.subject || '—') + '</div>' + (x.teacher ? '<div class="t">' + esc(shortName(x.teacher)) + '</div>' : ''); }).join('') : '<div class="t">—</div>') + '</div></div>';
+            } else if (p > 0 && p < maxP) {
+              body += '<div class="lesson brk"><div>' + range(r.f, r.t) + '</div><div>' + esc(r.l || (r.k === 'a' ? 'الطابور' : 'الاستراحة')) + '</div></div>';
+            }
+          });
+        } else {
+          for (p = 1; p <= maxP; p++) {
+            var ls = lessons.filter(function (x) { return x.period === p; });
+            body += '<div class="lesson"><div class="p">الحصة ' + (ORD[p - 1] || p) + '</div><div>' +
+              (ls.length ? ls.map(function (x) { return '<div class="s">' + esc(x.subject || '—') + '</div>' + (x.teacher ? '<div class="t">' + esc(shortName(x.teacher)) + '</div>' : ''); }).join('') : '<div class="t">—</div>') + '</div></div>';
+          }
+        }
+        return '<details class="day' + (WEEK[wd] === dname ? ' today' : '') + '"' + (di === openIdx ? ' open' : '') + '><summary>' + esc(dname) + '</summary>' + body + '</details>';
+      }).join('') + '</div>';
+  }
+
+  function draw() {
+    var kids = data.children || [];
+    if (!kids.length) { main.innerHTML = '<div class="msg">لا يوجد أبناء مسجلون مرتبطون بهذا الرابط حاليًا.</div>'; return; }
+    var k = kids[cur] || kids[0];
+    main.innerHTML = (kids.length > 1
+        ? '<div class="kids">' + kids.map(function (x, i) { return '<button type="button" data-kid="' + i + '" aria-pressed="' + (i === cur) + '">' + esc(x.name.split(/\s+/)[0]) + '</button>'; }).join('') + '</div>'
+        : '') +
+      '<div class="kid-head"><b>' + esc(k.name) + '</b><span>الشعبة: ' + esc(k.class_name || '—') + '</span></div>' +
+      absHtml(k) + busHtml(k) + ttHtml(k) +
+      '<p class="muted" style="text-align:center">البيانات كما سجّلتها الأكاديمية حتى ' + new Date().toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '. لأي استفسار تواصل مع إدارة الأكاديمية.</p>';
+  }
+
+  main.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-kid]');
+    if (b) { cur = +b.getAttribute('data-kid'); allAbs = false; draw(); window.scrollTo(0, 0); return; }
+    if (e.target.closest('[data-allabs]')) { allAbs = !allAbs; draw(); }
+  });
+
+  async function load() {
+    if (!sb) { main.innerHTML = '<div class="msg err">لم يُضبط الاتصال بقاعدة البيانات.</div>'; return; }
+    if (!/^[0-9a-f]{64}$/.test(token)) { main.innerHTML = '<div class="msg err">الرابط غير مكتمل. افتحه كما وصلك من الأكاديمية.</div>'; return; }
+    var r = await sb.rpc('parent_view', { p_token: token });
+    if (r.error) { main.innerHTML = '<div class="msg err">تعذر جلب البيانات. حاول مرة أخرى بعد قليل.</div>'; return; }
+    if (r.data && r.data.error) { main.innerHTML = '<div class="msg err">' + esc(r.data.error) + '</div>'; return; }
+    data = r.data;
+    document.getElementById('title').textContent = data.school || 'متابعة ولي الأمر';
+    document.title = 'متابعة ولي الأمر — ' + (data.school || '');
+    sub.textContent = 'متابعة ولي الأمر · ' + new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    draw();
+  }
+  load();
+})();
+</script>
+</body>
+</html>
