@@ -1130,7 +1130,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 5';
+  var APP_BUILD = '20/10 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2006,7 +2006,8 @@
 
   function studentFieldHtml(f, st) {
     var v = stVal(st, f.k), id = 'sf-' + f.k, inner;
-    if (f.k === 'filled_by' && !v) v = (S.profile && S.profile.full_name) || '';
+    // اسم مُدخل البيانات يُقترح عند التسجيل والاعتماد؛ تعديل تسجيل نهائي لا يغيّره
+    if (f.k === 'filled_by' && !v && !(st && stStatus(st) === 'final')) v = (S.profile && S.profile.full_name) || '';
     var need = f.req || f.dep;
     if (f.type === 'class') {
       inner = '<select id="' + id + '" required>' + classOptionsHtml(v || '') + '</select>' +
@@ -2303,7 +2304,7 @@
       '<input type="text" id="sf-docnote" value="' + esc((st && st.documents_note) || '') + '">' +
       '<div class="actions">' +
         (final
-          ? '<button type="submit" class="btn primary" data-mode="final">حفظ</button>' +
+          ? '<button type="submit" class="btn primary" data-mode="edit" formnovalidate>حفظ التعديلات</button>' +
             '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
           : '<button type="submit" class="btn primary" data-mode="final">حفظ واعتماد التسجيل النهائي</button>' +
             '<button type="submit" class="btn" data-mode="save" formnovalidate>' + (st && stStatus(st) === 'reserve' ? 'حفظ (يبقى احتياطًا)' : 'حفظ دون اعتماد') + '</button>' +
@@ -3016,7 +3017,8 @@
     if (!data.full_name) return toast('اكتب اسم الطالب.', true);
     var wasFinal = st && stStatus(st) === 'final';
     // شعبة ممتلئة أو لجنس آخر: تنبيه، والمتابعة ممكنة
-    if (mode === 'final' && data.class_name && !confirmClass(data.class_name, st, data.gender)) return;
+    var classChanged = !st || String(st.class_name || '') !== String(data.class_name || '');
+    if ((mode === 'final' && (!wasFinal || classChanged) || mode === 'edit' && classChanged) && data.class_name && !confirmClass(data.class_name, st, data.gender)) return;
     if (mode === 'final' && !wasFinal) {
       var missing = ST_DOCS.filter(function (d) { return !data.documents[d[0]]; }).map(function (d) { return d[1]; });
       if (missing.length && !confirm('لم تُسجَّل هذه المستندات: ' + missing.join('، ') + '.\nهل تريد اعتماد التسجيل النهائي مع ذلك؟')) return;
@@ -3037,8 +3039,22 @@
       if (willBeFinal) delete data.details.bus_wish;
       else data.details.bus_wish = pickNow.value || '';
     }
+    // تعديل سجل موجود: تُرسل الحقول التي تغيّرت فقط، فلا يُكتب فوق ما عدّله غيرك في الأثناء
+    var changed = 0;
+    if (st) {
+      // الفارغ واحد: لا قيمة، أو نص فارغ، أو قائمة/كائن فارغ
+      var blank = function (v) { return v == null || v === '' || (typeof v === 'object' && !Object.keys(v).length) ? '' : v; };
+      var same = function (p, q) { return JSON.stringify(blank(p)) === JSON.stringify(blank(q)); }, diff = {}, old = st.details || {};
+      Object.keys(data).forEach(function (k) {
+        if (k === 'details') {
+          var dk = Object.keys(Object.assign({}, data.details, old)).filter(function (key) { return !same(data.details[key], old[key]); });
+          if (dk.length) { diff.details = data.details; changed += dk.length; }
+        } else if (!same(data[k], st[k])) { diff[k] = data[k]; changed++; }
+      });
+      data = diff;
+    }
     var r = st
-      ? await sb.from('students').update(data).eq('id', st.id)
+      ? (changed ? await sb.from('students').update(data).eq('id', st.id) : { error: null })
       : await sb.from('students').insert(data).select().single();
     if (r.error) {
       return /duplicate|unique/i.test(r.error.message) ? toast('رقم الهوية مسجل نهائيًا لطالب آخر.', true) : fail(r.error);
@@ -3070,7 +3086,7 @@
     var synced = await syncSiblingCount(st);
     ui.editStudent = null;
     render();
-    toast((data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : 'تم الحفظ') + (synced ? ' — حُدِّث «عدد الأبناء في المركز» في سجلات إخوته (' + synced + ')' : ''));
+    toast((data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : st && mode !== 'final' ? (changed ? 'حُفظت التعديلات (' + changed + ')' : 'لا تعديلات للحفظ') : 'تم الحفظ') + (synced ? ' — حُدِّث «عدد الأبناء في المركز» في سجلات إخوته (' + synced + ')' : ''));
   }
 
   /* ----- الاستيراد من Excel ----- */
