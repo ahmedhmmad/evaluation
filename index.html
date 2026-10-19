@@ -1083,7 +1083,7 @@
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
     S.tGroups = []; S.tMembers = []; S.tPay = {}; S.tTop = {}; S.transportMissing = false;
-    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false;
+    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -1134,7 +1134,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 12';
+  var APP_BUILD = '20/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1478,6 +1478,107 @@
 
   /* ---------- الرئيسية ---------- */
 
+  /* ---------- لوحة المؤشرات (الرئيسية) ----------
+     للمدير العام والمدير: الغياب اليوم، وحصيلة المواصلات اليوم والشهر، والمتأخرون في الدفع، والطلاب الجدد، والشعب الممتلئة.
+     المشرف يرى بطاقة الغياب وحدها. الأرقام تُجلب عند فتح الرئيسية، و«تحديث» يعيد جلبها */
+  S.dash = null;
+  var loadingDash = false;
+  async function loadDash() {
+    if (loadingDash) return;
+    loadingDash = true;
+    var today = todayISO(), month = today.slice(0, 7), d = { day: today, month: month, at: new Date() };
+    var att = await fetchAll(function () { return sb.from('attendance').select('student_id, status, class_name').eq('day', today).order('student_id'); });
+    d.att = att ? attNormRows(att) : null;
+    if (canView() && !S.transportMissing) {
+      var got = await receiptsBetween(month + '-01', today);
+      d.recs = got ? got.list : null;
+      if (!S.tPay[month]) await loadPayments(month);
+    }
+    S.dash = d;
+    loadingDash = false;
+    render();
+  }
+
+  function dashHtml() {
+    var d = S.dash;
+    if (!d || d.day !== todayISO()) { loadDash(); return '<div class="card empty" style="padding:16px">جارٍ تجهيز مؤشرات اليوم…</div>'; }
+    var stat = function (href, label, num, sub, color) {
+      return '<a class="card stat" href="' + href + '"><span class="lbl">' + label + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></a>';
+    };
+    var cards = '';
+
+    // الغياب اليوم: المسجلون في الشعب، والغائبون منهم، والشعب التي لم يُسجَّل غيابها بعد
+    if (d.att) {
+      var cfgDays = (S.ttConfig && S.ttConfig.days) || [], off = cfgDays.length && cfgDays.indexOf(dayName(d.day)) < 0;
+      var roll = S.students.filter(function (x) { return enrolled(x) && x.class_name; }), byCls = {}, done = {};
+      roll.forEach(function (x) { byCls[x.class_name] = (byCls[x.class_name] || 0) + 1; });
+      var absent = 0;
+      d.att.forEach(function (r) { done[r.class_name] = 1; if (r.status === 'absent') absent++; });
+      var left = Object.keys(byCls).filter(function (c) { return !done[c]; }).length, taken = d.att.length;
+      cards += off && !taken
+        ? stat('#/attendance', 'الغياب اليوم', '—', 'لا دراسة اليوم (' + dayName(d.day) + ')')
+        : !taken
+          ? stat('#/attendance', 'الغياب اليوم', '—', 'لم يُسجَّل الغياب اليوم بعد', 'var(--muted)')
+          : stat('#/attendance', 'الغياب اليوم', absent + ' <small>(' + Math.round(absent * 100 / taken) + '%)</small>',
+              'من ' + taken + ' طالبًا سُجّل حضورهم' + (left ? ' · شعب لم تُسجَّل: ' + left : ' · سُجّلت كل الشعب'), absent ? 'var(--red)' : '');
+    }
+
+    if (canView()) {
+      // حصيلة المواصلات بتاريخ السداد، كما في «سجل الدفعات»
+      if (d.recs) {
+        var sum = function (list) {
+          var t = { all: 0, cash: 0, n: list.length };
+          list.forEach(function (r) { t.all += r.amount; if (r.method === 'cash') t.cash += r.amount; });
+          return t;
+        };
+        var td = sum(d.recs.filter(function (r) { return r.day === d.day; })), mo = sum(d.recs);
+        var split = function (t) { return t.n + ' إيصالًا · نقدًا ' + money(t.cash) + ' · تحويلات ' + money(t.all - t.cash); };
+        cards += stat('#/transport/ledger', 'حصيلة المواصلات اليوم', money(td.all), split(td)) +
+          stat('#/transport/ledger', 'حصيلة ' + monthLabel(d.month), money(mo.all), split(mo));
+      }
+      // المتأخرون عن سداد اشتراك هذا الشهر بعد المهلة
+      if (!S.transportMissing && !S.busMissing && S.tPay[d.month]) {
+        var keep = ui.tMonth;
+        ui.tMonth = d.month;
+        var due = dueRows();
+        ui.tMonth = keep;
+        var late = due.filter(function (r) { return r.state === 'late'; }), owed = 0, stopped = 0;
+        due.forEach(function (r) { if (r.state === 'late') owed += r.left; if (r.state === 'suspended') stopped++; });
+        cards += stat('#/transport/late', 'المتأخرون في دفع المواصلات', late.length,
+          (late.length ? 'المتبقي عليهم ' + money(owed) : todayISO() <= payDeadline(d.month) ? 'المهلة حتى ' + dmy(payDeadline(d.month)) : 'لا متأخرين') + (stopped ? ' · موقوفون: ' + stopped : ''),
+          late.length ? 'var(--red)' : '');
+      }
+      // الطلاب الجدد: من سُجّلوا (بأي حالة) هذا الأسبوع وهذا الشهر
+      var weekAgo = new Date(Date.now() - 6 * 864e5).toISOString().slice(0, 10);
+      var newM = S.students.filter(function (x) { return String(x.created_at || '').slice(0, 7) === d.month; });
+      cards += stat('#/students', 'الطلاب الجدد', newM.length,
+        'هذا الشهر · آخر 7 أيام: ' + newM.filter(function (x) { return String(x.created_at || '').slice(0, 10) >= weekAgo; }).length +
+        ' · بانتظار الاعتماد: ' + S.students.filter(function (x) { return stStatus(x) === 'pending'; }).length);
+      // الشعب الممتلئة والمتجاوزة لسعتها
+      var counts = {};
+      S.students.forEach(function (x) { if (enrolled(x) && x.class_name) counts[x.class_name] = (counts[x.class_name] || 0) + 1; });
+      var full = [], over = [];
+      schoolClasses().forEach(function (c) {
+        var info = classInfo(c), cap = info ? info.capacity : null, n = counts[c] || 0;
+        if (cap == null) return;
+        if (n > cap) over.push(c); else if (n === cap) full.push(c);
+      });
+      var names = over.concat(full);
+      cards += stat('#/classes', 'الشعب الممتلئة', names.length,
+        names.length ? (over.length ? 'تجاوزت السعة: ' + over.length + ' · ' : '') + names.slice(0, 4).map(esc).join('، ') + (names.length > 4 ? '…' : '') : 'كل الشعب فيها أماكن متاحة',
+        over.length ? 'var(--red)' : '');
+    }
+
+    return '<div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0">مؤشرات اليوم</h2>' +
+      '<span class="hint" style="margin:0">آخر تحديث ' + d.at.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '</span>' +
+      '<button type="button" class="btn" data-dashrefresh data-ro-ok>تحديث</button></div>' +
+      '<div class="stats">' + cards + '</div>';
+  }
+
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-dashrefresh]')) { S.dash = null; render(); }
+  });
+
   function renderHome() {
     var count = function (list, test) { return list.filter(test).length; };
     var month = todayISO().slice(0, 7);
@@ -1515,6 +1616,7 @@
     app.innerHTML =
       '<div class="page-head"><div><h1>مرحبًا، ' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</h1>' +
         '<p>' + new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) + '</p></div></div>' +
+      (canView() || role() === 'supervisor' ? dashHtml() : '') +
       '<div class="stats">' + stats + '</div>' +
       '<div class="card"><h2>إجراءات سريعة</h2><div class="quick" style="margin-top:10px">' +
         '<a class="btn primary" href="#/visits">+ تقرير زيارة إشرافية</a>' +
@@ -5107,10 +5209,20 @@
     if (!l.from || !l.to || l.from > l.to) return toast('اختر فترة صحيحة', true);
     l.loading = true;
     render();
-    var from = l.from, to = l.to;
-    var rows = await fetchAll(function () { return sb.from('transport_payments').select('*').gte('paid_on', from).lte('paid_on', to).order('paid_on').order('student_id'); });
+    var from = l.from, to = l.to, got = await receiptsBetween(from, to);
     l.loading = false;
-    if (!rows) { toast('تعذر جلب الدفعات', true); render(); return; }
+    if (!got) { toast('تعذر جلب الدفعات', true); render(); return; }
+    l.rows = got.list;
+    l.dateWarn = got.dateWarn;
+    l.loadedFrom = from; l.loadedTo = to;
+    render();
+  }
+
+  // الإيصالات الصادرة بين تاريخين (بتاريخ السداد): الأول بمبلغه الأول، والمكمِّل بمبلغه. يعيد { list, dateWarn } أو null عند الخطأ.
+  // يستعملها «سجل الدفعات» ولوحة المؤشرات، فتتطابق الحصيلة فيهما
+  async function receiptsBetween(from, to) {
+    var rows = await fetchAll(function () { return sb.from('transport_payments').select('*').gte('paid_on', from).lte('paid_on', to).order('paid_on').order('student_id'); });
+    if (!rows) return null;
     var groupOf = transportGroupOf();
     // الإيصالات المكمِّلة: تُعرض بتاريخها ووسيلتها، والإيصال الأول بمبلغه قبلها
     var tops = S.topupMissing ? [] : await fetchAll(function () { return sb.from('transport_topups').select('*').order('receipt_no'); }) || [], firstOf = {};
@@ -5120,7 +5232,7 @@
       return { p: p, x: x, name: x ? x.full_name : '(طالب محذوف)', cls: x ? x.class_name || '' : '', bus: g ? g.assembly_point : '', amount: amount,
         method: PAY_METHODS[p.method] ? p.method : 'cash', ref: p.method_note || '', who: p.issued_by || '', day: String(p.paid_on || '').slice(0, 10) };
     };
-    l.rows = rows.filter(function (p) { return Number(p.amount) > 0; }).map(function (p) {
+    var list = rows.filter(function (p) { return Number(p.amount) > 0; }).map(function (p) {
       var k = p.student_id + '|' + p.month;
       return mk(p, k in firstOf ? firstOf[k] : Number(p.amount) || 0);
     }).concat(tops.filter(function (t) { var d = String(t.paid_on || '').slice(0, 10); return d >= from && d <= to; }).map(function (t) { return mk(t, Number(t.amount) || 0); }));
@@ -5135,12 +5247,11 @@
       var m = cand[ci].month;
       if (!seq[m]) seq[m] = await fetchAll(function () { return sb.from('transport_payments').select('receipt_no,paid_on').eq('month', m).order('receipt_no'); }) || [];
     }
-    l.dateWarn = cand.filter(function (p) {
+    var dateWarn = cand.filter(function (p) {
       var d = String(p.paid_on || '').slice(0, 10), n = Number(p.receipt_no) || 0;
       return seq[p.month].some(function (o) { return (Number(o.receipt_no) || 0) > n && String(o.paid_on || '').slice(0, 10) < d; });
     }).map(function (p) { var x = findStudent(p.student_id); return { no: p.receipt_no, name: x ? x.full_name : '', day: String(p.paid_on || '').slice(0, 10) }; });
-    l.loadedFrom = from; l.loadedTo = to;
-    render();
+    return { list: list, dateWarn: dateWarn };
   }
 
   function ledFiltered() {
