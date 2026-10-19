@@ -37,7 +37,7 @@ create policy teachers_delete on public.teachers
 
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
-  check (role in ('pending', 'viewer', 'teacher', 'supervisor', 'superadmin'));
+  check (role in ('pending', 'viewer', 'teacher', 'registrar', 'supervisor', 'manager', 'superadmin'));
 
 alter table public.profiles
   add column if not exists teacher_id uuid references public.teachers (id) on delete set null,

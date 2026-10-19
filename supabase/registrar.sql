@@ -5,7 +5,7 @@
 
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
-  check (role in ('pending', 'viewer', 'teacher', 'registrar', 'supervisor', 'superadmin'));
+  check (role in ('pending', 'viewer', 'teacher', 'registrar', 'supervisor', 'manager', 'superadmin'));
 
 -- Students: read, add, edit (no delete).
 drop policy if exists students_registrar_select on public.students;
