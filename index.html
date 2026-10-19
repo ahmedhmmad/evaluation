@@ -497,6 +497,13 @@
   #print-sheet .rc-2 .rh-banner { margin-top: 0; }
   /* كلمة «أصل» / «نسخة» في أعلى الإيصال، فوق طرف الترويسة */
   #print-sheet .rv-tag { position: absolute; z-index: 3; top: 5mm; inset-inline-start: 0; padding: .05em 1.3em .15em; border: 1pt solid var(--gold); border-radius: .4em; background: #fff; font-family: var(--font-head); font-size: 1.15em; font-weight: 800; color: var(--navy); }
+  #print-sheet .rv-tag small { font-family: var(--font-en); font-size: .55em; font-weight: 700; letter-spacing: .08em; margin-inline-start: .3em; }
+  #print-sheet .rv-tag span { display: block; font-family: var(--font-body); font-size: .6em; font-weight: 600; text-align: center; }
+  #print-sheet .rv-tag.orig { background: var(--navy-dark); border: 1.5pt solid var(--navy-dark); color: #fff; }
+  #print-sheet .rv-tag.copy { background: #fff; border: 1.5pt dashed #555; color: #444; }
+  /* «نسخة» كبيرة مائلة باهتة على جسم النسخة */
+  #print-sheet .rv-copymark { position: absolute; z-index: 2; top: 52%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); font-family: var(--font-head); font-weight: 800;
+    font-size: 8em; line-height: 1; color: rgba(0, 0, 0, .1); border: .06em solid rgba(0, 0, 0, .1); border-radius: .12em; padding: 0 .3em; pointer-events: none; white-space: nowrap; }
   #print-sheet .rc-cut { display: flex; align-items: center; gap: .7em; height: 7mm; margin: 0 calc(-1 * var(--pad-x)); color: #888; font-size: .8em; }
   #print-sheet .rc-cut::before, #print-sheet .rc-cut::after { content: ""; flex: 1; border-top: .75pt dashed #999; }
   /* الترويسة هنا الصورة وحدها، وتحتها خط ذهبي رفيع */
@@ -1131,7 +1138,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 9';
+  var APP_BUILD = '20/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10894,6 +10901,20 @@
   /* ----- إيصال اشتراك المواصلات -----
      ورقة A4 واحدة فيها نسختان يفصلهما خط قص في منتصفها: الأصل لولي الأمر، والنسخة لسجل المدرسة.
      على هيئة الإيصالات المتداولة: رقم الإيصال، خانة المبلغ، المبلغ كتابةً، البيان، طريقة الدفع، التوقيعات والختم */
+  // الأصل والنسخة في الإيصال وسند الاسترداد: يُميَّزان بالشكل لا بالكلمة وحدها، ويظهر الفرق في الطباعة بالأبيض والأسود.
+  // الأصل: شارة مملوءة داكنة. النسخة: شارة بإطار متقطع، وكلمة «نسخة» كبيرة مائلة باهتة على جسم الإيصال.
+  // في الإيصال الأصل لولي الأمر والنسخة للأكاديمية؛ وفي سند الاسترداد العكس (الأصل بتوقيع ولي الأمر يبقى في الأكاديمية)
+  function rvTag(second, kind) {
+    var forGuardian = kind === 'refund' ? second : !second;
+    var who = forGuardian ? 'لولي الأمر' : 'تُحفظ في الأكاديمية';
+    return second
+      ? '<div class="rv-tag copy">نسخة <small>COPY</small><span>' + who + '</span></div><div class="rv-copymark" aria-hidden="true">نسخة</div>'
+      : '<div class="rv-tag orig">الأصل <small>ORIGINAL</small><span>' + who + '</span></div>';
+  }
+  function rvCut(kind) {
+    return '<div class="rc-cut">✂ قصّ هنا — ' + (kind === 'refund' ? 'الأعلى (الأصل) للأكاديمية، والأسفل (النسخة) لولي الأمر' : 'الأعلى (الأصل) لولي الأمر، والأسفل (النسخة) للأكاديمية') + '</div>';
+  }
+
   function buildReceiptSheet(q) {
     var x = findStudent(q.sid), recs = payReceipts(q.sid);
     var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0], g = findGroup(mem.group_id);
@@ -10912,7 +10933,7 @@
       return '<span class="rv-m">' + (k === method ? '☑' : '☐') + ' ' + (k === 'other' && method === 'other' && rec.method_note ? 'أخرى: ' + esc(rec.method_note) : PAY_METHODS[k]) + '</span>';
     }).join('');
     var copy = function (tag, second) {
-      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt=""><div class="rv-tag">' + tag + '</div>' + letterhead() +
+      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt="">' + rvTag(second, 'receipt') + letterhead() +
         '<div class="rv-top">' +
           '<div class="rv-no"><div><span>رقم الإيصال <small>No.</small></span><b>' + no + '</b></div>' +
             '<div><span>التاريخ <small>Date</small></span><i>' + dmy(rec.paid_on || todayISO()) + '</i></div></div>' +
@@ -10935,7 +10956,7 @@
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
     };
     sheet.className = 'rc';
-    sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
+    sheet.innerHTML = copy('أصل') + rvCut('receipt') + copy('نسخة', true);
     fitSheet();
   }
 
@@ -10953,7 +10974,7 @@
       return '<span class="rv-m">' + (k === method ? '☑' : '☐') + ' ' + PAY_METHODS[k] + (k === method && v.method_note ? ': ' + esc(v.method_note) : '') + '</span>';
     }).join('');
     var copy = function (tag, second) {
-      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt=""><div class="rv-tag">' + tag + '</div>' + letterhead() +
+      return '<div class="rc-copy' + (second ? ' rc-2' : '') + '"><img class="wm" src="' + REPORT.logo + '" alt="">' + rvTag(second, 'refund') + letterhead() +
         '<div class="rv-top">' +
           '<div class="rv-no"><div><span>رقم السند <small>No.</small></span><b>' + no + '</b></div>' +
             '<div><span>التاريخ <small>Date</small></span><i>' + dmy(v.refunded_on || todayISO()) + '</i></div></div>' +
@@ -10973,7 +10994,7 @@
         '<div class="rv-stamp">الختم</div></div></div>';
     };
     sheet.className = 'rc';
-    sheet.innerHTML = copy('أصل') + '<div class="rc-cut">✂</div>' + copy('نسخة', true);
+    sheet.innerHTML = copy('أصل') + rvCut('refund') + copy('نسخة', true);
     fitSheet();
   }
 
