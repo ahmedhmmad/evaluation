@@ -1121,7 +1121,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 1';
+  var APP_BUILD = '20/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7063,16 +7063,26 @@
     S.ttSessions.forEach(function (s) { if (s.status !== 'removed' && names.indexOf(s.class_name) < 0) names.push(s.class_name); });
     return names;
   }
-  // معلمو الجدول: من له حصص، بالترتيب الأبجدي
+  // محفّظ القرآن: فئته «محفظون»، أو كل حصصه في الجدول قرآن (لمن لم تُضبط فئته)
+  function ttIsQuranT(t) {
+    if (!t) return false;
+    if (t.category === 'محفظون') return true;
+    var mine = S.ttSessions.filter(function (s) { return s.teacher_id === t.id && s.status !== 'removed'; });
+    return mine.length > 0 && mine.every(function (s) { return norm(ttFixSubject(s.subject)) === norm('قرآن'); });
+  }
+  // ترتيب المعلمين في كل قوائم الجدول وجداوله: المعلمون أبجديًا، ثم محفّظو القرآن في النهاية
+  function ttTeacherCmp(a, b) {
+    return (ttIsQuranT(a) ? 1 : 0) - (ttIsQuranT(b) ? 1 : 0) || a.name.localeCompare(b.name, 'ar');
+  }
+  // معلمو الجدول: من له حصص
   function ttTeachers() {
     var has = {};
     S.ttSessions.forEach(function (s) { if (s.teacher_id && s.status !== 'removed') has[s.teacher_id] = 1; });
-    return S.teachers.filter(function (t) { return has[t.id]; }).sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    return S.teachers.filter(function (t) { return has[t.id]; }).sort(ttTeacherCmp);
   }
   // من يُختار معلمًا لحصة: هيئة التدريس والمحفظون، ومن هو معلم الحصة أصلًا
   function ttTeacherChoices(cur) {
-    return S.teachers.filter(function (t) { return t.id === cur || !t.category || t.category === 'هيئة تدريس' || t.category === 'محفظون'; })
-      .sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    return S.teachers.filter(function (t) { return t.id === cur || !t.category || t.category === 'هيئة تدريس' || t.category === 'محفظون'; }).sort(ttTeacherCmp);
   }
 
   // التعارض: الشعبة أو المعلم في حصتين بنفس اليوم والحصة. يُعرض ولا يمنع الحفظ
@@ -8101,7 +8111,7 @@
     var tl = {};
     draft.forEach(function (r) { if (r.teacher_id) (tl[r.teacher_id] || (tl[r.teacher_id] = { need: 0, got: 0 })).need += Number(r.count || 0); });
     ttLive().forEach(function (s) { if (s.teacher_id) (tl[s.teacher_id] || (tl[s.teacher_id] = { need: 0, got: 0 })).got++; });
-    var tRows = Object.keys(tl).map(function (id) { return { id: id, x: tl[id] }; }).sort(function (p, q) { return ttTName(p.id).localeCompare(ttTName(q.id), 'ar'); }).map(function (p) {
+    var tRows = Object.keys(tl).map(function (id) { return { id: id, x: tl[id] }; }).sort(function (p, q) { var a = find(p.id), b = find(q.id); return a && b ? ttTeacherCmp(a, b) : ttTName(p.id).localeCompare(ttTName(q.id), 'ar'); }).map(function (p) {
       return '<tr><td>' + esc(ttTName(p.id)) + '</td><td>' + p.x.need + '</td><td>' + p.x.got + '</td><td>' + (p.x.need === p.x.got ? '<span class="badge approved">مطابق</span>' : '<span class="badge unpaid">فرق ' + (p.x.got - p.x.need > 0 ? '+' : '') + (p.x.got - p.x.need) + '</span>') + '</td></tr>';
     }).join('');
     var diff = ttQuotaDiff().length, dirty = JSON.stringify(draft) !== JSON.stringify(ttQuota());
