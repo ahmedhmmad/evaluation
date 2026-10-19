@@ -1,0 +1,141 @@
+{
+  "name": "النسخ الاحتياطي اليومي إلى Google Drive",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## قبل التشغيل\n1. شغّل supabase/auto_backup.sql في محرر SQL.\n2. من البرنامج: الإعدادات والمستخدمون ← النسخ الاحتياطي ← «إظهار» مفتاح النسخ، وضعه مكان PUT_BACKUP_KEY_HERE في عقدتي «طلب النسخة» و«تسجيل النجاح».\n3. أنشئ مجلدًا في Google Drive وضع رقمه (الجزء الأخير من رابط المجلد) مكان PUT_DRIVE_FOLDER_ID_HERE في عقدتي «حفظ في Drive» و«النسخ الأقدم من 30 يومًا».\n4. اختر حساب Google Drive في العقد الثلاث الخاصة به، ثم فعّل الـ workflow.",
+        "height": 300,
+        "width": 520
+      },
+      "id": "b4c7a11e-0000-4000-8000-000000000000",
+      "name": "تعليمات",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1220, -280]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 23 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b4c7a11e-0001-4000-8000-000000000001",
+      "name": "كل ليلة 11 مساءً",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1200, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wvklhyjtzqomiyhzsfuf.supabase.co/rest/v1/rpc/backup_dump",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
+            { "name": "Authorization", "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"p_key\": \"PUT_BACKUP_KEY_HERE\" }",
+        "options": {}
+      },
+      "id": "b4c7a11e-0002-4000-8000-000000000002",
+      "name": "طلب النسخة",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-980, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nif (!data || data.app !== 'third-pillar-backup' || !data.tables) throw new Error('لم تصل نسخة صحيحة من القاعدة');\nconst rows = Object.values(data.tables).reduce((n, t) => n + (Array.isArray(t) ? t.length : 0), 0);\nif (!(data.tables.students || []).length) throw new Error('النسخة بلا طلاب؛ لم تُحفظ');\nconst d = new Date(data.created_at);\nconst p = (x) => String(x).padStart(2, '0');\nconst local = new Date(d.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));\nconst name = `نسخة-احتياطية-تلقائية-${local.getFullYear()}-${p(local.getMonth() + 1)}-${p(local.getDate())}.json`;\nconst bin = await this.helpers.prepareBinaryData(Buffer.from(JSON.stringify(data)), name, 'application/json');\nreturn [{ json: { name, rows }, binary: { data: bin } }];"
+      },
+      "id": "b4c7a11e-0003-4000-8000-000000000003",
+      "name": "تجهيز الملف",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-760, 100]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "name": "={{ $json.name }}",
+        "driveId": { "__rl": true, "mode": "list", "value": "My Drive" },
+        "folderId": { "__rl": true, "mode": "id", "value": "PUT_DRIVE_FOLDER_ID_HERE" },
+        "options": {}
+      },
+      "id": "b4c7a11e-0004-4000-8000-000000000004",
+      "name": "حفظ في Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-540, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wvklhyjtzqomiyhzsfuf.supabase.co/rest/v1/rpc/backup_done",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
+            { "name": "Authorization", "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_key: 'PUT_BACKUP_KEY_HERE', p_file: $('تجهيز الملف').first().json.name, p_rows: $('تجهيز الملف').first().json.rows }) }}",
+        "options": {}
+      },
+      "id": "b4c7a11e-0005-4000-8000-000000000005",
+      "name": "تسجيل النجاح",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-320, 100]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "='PUT_DRIVE_FOLDER_ID_HERE' in parents and trashed = false and name contains 'نسخة-احتياطية-تلقائية' and createdTime < '{{ $now.minus({ days: 30 }).toUTC().toISO() }}'",
+        "returnAll": true,
+        "filter": {},
+        "options": {}
+      },
+      "id": "b4c7a11e-0006-4000-8000-000000000006",
+      "name": "النسخ الأقدم من 30 يومًا",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-100, 100]
+    },
+    {
+      "parameters": {
+        "operation": "deleteFile",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $json.id }}" },
+        "options": {}
+      },
+      "id": "b4c7a11e-0007-4000-8000-000000000007",
+      "name": "حذفها",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [120, 100]
+    }
+  ],
+  "connections": {
+    "كل ليلة 11 مساءً": { "main": [[{ "node": "طلب النسخة", "type": "main", "index": 0 }]] },
+    "طلب النسخة": { "main": [[{ "node": "تجهيز الملف", "type": "main", "index": 0 }]] },
+    "تجهيز الملف": { "main": [[{ "node": "حفظ في Drive", "type": "main", "index": 0 }]] },
+    "حفظ في Drive": { "main": [[{ "node": "تسجيل النجاح", "type": "main", "index": 0 }]] },
+    "تسجيل النجاح": { "main": [[{ "node": "النسخ الأقدم من 30 يومًا", "type": "main", "index": 0 }]] },
+    "النسخ الأقدم من 30 يومًا": { "main": [[{ "node": "حذفها", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "Africa/Cairo" },
+  "pinData": {}
+}

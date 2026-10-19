@@ -1104,6 +1104,8 @@
       if (canView()) {
         // غير موجود إلى أن يُشغَّل الملف supabase/teacher_accounts.sql
         var ps = isAdmin() ? await sb.from('private_settings').select('*').eq('id', 1).maybeSingle() : { data: null, error: null };
+        S.bk = null;
+        if (isAdmin()) await loadBackupStatus();
         // فئة العامل ومسماه الوظيفي وواتسابه: أعمدة من supabase/staff.sql
         S.staffMissing = !!(await sb.from('teachers').select('category').limit(1)).error;
         S.accountsMissing = !!ps.error;
@@ -1134,7 +1136,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 14';
+  var APP_BUILD = '20/10 — 15';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1611,6 +1613,10 @@
       var riding = transportGroupOf();
       add(count(S.students, function (x) { return x.wants_transport === true && !riding[x.id]; }), 'طلاب يحتاجون مواصلات بلا نقطة تجمع', '#/transport');
       add(count(S.users, function (u) { return u.role === 'pending'; }), 'حسابات بانتظار التفعيل', '#/admin');
+      // النسخ التلقائي متوقف: لم تصل نسخة منذ يومين أو أكثر
+      if (S.bk && !S.bk.missing && S.bk.last_at && Date.now() - new Date(S.bk.last_at).getTime() >= 2 * 864e5) {
+        todo.push('<a href="#/admin"><span>لم تصل نسخة احتياطية تلقائية منذ ' + Math.floor((Date.now() - new Date(S.bk.last_at).getTime()) / 864e5) + ' أيام</span><span class="n">!</span></a>');
+      }
       if (!schoolClasses().length) todo.push('<a href="#/rooms"><span>لم تُعرَّف شعب المدرسة بعد</span><span class="n">!</span></a>');
     }
 
@@ -7035,7 +7041,13 @@
     { name: 'transport_members', label: 'اشتراكات المواصلات', key: 'student_id' },
     { name: 'transport_payments', label: 'دفعات المواصلات', key: 'student_id,month', drop: ['id'] },
     { name: 'transport_voided', label: 'أرشيف الإيصالات المحذوفة', key: 'id' },
-    { name: 'transport_refunds', label: 'مستردات المواصلات', key: 'id' }
+    { name: 'transport_refunds', label: 'مستردات المواصلات', key: 'id' },
+    // الإيصالات المكمِّلة لا تُعدَّل بعد صدورها (supabase/transport_topups.sql)، فيُضاف الناقص منها فقط
+    { name: 'transport_topups', label: 'الإيصالات المكمِّلة', key: 'receipt_no', insertOnly: true },
+    { name: 'attendance', label: 'الحضور والغياب', key: 'student_id,day' },
+    { name: 'timetable_config', label: 'إعدادات جدول الحصص', key: 'id' },
+    { name: 'timetable_sessions', label: 'حصص الجدول', key: 'id' },
+    { name: 'timetable_proposals', label: 'مقترحات تحسين الجدول', key: 'id' }
   ];
   var BACKUP_MARK = 'third-pillar-backup';
 
@@ -7311,8 +7323,24 @@
     var last = '';
     try { last = localStorage.getItem('last-backup') || ''; } catch (err) { /* التخزين المحلي غير متاح */ }
     var days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 864e5) : null;
+    var bk = S.bk, auto;
+    if (!bk) auto = '';
+    else if (bk.missing) auto = '<p class="formhint">النسخ التلقائي اليومي إلى Google Drive يحتاج إلى تشغيل الملف <code dir="ltr">supabase/auto_backup.sql</code> في محرر SQL، ثم استيراد <code dir="ltr">n8n/auto-backup.json</code> في n8n.</p>';
+    else {
+      var ago = bk.last_at ? Math.floor((Date.now() - new Date(bk.last_at).getTime()) / 864e5) : null;
+      auto = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><h3 style="margin:0 0 6px">النسخ التلقائي اليومي (Google Drive)</h3>' +
+        '<p class="' + (ago == null || ago >= 2 ? 'formhint' : 'hint') + '" style="margin:0">' + (bk.last_at
+          ? 'آخر نسخة تلقائية: ' + new Date(bk.last_at).toLocaleString('ar-u-nu-latn', { dateStyle: 'long', timeStyle: 'short' }) + (bk.last_file ? ' — ' + esc(bk.last_file) : '') +
+            (ago >= 2 ? ' (منذ ' + ago + ' أيام: تحقّق من n8n)' : '')
+          : 'لم تصل أي نسخة تلقائية بعد. استورد n8n/auto-backup.json في n8n وضع فيه المفتاح التالي ورقم مجلد Drive.') + '</p>' +
+        '<div class="toolbar" style="align-items:center;margin:8px 0 0"><span class="hint" style="margin:0">مفتاح النسخ (يوضع في n8n فقط):</span>' +
+        '<code dir="ltr" style="user-select:all">' + (ui.bkShow ? esc(bk.backup_key) : '••••••••••••') + '</code>' +
+        '<button type="button" class="btn" data-bkshow>' + (ui.bkShow ? 'إخفاء' : 'إظهار') + '</button>' +
+        '<button type="button" class="btn" data-bknew>مفتاح جديد</button></div>' +
+        '<p class="hint" style="margin:6px 0 0">من يملك هذا المفتاح يستطيع تنزيل كل البيانات؛ لا ترسله لأحد. إن شككت في تسرّبه اضغط «مفتاح جديد» ثم ضعه في n8n.</p></div>';
+    }
     return '<div class="card"><h2>النسخ الاحتياطي</h2>' +
-      '<p class="hint">تنزّل النسخة ملفًا واحدًا فيه كل بيانات البرنامج (الطلاب، المواصلات والدفعات، المعلمون، الزيارات، الإعدادات). احفظه في مكان آمن خارج هذا الجهاز؛ فيه بيانات شخصية.</p>' +
+      '<p class="hint">تنزّل النسخة ملفًا واحدًا فيه كل بيانات البرنامج (الطلاب، المواصلات والدفعات، الحضور والغياب، جدول الحصص، المعلمون، الزيارات، الإعدادات). احفظه في مكان آمن خارج هذا الجهاز؛ فيه بيانات شخصية.</p>' +
       '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn primary" data-backup>تنزيل نسخة احتياطية الآن</button>' +
         '<button type="button" class="btn" data-restore>استعادة من ملف…</button>' +
@@ -7321,13 +7349,31 @@
           ? 'آخر نسخة من هذا المتصفح: ' + dmy(last) + (days ? ' (منذ ' + days + ' يومًا)' : ' (اليوم)')
           : 'لم تؤخذ نسخة من هذا المتصفح بعد.') + '</span>' +
       '</div>' +
-      '<p class="hint" style="margin:10px 0 0">الاستعادة تعيد كل سجل في الملف إلى ما كان عليه وقت النسخ (تُرجع المحذوف وتُصحّح المعدَّل)، ولا تحذف ما أُضيف بعدها. حسابات الدخول وكلمات المرور ليست ضمن النسخة.</p></div>';
+      '<p class="hint" style="margin:10px 0 0">الاستعادة تعيد كل سجل في الملف إلى ما كان عليه وقت النسخ (تُرجع المحذوف وتُصحّح المعدَّل)، ولا تحذف ما أُضيف بعدها. حسابات الدخول وكلمات المرور ليست ضمن النسخة. ملفات النسخ التلقائي تُستعاد من هنا أيضًا.</p>' + auto + '</div>';
+  }
+
+  // حالة النسخ التلقائي (supabase/auto_backup.sql): تُجلب عند الدخول للمدير العام
+  async function loadBackupStatus() {
+    var r = await sb.from('backup_status').select('*').eq('id', 1).maybeSingle();
+    S.bk = r.error ? { missing: true } : r.data || { missing: true };
+  }
+
+  async function newBackupKey() {
+    if (!confirm('توليد مفتاح نسخ جديد؟\nيتوقف المفتاح الحالي فورًا، فيجب وضع الجديد في n8n وإلا تتوقف النسخ التلقائية.')) return;
+    var r = await sb.rpc('backup_new_key');
+    if (r.error) return fail(r.error);
+    S.bk.backup_key = r.data;
+    ui.bkShow = true;
+    render();
+    toast('وُلّد مفتاح جديد. ضعه في n8n مكان المفتاح القديم.');
   }
 
   document.addEventListener('click', function (e) {
     if (!isAdmin() || location.hash !== '#/admin') return;
     var el;
-    if ((el = e.target.closest('[data-backup]'))) downloadBackup(el);
+    if (e.target.closest('[data-bkshow]')) { ui.bkShow = !ui.bkShow; render(); }
+    else if (e.target.closest('[data-bknew]')) newBackupKey();
+    else if ((el = e.target.closest('[data-backup]'))) downloadBackup(el);
     else if (e.target.closest('[data-restore]')) document.getElementById('restore-file').click();
   });
 
