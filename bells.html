@@ -7,7 +7,7 @@
 <title>مواعيد الدوام</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&display=swap">
 <style>
-  /* شاشة الممر: مواعيد الدوام والحصة الجارية، للمشاهدة فقط وبلا تسجيل دخول (الأوقات وأسماء المراحل فقط) */
+  /* شاشة الممر: مواعيد الدوام والحصة الجارية، وحصص الاحتياط اليوم، للمشاهدة فقط وبلا تسجيل دخول */
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
   body { background: #0f2647; color: #fff; font-family: "Cairo", system-ui, "Segoe UI", Tahoma, sans-serif; padding: 3vh 3vw; }
@@ -35,6 +35,9 @@
   .tools button { font: inherit; font-size: .9rem; background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
   .tools button.on { background: #c5a46d; color: #0f2647; border-color: #c5a46d; font-weight: 800; }
   :fullscreen .tools .test, :fullscreen #fs { display: none; }
+  .subs { margin-top: 2.5vh; background: rgba(197,164,109,.12); border: 1px solid rgba(197,164,109,.5); border-radius: 16px; padding: 1.6vh 1.6vw; }
+  .subs h2 { margin: 0 0 1vh; color: #c5a46d; font-size: clamp(1.1rem, 2vw, 1.9rem); }
+  .subs .row b { color: #c5a46d; }
 </style>
 </head>
 <body>
@@ -57,7 +60,7 @@
 (function () {
   var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
   var ORD = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة', 'الحادية عشرة', 'الثانية عشرة'];
-  var bells = null, main = document.getElementById('main');
+  var bells = null, subs = [], main = document.getElementById('main');
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
   function mins(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? +m[1] * 60 + +m[2] : NaN; }
@@ -98,7 +101,31 @@
         st.rows.map(function (r, i) {
           return '<div class="row k-' + esc(r.k) + (ni.state === 'in' && ni.cur === i ? ' now' : '') + (past(ni, i) ? ' past' : '') + '"><span>' + esc(label(st, i)) + '</span><span>⁧' + esc(r.f) + ' – ' + esc(r.t) + '⁩</span></div>'; // من اليمين: البداية ثم النهاية
         }).join('') + '</section>';
-    }).join('') + '</div>';
+    }).join('') + '</div>' + subsHtml();
+  }
+
+  // حصص الاحتياط اليوم (supabase/substitutes.sql): الحصة والشعبة والمادة واسم المعلم البديل (الأول والأخير)
+  // كما في جداول البرنامج: المركّب يبقى كاملًا («عطا الله»، «أبو القمبز»، «عبد الرحمن»)
+  function nameParts(full) {
+    var w = String(full || '').trim().split(/\s+/), out = [];
+    for (var i = 0; i < w.length; i++) {
+      if (/^(عبد|عبدال|أبو|ابو|أبي|ابي|بن|ابن|آل|ال)$/.test(w[i]) && i + 1 < w.length) { out.push(w[i] + ' ' + w[i + 1]); i++; }
+      else out.push(w[i]);
+    }
+    return out;
+  }
+  function shortName(full) {
+    var words = String(full || '').trim().split(/\s+/), n = words.length, last = words[n - 1];
+    if (n <= 2) return String(full || '').trim();
+    var fam = /^(الله|الدين|الرحمن|الرحيم)$/.test(last) || /^(أبو|ابو|آل|بن|ابن|بني)$/.test(words[n - 2]) ? words[n - 2] + ' ' + last : last;
+    var short = (nameParts(full)[0] || '') + ' ' + fam;
+    return short.split(' ').length >= n ? String(full).trim() : short;
+  }
+  function subsHtml() {
+    if (!subs.length) return '';
+    return '<section class="subs"><h2>حصص الاحتياط اليوم</h2>' + subs.map(function (s) {
+      return '<div class="row"><span>الحصة ' + esc(ORD[s.period - 1] || s.period) + ' · ' + esc(s.class_name) + (s.subject ? ' · ' + esc(s.subject) : '') + '</span><b>' + esc(shortName(s.teacher)) + '</b></div>';
+    }).join('') + '</section>';
   }
 
   async function load() {
@@ -107,6 +134,9 @@
     if (r.error) { if (!bells) main.innerHTML = '<p class="msg">تعذر جلب المواعيد. تُعاد المحاولة تلقائيًا.</p>'; return; }
     var b = r.data && r.data.bells;
     bells = b && Array.isArray(b.stages) ? b : { stages: [] };
+    // الاحتياط اختياري: إن لم يُشغَّل ملفه بعد تبقى الصفحة كما هي
+    var s = await sb.rpc('public_subs');
+    subs = !s.error && Array.isArray(s.data) ? s.data : [];
     draw();
   }
 
@@ -173,7 +203,7 @@
   load();
   setInterval(draw, 20000);
   setInterval(watch, 1000);
-  setInterval(load, 10 * 60000); // تعديل المواعيد في البرنامج يظهر هنا خلال عشر دقائق
+  setInterval(load, 5 * 60000); // تعديل المواعيد أو الاحتياط في البرنامج يظهر هنا خلال خمس دقائق
 })();
 </script>
 </body>

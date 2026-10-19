@@ -1083,7 +1083,7 @@
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
     S.tGroups = []; S.tMembers = []; S.tPay = {}; S.tTop = {}; S.transportMissing = false;
-    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null; S.pLinks = null;
+    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null; S.pLinks = null; S.subs = null;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -1136,7 +1136,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 16';
+  var APP_BUILD = '20/10 — 17';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7048,7 +7048,9 @@
     { name: 'attendance', label: 'الحضور والغياب', key: 'student_id,day' },
     { name: 'timetable_config', label: 'إعدادات جدول الحصص', key: 'id' },
     { name: 'timetable_sessions', label: 'حصص الجدول', key: 'id' },
-    { name: 'timetable_proposals', label: 'مقترحات تحسين الجدول', key: 'id' }
+    { name: 'timetable_proposals', label: 'مقترحات تحسين الجدول', key: 'id' },
+    { name: 'teacher_absences', label: 'غياب المعلمين', key: 'id' },
+    { name: 'substitutions', label: 'حصص الاحتياط', key: 'id' }
   ];
   var BACKUP_MARK = 'third-pillar-backup';
 
@@ -7122,7 +7124,8 @@
     students: 'الطلاب', teachers: 'المعلمون والعاملون', profiles: 'المستخدمون', settings: 'الإعدادات',
     transport_groups: 'الباصات', transport_members: 'اشتراكات المواصلات', transport_payments: 'إيصالات المواصلات',
     transport_topups: 'الإيصالات المكمِّلة', transport_refunds: 'المستردات', transport_voided: 'أرشيف الإيصالات المحذوفة',
-    timetable_sessions: 'جدول الحصص', timetable_config: 'إعدادات الجدول', timetable_proposals: 'مقترحات تحسين الجدول', attendance: 'الحضور والغياب'
+    timetable_sessions: 'جدول الحصص', timetable_config: 'إعدادات الجدول', timetable_proposals: 'مقترحات تحسين الجدول', attendance: 'الحضور والغياب',
+    teacher_absences: 'غياب المعلمين', substitutions: 'حصص الاحتياط'
   };
   var AUDIT_ACT = { insert: 'إضافة', update: 'تعديل', 'delete': 'حذف' };
   var AUDIT_FIELD = {
@@ -7133,7 +7136,8 @@
     exempt_from: 'الإعفاء من', exempt_to: 'الإعفاء حتى', assembly_point: 'نقطة التجمع', fee: 'الاشتراك', capacity: 'السعة',
     role: 'الصلاحية', email: 'اسم المستخدم', subject: 'المادة', teacher_id: 'المعلم', day: 'اليوم', period: 'الحصة', note: 'ملاحظة',
     ratings: 'درجات التقييم', notes: 'الملاحظات', approver_notes: 'ملاحظات المعتمد', visible: 'ظاهر', category: 'الفئة', title: 'المسمى الوظيفي',
-    classes: 'الصفوف والشعب', bells: 'التوقيت والأجراس', days: 'أيام الدراسة', subjects: 'المواد', quota: 'النصاب', rules: 'القواعد'
+    classes: 'الصفوف والشعب', bells: 'التوقيت والأجراس', days: 'أيام الدراسة', subjects: 'المواد', quota: 'النصاب', rules: 'القواعد',
+    sub_teacher_id: 'معلم الاحتياط', absent_teacher_id: 'المعلم الغائب', periods: 'الحصص', reason: 'السبب'
   };
 
   function auditState() {
@@ -7158,7 +7162,7 @@
   // قيمة الحقل كما تُقرأ: اسم المعلم بدل معرّفه، والتاريخ بصيغته، واختصار ما طال
   function auditVal(k, v, tbl) {
     if (v == null || v === '') return '—';
-    if (k === 'teacher_id') { var t = S.teachers.filter(function (x) { return x.id === v; })[0]; return t ? t.name : 'معلم محذوف'; }
+    if (/teacher_id$/.test(k)) { var t = S.teachers.filter(function (x) { return x.id === v; })[0]; return t ? t.name : 'معلم محذوف'; }
     if (k === 'group_id') { var g = findGroup(v); return g ? g.assembly_point : 'باص محذوف'; }
     if (k === 'role') return ROLES[v] || v;
     if (k === 'method') return PAY_METHODS[v] || v;
@@ -7633,7 +7637,7 @@
 
   function ttView() {
     if (isTeacherRole()) return 'mine';
-    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|import|quota|improve)$/);
+    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|import|quota|improve|subs)$/);
     return m ? m[1] : 'classes';
   }
 
@@ -7645,6 +7649,7 @@
     };
     return '<nav class="pills" aria-label="أقسام جدول الحصص">' + item('classes', '#/timetable', 'جداول الصفوف') + item('teachers', '#/timetable/teachers', 'جداول المعلمين') +
       item('bells', '#/timetable/bells', 'مواعيد الدوام') + item('review', '#/timetable/review', 'المراجعة', badge) +
+      item('subs', '#/timetable/subs', 'الاحتياط') +
       item('quota', '#/timetable/quota', 'النصاب والقواعد') + item('improve', '#/timetable/improve', 'تحسين الجدول', pend) +
       (canEditTT() ? item('import', '#/timetable/import', 'استيراد من ملف') : '') + '</nav>';
   }
@@ -7670,6 +7675,273 @@
 
   function ttSignOn() { try { return localStorage.getItem('tt-sign') === '1'; } catch (e) { return false; } }
 
+  /* ---------- حصص الاحتياط ----------
+     يُسجَّل غياب المعلم ليوم (كله أو حصص منه)، فتظهر حصصه في ذلك اليوم من الجدول، ولكل حصة يُقترح بديل:
+     معلم ليس عنده حصة في الوقت نفسه ولا احتياط آخر، والأولوية لمن هو في المدرسة ذلك اليوم، ثم الأقل احتياطًا اليوم وفي الشهر،
+     ثم من يدرّس الشعبة نفسها أو المادة نفسها، ثم الأخف يومًا. «توزيع تلقائي» يملأ الحصص الفارغة بالترتيب نفسه (supabase/substitutes.sql) */
+  var WEEK_FULL = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+  function subState() {
+    if (!ui.sub) {
+      // اليوم، وإن لم يكن يوم دراسة فأول يوم دراسة بعده
+      var d = new Date(), days = ttCfg().days;
+      for (var i = 0; i < 7 && days.indexOf(WEEK_FULL[d.getDay()]) < 0; i++) d.setDate(d.getDate() + 1);
+      ui.sub = { day: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'), add: '', periods: {}, reason: '' };
+    }
+    return ui.sub;
+  }
+  function subDayIdx(day) { return ttCfg().days.indexOf(WEEK_FULL[new Date(day + 'T00:00').getDay()]); }
+
+  // غياب المعلمين واحتياط شهر اليوم المختار
+  var loadingSubs = false;
+  async function loadSubs(month) {
+    if (loadingSubs) return;
+    loadingSubs = true;
+    var from = month + '-01', to = month + '-31';
+    var a = await fetchAll(function () { return sb.from('teacher_absences').select('*').gte('day', from).lte('day', to).order('day').order('teacher_id'); });
+    var s = a ? await fetchAll(function () { return sb.from('substitutions').select('*').gte('day', from).lte('day', to).order('day').order('period'); }) : null;
+    loadingSubs = false;
+    S.subs = { month: month, missing: !a || !s, abs: a || [], subs: s || [] };
+    render();
+  }
+
+  // حصص المعلم الغائب في اليوم المختار (بحسب الحصص التي يغيبها)
+  function subLessons(day) {
+    var di = subDayIdx(day), out = [];
+    if (di < 0) return out;
+    S.subs.abs.filter(function (a) { return a.day === day; }).forEach(function (a) {
+      ttLive().forEach(function (s) {
+        if (s.teacher_id !== a.teacher_id || s.day !== di) return;
+        if (a.periods && a.periods.length && a.periods.indexOf(s.period) < 0) return;
+        out.push({ s: s, a: a, rec: S.subs.subs.filter(function (r) { return r.day === day && r.class_name === s.class_name && r.period === s.period; })[0] || null });
+      });
+    });
+    return out.sort(function (x, y) { return x.s.period - y.s.period || classRank(x.s.class_name) - classRank(y.s.class_name); });
+  }
+
+  // البدلاء المحتملون لحصة، مرتبين. taken: { 'teacherId|period': 1 } لما وُزّع ولم يُحفظ بعد (التوزيع التلقائي)
+  function subCandidates(day, s, taken, extra) {
+    var di = subDayIdx(day), month = day.slice(0, 7);
+    var absent = {};
+    S.subs.abs.forEach(function (a) { if (a.day === day) absent[a.teacher_id] = a.periods && a.periods.length ? a.periods : true; });
+    var busySub = {}, today = {}, inMonth = {};
+    S.subs.subs.forEach(function (r) {
+      if (!r.sub_teacher_id) return;
+      if (r.day === day) { busySub[r.sub_teacher_id + '|' + r.period] = r; today[r.sub_teacher_id] = (today[r.sub_teacher_id] || 0) + 1; }
+      if (r.day.slice(0, 7) === month) inMonth[r.sub_teacher_id] = (inMonth[r.sub_teacher_id] || 0) + 1;
+    });
+    Object.keys(extra || {}).forEach(function (id) { today[id] = (today[id] || 0) + extra[id]; inMonth[id] = (inMonth[id] || 0) + extra[id]; });
+    var live = ttLive();
+    return S.teachers.map(function (t) {
+      if (t.id === s.teacher_id) return null;
+      var ab = absent[t.id];
+      if (ab === true || (ab && ab.indexOf(s.period) > -1)) return null;
+      var mine = live.filter(function (x) { return x.teacher_id === t.id && x.day === di; });
+      if (mine.some(function (x) { return x.period === s.period; })) return null;
+      var other = busySub[t.id + '|' + s.period];
+      if (other && !(other.class_name === s.class_name && other.period === s.period)) return null;
+      if (taken && taken[t.id + '|' + s.period]) return null;
+      var everyLesson = live.filter(function (x) { return x.teacher_id === t.id; });
+      if (!everyLesson.length) return null; // ليس من معلمي الجدول
+      return { t: t, onSite: mine.length > 0, quran: ttIsQuranT(t), today: today[t.id] || 0, month: inMonth[t.id] || 0,
+        cls: everyLesson.some(function (x) { return x.class_name === s.class_name; }), subj: everyLesson.some(function (x) { return norm(ttFixSubject(x.subject)) === norm(ttFixSubject(s.subject)); }),
+        load: mine.length };
+    }).filter(Boolean).sort(function (a, b) {
+      return (b.onSite - a.onSite) || (a.quran - b.quran) || (a.today - b.today) || (a.month - b.month) || (b.cls - a.cls) || (b.subj - a.subj) || (a.load - b.load) || a.t.name.localeCompare(b.t.name, 'ar');
+    });
+  }
+
+  function subWhy(c) {
+    var w = [];
+    if (!c.onSite) w.push('ليس عنده حصص هذا اليوم');
+    if (c.cls) w.push('يدرّس الشعبة');
+    if (c.subj) w.push('نفس المادة');
+    w.push('احتياط اليوم ' + c.today + ' · الشهر ' + c.month);
+    return w.join(' · ');
+  }
+
+  function ttSubsHtml() {
+    var st = subState(), month = st.day.slice(0, 7), edit = canEditTT();
+    if (!S.subs || S.subs.month !== month) { loadSubs(month); return '<div class="card empty">جارٍ التحميل…</div>'; }
+    if (S.subs.missing) return '<div class="card empty">حصص الاحتياط تحتاج إلى جدولين جديدين في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/substitutes.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+    var di = subDayIdx(st.day), absToday = S.subs.abs.filter(function (a) { return a.day === st.day; });
+    var head = '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
+      '<span class="monthpick"><label class="field" for="sub-day">اليوم</label><input type="date" id="sub-day" data-ro-ok value="' + st.day + '"></span>' +
+      '<b>' + dayName(st.day) + '</b>' + (di < 0 ? ' <span class="badge pending">ليس يوم دراسة في الجدول</span>' : '') + '</div></div>';
+    if (di < 0) return head;
+
+    // تسجيل غياب معلم
+    var absentIds = absToday.map(function (a) { return a.teacher_id; });
+    var addCard = '';
+    if (edit) {
+      var tOpts = ttTeachers().filter(function (t) { return absentIds.indexOf(t.id) < 0; });
+      var mine = st.add ? ttLive().filter(function (x) { return x.teacher_id === st.add && x.day === di; }).sort(function (a, b) { return a.period - b.period; }) : [];
+      addCard = '<div class="card"><h2>تسجيل غياب معلم</h2><div class="toolbar" style="align-items:center">' +
+        '<select id="sub-add" style="width:auto;min-width:220px"><option value="">— اختر المعلم —</option>' + tOpts.map(function (t) { return '<option value="' + t.id + '"' + (st.add === t.id ? ' selected' : '') + '>' + esc(ttName(t)) + '</option>'; }).join('') + '</select>' +
+        '<input type="text" id="sub-reason" placeholder="السبب (اختياري)" value="' + esc(st.reason) + '" style="max-width:220px">' +
+        '<button type="button" class="btn primary" data-subadd' + (st.add ? '' : ' disabled') + '>تسجيل الغياب</button></div>' +
+        (st.add ? (mine.length
+          ? '<div class="toolbar" style="align-items:center;margin-top:8px"><span class="hint" style="margin:0">يغيب عن:</span>' +
+              '<label class="check"><input type="checkbox" id="sub-all"' + (Object.keys(st.periods).length ? '' : ' checked') + '>اليوم كله</label>' +
+              mine.map(function (x) { return '<label class="check"><input type="checkbox" data-subp="' + x.period + '"' + (st.periods[x.period] ? ' checked' : '') + '>الحصة ' + x.period + ' (' + esc(x.class_name) + ')</label>'; }).join('') + '</div>'
+          : '<p class="hint" style="margin:8px 0 0">ليس لهذا المعلم حصص في هذا اليوم.</p>') : '') + '</div>';
+    }
+
+    var absCard = '<div class="card"><h2>المعلمون الغائبون — ' + dayName(st.day) + ' ' + dmy(st.day) + '</h2>' + (absToday.length
+      ? '<ul style="margin:0;padding-inline-start:18px">' + absToday.map(function (a) {
+          var t = find(a.teacher_id);
+          return '<li style="margin:4px 0"><b>' + esc(t ? ttName(t) : 'معلم محذوف') + '</b> — ' + (a.periods && a.periods.length ? 'الحصص ' + a.periods.join('، ') : 'اليوم كله') +
+            (a.reason ? ' · ' + esc(a.reason) : '') + (edit ? ' <button type="button" class="btn link" data-subdel="' + a.id + '">إلغاء الغياب</button>' : '') + '</li>';
+        }).join('') + '</ul>'
+      : '<p class="hint" style="margin:0">لم يُسجَّل غياب معلم في هذا اليوم.</p>') + '</div>';
+
+    var ls = subLessons(st.day), open = ls.filter(function (l) { return !(l.rec && l.rec.sub_teacher_id); }).length;
+    var rows = ls.map(function (l) {
+      var s = l.s, t = ttTimeFor(s.class_name, s.period), cur = l.rec && l.rec.sub_teacher_id, cands = subCandidates(st.day, s);
+      if (cur && !cands.some(function (c) { return c.t.id === cur; })) { var ct = find(cur); if (ct) cands.unshift({ t: ct, onSite: true, today: 0, month: 0, cls: false, subj: false, load: 0, forced: true }); }
+      var sel = edit
+        ? '<select data-subpick="' + esc(s.class_name) + '|' + s.period + '" style="width:auto;max-width:260px"><option value="">— بلا بديل بعد —</option>' +
+            cands.map(function (c, i) { return '<option value="' + c.t.id + '"' + (cur === c.t.id ? ' selected' : '') + '>' + (i === 0 && !cur ? '★ ' : '') + esc(ttName(c.t)) + (c.forced ? '' : ' (' + c.month + ')') + '</option>'; }).join('') + '</select>' +
+            (cands[0] && !cur ? '<div class="hint" style="margin:2px 0 0">المقترح: ' + esc(ttName(cands[0].t)) + ' — ' + esc(subWhy(cands[0])) + '</div>' : '')
+        : esc(cur ? ttTName(cur) : '—');
+      return '<tr><td style="white-space:nowrap"><b>' + (TT_ORD[s.period - 1] || s.period) + '</b>' + (t ? '<div class="hint" style="margin:0">' + ttRange(t[0], t[1]) + '</div>' : '') + '</td>' +
+        '<td>' + esc(s.class_name) + '</td><td>' + esc(ttFixSubject(s.subject) || '—') + '</td><td>' + esc(ttTName(s.teacher_id)) + '</td>' +
+        '<td>' + sel + '</td></tr>';
+    }).join('');
+    var lessonsCard = '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">حصص تحتاج احتياطًا (' + ls.length + ')' + (open ? ' — بلا بديل: ' + open : '') + '</h2>' +
+      (edit && open ? '<button type="button" class="btn primary" data-subauto>توزيع تلقائي (' + open + ')</button>' : '') +
+      (ls.length ? '<button type="button" class="btn" data-subprint data-ro-ok>طباعة ورقة الاحتياط</button>' : '') + '</div>' +
+      (ls.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الحصة</th><th>الشعبة</th><th>المادة</th><th>المعلم الغائب</th><th>معلم الاحتياط <span class="hint" style="margin:0">(احتياطه هذا الشهر)</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<p class="hint" style="margin:0">' + (absToday.length ? 'لا حصص في الجدول للمعلمين الغائبين في هذا اليوم.' : 'سجّل غياب المعلم أولًا لتظهر حصصه هنا.') + '</p>') + '</div>';
+
+    // إحصاء الشهر: من غطّى كم حصة، ومن غاب كم يومًا
+    var cnt = {}, absCnt = {};
+    S.subs.subs.forEach(function (r) { if (r.sub_teacher_id) cnt[r.sub_teacher_id] = (cnt[r.sub_teacher_id] || 0) + 1; });
+    S.subs.abs.forEach(function (a) { absCnt[a.teacher_id] = (absCnt[a.teacher_id] || 0) + 1; });
+    var ids = Object.keys(cnt).concat(Object.keys(absCnt).filter(function (k) { return !cnt[k]; }));
+    var statCard = '<div class="card"><h2>إحصاء ' + monthLabel(month) + '</h2>' + (ids.length
+      ? '<div class="table-wrap"><table class="grid"><thead><tr><th>المعلم</th><th>حصص احتياط غطّاها</th><th>أيام غياب</th></tr></thead><tbody>' +
+          ids.map(function (k) { return { id: k, n: cnt[k] || 0 }; }).sort(function (a, b) { return b.n - a.n; }).map(function (r) {
+            return '<tr><td>' + esc(ttTName(r.id)) + '</td><td class="c"><b>' + r.n + '</b></td><td class="c">' + (absCnt[r.id] || 0) + '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+      : '<p class="hint" style="margin:0">لا احتياط ولا غياب مسجّل هذا الشهر.</p>') + '</div>';
+
+    return head + addCard + absCard + lessonsCard + statCard;
+  }
+
+  async function subSave(day, s, teacherId) {
+    var rec = { day: day, period: s.period, class_name: s.class_name, subject: ttFixSubject(s.subject) || '', absent_teacher_id: s.teacher_id,
+      sub_teacher_id: teacherId || null, created_by: (S.profile && S.profile.full_name) || displayName(S.email) };
+    return sb.from('substitutions').upsert(rec, { onConflict: 'day,class_name,period' });
+  }
+
+  async function subAddAbsence() {
+    var st = subState();
+    if (!st.add) return;
+    var periods = Object.keys(st.periods).map(Number).sort(function (a, b) { return a - b; });
+    var r = await sb.from('teacher_absences').insert({ day: st.day, teacher_id: st.add, periods: periods.length ? periods : null, reason: st.reason.trim(),
+      created_by: (S.profile && S.profile.full_name) || displayName(S.email) });
+    if (r.error) return fail(r.error);
+    st.add = ''; st.periods = {}; st.reason = '';
+    S.subs = null;
+    render();
+    toast('سُجّل الغياب؛ اختر البدلاء أو اضغط «توزيع تلقائي»');
+  }
+
+  async function subDelAbsence(id) {
+    var a = S.subs.abs.filter(function (x) { return x.id === id; })[0];
+    if (!a) return;
+    var t = find(a.teacher_id);
+    var mineSubs = S.subs.subs.filter(function (r) { return r.day === a.day && r.absent_teacher_id === a.teacher_id; });
+    if (!confirm('إلغاء غياب ' + (t ? ttName(t) : 'المعلم') + ' في ' + dmy(a.day) + '؟' + (mineSubs.length ? '\nتُحذف معه حصص الاحتياط الموزعة عنه (' + mineSubs.length + ').' : ''))) return;
+    if (mineSubs.length) {
+      var d = await sb.from('substitutions').delete().eq('day', a.day).eq('absent_teacher_id', a.teacher_id);
+      if (d.error) return fail(d.error);
+    }
+    var r = await sb.from('teacher_absences').delete().eq('id', id);
+    if (r.error) return fail(r.error);
+    S.subs = null;
+    render();
+  }
+
+  async function subAuto() {
+    var st = subState(), ls = subLessons(st.day).filter(function (l) { return !(l.rec && l.rec.sub_teacher_id); });
+    var taken = {}, extra = {}, plan = [];
+    ls.forEach(function (l) {
+      var c = subCandidates(st.day, l.s, taken, extra)[0];
+      if (!c) return;
+      taken[c.t.id + '|' + l.s.period] = 1;
+      extra[c.t.id] = (extra[c.t.id] || 0) + 1;
+      plan.push({ s: l.s, t: c.t });
+    });
+    if (!plan.length) return toast('لا يوجد معلم متاح لهذه الحصص', true);
+    var nLessons = function (n) { return n + (n > 2 && n <= 10 ? ' حصص' : ' حصة'); };
+    if (!confirm('توزيع ' + nLessons(plan.length) + ' احتياط:\n\n' + plan.map(function (p) { return 'الحصة ' + p.s.period + ' · ' + p.s.class_name + ' ← ' + ttName(p.t); }).join('\n') +
+      (plan.length < ls.length ? '\n\nتبقى ' + (ls.length - plan.length) + ' بلا بديل متاح.' : ''))) return;
+    for (var i = 0; i < plan.length; i++) {
+      var r = await subSave(st.day, plan[i].s, plan[i].t.id);
+      if (r.error) { S.subs = null; render(); return fail(r.error); }
+    }
+    S.subs = null;
+    render();
+    toast('وُزّعت ' + nLessons(plan.length) + ' احتياط');
+  }
+
+  // ورقة الاحتياط اليومية: صفحة واحدة، وخانة توقيع لكل معلم بديل
+  var pendingSubs = null;
+  function buildSubsSheet(day) {
+    var ls = subLessons(day), n = 7;
+    var head = reportHead('حصص الاحتياط', [['اليوم', dayName(day) + ' ' + dmy(day)], ['عدد الحصص', ls.length]]).replace(/^<img class="wm"[^>]*>/, '');
+    var absList = S.subs.abs.filter(function (a) { return a.day === day; }).map(function (a) {
+      return ttTName(a.teacher_id) + (a.periods && a.periods.length ? ' (الحصص ' + a.periods.join('، ') + ')' : '');
+    });
+    var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
+    var body = ls.map(function (l, i) {
+      var s = l.s, t = ttTimeFor(s.class_name, s.period), sub = l.rec && l.rec.sub_teacher_id;
+      return '<tr>' + c(i + 1) + c((TT_ORD[s.period - 1] || s.period) + (t ? '<br><small>' + ttRange(t[0], t[1]) + '</small>' : ''), true) + c(esc(s.class_name)) +
+        '<td>' + esc(ttFixSubject(s.subject) || '—') + '</td><td>' + esc(ttTName(s.teacher_id)) + '</td><td><b>' + esc(sub ? ttTName(sub) : '') + '</b></td><td style="min-width:7em"></td></tr>';
+    }).join('');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>الحصة</th><th>الشعبة</th><th>المادة</th><th>المعلم الغائب</th><th>معلم الاحتياط</th><th>توقيع المعلم</th></tr></thead>' +
+      '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
+      (absList.length ? '<p style="font-size:.9em;margin:.6em 0 0"><b>المعلمون الغائبون:</b> ' + esc(absList.join('، ')) + '</p>' : '') +
+      reportSigns([['المشرف التربوي', ''], ['مدير الأكاديمية', principalName()]]);
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/timetable/subs') return;
+    var el;
+    if (e.target.closest('[data-subprint]')) { pendingSubs = subState().day; return printNow(); }
+    if (!canEditTT()) return;
+    if (e.target.closest('[data-subadd]')) subAddAbsence();
+    else if ((el = e.target.closest('[data-subdel]'))) subDelAbsence(el.getAttribute('data-subdel'));
+    else if (e.target.closest('[data-subauto]')) subAuto();
+  });
+  document.addEventListener('change', async function (e) {
+    if (location.hash !== '#/timetable/subs') return;
+    var st = subState(), el = e.target;
+    if (el.id === 'sub-day') { if (el.value) { st.day = el.value; st.add = ''; st.periods = {}; render(); } return; }
+    if (!canEditTT()) return;
+    if (el.id === 'sub-add') { st.add = el.value; st.periods = {}; render(); }
+    else if (el.id === 'sub-reason') st.reason = el.value;
+    else if (el.id === 'sub-all') { st.periods = {}; render(); }
+    else if (el.hasAttribute('data-subp')) { var p = el.getAttribute('data-subp'); if (el.checked) st.periods[p] = 1; else delete st.periods[p]; render(); }
+    else if (el.hasAttribute('data-subpick')) {
+      var q = el.getAttribute('data-subpick').split('|'), per = +q.pop(), cls = q.join('|');
+      var l = subLessons(st.day).filter(function (x) { return x.s.class_name === cls && x.s.period === per; })[0];
+      if (!l) return;
+      var r = await subSave(st.day, l.s, el.value);
+      if (r.error) return fail(r.error);
+      S.subs = null;
+      render();
+    }
+  });
+
   function renderTimetable() {
     if (S.ttMissing) {
       app.innerHTML = tabs('timetable') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لجدول الحصص بعد.<br>' +
@@ -7683,13 +7955,14 @@
     else if (view === 'bells') body = ttBellsHtml();
     else if (view === 'quota') body = ttQuotaHtml();
     else if (view === 'improve') body = ttImproveHtml();
+    else if (view === 'subs') body = ttSubsHtml();
     else if (view === 'review') body = ttReviewHtml(cf);
     else if (view === 'teachers') body = ttTeacherHtml(cf);
     else body = ttClassHtml(cf);
     var empty = !S.ttSessions.length && !/^(import|bells|quota)$/.test(view)
       ? '<div class="card empty">لا توجد حصص بعد.' + (canEditTT() ? ' استوردها من ملف الجدول من «استيراد من ملف»، أو أضفها بالضغط على خانات الجدول.' : '') + '</div>' : '';
     app.innerHTML = tabs('timetable') + (view === 'mine' ? '' : ttNav(view, cf)) + empty + ttEditorHtml() + body +
-      (/^(import|review|quota|improve)$/.test(view) ? '' : ttPrintBar(view));
+      (/^(import|review|quota|improve|subs)$/.test(view) ? '' : ttPrintBar(view));
   }
 
   /* ----- الشبكة ----- */
@@ -11794,7 +12067,8 @@
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.removeAttribute('data-pages');
-    if (pendingTT) buildTtSheet(pendingTT);
+    if (pendingSubs) buildSubsSheet(pendingSubs);
+    else if (pendingTT) buildTtSheet(pendingTT);
     else if (pendingLed) buildLedSheet();
     else if (pendingRep) buildRepSheet();
     else if (pendingAtt) buildAttSheet(pendingAtt);
@@ -11812,6 +12086,7 @@
     else return false;
     if (sheet.classList.contains('ls')) { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
     pendingTT = null;
+    pendingSubs = null;
     pendingReceipt = null;
     pendingProfile = null;
     pendingBlank = false;
