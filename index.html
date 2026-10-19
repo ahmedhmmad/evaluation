@@ -1121,7 +1121,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 2';
+  var APP_BUILD = '20/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7021,7 +7021,13 @@
     return a < 1e9 ? [ttHm(a), ttHm(b)] : ['', ''];
   }
 
-  function ttTName(id) { var t = id && find(id); return t ? t.name : 'بدون معلم'; }
+  // اسم المعلم في الجداول: الأول والأخير؛ ويبقى كاملًا إن تشابه مختصره مع اسم آخر في بيانات العاملين
+  function ttName(t) {
+    if (!t) return 'بدون معلم';
+    var sh = ttShortName(t.name);
+    return S.teachers.some(function (x) { return x !== t && ttShortName(x.name) === sh; }) ? t.name : sh;
+  }
+  function ttTName(id) { var t = id && find(id); return t ? ttName(t) : 'بدون معلم'; }
 
   // الاسم الأول واسم العائلة: «سحر أحمد محمد الطويل» ← «سحر الطويل». الأسماء المركبة تبقى كاملة («عبد الرحمن»، «عطا الله»، «أبو القمبز»)
   function ttFamily(words) {
@@ -7034,7 +7040,7 @@
     var fam = ttFamily(words), short = first + ' ' + fam;
     return words.length <= 2 || short.split(' ').length >= words.length ? String(full || '').trim() : short;
   }
-  function ttShortTName(id) { var t = id && find(id); return t ? ttShortName(t.name) : 'بدون معلم'; }
+  function ttShortTName(id) { return ttTName(id); }
 
   function ttLev(a, b) {
     var p = [], i, j;
@@ -7160,7 +7166,7 @@
   /* ----- الشبكة ----- */
   function ttPicker(kind, items, cur, cf) {
     return '<div class="tt-picker" role="group" aria-label="' + (kind === 't' ? 'المعلمون' : 'الصفوف') + '">' + items.map(function (x) {
-      var id = kind === 't' ? x.id : x, label = kind === 't' ? x.name : x;
+      var id = kind === 't' ? x.id : x, label = kind === 't' ? ttName(x) : x;
       var bad = S.ttSessions.some(function (s) {
         return s.status !== 'removed' && (kind === 't' ? s.teacher_id === id : s.class_name === id) && (cf.ids[s.id] || s.status === 'review');
       });
@@ -7256,7 +7262,7 @@
       }).map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + (x.category ? ' — ' + esc(x.category) : '') + '</option>'; }).join('') + '</select> ' +
       '<button type="button" class="btn" data-ttmoveto="' + t.id + '">نقل الحصص</button></details>' : '';
     return '<div class="card">' + ttPicker('t', list, t.id, cf) + add +
-      '<div class="tt-head" style="margin-top:10px"><div><h2>' + esc(t.name) + '</h2>' + (sub ? '<p class="hint" style="margin:0">' + sub + '</p>' : '') + '</div>' + ttTeacherStats(mine) + '</div>' +
+      '<div class="tt-head" style="margin-top:10px"><div><h2>' + esc(ttName(t)) + '</h2>' + (sub ? '<p class="hint" style="margin:0">' + sub + '</p>' : '') + '</div>' + ttTeacherStats(mine) + '</div>' +
       (function () {
         var sc = ttEvalT(t.id, mine, ttRuleSet(), ttPeriods());
         return sc.notes.length ? '<p class="formhint" style="margin:0 0 10px">حسب قواعد الجدول: ' + sc.notes.map(esc).join('، ') +
@@ -7271,7 +7277,7 @@
     if (!t) return '<div class="card empty">حسابك غير مربوط بسجل معلم. راجع إدارة الأكاديمية.</div>';
     var mine = ttLive().filter(function (s) { return s.teacher_id === t.id; });
     if (!mine.length) return '<div class="card empty">لا توجد حصص مسجلة لك في جدول الحصص.</div>';
-    return '<div class="card"><div class="tt-head"><div><h2>' + esc(t.name) + '</h2></div>' + ttTeacherStats(mine) + '</div>' +
+    return '<div class="card"><div class="tt-head"><div><h2>' + esc(ttName(t)) + '</h2></div>' + ttTeacherStats(mine) + '</div>' +
       ttGridHtml(mine, 'mine', null, cf) + ttSubjects(mine) + '</div>' +
       '<div class="card no-print"><div class="toolbar" style="margin:0"><button type="button" class="btn" data-ttprint="t|' + t.id + '" data-ro-ok>طباعة جدولي / PDF</button></div></div>';
   }
@@ -7344,7 +7350,7 @@
         field('tte-class', 'الصف', '<select id="tte-class">' + (e.class_name ? '' : opt('', '— اختر —', '')) + ttClasses().map(function (c) { return opt(c, c, e.class_name); }).join('') + '</select>') +
         field('tte-subject', 'المادة', '<select id="tte-subject">' + (e.subject || e.newSubject ? '' : opt('', '— اختر —', '')) + subs.map(function (x) { return opt(x, x, e.newSubject ? '' : e.subject); }).join('') + opt('__new', 'مادة أخرى…', e.newSubject ? '__new' : '') + '</select>' +
           (e.newSubject ? '<input type="text" id="tte-subnew" placeholder="اسم المادة" value="' + esc(e.subject) + '" style="margin-top:6px">' : '')) +
-        field('tte-teacher', 'المعلم', '<select id="tte-teacher">' + opt('', 'بدون معلم', e.teacher_id) + ttTeacherChoices(e.teacher_id).map(function (x) { return opt(x.id, x.name, e.teacher_id); }).join('') + '</select>') +
+        field('tte-teacher', 'المعلم', '<select id="tte-teacher">' + opt('', 'بدون معلم', e.teacher_id) + ttTeacherChoices(e.teacher_id).map(function (x) { return opt(x.id, ttName(x), e.teacher_id); }).join('') + '</select>') +
         field('tte-note', 'ملاحظة', '<input type="text" id="tte-note" placeholder="اختياري" value="' + esc(e.note) + '">') +
       '</div>' +
       '<label class="check"><input type="checkbox" id="tte-review"' + (e.status === 'review' ? ' checked' : '') + '> تحتاج تأكيدًا</label>' +
@@ -8095,7 +8101,7 @@
       var s2 = subs.slice();
       if (r.subject && s2.indexOf(r.subject) < 0) s2.push(r.subject);
       return '<tr><td>' + (edit ? '<select data-tq="' + x.i + '" data-f="subject">' + opt('', '— المادة —', r.subject) + s2.map(function (s) { return opt(s, s, r.subject); }).join('') + '</select>' : esc(r.subject)) + '</td>' +
-        '<td>' + (edit ? '<select data-tq="' + x.i + '" data-f="teacher_id">' + opt('', 'بدون معلم', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, t.name, r.teacher_id); }).join('') + '</select>' : esc(ttTName(r.teacher_id))) + '</td>' +
+        '<td>' + (edit ? '<select data-tq="' + x.i + '" data-f="teacher_id">' + opt('', 'بدون معلم', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, ttName(t), r.teacher_id); }).join('') + '</select>' : esc(ttTName(r.teacher_id))) + '</td>' +
         '<td>' + (edit ? '<input type="number" min="0" max="30" step="1" data-tq="' + x.i + '" data-f="count" value="' + esc(r.count) + '" style="width:5em">' : esc(r.count)) + '</td>' +
         '<td style="white-space:nowrap">' + got + '</td><td>' + (ok ? '<span class="badge approved">مطابق</span>' : '<span class="badge unpaid">في الجدول ' + got + '</span>') + '</td>' +
         (edit ? '<td><button type="button" class="btn danger" data-tqdel="' + x.i + '" title="حذف السطر">×</button></td>' : '') + '</tr>';
@@ -8167,8 +8173,8 @@
         if (k === 'subjects') return field('المادة', '<input type="text" list="tt-subjlist" data-trc="' + i + '|subjects" value="' + esc(r.subjects || '') + '" placeholder="مثال: قرآن" style="width:13em"' + dis + ' title="أكثر من مادة: افصل بفاصلة">');
         if (k === 'periods') return field('الحصص', chips(i, 'periods', NP, function (v) { return v; }, r.periods));
         if (k === 'days') return field('الأيام', chips(i, 'days', cfg.days.length, function (v) { return cfg.days[v]; }, r.days));
-        if (k === 'teacher') return field('المعلم', '<select data-trc="' + i + '|teacher_id"' + dis + '>' + opt('', '— اختر —', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, t.name, r.teacher_id); }).join('') + '</select>');
-        if (k === 'teacherAll') return field('المعلم', '<select data-trc="' + i + '|teacher_id"' + dis + '>' + opt('', 'كل المعلمين', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, t.name, r.teacher_id); }).join('') + '</select>');
+        if (k === 'teacher') return field('المعلم', '<select data-trc="' + i + '|teacher_id"' + dis + '>' + opt('', '— اختر —', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, ttName(t), r.teacher_id); }).join('') + '</select>');
+        if (k === 'teacherAll') return field('المعلم', '<select data-trc="' + i + '|teacher_id"' + dis + '>' + opt('', 'كل المعلمين', r.teacher_id) + ttTeacherChoices(r.teacher_id).map(function (t) { return opt(t.id, ttName(t), r.teacher_id); }).join('') + '</select>');
         if (k === 'n') return field('العدد', '<input type="number" min="0" max="30" data-trc="' + i + '|n" value="' + esc(r.n == null ? '' : r.n) + '" style="width:5em"' + dis + '>');
         return '';
       }).join('');
@@ -8389,7 +8395,7 @@
     var scored = ttTeachers().map(function (t) { var e = ev.t[t.id] || { soft: 0, hard: 0, notes: [] }; return { t: t, e: e }; })
       .sort(function (a, b) { return (b.e.hard * 1000 + b.e.soft) - (a.e.hard * 1000 + a.e.soft) || a.t.name.localeCompare(b.t.name, 'ar'); });
     var opts = '<option value="">كل المعلمين والشعب (يقلّ مجموع المخالفات ولا يسوء جدول أحد)</option>' + scored.map(function (x) {
-      return '<option value="' + x.t.id + '"' + (ui.ttImpT === x.t.id ? ' selected' : '') + '>' + esc(x.t.name) + ' — الدرجة ' + x.e.soft + (x.e.hard ? ' · ملزمة ' + x.e.hard : '') + '</option>';
+      return '<option value="' + x.t.id + '"' + (ui.ttImpT === x.t.id ? ' selected' : '') + '>' + esc(ttName(x.t)) + ' — الدرجة ' + x.e.soft + (x.e.hard ? ' · ملزمة ' + x.e.hard : '') + '</option>';
     }).join('');
     var res = ui.ttOpt, card = '';
     if (res && res.tid === (ui.ttImpT || '') && (res.tol || 0) === (ui.ttTol || 0)) {
@@ -8573,7 +8579,7 @@
       return r + '</tr>';
     }).join('');
     return '<section class="tt-page" data-base="13">' + letterhead() +
-      '<div class="tt-ptitle">' + (isT ? 'جدول المعلم/ة: ' + esc(x.name) : 'جدول الصف ' + esc(x)) + '</div>' +
+      '<div class="tt-ptitle">' + (isT ? 'جدول المعلم/ة: ' + esc(ttName(x)) : 'جدول الصف ' + esc(x)) + '</div>' +
       '<div class="tt-pmeta">' + meta.filter(Boolean).map(esc).join(' · ') + '</div>' +
       '<table class="tt-ptable"><thead>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
       (ttSignOn() ? '<div class="tt-sig"><span>المشرف التربوي: ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div>' : '') + '</section>';
@@ -8590,7 +8596,7 @@
     var head2 = '<tr>';
     for (var d = 0; d < ND; d++) for (var p = 1; p <= NP; p++) head2 += '<th class="per' + (p === 1 ? ' ds' : '') + '">' + p + '</th>';
     var body = rows.map(function (r) {
-      var id = byCls ? r : r.id, tr = '<tr class="tt-r"><th class="rh">' + esc(byCls ? ttShortCls(r) : r.name) + '</th>';
+      var id = byCls ? r : r.id, tr = '<tr class="tt-r"><th class="rh">' + esc(byCls ? ttShortCls(r) : ttName(r)) + '</th>';
       for (var d2 = 0; d2 < ND; d2++) for (var q = 1; q <= NP; q++) {
         var v = map[id + '|' + d2 + '|' + q], tx = v ? v.join(' / ') : '';
         tr += '<td' + (q === 1 ? ' class="ds"' : '') + '>' + (tx.length > 6 ? '<span class="sm">' + esc(tx) + '</span>' : esc(tx)) + '</td>';
