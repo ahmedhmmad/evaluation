@@ -50,8 +50,9 @@
   <button type="button" class="test" id="t-break">تجربة نغمة الاستراحة</button>
   <button type="button" id="fs">ملء الشاشة</button>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script>/* مكتبة الاتصال بإصدار ثابت يعمل على المتصفحات القديمة؛ إن حُجب مصدرها تُحمَّل من مصدر احتياطي */ window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"><\/script>');</script>
 <script>
 (function () {
   var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;

@@ -787,8 +787,9 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <div id="print-sheet" aria-hidden="true"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script>/* مكتبة الاتصال بإصدار ثابت يعمل على المتصفحات القديمة؛ إن حُجب مصدرها تُحمَّل من مصدر احتياطي */ window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"><\/script>');</script>
 <script>
 (function () {
   'use strict';
@@ -1120,7 +1121,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '19/10 — 8';
+  var APP_BUILD = '20/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1479,6 +1480,13 @@
   /* ---------- الدخول ---------- */
 
   function renderSetup() {
+    // المكتبة لم تُحمَّل (انقطاع، أو شبكة تحجب مصدرها، أو متصفح قديم جدًا): رسالة تدل على السبب الحقيقي
+    if (!window.supabase) {
+      app.innerHTML = '<div class="card empty">تعذّر تحميل مكتبة الاتصال بقاعدة البيانات على هذا الجهاز.<br>' +
+        'تحقق من الاتصال بالإنترنت ثم أعد تحميل الصفحة. إن تكرر ذلك فقد تكون شبكة المكان تحجب الموقعين ' +
+        '<span dir="ltr">cdn.jsdelivr.net</span> و<span dir="ltr">unpkg.com</span>، أو يكون المتصفح قديمًا: جرّب شبكة أخرى (بيانات الجوال) أو حدّث المتصفح.</div>';
+      return;
+    }
     app.innerHTML = '<div class="card empty">لم يتم ربط قاعدة البيانات بعد.<br>أضف عنوان المشروع والمفتاح العام في الملف <code dir="ltr">config.js</code>.</div>';
   }
 

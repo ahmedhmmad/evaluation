@@ -43,8 +43,9 @@
 <header><h1 id="title">تسجيل الغياب</h1><div class="sub" id="sub"></div></header>
 <main id="main"><div class="msg">جارٍ التحميل…</div></main>
 <div class="bar" id="bar" hidden></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script>/* مكتبة الاتصال بإصدار ثابت يعمل على المتصفحات القديمة؛ إن حُجب مصدرها تُحمَّل من مصدر احتياطي */ window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"><\/script>');</script>
 <script>
 (function () {
   'use strict';
