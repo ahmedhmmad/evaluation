@@ -75,6 +75,14 @@
   function dmy(iso) { iso = String(iso || '').slice(0, 10); return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
   function dayName(iso) { return WEEK[new Date(iso + 'T00:00').getDay()]; }
   function monthLabel(m) { return new Date(m + '-01T00:00').toLocaleDateString('ar-u-nu-latn', { month: 'long', year: 'numeric' }); }
+  // دورة المواصلات كما في البرنامج: «نوفمبر 2026 (15/11 – 14/12)»؛ وإن طابقت الشهر الميلادي فاسمه وحده
+  function cycleLabel(m) {
+    var from = String(m.from || ''), to = String(m.to || ''), dm = function (iso) { return iso.slice(8, 10) + '/' + iso.slice(5, 7); };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return monthLabel(m.month);
+    var end = new Date(Number(m.month.slice(0, 4)), Number(m.month.slice(5, 7)), 0).getDate();
+    if (from === m.month + '-01' && to === m.month + '-' + pad(end)) return monthLabel(m.month);
+    return monthLabel(m.month) + ' (⁧' + dm(from) + ' – ' + dm(to) + '⁩)';
+  }
   function money(x) { return (Math.round(Number(x) * 100) / 100).toLocaleString('en') + ' ج.م'; }
   // فترة زمنية تُقرأ من اليمين: البداية ثم النهاية
   function range(f, t) { return '⁧' + f + ' – ' + t + '⁩'; }
@@ -125,7 +133,7 @@
       (months.length
         ? months.map(function (m) {
             var left = m.due != null && Number(m.due) > Number(m.paid) ? Number(m.due) - Number(m.paid) : 0;
-            return '<div class="month"><div class="top"><span>' + monthLabel(m.month) + '</span>' +
+            return '<div class="month"><div class="top"><span>' + esc(cycleLabel(m)) + '</span>' +
               (left ? '<span class="tag part">المتبقي ' + money(left) + '</span>' : '<span class="tag ok">مسدَّد ' + money(m.paid) + '</span>') + '</div>' +
               (m.receipts || []).map(function (r) {
                 return '<div class="rc">إيصال رقم ' + esc(r.no) + ' · ' + money(r.amount) + ' · ' + dmy(r.on) + '</div>';

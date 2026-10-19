@@ -32,20 +32,12 @@ language sql immutable as $$
   select lower(btrim(regexp_replace(translate(regexp_replace(coalesce(p, ''), '[ً-ْـ*؟?:]', '', 'g'), 'أإآةى', 'اااهي'), '\s+', ' ', 'g')))
 $$;
 
--- إعدادات الرسوم من «إعداد الفصول»: { first, next, dueDay }
-create or replace function public.api_fees() returns jsonb
-language sql stable security definer set search_path = public as $$
-  with c as (select case when jsonb_typeof(classes) = 'object' then classes -> 'fees' end as f from settings where id = 1)
-  select jsonb_build_object(
-    'first', case when (f ->> 'first') ~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$' then (f ->> 'first')::numeric else 700 end,
-    'next', case when (f ->> 'next') ~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$' then (f ->> 'next')::numeric else 600 end,
-    'dueDay', case when (f ->> 'dueDay') ~ '^\s*[0-9]+(\.[0-9]+)?\s*$' and (f ->> 'dueDay')::numeric between 1 and 28 then round((f ->> 'dueDay')::numeric)::int else 5 end)
-  from c
-$$;
+-- «الشهر» في المواصلات دورة: تُعرف بشهر بدايتها، ومواعيدها ورسومها من transport_cycle() (supabase/transport_cycles.sql)
+drop function if exists public.api_fees();
 
--- آخر يوم لسداد اشتراك الشهر
+-- آخر موعد لسداد اشتراك الدورة
 create or replace function public.api_deadline(p_month text) returns date
-language sql stable as $$ select (p_month || '-' || lpad((public.api_fees() ->> 'dueDay'), 2, '0'))::date $$;
+language sql stable security definer set search_path = public as $$ select (public.transport_cycle(p_month) ->> 'due')::date $$;
 
 -- ===================================================================================================
 -- المواصلات: المطلوب من كل مشترك عن شهر (مثل payRows / dueRows في الموقع)
@@ -58,7 +50,7 @@ create or replace function public.api_transport_dues(p_month text)
 returns table (student_id uuid, group_id uuid, share numeric, paid numeric, left_amount numeric, exempt boolean, status text, state text, family_rank int, family_size int)
 language plpgsql stable security definer set search_path = public as $$
 declare
-  fees jsonb := public.api_fees();
+  fees jsonb := public.transport_cycle(p_month);   -- رسوم الدورة: الأول والإخوة
   today date := public.api_today();
 begin
   if p_month !~ '^\d{4}-\d{2}$' then raise exception 'الشهر بصيغة YYYY-MM'; end if;
@@ -170,7 +162,7 @@ end $$;
 -- المتأخرون في دفع المواصلات عن شهر (وكل من عليه متبقٍّ، بحالته)
 create or replace function public.api_late_payers(p_month text default null) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
-declare mon text := coalesce(nullif(p_month, ''), to_char(public.api_today(), 'YYYY-MM'));
+declare mon text := coalesce(nullif(p_month, ''), public.transport_current_cycle(public.api_today()));
 begin
   perform public.api_need('superadmin', 'manager');
   return (
@@ -181,7 +173,7 @@ begin
       where d.left_amount > 0
     )
     select jsonb_build_object(
-      'month', mon, 'deadline', public.api_deadline(mon),
+      'month', mon, 'cycle', public.transport_cycle(mon), 'deadline', public.api_deadline(mon),
       'days_late', greatest(0, public.api_today() - public.api_deadline(mon)),
       'counts', jsonb_build_object('late', (select count(*) from d where state = 'late'), 'extended', (select count(*) from d where state = 'extended'),
                                    'suspended', (select count(*) from d where state = 'suspended'), 'grace', (select count(*) from d where state = 'grace')),
@@ -220,7 +212,7 @@ create or replace function public.api_dashboard() returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare
   d date := public.api_today();
-  mon text := to_char(d, 'YYYY-MM');
+  mon text := public.transport_current_cycle(d);
   wd text := (array['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'])[extract(dow from d)::int + 1];
   days jsonb;
   att jsonb; res jsonb;
@@ -238,7 +230,7 @@ begin
   if public.my_role() = 'supervisor' then return res; end if;
 
   return res || (
-    with rec as (select * from public.api_receipt_rows(date_trunc('month', d)::date, d)),
+    with rec as (select * from public.api_receipt_rows((public.transport_cycle(mon) ->> 'from')::date, d)),
     due as (select * from public.api_transport_dues(mon)),
     caps as (
       select e ->> 'name' as name, case when (e ->> 'capacity') ~ '^[0-9]+$' and (e ->> 'capacity')::int > 0 then (e ->> 'capacity')::int end as cap
@@ -248,6 +240,7 @@ begin
       select c.name, c.cap, (select count(*) from students x where x.status in ('final', 'reserve') and x.class_name = c.name) as n from caps c where c.cap is not null
     )
     select jsonb_build_object(
+      'cycle', public.transport_cycle(mon),
       'collected_today', jsonb_build_object('total', coalesce((select sum(amount) from rec where paid_on = d), 0), 'cash', coalesce((select sum(amount) from rec where paid_on = d and method = 'cash'), 0),
                                             'count', (select count(*) from rec where paid_on = d)),
       'collected_month', jsonb_build_object('total', coalesce((select sum(amount) from rec), 0), 'cash', coalesce((select sum(amount) from rec where method = 'cash'), 0), 'count', (select count(*) from rec)),
@@ -293,7 +286,7 @@ language plpgsql stable security definer set search_path = public as $$
 declare
   x students;
   y0 date := make_date(extract(year from public.api_today())::int - case when extract(month from public.api_today()) < 9 then 1 else 0 end, 9, 1);
-  mon text := to_char(public.api_today(), 'YYYY-MM');
+  mon text := public.transport_current_cycle(public.api_today());
 begin
   perform public.api_need('superadmin', 'manager');
   select * into x from students where id = p_id;
@@ -563,7 +556,7 @@ do $$
 declare f text;
 begin
   foreach f in array array[
-    'api_need(text[])', 'api_fees()', 'api_deadline(text)', 'api_transport_dues(text)', 'api_receipt_rows(date, date)',
+    'api_need(text[])', 'api_deadline(text)', 'api_transport_dues(text)', 'api_receipt_rows(date, date)',
     'api_tt_days()', 'api_tt_day_index(date)', 'api_period_time(text, integer)', 'api_sub_candidates(date, text, integer)', 'api_att_who()'] loop
     execute 'revoke all on function public.' || f || ' from public, anon, authenticated';
   end loop;

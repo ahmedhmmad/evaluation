@@ -2,7 +2,7 @@
 -- ولي الأمر يُعرَف برقم هويته في ملف التسجيل، وإن لم يوجد فبرقم الجوال، وإلا فالرابط للطالب وحده.
 -- يُنشئ المدير العام الروابط ويلغيها من شاشة «روابط أولياء الأمور»؛ وكل شيء يمر عبر الدوال أدناه.
 -- لا يظهر في الرابط أي رقم هاتف أو هوية، ولا بيانات أي طالب آخر.
--- شغّل هذا الملف مرة في محرر SQL في Supabase (بعد attendance.sql و timetable.sql). لا يغيّر أي بيانات موجودة.
+-- شغّل هذا الملف مرة في محرر SQL في Supabase (بعد attendance.sql و timetable.sql و transport_cycles.sql). لا يغيّر أي بيانات موجودة.
 
 -- مفتاح ولي الأمر لطالب: 'id:' + رقم الهوية، أو 'tel:' + الجوال بصيغة الواتساب، أو 'st:' + معرّف الطالب.
 -- يجب أن يطابق guardianKey() في index.html
@@ -60,6 +60,7 @@ begin
       -- الإيصالات: الأول بمبلغه الأول (قبل الإيصالات المكمِّلة)، ثم المكمِّلة؛ والمتبقي عن الشهر إن كان مطلوبه مسجّلًا
       'months', (select coalesce(jsonb_agg(jsonb_build_object(
                     'month', p.month, 'paid', p.amount, 'due', to_jsonb(p) -> 'due',
+                    'from', public.transport_cycle(p.month) -> 'from', 'to', public.transport_cycle(p.month) -> 'to',   -- الدورة (transport_cycles.sql)
                     'receipts', (select jsonb_agg(r order by (r ->> 'no')::bigint) from (
                         select jsonb_build_object('no', p.receipt_no, 'amount',
                                  coalesce((select t.paid_before from transport_topups t where t.student_id = p.student_id and t.month = p.month order by t.receipt_no limit 1), p.amount),

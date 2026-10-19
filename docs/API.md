@@ -4,7 +4,7 @@
 كل العمليات **دوال** في القاعدة تُستدعى بـ `rpc`، تعيد JSON، وتتحقق كل دالة بنفسها من صلاحية صاحب الحساب.
 منطق الحساب فيها هو منطق الموقع نفسه، فتتطابق الأرقام بين الموقع والتطبيق.
 
-> قبل الاستعمال: يُشغَّل الملف `supabase/api.sql` مرة في محرر SQL في Supabase (بعد ملفات SQL السابقة كلها، ومنها `substitutes.sql` و`parent_links.sql`).
+> قبل الاستعمال: يُشغَّل الملف `supabase/api.sql` مرة في محرر SQL في Supabase، بعد ملفات SQL السابقة كلها، ومنها `substitutes.sql` و`transport_cycles.sql` و`parent_links.sql`.
 
 ---
 
@@ -69,6 +69,11 @@ try {
 ```
 
 - التواريخ بصيغة `YYYY-MM-DD`، والأشهر بصيغة `YYYY-MM`.
+- **«الشهر» في المواصلات دورة:**
+  - تُعرف الدورة بشهر بدايتها، فمثلًا `2026-11` هي الدورة من 15/11 إلى 14/12 إن كانت الدورات تبدأ يوم 15.
+  - بدايتها ونهايتها وموعد سدادها ورسومها تُضبط من الموقع (صفحة الباصات ← «دورات المواصلات ورسومها»).
+  - الدوال التي تعيد `cycle` تعطي: `{ key, from, to, due, first, next, custom }`.
+  - الافتراضي في كل دالة هو الدورة الجارية (التي يقع فيها اليوم)، لا الشهر الميلادي.
 - «اليوم» هو تاريخ مصر (Africa/Cairo).
 - المبالغ بالجنيه المصري.
 - `method` وسيلة الدفع: `cash` نقدًا، `instapay` إنستاباي، `vodafone` فودافون كاش، `other` أخرى.
@@ -85,8 +90,9 @@ try {
   "day": "2026-10-19",
   "attendance": { "school_day": true, "weekday": "الاثنين", "taken": 240, "absent": 12, "classes_missing": 2 },
   "collected_today": { "total": 3500, "cash": 3200, "count": 9 },
+  "cycle": { "key": "2026-10", "from": "2026-10-15", "to": "2026-11-14", "due": "2026-10-20", "first": 700, "next": 600, "custom": false },
   "collected_month": { "total": 41200, "cash": 30100, "count": 98 },
-  "late": { "count": 14, "owed": 8400, "suspended": 1, "deadline": "2026-10-05" },
+  "late": { "count": 14, "owed": 8400, "suspended": 1, "deadline": "2026-10-20" },
   "new_students": { "month": 6, "week": 2, "pending": 4 },
   "classes": { "full": ["الأول أ"], "over": [] }
 }
@@ -94,13 +100,15 @@ try {
 
 - `school_day = false`: اليوم ليس من أيام الدراسة في الجدول.
 - `late.owed`: المتبقي على المتأخرين فقط، كما في رئيسية الموقع.
+- `collected_month`: المحصَّل من بداية الدورة الجارية (`cycle.from`) إلى اليوم.
 
 ### `api_late_payers(p_month)` — المتأخرون في المواصلات
 **الصلاحية:** المدير العام، المدير. `p_month` اختياري (الافتراضي الشهر الحالي).
 
 ```json
 {
-  "month": "2026-10", "deadline": "2026-10-05", "days_late": 14,
+  "month": "2026-10", "cycle": { "key": "2026-10", "from": "2026-10-15", "to": "2026-11-14", "due": "2026-10-20", "first": 700, "next": 600, "custom": false },
+  "deadline": "2026-10-20", "days_late": 0,
   "counts": { "late": 14, "extended": 2, "suspended": 1, "grace": 0 },
   "owed": 9900,
   "students": [

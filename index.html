@@ -1136,7 +1136,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 17';
+  var APP_BUILD = '20/10 — 18';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1490,11 +1490,12 @@
   async function loadDash() {
     if (loadingDash) return;
     loadingDash = true;
-    var today = todayISO(), month = today.slice(0, 7), d = { day: today, month: month, at: new Date() };
+    // «الشهر» في المواصلات هو الدورة الجارية (من بدايتها إلى اليوم)
+    var today = todayISO(), month = canView() ? currentCycle(today) : today.slice(0, 7), d = { day: today, month: month, at: new Date() };
     var att = await fetchAll(function () { return sb.from('attendance').select('student_id, status, class_name').eq('day', today).order('student_id'); });
     d.att = att ? attNormRows(att) : null;
     if (canView() && !S.transportMissing) {
-      var got = await receiptsBetween(month + '-01', today);
+      var got = await receiptsBetween(cycleOf(month).from, today);
       d.recs = got ? got.list : null;
       if (!S.tPay[month]) await loadPayments(month);
     }
@@ -1538,7 +1539,7 @@
         var td = sum(d.recs.filter(function (r) { return r.day === d.day; })), mo = sum(d.recs);
         var split = function (t) { return t.n + ' إيصالًا · نقدًا ' + money(t.cash) + ' · تحويلات ' + money(t.all - t.cash); };
         cards += stat('#/transport/ledger', 'حصيلة المواصلات اليوم', money(td.all), split(td)) +
-          stat('#/transport/ledger', 'حصيلة ' + monthLabel(d.month), money(mo.all), split(mo));
+          stat('#/transport/ledger', 'حصيلة ' + tLabel(d.month), money(mo.all), split(mo));
       }
       // المتأخرون عن سداد اشتراك هذا الشهر بعد المهلة
       if (!S.transportMissing && !S.busMissing && S.tPay[d.month]) {
@@ -2852,7 +2853,7 @@
 
     if (pays.length) {
       var sum = pays.reduce(function (a, p) { return a + Number(p.amount); }, 0);
-      var what = pays.length + ' دفعة مواصلات بمجموع ' + money(sum) + ' (' + pays.map(function (p) { return monthLabel(p.month); }).join('، ') + ')';
+      var what = pays.length + ' دفعة مواصلات بمجموع ' + money(sum) + ' (' + pays.map(function (p) { return tLabel(p.month); }).join('، ') + ')';
       if (!keep) {
         return alert('لا يمكن حذف «' + st.full_name + '»: له ' + what + '.\n\nحذف السجل يحذف دفعاته. إن كان الحذف مقصودًا فاحذف إيصالاته أولًا من شاشة المواصلات (تُحفظ في أرشيف الإيصالات)، أو استردّها.');
       }
@@ -2861,7 +2862,7 @@
       if (!theirs) return toast('تعذر التحقق من دفعات السجل الآخر؛ لم يُحذف شيء.', true);
       var clash = pays.filter(function (p) { return theirs.some(function (o) { return o.month === p.month; }); });
       if (clash.length) {
-        return alert('لم يُحذف شيء: للسجلين دفعة عن الشهر نفسه (' + clash.map(function (p) { return monthLabel(p.month); }).join('، ') + ').\nاحذف إيصال أحدهما أو استردّه أولًا ثم أعد المحاولة.');
+        return alert('لم يُحذف شيء: للسجلين دفعة عن الشهر نفسه (' + clash.map(function (p) { return tLabel(p.month); }).join('، ') + ').\nاحذف إيصال أحدهما أو استردّه أولًا ثم أعد المحاولة.');
       }
       var mv = await sb.from('transport_payments').update({ student_id: keep.id }).eq('student_id', st.id);
       if (mv.error) return fail(mv.error);
@@ -3763,26 +3764,28 @@
     if (!x || !m) return;
     if (stop) {
       if (((S.tPay[ui.tMonth] || {})[sid] || {}).amount > 0) {
-        return alert('للطالب «' + x.full_name + '» دفعة مسجلة عن ' + monthLabel(ui.tMonth) + '.\nاحذف إيصالها أولًا إن كان لن يشترك هذا الشهر، أو اختر الشهر التالي من أعلى الصفحة ثم أوقف الاشتراك ابتداءً منه.');
+        return alert('للطالب «' + x.full_name + '» دفعة مسجلة عن ' + tLabel(ui.tMonth) + '.\nاحذف إيصالها أولًا إن كان لن يشترك هذا الشهر، أو اختر الشهر التالي من أعلى الصفحة ثم أوقف الاشتراك ابتداءً منه.');
       }
-      if (!confirm('إيقاف اشتراك «' + x.full_name + '» في المواصلات ابتداءً من ' + monthLabel(ui.tMonth) + '؟\n\nلن يُطلب منه اشتراك هذا الشهر وما بعده. الأشهر السابقة ودفعاتها تبقى كما هي.')) return;
+      if (!confirm('إيقاف اشتراك «' + x.full_name + '» في المواصلات ابتداءً من ' + tLabel(ui.tMonth) + '؟\n\nلن يُطلب منه اشتراك هذا الشهر وما بعده. الأشهر السابقة ودفعاتها تبقى كما هي.')) return;
     }
     var value = stop ? ui.tMonth : null;
     var r = await sb.from('transport_members').update({ left_from: value }).eq('student_id', sid);
     if (r.error) return fail(r.error);
     m.left_from = value;
     render();
-    toast(stop ? 'أُوقف الاشتراك ابتداءً من ' + monthLabel(ui.tMonth) : 'أُعيد الاشتراك');
+    toast(stop ? 'أُوقف الاشتراك ابتداءً من ' + tLabel(ui.tMonth) : 'أُعيد الاشتراك');
   }
 
   // حصة الطالب: المحددة له، وإلا اشتراك المجموعة
   // رسوم المواصلات الشهرية تُحسب للأسرة: الطالب الأول بمبلغ، وكل أخ بعده بمبلغ أقل
   var DEFAULT_FEES = { first: 700, next: 600 };
 
-  function transportFees() {
+  function feeNum(v, d) { return v == null || v === '' || isNaN(Number(v)) ? d : Number(v); }
+  // الرسوم: لدورة بعينها إن مُرّرت (قد تُعدَّل رسوم دورة واحدة)، وإلا الرسوم العامة
+  function transportFees(month) {
+    if (month) { var c = cycleOf(month); return { first: c.first, next: c.next }; }
     var f = classConfig().fees || {};
-    var num = function (v, d) { return v == null || v === '' || isNaN(Number(v)) ? d : Number(v); };
-    return { first: num(f.first, DEFAULT_FEES.first), next: num(f.next, DEFAULT_FEES.next) };
+    return { first: feeNum(f.first, DEFAULT_FEES.first), next: feeNum(f.next, DEFAULT_FEES.next) };
   }
 
   // ترتيب كل مشترك في المواصلات بين إخوته المشتركين: { studentId: { rank, size, family } } (family: معرّف الأسرة).
@@ -3831,7 +3834,7 @@
     var issued = (S.tPay[ui.tMonth] || {})[m.student_id];
     if (issued && issued.amount > 0 && issued.due != null && issued.due !== '') return Number(issued.due);
     if (m.share != null && m.share !== '') return Number(m.share);
-    var fees = transportFees(), fam = familyInfo()[m.student_id];
+    var fees = transportFees(ui.tMonth), fam = familyInfo()[m.student_id];
     return fam && fam.rank > 1 ? fees.next : fees.first;
   }
 
@@ -3848,12 +3851,72 @@
     return (Math.round(x * 100) / 100).toLocaleString('en') + ' ج.م';
   }
 
-  function thisMonth() {
-    return todayISO().slice(0, 7);
-  }
-
   function monthLabel(m) {
     return new Date(m + '-01T00:00').toLocaleDateString('ar-u-nu-latn', { month: 'long', year: 'numeric' });
+  }
+
+  /* ----- دورات المواصلات -----
+     اشتراك المواصلات لدورة لا لشهر ميلادي: تبدأ كل دورة يومًا محددًا من الشهر (15 مثلًا) وتنتهي قبل بداية التالية،
+     وموعد سدادها بعد بدايتها بعدد أيام المهلة. تُعرف الدورة بشهر بدايتها («2026-11» = 15/11 – 14/12)، وبه تُحفظ الإيصالات كما كانت.
+     لكل دورة يمكن تعديل بدايتها ونهايتها وموعد سدادها ورسومها؛ وتعديل نهاية دورة يجعل التالية تبدأ في اليوم الذي يليها.
+     الإعداد في settings.classes.cycles: { startDay, graceDays, over: { 'YYYY-MM': { from, to, due, first, next } } }.
+     بلا إعداد: الدورة هي الشهر الميلادي وموعد السداد اليوم المحدد منه (كما كان). يطابق transport_cycle() في supabase/transport_cycles.sql */
+  function isoDay(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
+  function addDays(iso, n) {
+    var d = new Date(iso + 'T00:00');
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function shiftMonth(key, n) {
+    var y = Number(key.slice(0, 4)), m = Number(key.slice(5, 7)) - 1 + n;
+    y += Math.floor(m / 12);
+    m = ((m % 12) + 12) % 12;
+    return y + '-' + String(m + 1).padStart(2, '0');
+  }
+  function cycleCfg() {
+    var c = classConfig().cycles || {}, sd = Number(c.startDay), gd = Number(c.graceDays);
+    return {
+      startDay: c.startDay != null && c.startDay !== '' && sd >= 1 && sd <= 28 ? Math.round(sd) : 1,
+      graceDays: c.graceDays != null && c.graceDays !== '' && gd >= 0 && gd <= 27 ? Math.round(gd) : payDueDay() - 1,
+      over: c.over && typeof c.over === 'object' && !Array.isArray(c.over) ? c.over : {},
+      set: c.startDay != null && c.startDay !== ''
+    };
+  }
+  function cycleFrom(key, cc) {
+    var o = cc.over[key] || {}, p = cc.over[shiftMonth(key, -1)] || {};
+    if (isoDay(o.from)) return o.from;
+    if (isoDay(p.to)) return addDays(p.to, 1);
+    return key + '-' + String(cc.startDay).padStart(2, '0');
+  }
+  // { key, from, to, due, first, next, custom }
+  function cycleOf(key) {
+    var cc = cycleCfg(), o = cc.over[key] || {}, from = cycleFrom(key, cc), base = transportFees();
+    return {
+      key: key, from: from,
+      to: isoDay(o.to) ? o.to : addDays(cycleFrom(shiftMonth(key, 1), cc), -1),
+      due: isoDay(o.due) ? o.due : addDays(from, cc.graceDays),
+      first: feeNum(o.first, base.first), next: feeNum(o.next, base.next),
+      custom: Object.keys(o).length > 0
+    };
+  }
+  // الدورة التي يقع فيها اليوم
+  function currentCycle(day) {
+    day = day || todayISO();
+    var key = day.slice(0, 7);
+    for (var i = 0; i < 3; i++) {
+      var c = cycleOf(key);
+      if (day < c.from) key = shiftMonth(key, -1);
+      else if (day > c.to) key = shiftMonth(key, 1);
+      else break;
+    }
+    return key;
+  }
+  // اسم الدورة: «نوفمبر 2026 (15/11 – 14/12)»؛ وإن طابقت الشهر الميلادي فاسمه وحده
+  function tLabel(key) {
+    if (!key) return '';
+    var c = cycleOf(key), dm = function (iso) { return iso.slice(8, 10) + '/' + iso.slice(5, 7); };
+    if (c.from === key + '-01' && c.to === addDays(shiftMonth(key, 1) + '-01', -1)) return monthLabel(key);
+    return monthLabel(key) + ' (⁧' + dm(c.from) + ' – ' + dm(c.to) + '⁩)';
   }
 
   // المطلوب والمحصَّل لمجموعة في الشهر المعروض
@@ -3923,7 +3986,7 @@
       }
       if (!owesThisMonth(m)) {
         return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
-          '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + monthLabel(m.left_from) + '</td>' +
+          '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + tLabel(m.left_from) + '</td>' +
           '<td><span class="badge pending">متوقف</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button> ' +
           '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
@@ -3953,7 +4016,7 @@
 
   function exemptText(m) {
     if (!m || !m.exempt_from) return '';
-    return 'إعفاء ' + (m.exempt_to && m.exempt_to !== m.exempt_from ? 'من ' + monthLabel(m.exempt_from) + ' إلى ' + monthLabel(m.exempt_to) : m.exempt_to ? monthLabel(m.exempt_from) : 'من ' + monthLabel(m.exempt_from) + ' (مستمر)') +
+    return 'إعفاء ' + (m.exempt_to && m.exempt_to !== m.exempt_from ? 'من ' + tLabel(m.exempt_from) + ' إلى ' + tLabel(m.exempt_to) : m.exempt_to ? tLabel(m.exempt_from) : 'من ' + tLabel(m.exempt_from) + ' (مستمر)') +
       (m.exempt_note ? ' — ' + esc(m.exempt_note) : '');
   }
 
@@ -4018,8 +4081,63 @@
     return d >= 1 && d <= 28 ? Math.round(d) : 5;
   }
 
+  // بطاقة «دورات المواصلات ورسومها» (صفحة الباصات): الإعداد العام، ثم الدورة السابقة والجارية والتاليتان، كلٌّ قابلة للتعديل
+  function cyclesCardHtml() {
+    var cc = cycleCfg(), base = transportFees(), cur = currentCycle(), edit = isAdmin();
+    var keys = [shiftMonth(cur, -1), cur, shiftMonth(cur, 1), shiftMonth(cur, 2)];
+    var dis = edit ? '' : ' disabled';
+    var rows = keys.map(function (k) {
+      var c = cycleOf(k), o = cc.over[k] || {};
+      var date = function (f) { return '<input type="date" data-cyc="' + k + '|' + f + '" value="' + c[f] + '"' + dis + (o[f] ? ' style="border-color:var(--primary)"' : '') + '>'; };
+      var fee = function (f) { return '<input type="number" min="0" step="any" style="width:90px" data-cyc="' + k + '|' + f + '" placeholder="' + base[f] + '" value="' + (o[f] != null && o[f] !== '' ? esc(o[f]) : '') + '"' + dis + '>'; };
+      return '<tr' + (k === cur ? ' style="background:var(--primary-soft, #eef2ff)"' : '') + '><td><b>' + monthLabel(k) + '</b>' + (k === cur ? ' <span class="badge paid">الجارية</span>' : '') + '</td>' +
+        '<td>' + date('from') + '</td><td>' + date('to') + '</td><td>' + date('due') + '</td><td>' + fee('first') + '</td><td>' + fee('next') + '</td>' +
+        '<td>' + (edit && c.custom ? '<button type="button" class="btn link" data-cycreset="' + k + '">إلى الافتراضي</button>' : '') + '</td></tr>';
+    }).join('');
+    return '<div class="card"><h2>دورات المواصلات ورسومها</h2>' +
+      '<div class="toolbar" style="align-items:center;margin-top:8px">' +
+        '<label class="field" for="fee-first" style="margin:0">الطالب الأول</label><input type="number" id="fee-first" min="0" step="any" style="width:100px" value="' + base.first + '"' + dis + '>' +
+        '<label class="field" for="fee-next" style="margin:0">كل أخ بعده</label><input type="number" id="fee-next" min="0" step="any" style="width:100px" value="' + base.next + '"' + dis + '>' +
+        '<span class="st-count" style="margin:0">ج.م لكل طالب في الدورة</span></div>' +
+      '<div class="toolbar" style="align-items:center;margin-top:8px">' +
+        '<label class="field" for="cyc-start" style="margin:0">تبدأ كل دورة يوم</label><input type="number" id="cyc-start" min="1" max="28" step="1" style="width:80px" value="' + cc.startDay + '"' + dis + '>' +
+        '<span class="st-count" style="margin:0">من الشهر، وتنتهي قبل بداية التالية ·</span>' +
+        '<label class="field" for="cyc-grace" style="margin:0">مهلة السداد</label><input type="number" id="cyc-grace" min="0" max="27" step="1" style="width:80px" value="' + cc.graceDays + '"' + dis + '>' +
+        '<span class="st-count" style="margin:0">أيام بعد بدايتها</span></div>' +
+      '<div class="table-wrap" style="margin-top:10px"><table class="grid"><thead><tr><th>الدورة</th><th>من</th><th>إلى</th><th>آخر موعد للسداد</th><th>الطالب الأول</th><th>كل أخ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<p class="hint" style="margin:8px 0 0">لكل دورة تعديل بدايتها أو نهايتها أو موعد سدادها أو رسومها وحدها (الخانة المعدّلة بإطار ملوّن)؛ ' +
+        'وتغيير نهاية دورة يجعل التالية تبدأ في اليوم الذي يليها. الرسوم الفارغة تعني الرسوم العامة أعلاه. الإيصالات الصادرة لا يتغير مبلغها. ' +
+        'الدورة تُسمّى بشهر بدايتها، وإيصالاتها «عن شهر» ذلك. يُعرف الإخوة بهوية ولي الأمر أو هاتفه أو اسم الأب والجد والعائلة، والأول هو الأكبر سنًّا؛ ومبلغ خاص لطالب بعينه من صفحة نقطة التجمع.</p></div>';
+  }
+
+  // حفظ إعداد الدورات (يبقى معه كل إعداد الفصول الآخر)
+  function saveCycles(next) {
+    var cfg = classConfig();
+    saveClassConfig({ rooms: cfg.rooms, list: cfg.list, fees: cfg.fees, holidays: cfg.holidays, cycles: next });
+  }
+
+  function cycleEdit(key, field, value) {
+    var cc = cycleCfg(), over = JSON.parse(JSON.stringify(cc.over)), o = over[key] || {};
+    if (value === '' || value == null) delete o[field];
+    else if (field === 'first' || field === 'next') o[field] = Math.max(0, Number(value) || 0);
+    else if (isoDay(value)) o[field] = value;
+    else return toast('تاريخ غير صحيح', true);
+    if (Object.keys(o).length) over[key] = o; else delete over[key];
+    // تحقق: البداية قبل النهاية في هذه الدورة وجارتيها
+    var test = { startDay: cc.startDay, graceDays: cc.graceDays, over: over };
+    var old = S.settings.classes;
+    S.settings.classes = Object.assign({}, old, { cycles: test });
+    classCache = null;
+    var bad = [shiftMonth(key, -1), key, shiftMonth(key, 1)].filter(function (k) { var c = cycleOf(k); return c.from > c.to; });
+    S.settings.classes = old;
+    classCache = null;
+    if (bad.length) { render(); return toast('بداية الدورة يجب أن تكون قبل نهايتها (' + bad.map(monthLabel).join('، ') + ')', true); }
+    saveCycles(test);
+  }
+
+  // آخر موعد لسداد اشتراك الدورة
   function payDeadline(month) {
-    return month + '-' + String(payDueDay()).padStart(2, '0');
+    return cycleOf(month).due;
   }
 
   // left: المتبقي عليه عن الشهر المعروض. يعيد: ok | grace (ضمن المهلة) | extended (مهلة إضافية) | late | suspended
@@ -4107,12 +4225,11 @@
         '<td class="no-print"><div class="acts">' + act + '</div></td></tr>';
     }).join('');
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
-        '<label class="field" for="fee-due" style="margin:0">آخر يوم لسداد اشتراك الشهر</label>' +
-        '<input type="number" id="fee-due" min="1" max="28" step="1" style="width:90px" value="' + payDueDay() + '">' +
-        '<span class="st-count" style="margin:0">من كل شهر · موعد ' + monthLabel(ui.tMonth) + ': ' + dmy(payDeadline(ui.tMonth)) + '</span></div>' +
+        '<span><b>آخر موعد لسداد اشتراك ' + tLabel(ui.tMonth) + ': ' + dmy(payDeadline(ui.tMonth)) + '</b></span>' +
+        (isAdmin() ? '<a class="btn link" href="#/transport">تعديل الدورات ومواعيدها</a>' : '') + '</div>' +
         '<p class="hint" style="margin:8px 0 0">من فاته الموعد ولم يسدد كاملًا يظهر «متأخرًا». القرار لك: تعليقه عن الركوب، أو منحه مهلة إضافية حتى تاريخ تختاره. لا يُعلَّق أحد تلقائيًا، والسداد الكامل يرفع التعليق.</p></div>' +
       '<div class="stats">' + card('late', 'متأخرون', 'فات الموعد — بانتظار قرارك', n.late ? 'var(--red)' : '') + card('extended', 'بمهلة إضافية', 'لم تنتهِ مهلتهم بعد') +
-        card('suspended', 'موقوفون عن الركوب', 'لشهر ' + monthLabel(ui.tMonth), n.suspended ? 'var(--red)' : '') + card('grace', 'ضمن المهلة', 'لم يحن الموعد بعد') + '</div>' +
+        card('suspended', 'موقوفون عن الركوب', 'لشهر ' + tLabel(ui.tMonth), n.suspended ? 'var(--red)' : '') + card('grace', 'ضمن المهلة', 'لم يحن الموعد بعد') + '</div>' +
       '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">' + (ui.lateState ? RIDE_STATE[ui.lateState] : 'المتأخرون والموقوفون') + ' (' + shown.length + ')' +
           (ui.lateState ? '' : ' — المتبقي عليهم ' + plainNum(owed) + ' ج.م') + '</h2>' +
         (ui.lateState ? '<button type="button" class="btn" data-latestate="">عرض الكل</button>' : '') +
@@ -4125,7 +4242,7 @@
 
   async function suspendAllLate() {
     var list = dueRows().filter(function (r) { return r.state === 'late'; });
-    if (!list.length || !confirm('تعليق ' + list.length + ' طالبًا عن ركوب الباص لشهر ' + monthLabel(ui.tMonth) + '؟\n\nيظهرون «موقوفين» في كشوف الباصات إلى أن يسددوا أو تمنحهم مهلة.')) return;
+    if (!list.length || !confirm('تعليق ' + list.length + ' طالبًا عن ركوب الباص لشهر ' + tLabel(ui.tMonth) + '؟\n\nيظهرون «موقوفين» في كشوف الباصات إلى أن يسددوا أو تمنحهم مهلة.')) return;
     var patch = suspendPatch(true), done = 0;
     for (var i = 0; i < list.length; i++) {
       var r = await sb.from('transport_members').update(patch).eq('student_id', list[i].x.id);
@@ -4143,7 +4260,7 @@
       await loadXlsx();
       var wb = XLSX.utils.book_new(), late = daysLate();
       wb.Workbook = { Views: [{ RTL: true }] };
-      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['متابعة سداد المواصلات — ' + monthLabel(ui.tMonth) + ' — آخر موعد ' + dmy(payDeadline(ui.tMonth))], [],
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['متابعة سداد المواصلات — ' + tLabel(ui.tMonth) + ' — آخر موعد ' + dmy(payDeadline(ui.tMonth))], [],
         ['م', 'اسم الطالب', 'الشعبة', 'الباص', 'نقطة الركوب', 'ولي الأمر', 'هاتف ولي الأمر', 'رقم الواتساب', 'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'مهلة حتى', 'أيام التأخير']]
         .concat(rows.map(function (r, i) {
           return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, r.m.pickup || '', r.x.guardian_name || '', plainPhone(r.x.phone), plainPhone(r.x.whatsapp),
@@ -4235,7 +4352,7 @@
     }).join('');
     var dots = '............................';
     // صفحة واحدة (يُصغَّر الخط حتى يتسع)؛ وتتكرر عناوين الأعمدة لو امتد اضطرارًا إلى صفحة ثانية
-    var head = reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', monthLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
+    var head = reportHead('كشف الباص — ' + esc(g.assembly_point), [['الشهر', tLabel(ui.tMonth)], ['السائق', g.driver_name ? esc(g.driver_name) + (g.driver_phone ? ' (' + esc(g.driver_phone) + ')' : '') : dots],
         ['المشرف/ة', g.supervisor_name ? esc(g.supervisor_name) + (g.supervisor_phone ? ' (' + esc(g.supervisor_phone) + ')' : '') : dots], ['وقت التجمع', g.pickup_time || '']]).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
@@ -4339,7 +4456,7 @@
 
   // ما يُصدَّر أو يُطبع الآن: مجموعة بعينها، أو ما تعرضه شاشة الدفعات بتصفيتها، أو المدرسة كلها
   function payScope() {
-    var g = currentGroup(), all = payRows(), info = [['الشهر', monthLabel(ui.tMonth)]];
+    var g = currentGroup(), all = payRows(), info = [['الشهر', tLabel(ui.tMonth)]];
     if (g) {
       info.push(['الباص', g.assembly_point]);
       return { rows: all.filter(function (r) { return r.g === g; }), info: info, name: g.assembly_point, group: g };
@@ -4368,7 +4485,7 @@
     };
     var cash = function (v) { return plainNum(v) + ' <small>ج.م</small>'; };
     return '<div class="stats">' +
-      card('الطلاب المشتركون', t.n, firstSub || monthLabel(ui.tMonth)) +
+      card('الطلاب المشتركون', t.n, firstSub || tLabel(ui.tMonth)) +
       card('المطلوب', cash(t.due), 'مجموع اشتراكات الشهر') +
       card('المحصَّل', cash(t.paid), (t.due ? Math.round(t.paid / t.due * 100) : 0) + '% من المطلوب', 'var(--green)') +
       card('المتبقي', cash(t.left), t.owing ? 'لم يسددوا كامل الاشتراك: ' + t.owing : 'لا متأخرات', t.left ? 'var(--red)' : '') +
@@ -4385,7 +4502,7 @@
      للعثور على ما عُدِّل يدويًا وتصحيحه. يعرض ولا يغيّر شيئًا */
   function naturalShare(m) {
     if (m.share != null && m.share !== '') return Number(m.share);
-    var fees = transportFees(), fam = familyInfo()[m.student_id];
+    var fees = transportFees(ui.tMonth), fam = familyInfo()[m.student_id];
     return fam && fam.rank > 1 ? fees.next : fees.first;
   }
 
@@ -4522,7 +4639,7 @@
     }
 
     if (!owesThisMonth(m) && !subscribedIn(m, ui.tMonth)) {
-      return head + '<p class="formhint" style="margin-top:10px">اشتراك هذا الطالب في المواصلات متوقف منذ ' + monthLabel(m.left_from) + '، فلا يُطلب منه اشتراك ' + monthLabel(ui.tMonth) + '.</p>' +
+      return head + '<p class="formhint" style="margin-top:10px">اشتراك هذا الطالب في المواصلات متوقف منذ ' + tLabel(m.left_from) + '، فلا يُطلب منه اشتراك ' + tLabel(ui.tMonth) + '.</p>' +
         '<div class="actions"><button type="button" class="btn primary" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button></div></div>';
     }
     var rec = (S.tPay[ui.tMonth] || {})[x.id] || {}, share = shareOf(m), paid = rec.amount || 0, left = Math.max(0, share - paid);
@@ -4538,10 +4655,10 @@
       });
     }
     return head +
-      (exemptIn(m, ui.tMonth) ? '<p class="formhint" style="margin-top:10px;border-color:#c4b5fd;background:#f5f3ff;color:#5b21b6">هذا الطالب معفى من اشتراك ' + monthLabel(ui.tMonth) + ' (' + exemptText(m) + '): يُعدّ مسدَّدًا ولا يُطلب منه شيء.</p>' : '') +
-      (notStarted ? '<p class="formhint" style="margin-top:10px">لم يبدأ اشتراك هذا الطالب بعد: اختيرت له نقطة التجمع فقط. يبدأ اشتراكه من ' + monthLabel(ui.tMonth) + ' عند تسجيل هذه الدفعة.</p>' : '') +
+      (exemptIn(m, ui.tMonth) ? '<p class="formhint" style="margin-top:10px;border-color:#c4b5fd;background:#f5f3ff;color:#5b21b6">هذا الطالب معفى من اشتراك ' + tLabel(ui.tMonth) + ' (' + exemptText(m) + '): يُعدّ مسدَّدًا ولا يُطلب منه شيء.</p>' : '') +
+      (notStarted ? '<p class="formhint" style="margin-top:10px">لم يبدأ اشتراك هذا الطالب بعد: اختيرت له نقطة التجمع فقط. يبدأ اشتراكه من ' + tLabel(ui.tMonth) + ' عند تسجيل هذه الدفعة.</p>' : '') +
       '<div class="stats" style="margin:14px 0 6px">' +
-        '<div class="card stat"><span class="lbl">اشتراك ' + monthLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
+        '<div class="card stat"><span class="lbl">اشتراك ' + tLabel(ui.tMonth) + '</span><span class="num">' + plainNum(share) + ' <small>ج.م</small></span><span class="sub">' + (m.share != null && m.share !== '' ? 'مبلغ خاص بهذا الطالب' : 'حسب رسوم الأسرة') + '</span></div>' +
         '<div class="card stat"><span class="lbl">المدفوع</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span><span class="sub">' + (paid ? receiptsNote(x.id) : 'لم يُسجَّل دفع لهذا الشهر') + '</span></div>' +
         '<div class="card stat"><span class="lbl">المتبقي</span><span class="num"' + (left ? ' style="color:var(--red)"' : '') + '>' + plainNum(left) + ' <small>ج.م</small></span><span class="sub">' + (left ? 'يُسدَّد بتسجيل المبلغ كاملًا' : 'مسدَّد') + '</span></div>' +
       '</div>' +
@@ -4684,7 +4801,7 @@
     if (S.archiveMissing) return toast(ARCHIVE_SQL_MSG, true);
     var x = findStudent(sid), rec = (S.tPay[ui.tMonth] || {})[sid];
     if (!x || !rec || !(rec.amount > 0)) return;
-    var reason = prompt('حذف الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' للطالب «' + x.full_name + '» بمبلغ ' + money(rec.amount) + ' عن ' + monthLabel(ui.tMonth) + '.\n' +
+    var reason = prompt('حذف الإيصال رقم ' + (rec.receipt_no != null ? rec.receipt_no : '—') + ' للطالب «' + x.full_name + '» بمبلغ ' + money(rec.amount) + ' عن ' + tLabel(ui.tMonth) + '.\n' +
       'يُلغى أثر الدفعة ويُحفظ الإيصال في أرشيف الإيصالات.\n\nاكتب سبب الحذف:', '');
     if (reason == null) return;
     reason = reason.trim();
@@ -4746,7 +4863,7 @@
       total += Number(v.amount) || 0;
       return '<tr><td>' + (i + 1) + '</td><td>' + (v.receipt_no != null ? v.receipt_no : '—') + '</td><td><b>' + esc(v.student_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' +
         esc(v.class_name || 'بدون شعبة') + (v.assembly_point ? ' · ' + esc(v.assembly_point) : '') + '</span></td>' +
-        '<td>' + monthLabel(v.month) + '</td><td>' + plainNum(Number(v.amount) || 0) + '</td><td>' + esc(payMethodLabel(v)) + '</td><td>' + dmy(v.paid_on) + '</td>' +
+        '<td>' + tLabel(v.month) + '</td><td>' + plainNum(Number(v.amount) || 0) + '</td><td>' + esc(payMethodLabel(v)) + '</td><td>' + dmy(v.paid_on) + '</td>' +
         '<td>' + dmy(v.voided_at) + '</td><td>' + esc(v.voided_by) + '</td><td>' + esc(v.reason) + '</td></tr>';
     }).join('');
     return '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الإيصالات المحذوفة (' + list.length + ')</h2>' +
@@ -4797,7 +4914,7 @@
   function refundFormHtml(x, paid) {
     var opts = Object.keys(PAY_METHODS).map(function (k) { return '<option value="' + k + '">' + PAY_METHODS[k] + '</option>'; }).join('');
     return '<div class="refund-box"><h3 style="margin:0 0 4px">استرداد مبلغ</h3>' +
-      '<p class="hint">يُردّ المبلغ من المدفوع عن ' + monthLabel(ui.tMonth) + ' (' + plainNum(paid) + ' ج.م)، فينقص المحصَّل بقدره، ويُحفظ الاسترداد في سجل المستردات بسند مستقل.</p>' +
+      '<p class="hint">يُردّ المبلغ من المدفوع عن ' + tLabel(ui.tMonth) + ' (' + plainNum(paid) + ' ج.م)، فينقص المحصَّل بقدره، ويُحفظ الاسترداد في سجل المستردات بسند مستقل.</p>' +
       '<div class="grid2">' +
         '<div><label class="field" for="rf-amount">المبلغ المسترد (ج.م) <span class="req">*</span></label><input type="number" id="rf-amount" min="0" max="' + paid + '" step="any" value="' + paid + '"></div>' +
         '<div><label class="field" for="rf-method">طريقة الرد</label><select id="rf-method">' + opts + '</select></div>' +
@@ -4822,7 +4939,7 @@
     if (amount > rec.amount) return toast('المبلغ المسترد أكبر من المدفوع عن الشهر (' + plainNum(rec.amount) + ' ج.م).', true);
     if (!reason) return toast('اكتب سبب الاسترداد.', true);
     var net = Math.round((rec.amount - amount) * 100) / 100;
-    if (!confirm('استرداد ' + money(amount) + ' للطالب «' + x.full_name + '» من المدفوع عن ' + monthLabel(ui.tMonth) + '؟\n\nالمدفوع الآن: ' + money(rec.amount) + '\nالصافي بعد الاسترداد: ' + money(net) +
+    if (!confirm('استرداد ' + money(amount) + ' للطالب «' + x.full_name + '» من المدفوع عن ' + tLabel(ui.tMonth) + '؟\n\nالمدفوع الآن: ' + money(rec.amount) + '\nالصافي بعد الاسترداد: ' + money(net) +
       (stop && net === 0 ? '\n\nوسيُوقف اشتراكه في المواصلات ابتداءً من هذا الشهر.' : ''))) return;
 
     var m = S.tMembers.filter(function (k) { return k.student_id === x.id; })[0], g = m && findGroup(m.group_id);
@@ -4865,13 +4982,13 @@
     var rows = list.map(function (v, i) {
       return '<tr><td>' + (i + 1) + '</td><td>' + (v.refund_no != null ? v.refund_no : '—') + '</td><td><b>' + esc(v.student_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' +
         esc(v.class_name || 'بدون شعبة') + (v.assembly_point ? ' · ' + esc(v.assembly_point) : '') + '</span></td>' +
-        '<td>' + monthLabel(v.month) + '</td><td>' + plainNum(Number(v.paid_before) || 0) + '</td><td><b>' + plainNum(Number(v.amount) || 0) + '</b></td><td>' + esc(payMethodLabel(v)) + '</td>' +
+        '<td>' + tLabel(v.month) + '</td><td>' + plainNum(Number(v.paid_before) || 0) + '</td><td><b>' + plainNum(Number(v.amount) || 0) + '</b></td><td>' + esc(payMethodLabel(v)) + '</td>' +
         '<td>' + dmy(v.refunded_on) + '</td><td>' + esc(v.reason) + '</td><td>' + esc(v.refunded_by) + '</td>' +
         '<td><button type="button" class="btn" data-rfprint="' + v.id + '">طباعة السند</button></td></tr>';
     }).join('');
     return '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">سجل المستردات (' + list.length + ')</h2>' +
       '<button type="button" class="btn" data-rfxlsx>تصدير Excel</button></div>' +
-      '<p class="st-count">مستردات عن ' + monthLabel(ui.tMonth) + ': ' + money(refundTotal(month)) + ' (' + month.length + ') · مجموع كل المستردات: ' + money(refundTotal(list)) + '</p>' +
+      '<p class="st-count">مستردات عن ' + tLabel(ui.tMonth) + ': ' + money(refundTotal(month)) + ' (' + month.length + ') · مجموع كل المستردات: ' + money(refundTotal(list)) + '</p>' +
       '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>رقم السند</th><th>الطالب</th><th>عن شهر</th><th>المدفوع قبله</th><th>المسترد (ج.م)</th><th>طريقة الرد</th>' +
       '<th>التاريخ</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
@@ -4906,13 +5023,13 @@
     }
     var hash = location.hash, g = currentGroup();
     if (ui.cl && hash === '#/transport') return renderCluster();
-    if (!ui.tMonth) ui.tMonth = thisMonth();
+    if (!ui.tMonth) ui.tMonth = currentCycle();
     if (!S.tPay[ui.tMonth]) {
       app.innerHTML = tabs('transport') + '<div class="card empty">جارٍ التحميل…</div>';
       loadPayments(ui.tMonth);
       return;
     }
-    var monthPick = '<span class="monthpick"><label class="field" for="t-month">الشهر</label>' +
+    var monthPick = '<span class="monthpick"><label class="field" for="t-month">الدورة (شهر بدايتها)</label>' +
       '<input type="month" id="t-month" value="' + ui.tMonth + '"></span>';
 
     if (g) {
@@ -4928,7 +5045,7 @@
           '<button type="button" class="btn" data-gedit="' + g.id + '">تعديل</button>' +
           '<button type="button" class="btn danger" data-gdel="' + g.id + '">حذف الباص</button></div></div>' +
         (editing ? groupFormHtml(g) : '') + exemptFormHtml(g) +
-        '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الطلاب (' + tot.n + ') — ' + monthLabel(ui.tMonth) + '</h2>' +
+        '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الطلاب (' + tot.n + ') — ' + tLabel(ui.tMonth) + '</h2>' +
           '<span class="no-print" style="display:flex;gap:8px;align-items:center">' + monthPick + '</span></div>' +
           '<div id="t-members">' + membersTableHtml(g) + '</div></div>' +
         '<div class="card no-print"><h2>إضافة طلاب إلى الباص</h2>' +
@@ -4996,7 +5113,7 @@
       var list = payByClass(all), sum = payTotals(all);
       app.innerHTML = head + payStatsHtml(sum, 'في ' + list.length + ' شعبة') +
         (list.length
-          ? '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">دفعات ' + monthLabel(ui.tMonth) + ' حسب الشعبة</h2>' + EXPORT_BTNS + '</div>' +
+          ? '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">دفعات ' + tLabel(ui.tMonth) + ' حسب الشعبة</h2>' + EXPORT_BTNS + '</div>' +
             '<p class="st-count">التصدير من هنا يشمل المدرسة كلها. لتصدير شعبة واحدة اضغط اسمها.</p>' +
             '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الشعبة</th><th>المشتركون</th><th>المطلوب (ج.م)</th><th>المحصَّل (ج.م)</th>' +
             Object.keys(PAY_METHODS).map(function (k) { return '<th>' + PAY_METHODS[k] + '</th>'; }).join('') +
@@ -5030,12 +5147,7 @@
       (ui.editGroup === 'new' ? groupFormHtml(null) :
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-gedit="new">+ باص جديد</button>' +
         '<button type="button" class="btn" data-clopen>اقتراح نقاط التجمع من العناوين</button></div>') +
-      '<div class="card"><h2>رسوم المواصلات الشهرية للأسرة</h2>' +
-        '<div class="toolbar" style="align-items:center;margin-top:8px">' +
-          '<label class="field" for="fee-first" style="margin:0">الطالب الأول</label><input type="number" id="fee-first" min="0" step="any" style="width:110px" value="' + transportFees().first + '">' +
-          '<label class="field" for="fee-next" style="margin:0">كل أخ بعده</label><input type="number" id="fee-next" min="0" step="any" style="width:110px" value="' + transportFees().next + '">' +
-          '<span class="st-count" style="margin:0">ج.م لكل طالب شهريًا</span></div>' +
-        '<p class="hint" style="margin:8px 0 0">يُعرف الإخوة بهوية ولي الأمر أو هاتفه أو اسم الأب والجد والعائلة، والأول هو الأكبر سنًّا. يمكن تحديد مبلغ خاص لطالب بعينه من صفحة نقطة التجمع.</p></div>' +
+      cyclesCardHtml() +
       (cards ? '<div class="teachers">' + cards + '</div>'
         : '<div class="card empty">لا توجد باصات بعد. أنشئ باصًا لكل مسار ثم أضف طلابه.</div>');
   }
@@ -5064,7 +5176,7 @@
       };
       var methodNames = Object.keys(PAY_METHODS).map(function (k) { return PAY_METHODS[k] + ' (ج.م)'; });
       var methodAmounts = function (t) { return Object.keys(PAY_METHODS).map(function (k) { return t.by[k]; }); };
-      var top = function (title) { return [[schoolName()], ['دفعات المواصلات — ' + monthLabel(ui.tMonth) + ' — ' + title], []]; };
+      var top = function (title) { return [[schoolName()], ['دفعات المواصلات — ' + tLabel(ui.tMonth) + ' — ' + title], []]; };
       var detail = function (title, rows) {
         var t = payTotals(rows);
         add(title, top(title).concat(
@@ -5132,7 +5244,7 @@
             w || r.exempt ? '' : r.share, w || r.exempt ? '' : r.paid, w || r.exempt ? '' : r.left, w ? r.note : PAY_STATUS[r.status] || '',
             r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : ''];
         });
-        var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['ملف المواصلات — ' + monthLabel(ui.tMonth) + ' — ' + title], [],
+        var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['ملف المواصلات — ' + tLabel(ui.tMonth) + ' — ' + title], [],
           ['م', 'اسم الطالب', 'الشعبة', 'الباص', 'المدينة', 'العنوان', 'ولي الأمر', 'هاتف ولي الأمر', 'رقم الواتساب', 'جوال الطالب',
             'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'طريقة الدفع', 'تاريخ السداد', 'رقم الإيصال']]
           .concat(body, [['', 'المجموع (' + list.length + ' طالبًا)', '', '', '', '', '', '', '', '', due, paid, left]]));
@@ -5208,7 +5320,7 @@
   /* ----- سجل الدفعات: كل الإيصالات في فترة، تُفرز وتُصفّى بالتاريخ ووسيلة الدفع ورقمها والباص والشعبة والمسجِّل ----- */
 
   function ledState() {
-    if (!ui.led) ui.led = { from: todayISO().slice(0, 8) + '01', to: todayISO(), method: '', q: '', bus: '', cls: '', issuer: '', sort: 'date', rows: null, loading: false };
+    if (!ui.led) ui.led = { from: cycleOf(currentCycle()).from, to: todayISO(), method: '', q: '', bus: '', cls: '', issuer: '', sort: 'date', rows: null, loading: false };
     return ui.led;
   }
 
@@ -5331,7 +5443,7 @@
     var rows = list.map(function (r, i) {
       return '<tr><td>' + (i + 1) + '</td><td>' + (r.p.receipt_no != null ? r.p.receipt_no : '—') + '</td><td style="white-space:nowrap">' + dmy(r.day) + '</td>' +
         '<td><b>' + esc(r.name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' + esc(r.cls || '—') + (r.bus ? ' · ' + esc(r.bus) : '') + '</span></td>' +
-        '<td>' + monthLabel(r.p.month) + '</td><td><b>' + plainNum(r.amount) + '</b></td><td>' + PAY_METHODS[r.method] + '</td>' +
+        '<td>' + tLabel(r.p.month) + '</td><td><b>' + plainNum(r.amount) + '</b></td><td>' + PAY_METHODS[r.method] + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(r.method === 'other' ? '' : r.ref) + (r.method === 'other' && r.ref ? '<span dir="rtl">' + esc(r.ref) + '</span>' : '') + '</td>' +
         '<td style="font-size:.85rem">' + esc(r.who || '—') + '<br><span dir="ltr" style="color:var(--muted)">' + esc(issuedWhen(r.p)) + '</span></td></tr>';
     }).join('');
@@ -5357,7 +5469,7 @@
       var wb = XLSX.utils.book_new(), head = [[schoolName()], ['سجل دفعات المواصلات']].concat(ledDesc().map(function (p) { return [p[0] + ': ' + p[1]]; }), [[]]);
       wb.Workbook = { Views: [{ RTL: true }] };
       var ws = XLSX.utils.aoa_to_sheet(head.concat([['م', 'رقم الإيصال', 'تاريخ السداد', 'اسم الطالب', 'الشعبة', 'الباص', 'عن شهر', 'المبلغ (ج.م)', 'وسيلة الدفع', 'رقم الدفع / ملاحظة', 'المسجِّل', 'وقت التسجيل']],
-        list.map(function (r, i) { return [i + 1, r.p.receipt_no != null ? r.p.receipt_no : '', dmy(r.day), r.name, r.cls, r.bus, monthLabel(r.p.month), r.amount, PAY_METHODS[r.method], r.ref, r.who, issuedWhen(r.p)]; }),
+        list.map(function (r, i) { return [i + 1, r.p.receipt_no != null ? r.p.receipt_no : '', dmy(r.day), r.name, r.cls, r.bus, tLabel(r.p.month), r.amount, PAY_METHODS[r.method], r.ref, r.who, issuedWhen(r.p)]; }),
         [['', '', '', 'المجموع', '', '', '', t.sum]], [[]], [['', 'حسب وسيلة الدفع']],
         Object.keys(PAY_METHODS).map(function (k) { return ['', PAY_METHODS[k], '', 'عدد الإيصالات: ' + t.cnt[k], '', '', '', t.by[k]]; })));
       ws['!cols'] = [5, 11, 12, 32, 14, 24, 14, 12, 14, 20, 20, 17].map(function (w) { return { wch: w }; });
@@ -5389,7 +5501,7 @@
       '<tr><th>م</th><th>رقم الإيصال</th><th>التاريخ</th><th>اسم الطالب</th><th>الشعبة</th><th>عن شهر</th><th>المبلغ</th><th>الوسيلة</th><th>رقم الدفع</th><th>المسجِّل</th></tr></thead><tbody>' +
       list.map(function (r, i) {
         return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + (r.p.receipt_no != null ? r.p.receipt_no : '') + '</td><td class="c" style="white-space:nowrap">' + dmy(r.day) + '</td>' +
-          '<td>' + esc(r.name) + '</td><td class="c">' + esc(r.cls) + '</td><td class="c">' + monthLabel(r.p.month) + '</td><td class="c"><b>' + plainNum(r.amount) + '</b></td>' +
+          '<td>' + esc(r.name) + '</td><td class="c">' + esc(r.cls) + '</td><td class="c">' + tLabel(r.p.month) + '</td><td class="c"><b>' + plainNum(r.amount) + '</b></td>' +
           '<td class="c">' + PAY_METHODS[r.method] + '</td><td class="c" dir="ltr">' + esc(r.ref) + '</td><td class="c">' + esc(r.who) + '</td></tr>';
       }).join('') +
       '<tr class="total"><td colspan="6">المجموع</td><td class="c">' + plainNum(t.sum) + '</td><td colspan="3"></td></tr></tbody>' +
@@ -5416,7 +5528,7 @@
     var el = e.target.closest('[data-famunfreeze]');
     if (!el || !isAdmin() || location.hash !== '#/transport/payments') return;
     var ids = el.getAttribute('data-famunfreeze').split(','), pay = S.tPay[ui.tMonth] || {};
-    if (!confirm('إلغاء تثبيت المطلوب لهذه الأسرة عن ' + monthLabel(ui.tMonth) + '؟ يعود المطلوب محسوبًا بالقاعدة، ولا يتغير أي إيصال.')) return;
+    if (!confirm('إلغاء تثبيت المطلوب لهذه الأسرة عن ' + tLabel(ui.tMonth) + '؟ يعود المطلوب محسوبًا بالقاعدة، ولا يتغير أي إيصال.')) return;
     for (var i = 0; i < ids.length; i++) {
       var r = await sb.from('transport_payments').update({ due: null }).eq('student_id', ids[i]).eq('month', ui.tMonth);
       if (r.error) return fail(r.error);
@@ -5432,7 +5544,7 @@
     if (!el || !isAdmin() || location.hash !== '#/transport/payments') return;
     var ids = el.getAttribute('data-famfreeze').split(','), pay = S.tPay[ui.tMonth] || {};
     var names = ids.map(function (id) { var x = findStudent(id); return (x ? x.full_name : id) + ': ' + plainNum((pay[id] || {}).amount || 0); });
-    if (!confirm('تثبيت المطلوب لهذه الأسرة عن ' + monthLabel(ui.tMonth) + ' كما في إيصالاتها المطبوعة؟\n\n' + names.join('\n') +
+    if (!confirm('تثبيت المطلوب لهذه الأسرة عن ' + tLabel(ui.tMonth) + ' كما في إيصالاتها المطبوعة؟\n\n' + names.join('\n') +
       '\n\nلا يتغير أي إيصال ولا مبلغ مدفوع؛ يصير المطلوب من كل أخ هو مبلغ إيصاله، فتختفي الأسرة من قائمة المراجعة.')) return;
     for (var i = 0; i < ids.length; i++) {
       var rec = pay[ids[i]];
@@ -5576,7 +5688,7 @@
     if ((el = e.target.closest('[data-latestate]'))) { ui.lateState = el.getAttribute('data-latestate'); return render(); }
     if ((el = e.target.closest('[data-suspend]'))) {
       var sx = findStudent(el.getAttribute('data-suspend'));
-      if (!sx || !confirm('تعليق «' + sx.full_name + '» عن ركوب الباص لشهر ' + monthLabel(ui.tMonth) + '؟')) return;
+      if (!sx || !confirm('تعليق «' + sx.full_name + '» عن ركوب الباص لشهر ' + tLabel(ui.tMonth) + '؟')) return;
       return updateMember(sx.id, suspendPatch(true), 'عُلِّق عن الركوب');
     }
     if ((el = e.target.closest('[data-unsuspend]'))) return updateMember(el.getAttribute('data-unsuspend'), suspendPatch(false), 'رُفع التعليق');
@@ -5680,6 +5792,13 @@
       saveClassConfig({ rooms: cfgNow.rooms, list: cfgNow.list, fees: {
         first: Math.max(0, Number(document.getElementById('fee-first').value) || 0),
         next: Math.max(0, Number(document.getElementById('fee-next').value) || 0), dueDay: payDueDay() } });
+    } else if (el.id === 'cyc-start' || el.id === 'cyc-grace') {
+      var ccNow = cycleCfg(), sdv = Math.round(Number(document.getElementById('cyc-start').value)), gdv = Math.round(Number(document.getElementById('cyc-grace').value));
+      if (!(sdv >= 1 && sdv <= 28) || !(gdv >= 0 && gdv <= 27)) { render(); return toast('يوم البداية من 1 إلى 28، والمهلة من 0 إلى 27 يومًا', true); }
+      saveCycles({ startDay: sdv, graceDays: gdv, over: ccNow.over });
+    } else if (el.hasAttribute('data-cyc')) {
+      var cq = el.getAttribute('data-cyc').split('|');
+      cycleEdit(cq[0], cq[1], el.value);
     } else if (el.id === 'fee-due') {
       var cfgDue = classConfig(), feesNow = transportFees();
       saveClassConfig({ rooms: cfgDue.rooms, list: cfgDue.list, fees: { first: feesNow.first, next: feesNow.next, dueDay: Math.min(28, Math.max(1, Math.round(Number(el.value) || 5))) } });
@@ -6188,7 +6307,13 @@
 
   document.addEventListener('click', async function (e) {
     if (!isAdmin() || location.hash !== '#/transport') return;
-    var cl = ui.cl;
+    var cl = ui.cl, cr = e.target.closest('[data-cycreset]');
+    if (cr) {
+      var k = cr.getAttribute('data-cycreset'), cc = cycleCfg(), over = JSON.parse(JSON.stringify(cc.over));
+      if (!confirm('إرجاع دورة ' + monthLabel(k) + ' إلى الإعداد العام (البداية والنهاية والموعد والرسوم)؟')) return;
+      delete over[k];
+      return saveCycles({ startDay: cc.startDay, graceDays: cc.graceDays, over: over });
+    }
     if (e.target.closest('[data-clopen]')) {
       ui.cl = { step: 'setup', includePending: true, pool: [], clusters: [], unclear: [], notSame: {}, error: '' };
       render();
@@ -6524,6 +6649,7 @@
     var cfg = {
       rooms: c && !Array.isArray(c) ? Number(c.rooms) || 0 : 0,
       fees: c && !Array.isArray(c) && c.fees ? c.fees : null, // رسوم المواصلات للأسرة: { first, next }
+      cycles: c && !Array.isArray(c) && c.cycles && typeof c.cycles === 'object' ? c.cycles : null, // دورات المواصلات (cycleCfg)
       // أيام العطل (غير الجمعة والسبت): تواريخ YYYY-MM-DD
       holidays: c && !Array.isArray(c) && Array.isArray(c.holidays) ? c.holidays.filter(function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); }).sort() : [],
       list: list.map(function (x) {
@@ -6602,7 +6728,8 @@
   }
 
   async function saveClassConfig(cfg, focusId) {
-    var value = { rooms: cfg.rooms, fees: cfg.fees || classConfig().fees || undefined, holidays: cfg.holidays || classConfig().holidays || [], list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity, teacher: x.teacher || '' }; }) };
+    var value = { rooms: cfg.rooms, fees: cfg.fees || classConfig().fees || undefined, holidays: cfg.holidays || classConfig().holidays || [],
+      cycles: cfg.cycles || classConfig().cycles || undefined, list: cfg.list.map(function (x) { return { name: x.name, gender: x.gender, capacity: x.capacity, teacher: x.teacher || '' }; }) };
     var r = await sb.from('settings').update({ classes: value }).eq('id', 1);
     if (r.error) { render(); return fail(r.error); }
     (S.settings || (S.settings = {})).classes = value;
@@ -6934,7 +7061,7 @@
       // الدفعات يقرؤها مدير النظام وحده؛ لغيره يبقى العمود «ملاحظات» كما في القالب
       var payHead = '', payNote = null;
       if (canView() && !S.transportMissing) {
-        if (!ui.tMonth) ui.tMonth = thisMonth();
+        if (!ui.tMonth) ui.tMonth = currentCycle();
         var payMonth = ui.tMonth;
         var payRowsNow = await fetchAll(function () { return sb.from('transport_payments').select('*').eq('month', payMonth).order('student_id'); });
         if (!payRowsNow) throw new Error('تعذر جلب دفعات المواصلات');
@@ -6942,7 +7069,7 @@
         payRowsNow.forEach(function (p) { p.amount = Number(p.amount) || 0; payMap[p.student_id] = p; });
         S.tPay[payMonth] = payMap;
         S.tMembers.forEach(function (m) { memberOf[m.student_id] = m; });
-        payHead = 'دفع المواصلات (' + monthLabel(payMonth) + ')';
+        payHead = 'دفع المواصلات (' + tLabel(payMonth) + ')';
         payNote = function (x) {
           var m = memberOf[x.id], paid = (payMap[x.id] || {}).amount || 0;
           if (!m) return paid > 0 ? 'مدفوع ' + plainNum(paid) : '';
@@ -7182,7 +7309,7 @@
     var nm = x ? x.full_name : row.student_name || (r.tbl === 'students' ? row.full_name : '');
     if (nm) parts.push(nm);
     if (r.receipt_no != null) parts.push('إيصال رقم ' + r.receipt_no);
-    if (row.month && r.tbl !== 'students') parts.push('عن ' + monthLabel(row.month));
+    if (row.month && r.tbl !== 'students') parts.push('عن ' + tLabel(row.month));
     if (r.tbl === 'teachers' || r.tbl === 'profiles') {
       var id = r.row_key, t = S.teachers.filter(function (q) { return q.id === id; })[0], u = S.users.filter(function (q) { return q.id === id; })[0];
       parts.push(row.name || row.full_name || (t && t.name) || (u && (u.full_name || displayName(u.email))) || '');
@@ -10847,7 +10974,7 @@
 
   function repDesc(res) {
     var r = repState(), parts = [['يشمل', REP_SCOPES[r.scope]]];
-    if (repUsesTpay()) parts.push(['شهر المواصلات', monthLabel(ui.tMonth)]);
+    if (repUsesTpay()) parts.push(['شهر المواصلات', tLabel(ui.tMonth)]);
     r.filters.forEach(function (fl) {
       var fd = repField(fl.k, res.fields);
       if (fd && fl.v != null) parts.push([fd.label, fl.v === '' ? '(فارغ)' : fl.v]);
@@ -10877,7 +11004,7 @@
   }
 
   function renderReports() {
-    if (!ui.tMonth) ui.tMonth = thisMonth();
+    if (!ui.tMonth) ui.tMonth = currentCycle();
     // دفعات شهر المواصلات تُجلب أولًا إن كان التقرير يستعملها
     if (repUsesTpay() && !S.tPay[ui.tMonth]) {
       app.innerHTML = tabs('reports') + '<div class="card empty">جارٍ تحميل دفعات المواصلات…</div>';
@@ -10912,7 +11039,7 @@
       '<div class="card"><h2>التقرير</h2>' +
         '<div class="toolbar" style="align-items:center">' +
           '<label class="field" for="rep-scope" style="margin:0">يشمل</label><select id="rep-scope" data-ro-ok style="width:auto">' + Object.keys(REP_SCOPES).map(function (k) { return opt(k, REP_SCOPES[k], r.scope); }).join('') + '</select>' +
-          (repUsesTpay() ? '<label class="field" for="rep-month" style="margin:0">شهر المواصلات</label><input type="month" id="rep-month" data-ro-ok value="' + ui.tMonth + '" style="width:auto">' : '') +
+          (repUsesTpay() ? '<label class="field" for="rep-month" style="margin:0">دورة المواصلات (شهر بدايتها)</label><input type="month" id="rep-month" data-ro-ok value="' + ui.tMonth + '" style="width:auto">' : '') +
           '<input type="text" id="rep-title" data-ro-ok placeholder="عنوان التقرير (اختياري)" value="' + esc(r.title) + '" style="flex:1;min-width:200px"></div>' +
           '<div class="toolbar" style="align-items:center;margin-top:8px"><span class="hint" style="margin:0">تقارير جاهزة:</span>' +
           '<button type="button" class="btn" data-reppreset="tpay" data-ro-ok>دفع رسوم المواصلات (المضافون إلى باص)</button></div>' +
@@ -11752,7 +11879,7 @@
           line('استلمنا من السيد/ة', 'Received from', x.guardian_name) +
           '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', x.full_name) + line('الشعبة', 'Class', x.class_name, 'short') + '</div>' +
           line('مبلغًا وقدره', 'The sum of', amountInWords(rec.amount)) +
-          line('وذلك عن', 'Being for', (rec.kind === 'topup' ? 'دفعة مكمِّلة لاشتراك المواصلات لشهر ' : 'اشتراك المواصلات لشهر ') + monthLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
+          line('وذلك عن', 'Being for', (rec.kind === 'topup' ? 'دفعة مكمِّلة لاشتراك المواصلات لشهر ' : 'اشتراك المواصلات لشهر ') + tLabel(ui.tMonth) + ' — نقطة التجمع: ' + g.assembly_point) +
           '<div class="rv-line"><span class="k">طريقة الدفع</span><span class="rv-ms">' + methods + '</span><span class="e">Payment</span></div>' +
           (hasPayRef(method) ? line('رقم الدفع (' + PAY_METHODS[method] + ')', 'Ref. No.', rec.method_note, 'ref') : '') +
           // الباقي بعد هذا الإيصال، أو استيفاء الاشتراك كاملًا
@@ -11793,7 +11920,7 @@
           line('رُدّ إلى السيد/ة', 'Refunded to', v.guardian_name) +
           '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', v.student_name) + '<div class="rv-line short"><span class="k">الشعبة</span><span class="v">' + esc(v.class_name) + '</span><span class="e">Class</span></div></div>' +
           line('مبلغ وقدره', 'The sum of', amountInWords(amount)) +
-          line('وذلك عن', 'Being for', 'استرداد من اشتراك المواصلات لشهر ' + monthLabel(v.month) + (v.reason ? ' — ' + v.reason : '')) +
+          line('وذلك عن', 'Being for', 'استرداد من اشتراك المواصلات لشهر ' + tLabel(v.month) + (v.reason ? ' — ' + v.reason : '')) +
           '<div class="rv-line"><span class="k">طريقة الرد</span><span class="rv-ms">' + methods + '</span><span class="e">Method</span></div>' +
           line('توقيع المستلم (ولي الأمر)', 'Received by', '') +
         '</div>' +
