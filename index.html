@@ -384,6 +384,8 @@
   #print-sheet.tt-pages .tt-page { break-inside: avoid; }
   #print-sheet.tt-pages .rh-banner { width: 100%; height: 19mm; object-fit: contain; margin: 0; }
   #print-sheet.tt-pages .rh { margin-bottom: .2em; }
+  #print-sheet .tt-plain { display: flex; justify-content: space-between; border-bottom: 1.2pt solid var(--gold); padding-bottom: .2em; margin-bottom: .3em; font-size: .85em; color: var(--navy); }
+  #print-sheet .tt-plain b { font-family: var(--font-head); }
   #print-sheet .tt-ptitle { text-align: center; font-family: var(--font-head); font-weight: 800; color: var(--navy); font-size: 1.4em; line-height: 1.3; }
   #print-sheet .tt-pmeta { text-align: center; color: #5e6b80; font-size: .8em; margin-bottom: .4em; }
   #print-sheet table.tt-ptable { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -1121,7 +1123,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 3';
+  var APP_BUILD = '20/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7133,12 +7135,19 @@
     var one = view === 'classes' && ui.ttClass ? b('data-ttprint="c|' + esc(ui.ttClass) + '"', 'طباعة جدول الصف') :
       view === 'teachers' && ui.ttTeacher ? b('data-ttprint="t|' + esc(ui.ttTeacher) + '"', 'طباعة جدول المعلم') : '';
     return '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b style="font-size:.95rem">طباعة / PDF:</b>' + one +
-      '<label class="check" style="padding:0"><input type="checkbox" id="tt-sign" data-ro-ok' + (ttSignOn() ? ' checked' : '') + '> مع خانات التوقيع</label>' +
+      ttHeadBox() + '<label class="check" style="padding:0"><input type="checkbox" id="tt-sign" data-ro-ok' + (ttSignOn() ? ' checked' : '') + '> مع خانات التوقيع</label>' +
       b('data-ttprint="c|"', 'جداول كل الصفوف') + b('data-ttprint="t|"', 'جداول كل المعلمين') +
       b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + '</div></div>';
   }
 
   // خانات التوقيع في جداول المعلمين والصفوف المطبوعة: اختيارية، ويُحفظ الاختيار في هذا المتصفح
+  // الترويسة والشعار (والعلامة المائية) في جداول المعلمين والصفوف واقتراحات التحسين المطبوعة: تُلغى من خانة في شريط الطباعة
+  function ttHeadOn() { try { return localStorage.getItem('tt-nohead') !== '1'; } catch (e) { return true; } }
+  function ttHeadBox() { return '<label class="check" style="padding:0"><input type="checkbox" id="tt-head" data-ro-ok' + (ttHeadOn() ? ' checked' : '') + '> مع الترويسة والشعار</label>'; }
+  // بلا ترويسة: سطر صغير باسم الأكاديمية والعام الدراسي بدلها
+  function ttTop() { return ttHeadOn() ? letterhead() : '<div class="tt-plain"><b>' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(academicYear()) + '</span></div>'; }
+  function ttWm() { return ttHeadOn() ? '<img class="wm" src="' + REPORT.logo + '" alt="">' : ''; }
+
   function ttSignOn() { try { return localStorage.getItem('tt-sign') === '1'; } catch (e) { return false; } }
 
   function renderTimetable() {
@@ -8420,6 +8429,7 @@
     var me = ui.ttImpT && ev.t[ui.ttImpT];
     return '<div class="card"><h2>تحسين الجدول</h2><p class="hint">يبحث البرنامج عن تبديل حصتين في الشعبة نفسها يحسّن الجدول حسب القواعد، فيبدأ بالقواعد الملزمة ثم الأعلى أولوية، بشرط ألا يصنع تعارضًا، ولا يغيّر النصاب، ولا يزيد مخالفة قاعدة ملزمة، ولا يسيء إلى جدول أي معلم آخر. ' +
         'لا يتغير الجدول قبل أن يُعتمد الاقتراح.</p>' +
+        '<div class="toolbar no-print" style="margin:0 0 8px">' + ttHeadBox() + '<span class="hint" style="margin:0">لطباعة الاقتراحات</span></div>' +
         '<div class="tt-comp" style="margin-bottom:10px"><b>الالتزام بالقواعد الآن: ' + ttPct(ev.ok, ev.total) + '%</b><span>' + (ev.hard ? '<b style="color:var(--red)">مخالفات ملزمة: ' + ev.hard + '</b>' : 'لا مخالفات ملزمة') + '</span></div>' +
         '<div class="toolbar" style="align-items:center;margin:0"><select id="tt-impt" style="width:auto;max-width:440px">' + opts + '</select>' +
         '<select id="tt-tol" style="width:auto" title="عند إصلاح مخالفة قاعدة ملزمة">' + [[0, 'صارم: لا يسوء جدول أحد'], [3, 'لإصلاح الملزمة: تراجع بسيط مقبول (حتى 3 نقاط للمعلم)'], [6, 'لإصلاح الملزمة: تراجع متوسط مقبول (حتى 6 نقاط)']].map(function (o) { return '<option value="' + o[0] + '"' + ((ui.ttTol || 0) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
@@ -8490,7 +8500,7 @@
     var st = p.status === 'approved' ? 'اعتُمد' + (p.decided_by ? ' — ' + p.decided_by : '') : p.status === 'rejected' ? 'رُفض' + (p.decided_by ? ' — ' + p.decided_by : '') : 'بانتظار الاعتماد';
     var meta = [['الحالة', st], ['أعدّه', p.created_by || ttWho()], ['تاريخ الإعداد', dmy(String(p.created_at || todayISO()).slice(0, 10))]];
     var head = function (sub) {
-      return letterhead() + '<div class="tt-ptitle">' + esc(p.title || 'اقتراح تحسين جدول الحصص') + '</div>' +
+      return ttTop() + '<div class="tt-ptitle">' + esc(p.title || 'اقتراح تحسين جدول الحصص') + '</div>' +
         '<div class="tt-pmeta">' + (sub ? esc(sub) + ' · ' : '') + meta.map(function (m) { return m[0] + ': ' + esc(m[1]); }).join(' · ') + '</div>';
     };
     var v = function (e) { return e ? e.hard * 1000 + e.soft : 0; };
@@ -8578,7 +8588,7 @@
       }
       return r + '</tr>';
     }).join('');
-    return '<section class="tt-page" data-base="13">' + letterhead() +
+    return '<section class="tt-page" data-base="13">' + ttTop() +
       '<div class="tt-ptitle">' + (isT ? 'جدول المعلم/ة: ' + esc(ttName(x)) : 'جدول الصف ' + esc(x)) + '</div>' +
       '<div class="tt-pmeta">' + meta.filter(Boolean).map(esc).join(' · ') + '</div>' +
       '<table class="tt-ptable"><thead>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
@@ -8629,7 +8639,7 @@
       printLandscape = true;
       sheet.style.width = '267mm';
       sheet.className = 'tt-pages land';
-      sheet.innerHTML = pr ? '<img class="wm" src="' + REPORT.logo + '" alt="">' + ttPropPages(pr) : '<p>لا يوجد اقتراح.</p>';
+      sheet.innerHTML = pr ? ttWm() + ttPropPages(pr) : '<p>لا يوجد اقتراح.</p>';
     } else if (q.kind === 'bells') {
       printLandscape = false;
       sheet.className = 'tt-pages';
@@ -8643,7 +8653,7 @@
       } else {
         var list = q.kind === 't' ? (q.id ? [find(q.id)] : ttTeachers()) : (q.id ? [q.id] : ttClasses());
         sheet.className = 'tt-pages land';
-        sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + list.filter(Boolean).map(function (x) { return ttEntityPage(q.kind, x); }).join('');
+        sheet.innerHTML = ttWm() + list.filter(Boolean).map(function (x) { return ttEntityPage(q.kind, x); }).join('');
       }
     }
     fitTtPages(sheet);
@@ -8794,6 +8804,7 @@
     if (el.id === 'tt-addteacher' && el.value) { ui.ttTeacher = el.value; return render(); }
     if (el.id === 'tt-impt') { ui.ttImpT = el.value; ui.ttOpt = null; return render(); }
     if (el.id === 'tt-tol') { ui.ttTol = Number(el.value) || 0; ui.ttOpt = null; return render(); }
+    if (el.id === 'tt-head') { try { localStorage.setItem('tt-nohead', el.checked ? '0' : '1'); } catch (err) {} return; }
     if (el.id === 'tt-sign') { try { localStorage.setItem('tt-sign', el.checked ? '1' : '0'); } catch (err) {} return; }
     if (!canEditTT()) return;
     if (/^tte-(day|period|class|teacher|subject)$/.test(el.id)) {
