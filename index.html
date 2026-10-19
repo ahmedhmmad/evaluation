@@ -1134,7 +1134,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 13';
+  var APP_BUILD = '20/10 — 14';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1410,7 +1410,7 @@
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
       groups.push(
         { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']] },
-        { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']] }
+        { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']].concat(isAdmin() ? [['#/audit', 'audit', 'سجل التعديلات']] : []) }
       );
     }
     return groups;
@@ -1428,6 +1428,7 @@
     if (h === '#/results' || /^#\/r\//.test(h)) return 'results';
     if (/^#\/transport/.test(h)) return 'transport';
     if (/^#\/classes/.test(h) && canView()) return 'classes';
+    if (h === '#/audit' && isAdmin()) return 'audit';
     var m = h.match(/^#\/(staff|students|admin|rooms|attendance|reports)$/);
     return m && canView() ? m[1] : 'home';
   }
@@ -7101,6 +7102,211 @@
     toast(errors.length ? 'اكتملت الاستعادة مع أخطاء' : 'تمت الاستعادة — سجلات: ' + done, !!errors.length);
   }
 
+  /* ---------- سجل التعديلات (المدير العام) ----------
+     تكتبه القاعدة نفسها عند كل إضافة أو تعديل أو حذف (supabase/audit_log.sql)، وتعرضه هذه الشاشة بالعربية.
+     التعديل يحمل الحقول التي تغيّرت فقط، بقيمها قبل وبعد. العمليات الجماعية (استيراد جدول مثلًا) تُجمع في سطر واحد */
+  var AUDIT_TBL = {
+    students: 'الطلاب', teachers: 'المعلمون والعاملون', profiles: 'المستخدمون', settings: 'الإعدادات',
+    transport_groups: 'الباصات', transport_members: 'اشتراكات المواصلات', transport_payments: 'إيصالات المواصلات',
+    transport_topups: 'الإيصالات المكمِّلة', transport_refunds: 'المستردات', transport_voided: 'أرشيف الإيصالات المحذوفة',
+    timetable_sessions: 'جدول الحصص', timetable_config: 'إعدادات الجدول', timetable_proposals: 'مقترحات تحسين الجدول', attendance: 'الحضور والغياب'
+  };
+  var AUDIT_ACT = { insert: 'إضافة', update: 'تعديل', 'delete': 'حذف' };
+  var AUDIT_FIELD = {
+    full_name: 'الاسم', name: 'الاسم', class_name: 'الشعبة', status: 'الحالة', national_id: 'رقم الهوية', phone: 'الجوال', whatsapp: 'الواتساب',
+    details: 'بيانات التسجيل', wants_transport: 'يحتاج مواصلات', filled_by: 'مدخل البيانات', amount: 'المبلغ', paid_on: 'تاريخ السداد',
+    method: 'وسيلة الدفع', method_note: 'رقم الدفع / ملاحظة', receipt_no: 'رقم الإيصال', due: 'المطلوب', issued_by: 'المسجِّل', month: 'الشهر',
+    group_id: 'الباص', pickup: 'نقطة الركوب', grace_until: 'مهلة حتى', suspended_month: 'موقوف عن الركوب في', left_from: 'إيقاف الاشتراك من',
+    exempt_from: 'الإعفاء من', exempt_to: 'الإعفاء حتى', assembly_point: 'نقطة التجمع', fee: 'الاشتراك', capacity: 'السعة',
+    role: 'الصلاحية', email: 'اسم المستخدم', subject: 'المادة', teacher_id: 'المعلم', day: 'اليوم', period: 'الحصة', note: 'ملاحظة',
+    ratings: 'درجات التقييم', notes: 'الملاحظات', approver_notes: 'ملاحظات المعتمد', visible: 'ظاهر', category: 'الفئة', title: 'المسمى الوظيفي',
+    classes: 'الصفوف والشعب', bells: 'التوقيت والأجراس', days: 'أيام الدراسة', subjects: 'المواد', quota: 'النصاب', rules: 'القواعد'
+  };
+
+  function auditState() {
+    if (!ui.audit) ui.audit = { from: todayISO().slice(0, 8) + '01', to: todayISO(), who: '', tbl: '', q: '', rows: null, loading: false, missing: false };
+    return ui.audit;
+  }
+
+  async function loadAudit() {
+    var a = auditState();
+    if (!a.from || !a.to || a.from > a.to) return toast('اختر فترة صحيحة', true);
+    a.loading = true;
+    render();
+    var from = new Date(a.from + 'T00:00').toISOString(), to = new Date(a.to + 'T23:59:59.999').toISOString();
+    var r = await sb.from('audit_log').select('*').gte('at', from).lte('at', to).order('id', { ascending: false }).limit(3000);
+    a.loading = false;
+    a.missing = !!r.error;
+    a.rows = r.error ? null : r.data || [];
+    a.cut = !!a.rows && a.rows.length >= 3000;
+    render();
+  }
+
+  // قيمة الحقل كما تُقرأ: اسم المعلم بدل معرّفه، والتاريخ بصيغته، واختصار ما طال
+  function auditVal(k, v, tbl) {
+    if (v == null || v === '') return '—';
+    if (k === 'teacher_id') { var t = S.teachers.filter(function (x) { return x.id === v; })[0]; return t ? t.name : 'معلم محذوف'; }
+    if (k === 'group_id') { var g = findGroup(v); return g ? g.assembly_point : 'باص محذوف'; }
+    if (k === 'role') return ROLES[v] || v;
+    if (k === 'method') return PAY_METHODS[v] || v;
+    if (k === 'day' && tbl === 'timetable_sessions') return ((S.ttConfig && S.ttConfig.days) || [])[v] || v;
+    if (typeof v === 'boolean') return v ? 'نعم' : 'لا';
+    if (typeof v === 'object') return 'تغيّرت';
+    var s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}(T|$)/.test(s)) return dmy(s.slice(0, 10));
+    return s.length > 60 ? s.slice(0, 60) + '…' : s;
+  }
+
+  // عمّن أو عمّا يتحدث السطر: الطالب، رقم الإيصال، المعلم، الباص، الشعبة واليوم
+  function auditSubject(r) {
+    var row = r.new || r.old || {}, parts = [];
+    if (r.tbl === 'attendance') return 'شعبة ' + (row.class_name || '') + ' — ' + dayName(row.day) + ' ' + dmy(row.day);
+    var x = r.student_id ? findStudent(r.student_id) : null;
+    var nm = x ? x.full_name : row.student_name || (r.tbl === 'students' ? row.full_name : '');
+    if (nm) parts.push(nm);
+    if (r.receipt_no != null) parts.push('إيصال رقم ' + r.receipt_no);
+    if (row.month && r.tbl !== 'students') parts.push('عن ' + monthLabel(row.month));
+    if (r.tbl === 'teachers' || r.tbl === 'profiles') {
+      var id = r.row_key, t = S.teachers.filter(function (q) { return q.id === id; })[0], u = S.users.filter(function (q) { return q.id === id; })[0];
+      parts.push(row.name || row.full_name || (t && t.name) || (u && (u.full_name || displayName(u.email))) || '');
+    }
+    if (r.tbl === 'transport_groups') { var g = findGroup(r.row_key); parts.push(row.assembly_point || (g && g.assembly_point) || ''); }
+    if (r.tbl === 'timetable_sessions') parts.push([row.class_name, auditVal('day', row.day, r.tbl), row.period ? 'الحصة ' + row.period : ''].filter(Boolean).join(' · '));
+    if (r.tbl === 'transport_refunds' && row.refund_no) parts.push('سند استرداد رقم ' + row.refund_no);
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  // ما الذي تغيّر، بجملة
+  function auditWhat(r) {
+    if (r.tbl === 'attendance') {
+      var n = r.new || {}, o = r.old || {};
+      if (r.action === 'insert') return 'سُجّل الحضور: ' + n.students + ' طالبًا، الغائبون ' + n.absent;
+      if (r.action === 'delete') return 'حُذف تسجيل ' + o.students + ' طالبًا';
+      return (n.changes || []).map(function (c) {
+        var x = findStudent(c.student_id);
+        return (x ? x.full_name : 'طالب') + ': ' + (c.from === 'absent' ? 'غائب' : 'حاضر') + ' ← ' + (c.to === 'absent' ? 'غائب' : 'حاضر');
+      }).join('، ');
+    }
+    if (r.action !== 'update') return '';
+    return Object.keys(r.new || {}).map(function (k) {
+      return (AUDIT_FIELD[k] || k) + ': ' + auditVal(k, (r.old || {})[k], r.tbl) + ' ← ' + auditVal(k, r.new[k], r.tbl);
+    }).join(' · ');
+  }
+
+  function auditFiltered() {
+    var a = auditState(), q = norm(a.q), digits = latinDigits(a.q).replace(/\D/g, '');
+    return (a.rows || []).filter(function (r) {
+      if (a.who && r.user_name !== a.who) return false;
+      if (a.tbl && r.tbl !== a.tbl) return false;
+      if (!q) return true;
+      if (digits && String(r.receipt_no || '') === digits) return true;
+      return norm(auditSubject(r) + ' ' + auditWhat(r)).indexOf(q) > -1;
+    });
+  }
+
+  // العمليات المتتالية لنفس المستخدم على نفس الجدول بنفس النوع خلال دقيقة تُجمع إن زادت عن 3
+  function auditGroups(list) {
+    var out = [];
+    list.forEach(function (r) {
+      var last = out[out.length - 1], t = new Date(r.at).getTime();
+      if (last && last.user_name === r.user_name && last.tbl === r.tbl && last.action === r.action && Math.abs(last.t - t) < 60000) { last.items.push(r); last.t = t; }
+      else out.push({ user_name: r.user_name, tbl: r.tbl, action: r.action, t: t, items: [r] });
+    });
+    return out;
+  }
+
+  function auditWhen(at) {
+    var d = new Date(at);
+    return dmy(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')) + ' ' +
+      d.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderAudit() {
+    var a = auditState();
+    var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    var head = '<div class="page-head"><div><h1>سجل التعديلات</h1><p>من أضاف أو عدّل أو حذف ماذا ومتى. تكتبه قاعدة البيانات نفسها، ولا يمكن تعديله أو حذفه.</p></div></div>' +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
+      '<span class="monthpick"><label class="field" for="aud-from">من</label><input type="date" id="aud-from" data-ro-ok value="' + a.from + '"></span>' +
+      '<span class="monthpick"><label class="field" for="aud-to">إلى</label><input type="date" id="aud-to" data-ro-ok value="' + a.to + '"></span>' +
+      '<button type="button" class="btn primary" data-audrun data-ro-ok' + (a.loading ? ' disabled' : '') + '>' + (a.loading ? 'جارٍ الجلب…' : 'عرض') + '</button></div></div>';
+    if (a.missing) {
+      app.innerHTML = head + '<div class="card empty">سجل التعديلات يحتاج إلى جدول جديد في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/audit_log.sql</code> في محرر SQL، ويبدأ التسجيل من لحظتها.</div>';
+      return;
+    }
+    if (!a.rows) {
+      app.innerHTML = head + '<div class="card empty">اختر الفترة ثم «عرض».</div>';
+      if (!a.loading) loadAudit();
+      return;
+    }
+    var who = {}, tbls = {};
+    a.rows.forEach(function (r) { who[r.user_name || '—'] = 1; tbls[r.tbl] = 1; });
+    var list = auditFiltered(), groups = auditGroups(list);
+    var line = function (r) {
+      var what = auditWhat(r), subj = auditSubject(r);
+      return '<span>' + esc(subj || '—') + '</span>' + (what ? '<div class="hint" style="margin:2px 0 0">' + esc(what) + '</div>' : '');
+    };
+    var rows = groups.map(function (g) {
+      var r = g.items[0], many = g.items.length > 3;
+      return '<tr><td style="white-space:nowrap">' + auditWhen(r.at) + '</td><td>' + esc(r.user_name || '—') + '</td>' +
+        '<td><span class="badge ' + (r.action === 'delete' ? 'unpaid' : r.action === 'insert' ? 'paid' : 'part') + '">' + AUDIT_ACT[r.action] + '</span></td>' +
+        '<td>' + esc(AUDIT_TBL[r.tbl] || r.tbl) + '</td>' +
+        '<td>' + (many
+          ? '<details><summary>' + g.items.length + (g.items.length <= 10 ? ' سجلات' : ' سجلًا') + ' في عملية واحدة</summary>' + g.items.map(function (x) { return '<div style="margin-top:6px">' + line(x) + '</div>'; }).join('') + '</details>'
+          : g.items.map(line).join('<hr style="border:0;border-top:1px solid var(--line);margin:6px 0">')) + '</td></tr>';
+    }).join('');
+    app.innerHTML = head +
+      '<div class="toolbar" style="align-items:center">' +
+        '<select id="aud-who" data-ro-ok style="width:auto">' + opt('', 'كل المستخدمين', a.who) + Object.keys(who).sort().map(function (v) { return opt(v, v, a.who); }).join('') + '</select>' +
+        '<select id="aud-tbl" data-ro-ok style="width:auto">' + opt('', 'كل البيانات', a.tbl) + Object.keys(tbls).map(function (v) { return opt(v, AUDIT_TBL[v] || v, a.tbl); }).join('') + '</select>' +
+        '<input type="search" id="aud-q" data-ro-ok placeholder="اسم الطالب أو رقم الإيصال أو أي كلمة" aria-label="بحث" value="' + esc(a.q) + '" style="max-width:280px">' +
+        '<button type="button" class="btn" data-audxlsx data-ro-ok' + (list.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
+      (a.cut ? '<p class="formhint">عُرض آخر 3000 تغيير فقط في هذه الفترة. اختر فترة أقصر لرؤية الأقدم.</p>' : '') +
+      '<div class="card"><p class="st-count" style="margin-top:0">التغييرات: ' + list.length + '</p>' +
+      (list.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>بواسطة</th><th>العملية</th><th>البيانات</th><th>التفاصيل</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا توجد تغييرات مطابقة.</div>') + '</div>';
+  }
+
+  async function exportAuditXlsx() {
+    var a = auditState(), list = auditFiltered();
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['سجل التعديلات — من ' + dmy(a.from) + ' إلى ' + dmy(a.to)], [],
+        ['م', 'الوقت', 'بواسطة', 'العملية', 'البيانات', 'عن', 'التغيير']].concat(list.map(function (r, i) {
+          return [i + 1, auditWhen(r.at), r.user_name || '', AUDIT_ACT[r.action], AUDIT_TBL[r.tbl] || r.tbl, auditSubject(r), auditWhat(r)];
+        })));
+      ws['!cols'] = [6, 18, 20, 10, 22, 40, 70].map(function (w) { return { wch: w }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'سجل التعديلات');
+      XLSX.writeFile(wb, 'سجل-التعديلات-' + a.from + '-' + a.to + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/audit' || !isAdmin()) return;
+    if (e.target.closest('[data-audrun]')) { var a = auditState(); a.rows = null; loadAudit(); }
+    else if (e.target.closest('[data-audxlsx]')) exportAuditXlsx();
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/audit') return;
+    var a = auditState(), el = e.target;
+    if (el.id === 'aud-from') a.from = el.value;
+    else if (el.id === 'aud-to') a.to = el.value;
+    else if (el.id === 'aud-who') { a.who = el.value; render(); }
+    else if (el.id === 'aud-tbl') { a.tbl = el.value; render(); }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/audit' || e.target.id !== 'aud-q') return;
+    auditState().q = e.target.value;
+    var pos = e.target.selectionStart;
+    render();
+    var q = document.getElementById('aud-q');
+    if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+  });
+
   function backupCardHtml() {
     var last = '';
     try { last = localStorage.getItem('last-backup') || ''; } catch (err) { /* التخزين المحلي غير متاح */ }
@@ -7192,6 +7398,7 @@
     if (/^#\/transport/.test(h) && canView()) return renderTransport();
     if (h === '#/admin' && canView()) return renderAdmin();
     if (h === '#/rooms' && canView()) return renderRooms();
+    if (h === '#/audit' && isAdmin()) return renderAudit();
     if (h === '#/attendance' && canAttView()) return renderAttendance();
     if (h === '#/reports' && canView()) return renderReports();
     if (h === '#/results' || r) return renderResults(r && r[1]);
