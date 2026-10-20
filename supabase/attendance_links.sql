@@ -281,7 +281,7 @@ declare
   msg text := att_norm(p_text);
   who text; st attendance_bot_state; cls text; rest text; reply text; cnum text;
 begin
-  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the attendance screen'); end if;
+  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the settings screen (الإعدادات والمستخدمون)'); end if;
   -- the number is matched on its last 9 digits, so 010…, +2010…, 0020… and a country code other than Egypt all match
   select name into who from attendance_tokens
   where active and length(ph) >= 9 and right(att_phone(phone), 9) = right(ph, 9) limit 1;

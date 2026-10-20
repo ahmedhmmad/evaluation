@@ -88,7 +88,7 @@ declare
   d date;
   n int; u int;
 begin
-  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the attendance screen'); end if;
+  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the settings screen (الإعدادات والمستخدمون)'); end if;
   who := staff_bot_sender(p_phone);
   if who.phone is null then return jsonb_build_object('handled', false); end if;
   select * into st from staff_bot_state where phone = pk and updated_at > now() - interval '30 minutes';

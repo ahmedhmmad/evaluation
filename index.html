@@ -1085,7 +1085,7 @@
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
     S.tGroups = []; S.tMembers = []; S.tPay = {}; S.tTop = {}; S.transportMissing = false;
-    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null; S.pLinks = null; S.subs = null; S.sa = null;
+    S.ttSessions = []; S.ttConfig = null; S.ttMissing = false; S.dash = null; S.pLinks = null; S.subs = null; S.sa = null; S.botKey = null;
 
     if (isStaff()) {
       var res = await Promise.all([
@@ -1140,7 +1140,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 23';
+  var APP_BUILD = '20/10 — 24';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7013,7 +7013,7 @@
     }).join('');
 
     app.innerHTML = tabs('admin') +
-      backupCardHtml() +
+      backupCardHtml() + botKeyCardHtml() +
       '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
         '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
@@ -11312,11 +11312,47 @@
         '<input type="text" id="al-phone" placeholder="جوال المعلم (واتساب)" dir="ltr" inputmode="tel" style="width:200px;text-align:right">' +
         '<button type="button" class="btn primary" data-aladd>إضافة معلم</button></div>' +
       (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>المعلم</th><th>الجوال</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<div class="empty">لم يُضف معلمون بعد.</div>') +
-      '<details style="margin-top:12px"><summary>مفتاح n8n (للرسائل الصباحية وبوت الواتساب)</summary>' +
-        '<p class="hint" style="margin:8px 0">يوضع في workflows الـ n8n مكان <code dir="ltr">PUT_BOT_KEY_HERE</code>. من يملكه يستطيع تسجيل الغياب باسم أي معلم مسجَّل هنا، فلا تنشره. إن تسرّب فغيّره ثم حدّثه في n8n.</p>' +
-        '<div class="toolbar" style="align-items:center"><code dir="ltr" style="flex:1;overflow-wrap:anywhere">' + esc(S.attBotKey ? S.attBotKey.slice(0, 6) + '…' + S.attBotKey.slice(-4) : '—') + '</code>' +
-        '<button type="button" class="btn" data-alkeycopy>نسخ المفتاح</button><button type="button" class="btn danger" data-alkeynew>تغيير المفتاح</button></div></details></div>';
+      '<p class="hint" style="margin:12px 0 0">مفتاح n8n (للرسائل الصباحية وبوت الواتساب) في <a href="#/admin">الإعدادات والمستخدمون</a>.</p></div>';
   }
+
+  // مفتاح n8n في «الإعدادات والمستخدمون»: يستعمله بوت الواتساب (الغياب وكشف الدوام) والرسائل الصباحية (supabase/attendance_links.sql)
+  async function loadBotKey() {
+    var k = await sb.from('attendance_settings').select('bot_key').eq('id', 1).maybeSingle();
+    S.botKey = k.error ? { missing: true } : { key: (k.data && k.data.bot_key) || '' };
+    render();
+  }
+
+  function botKeyCardHtml() {
+    if (!isAdmin()) return '';
+    if (!S.botKey) { loadBotKey(); return ''; }
+    if (S.botKey.missing) return '';
+    var key = S.botKey.key;
+    return '<div class="card"><h2>مفتاح n8n (بوت الواتساب)</h2>' +
+      '<p class="hint">يوضع في workflows الـ n8n مكان <code dir="ltr">PUT_BOT_KEY_HERE</code>: بوت الواتساب (تسجيل غياب الطلاب بكلمة «غياب»، وكشف دوام العاملين بكلمة «دوام») والرسائل الصباحية. ' +
+        'من يملكه يستطيع تسجيل الغياب باسم المعلمين المسجَّلين ورفع كشوف الدوام للمراجعة، فلا تنشره. إن تسرّب فغيّره ثم ضعه في n8n.</p>' +
+      '<div class="toolbar" style="align-items:center;margin:0"><code dir="ltr" style="flex:1;overflow-wrap:anywhere">' + esc(key ? (ui.botKeyShow ? key : key.slice(0, 6) + '…' + key.slice(-4)) : '—') + '</code>' +
+        '<button type="button" class="btn" data-botkeyshow>' + (ui.botKeyShow ? 'إخفاء' : 'إظهار') + '</button>' +
+        '<button type="button" class="btn" data-alkeycopy>نسخ المفتاح</button><button type="button" class="btn danger" data-alkeynew>تغيير المفتاح</button></div></div>';
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/admin' || !isAdmin() || !S.botKey || S.botKey.missing) return;
+    if (e.target.closest('[data-botkeyshow]')) { ui.botKeyShow = !ui.botKeyShow; return render(); }
+    if (e.target.closest('[data-alkeycopy]')) return copyText(S.botKey.key, 'نُسخ المفتاح');
+    if (e.target.closest('[data-alkeynew]')) {
+      if (!confirm('تغيير مفتاح n8n؟\nيتوقف بوت الواتساب (الغياب والدوام) والرسائل الصباحية حتى تضع المفتاح الجديد في n8n.')) return;
+      var bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      var key = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      var r = await sb.from('attendance_settings').update({ bot_key: key }).eq('id', 1);
+      if (r.error) return fail(r.error);
+      S.botKey.key = key;
+      S.attBotKey = key;
+      ui.botKeyShow = true;
+      render();
+      toast('تغيّر المفتاح — ضعه في n8n');
+    }
+  });
 
   /* ---------- روابط أولياء الأمور (المدير العام) ----------
      لكل ولي أمر رابط سري واحد (parent.html) يرى منه أبناءه المسجلين: الغياب، وإيصالات المواصلات، وجدول الحصص.
@@ -11514,18 +11550,6 @@
       if (r.error) return fail(r.error);
       S.attLinks = S.attLinks.filter(function (x) { return x !== d; });
       render();
-    } else if (e.target.closest('[data-alkeycopy]')) {
-      copyText(S.attBotKey, 'نُسخ المفتاح');
-    } else if (e.target.closest('[data-alkeynew]')) {
-      if (!confirm('تغيير مفتاح n8n؟ تتوقف الرسائل الصباحية والبوت حتى تضع المفتاح الجديد في n8n.')) return;
-      var bytes = new Uint8Array(32);
-      crypto.getRandomValues(bytes);
-      var key = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
-      r = await sb.from('attendance_settings').update({ bot_key: key }).eq('id', 1);
-      if (r.error) return fail(r.error);
-      S.attBotKey = key;
-      render();
-      toast('تغيّر المفتاح — ضعه في n8n');
     }
   });
 
