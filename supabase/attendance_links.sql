@@ -137,9 +137,13 @@ end $$;
 
 -- ---------- n8n (with the bot key) ----------
 
+-- The key is hex; anything else in what n8n sends (a line break or space picked up when pasting, an invisible
+-- direction mark from an Arabic page) is ignored, so a correctly copied key is never refused for an unseen character.
 create or replace function public.att_bot_ok(p_key text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from attendance_settings where id = 1 and bot_key = p_key and length(coalesce(p_key, '')) >= 32)
+  select exists (select 1 from attendance_settings
+                 where id = 1 and length(regexp_replace(coalesce(p_key, ''), '[^0-9A-Fa-f]', '', 'g')) >= 32
+                   and lower(regexp_replace(bot_key, '[^0-9A-Fa-f]', '', 'g')) = lower(regexp_replace(coalesce(p_key, ''), '[^0-9A-Fa-f]', '', 'g')))
 $$;
 
 -- The morning message: each active teacher with a phone, and their link token.
