@@ -1168,7 +1168,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 25';
+  var APP_BUILD = '21/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8403,8 +8403,10 @@
         : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>' +
       '<div class="card"><h2>الكشف الشهري</h2><div class="toolbar" style="align-items:center;margin:8px 0 0">' +
         '<span class="monthpick"><label class="field" for="sa-month">الشهر</label><input type="month" id="sa-month" data-ro-ok value="' + st.month + '"></span>' +
-        '<button type="button" class="btn" data-sarep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-sarep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
-        '<p class="hint" style="margin:8px 0 0">لكل موظف: أيام الحضور والغياب والإجازة والمأمورية، وأيام التأخير ومجموع دقائقه، ومجموع دقائق الانصراف المبكر. وملف Excel فيه أيضًا تفصيل كل يوم.</p></div>';
+        '<b style="margin-inline-start:8px">كشف الحضور:</b><button type="button" class="btn primary" data-sarep="regx" data-ro-ok>Excel</button><button type="button" class="btn primary" data-sarep="regp" data-ro-ok>PDF / طباعة</button>' +
+        '<b style="margin-inline-start:8px">الملخص:</b><button type="button" class="btn" data-sarep="xlsx" data-ro-ok>Excel</button><button type="button" class="btn" data-sarep="pdf" data-ro-ok>PDF / طباعة</button></div>' +
+        '<p class="hint" style="margin:8px 0 0"><b>كشف الحضور</b> مثل كشف الطلاب: اسم كل موظف وعمود لكل يوم من الشهر؛ + حاضر، L إجازة، غ غائب، م مأمورية، وتظليل الجمعة والسبت والعطل والإجازات. ' +
+          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>';
   }
 
   /* ----- قراءة كشف الدوام المصوَّر -----
@@ -8598,10 +8600,74 @@
     return { month: month, from: from, to: to, days: days, staff: staff, H: H };
   }
 
+  /* ----- كشف الحضور الشهري للموظفين (مثل كشف الطلاب) -----
+     صف لكل موظف وعمود لكل يوم: + حاضر، L إجازة، غ غائب، م مأمورية، و— خارج مدة عمله.
+     تُظلَّل الجمعة والسبت والعطل (attOff) وخانات الإجازة. في الأسفل عدد الحاضرين في كل يوم */
+  var SA_REG = { present: '+', leave: 'L', absent: 'غ', mission: 'م' };
+  // سُجّل دوام أحد في اليوم (وإلا فخانة عدد الحاضرين فارغة لا صفر)
+  function saDayRecorded(D, dd) { return D.staff.some(function (s) { return !!s.days[dd]; }); }
+  function saRegMark(s, dd) {
+    if (!employedOn(s.t, dd)) return '—';
+    var r = s.days[dd];
+    return r ? SA_REG[r.status] || '' : '';
+  }
+
+  async function saRegisterXlsx(D) {
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var head = ['م', 'اسم الموظف', 'الفئة'].concat(D.days.map(function (dd) {
+        return Number(dd.slice(8)) + (attOff(dd) ? ' (' + (attHoliday(dd) ? 'عطلة' : WEEKDAYS[new Date(dd + 'T00:00').getDay()]) + ')' : '');
+      }), ['حضور', 'إجازة', 'غياب', 'مأمورية']);
+      var presentPerDay = D.days.map(function (dd) { return D.staff.filter(function (s) { return (s.days[dd] || {}).status === 'present' && employedOn(s.t, dd); }).length; });
+      var aoa = [[schoolName()], ['كشف حضور الموظفين — ' + monthLabel(D.month)], [], head].concat(D.staff.map(function (s, i) {
+        return [i + 1, s.t.name + (s.term ? ' (' + s.term + ')' : ''), staffCat(s.t)].concat(D.days.map(function (dd) { return saRegMark(s, dd); }), [s.present, s.leave, s.absent, s.mission]);
+      }), [['', 'عدد الحاضرين في اليوم', ''].concat(D.days.map(function (dd, j) { return attOff(dd) || !saDayRecorded(D, dd) ? '' : presentPerDay[j]; }))],
+        [[], ['المفتاح: + حاضر · L إجازة · غ غائب · م مأمورية · — خارج مدة عمله · الأيام بين قوسين: الجمعة والسبت والعطل']]);
+      xlsxSheet(wb, used, 'كشف الحضور', aoa, [4, 28, 13].concat(D.days.map(function (dd) { return attOff(dd) ? 9 : 4; }), [7, 7, 7, 8]));
+      XLSX.writeFile(wb, 'كشف-حضور-الموظفين-' + D.month + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // صفحة أفقية واحدة بأسلوب كشف الطلاب (att-regs)، يُكبَّر خطها إلى أكبر حجم يتسع
+  function buildSaRegisterSheet(D) {
+    printLandscape = true;
+    var off = attOff;
+    var body = D.staff.map(function (s, i) {
+      return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(s.t.name) + (s.term ? ' <small>(' + esc(s.term) + ')</small>' : '') + '</td>' + D.days.map(function (dd) {
+        var m = saRegMark(s, dd), st = (s.days[dd] || {}).status;
+        return '<td class="c' + (off(dd) || st === 'leave' || m === '—' ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + m + '</td>';
+      }).join('') + '<td class="c">' + s.present + '</td><td class="c">' + s.leave + '</td><td class="c"><b>' + s.absent + '</b></td></tr>';
+    }).join('');
+    var perDay = D.days.map(function (dd) {
+      if (off(dd)) return '<td class="c fr">' + (attHoliday(dd) ? 'ع' : '') + '</td>';
+      if (!saDayRecorded(D, dd)) return '<td class="c"></td>';
+      return '<td class="c">' + D.staff.filter(function (s) { return (s.days[dd] || {}).status === 'present' && employedOn(s.t, dd); }).length + '</td>';
+    }).join('');
+    sheet.className = 'att-regs';
+    sheet.removeAttribute('data-fit');
+    sheet.style.width = '267mm';
+    sheet.innerHTML = '<section class="att-page">' +
+      '<div class="att-title"><b>' + esc(schoolName()) + '</b><span>كشف حضور الموظفين — ' + monthLabel(D.month) + '</span><span></span></div>' +
+      '<div class="att-sub"><span>عدد الموظفين: <b>' + D.staff.length + '</b></span><span>الوقت الرسمي: <b>' + D.H.time_in + ' – ' + D.H.time_out + '</b></span></div>' +
+      '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الموظف</th>' + D.days.map(function (dd) { return '<th class="' + (off(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
+        '<th class="tot">حضور</th><th class="tot">إجازة</th><th class="tot">غياب</th></tr></thead>' +
+      '<tbody>' + body + '<tr class="total"><td colspan="2">عدد الحاضرين في اليوم</td>' + perDay + '<td colspan="3"></td></tr></tbody></table>' +
+      '<p class="att-key">المفتاح: + حاضر · L إجازة · غ غائب · م مأمورية · — خارج مدة عمله · المظلّل: الجمعة والسبت والعطل' + (D.days.some(attHoliday) ? ' (ع: عطلة)' : '') +
+        ' والإجازات · الخانة الفارغة: لم يُسجَّل · تاريخ الإصدار: ' + dmy(todayISO()) + '</p>' +
+      reportSigns([['مدير الأكاديمية', principalName()]]) + '</section>';
+    fitRegisterPages(sheet);
+  }
+
   async function saReport(fmt) {
     var st = saState(), D = await saMonthData(st.month);
     if (!D) return toast('تعذر جلب الدوام', true);
     if (fmt === 'pdf') { pendingSa = D; return printNow(); }
+    if (fmt === 'regp') { pendingSa = Object.assign({ reg: true }, D); return printNow(); }
+    if (fmt === 'regx') return saRegisterXlsx(D);
     try {
       await loadXlsx();
       var wb = XLSX.utils.book_new();
@@ -13192,7 +13258,7 @@
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.removeAttribute('data-pages');
-    if (pendingSa) buildSaSheet(pendingSa);
+    if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
     else if (pendingSubs) buildSubsSheet(pendingSubs);
     else if (pendingTT) buildTtSheet(pendingTT);
     else if (pendingLed) buildLedSheet();
