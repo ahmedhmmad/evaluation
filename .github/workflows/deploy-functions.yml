@@ -1,5 +1,6 @@
-# Deploys the Supabase Edge Function that reads scanned registration forms, and hands it the
-# DeepInfra API key, so the key is never typed into the Supabase dashboard or the website.
+# Deploys the Supabase Edge Functions that read scanned registration forms (read-registration-form) and
+# photographed staff attendance sheets (read-staff-sheet), and hands them the DeepInfra API key,
+# so the key is never typed into the Supabase dashboard or the website.
 #
 # Repository secrets used (Settings → Secrets and variables → Actions):
 #   DEEPINFRA_API_KEY      - the DeepInfra key the function calls the model with
@@ -15,6 +16,7 @@ on:
     branches: [main]
     paths:
       - supabase/functions/read-registration-form/**
+      - supabase/functions/read-staff-sheet/**
       - .github/workflows/deploy-functions.yml
 
 jobs:
@@ -48,14 +50,18 @@ jobs:
 
       - name: Deploy the function
         if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy read-registration-form --project-ref "$PROJECT_REF"
+        run: |
+          supabase functions deploy read-registration-form --project-ref "$PROJECT_REF"
+          supabase functions deploy read-staff-sheet --project-ref "$PROJECT_REF"
 
-      - name: Confirm the function is reachable
+      - name: Confirm the functions are reachable
         if: steps.check.outputs.ready == 'true'
         run: |
-          code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS "https://$PROJECT_REF.supabase.co/functions/v1/read-registration-form")
-          echo "The function endpoint answered with HTTP $code"
-          if [ "$code" = "404" ]; then
-            echo "::error::The function was not found after deploying."
-            exit 1
-          fi
+          for fn in read-registration-form read-staff-sheet; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS "https://$PROJECT_REF.supabase.co/functions/v1/$fn")
+            echo "$fn answered with HTTP $code"
+            if [ "$code" = "404" ]; then
+              echo "::error::$fn was not found after deploying."
+              exit 1
+            fi
+          done

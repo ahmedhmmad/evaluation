@@ -1136,7 +1136,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 20';
+  var APP_BUILD = '20/10 — 21';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7553,7 +7553,9 @@
     { name: 'timetable_sessions', label: 'حصص الجدول', key: 'id' },
     { name: 'timetable_proposals', label: 'مقترحات تحسين الجدول', key: 'id' },
     { name: 'teacher_absences', label: 'غياب المعلمين', key: 'id' },
-    { name: 'substitutions', label: 'حصص الاحتياط', key: 'id' }
+    { name: 'substitutions', label: 'حصص الاحتياط', key: 'id' },
+    { name: 'staff_hours', label: 'الوقت الرسمي للدوام', key: 'id' },
+    { name: 'staff_attendance', label: 'دوام الموظفين', key: 'teacher_id,day' }
   ];
   var BACKUP_MARK = 'third-pillar-backup';
 
@@ -7629,7 +7631,7 @@
     transport_topups: 'الإيصالات المكمِّلة', transport_refunds: 'المستردات', transport_voided: 'أرشيف الإيصالات المحذوفة',
     transport_staff_members: 'مواصلات الموظفين', transport_staff_payments: 'إيصالات مواصلات الموظفين',
     timetable_sessions: 'جدول الحصص', timetable_config: 'إعدادات الجدول', timetable_proposals: 'مقترحات تحسين الجدول', attendance: 'الحضور والغياب',
-    teacher_absences: 'غياب المعلمين', substitutions: 'حصص الاحتياط'
+    teacher_absences: 'غياب المعلمين', substitutions: 'حصص الاحتياط', staff_attendance: 'دوام الموظفين', staff_hours: 'الوقت الرسمي للدوام'
   };
   var AUDIT_ACT = { insert: 'إضافة', update: 'تعديل', 'delete': 'حذف' };
   var AUDIT_FIELD = {
@@ -7641,7 +7643,7 @@
     role: 'الصلاحية', email: 'اسم المستخدم', subject: 'المادة', teacher_id: 'المعلم', day: 'اليوم', period: 'الحصة', note: 'ملاحظة',
     ratings: 'درجات التقييم', notes: 'الملاحظات', approver_notes: 'ملاحظات المعتمد', visible: 'ظاهر', category: 'الفئة', title: 'المسمى الوظيفي',
     classes: 'الصفوف والشعب', bells: 'التوقيت والأجراس', days: 'أيام الدراسة', subjects: 'المواد', quota: 'النصاب', rules: 'القواعد',
-    sub_teacher_id: 'معلم الاحتياط', absent_teacher_id: 'المعلم الغائب', periods: 'الحصص', reason: 'السبب'
+    sub_teacher_id: 'معلم الاحتياط', absent_teacher_id: 'المعلم الغائب', periods: 'الحصص', reason: 'السبب', time_in: 'الحضور', time_out: 'الانصراف'
   };
 
   function auditState() {
@@ -7670,6 +7672,7 @@
     if (k === 'group_id') { var g = findGroup(v); return g ? g.assembly_point : 'باص محذوف'; }
     if (k === 'role') return ROLES[v] || v;
     if (k === 'method') return PAY_METHODS[v] || v;
+    if (k === 'status' && tbl === 'staff_attendance') return SA_STATUS[v] || v;
     if (k === 'day' && tbl === 'timetable_sessions') return ((S.ttConfig && S.ttConfig.days) || [])[v] || v;
     if (typeof v === 'boolean') return v ? 'نعم' : 'لا';
     if (typeof v === 'object') return 'تغيّرت';
@@ -7682,6 +7685,11 @@
   function auditSubject(r) {
     var row = r.new || r.old || {}, parts = [];
     if (r.tbl === 'attendance') return 'شعبة ' + (row.class_name || '') + ' — ' + dayName(row.day) + ' ' + dmy(row.day);
+    if (r.tbl === 'staff_attendance') {
+      // في التعديل يُحفظ ما تغيّر فقط، فالموظف واليوم من مفتاح السجل
+      var sk = String(r.row_key || '').split(' | '), se = find(row.teacher_id || sk[0]), sd = String(row.day || sk[1] || '').slice(0, 10);
+      return (se ? se.name : 'موظف') + (sd ? ' — ' + dayName(sd) + ' ' + dmy(sd) : '');
+    }
     var x = r.student_id ? findStudent(r.student_id) : null;
     var nm = x ? x.full_name : row.student_name || (r.tbl === 'students' ? row.full_name : '');
     if (nm) parts.push(nm);
@@ -8239,6 +8247,10 @@
       return;
     }
     var list = saStaff(st.cat), off = attOff(st.day), di = subDayIdx(st.day), dirty = Object.keys(st.draft).length;
+    // ما قُرئ من الكشف المصوَّر ولم يُحفظ: اسم السطر في الكشف، والخانات غير المؤكدة بإطار برتقالي
+    var sheet = (st.scan && st.scan.fromSheet) || {}, unsureMap = (st.scan && st.scan.unsure) || {};
+    var uns = function (id, k) { return !!st.draft[id] && (unsureMap[id] || []).indexOf(k) > -1; };
+    var UNSURE = 'outline:2px solid #f79009;outline-offset:1px';
     var n = { present: 0, absent: 0, leave: 0, mission: 0, none: 0 }, lateN = 0;
     var rows = list.map(function (t, i) {
       var r = saRow(t.id), status = r ? r.status : '', late = r ? saLate(r, H) : 0, early = r ? saEarly(r, H) : 0;
@@ -8249,11 +8261,12 @@
       var teaches = di > -1 && ttLive().some(function (x) { return x.teacher_id === t.id && x.day === di; });
       var toSubs = status && status !== 'present' && teaches && canEditTT() && !S.sa.subsMissing && S.sa.subsAbs.indexOf(t.id) < 0 && S.sa.rows[t.id] && !st.draft[t.id];
       return '<tr' + (st.draft[t.id] ? ' style="background:#fffbeb"' : '') + '><td>' + (i + 1) + '</td>' +
-        '<td><b>' + esc(t.name) + '</b><div class="hint" style="margin:0">' + esc(staffCat(t)) + (t.job_title ? ' · ' + esc(t.job_title) : '') + '</div></td>' +
-        '<td><select data-sast="' + t.id + '" data-ro-ok style="width:auto">' + (status ? '' : '<option value="">— غير مسجَّل —</option>') +
+        '<td><b>' + esc(t.name) + '</b><div class="hint" style="margin:0">' + esc(staffCat(t)) + (t.job_title ? ' · ' + esc(t.job_title) : '') + '</div>' +
+          (sheet[t.id] != null && st.draft[t.id] ? '<div class="hint" style="margin:0">من الكشف: «' + esc(sheet[t.id]) + '»' + (uns(t.id, 'key') ? ' <span class="badge part">تحقّق أنه هو</span>' : '') + '</div>' : '') + '</td>' +
+        '<td><select data-sast="' + t.id + '" data-ro-ok style="width:auto' + (uns(t.id, 'status') ? ';' + UNSURE : '') + '">' + (status ? '' : '<option value="">— غير مسجَّل —</option>') +
           opt('present', 'حاضر') + opt('absent', 'غائب') + opt('leave', 'إجازة') + opt('mission', 'مأمورية') + '</select></td>' +
-        '<td><input type="time" data-sain="' + t.id + '" data-ro-ok value="' + (r ? r.time_in : '') + '"' + (status === 'present' || !status ? '' : ' disabled') + ' style="width:auto"></td>' +
-        '<td><input type="time" data-saout="' + t.id + '" data-ro-ok value="' + (r ? r.time_out : '') + '"' + (status === 'present' || !status ? '' : ' disabled') + ' style="width:auto"></td>' +
+        '<td><input type="time" data-sain="' + t.id + '" data-ro-ok value="' + (r ? r.time_in : '') + '"' + (status === 'present' || !status ? '' : ' disabled') + ' style="width:auto' + (uns(t.id, 'in') ? ';' + UNSURE : '') + '"></td>' +
+        '<td><input type="time" data-saout="' + t.id + '" data-ro-ok value="' + (r ? r.time_out : '') + '"' + (status === 'present' || !status ? '' : ' disabled') + ' style="width:auto' + (uns(t.id, 'out') ? ';' + UNSURE : '') + '"></td>' +
         '<td class="c">' + (late ? '<b style="color:var(--red)">' + late + ' د</b>' : '') + '</td><td class="c">' + (early ? '<b style="color:var(--red)">' + early + ' د</b>' : '') + '</td>' +
         '<td><input type="text" data-sanote="' + t.id + '" data-ro-ok value="' + esc(r ? r.note : '') + '" placeholder="ملاحظة" style="min-width:120px">' +
           (toSubs ? '<button type="button" class="btn link" data-satosubs="' + t.id + '" data-ro-ok>تسجيل غيابه في الاحتياط</button>' : '') + '</td></tr>';
@@ -8271,6 +8284,7 @@
       '</div></div>' +
       '<div class="stats">' + card('حاضرون', n.present, lateN ? 'منهم ' + lateN + ' متأخرون' : 'بلا تأخير') + card('غائبون', n.absent, 'هذا اليوم', n.absent ? 'var(--red)' : '') +
         card('إجازة ومأمورية', n.leave + n.mission, 'إجازة ' + n.leave + ' · مأمورية ' + n.mission) + card('غير مسجَّلين', n.none, 'من ' + list.length + ' موظفًا', n.none ? 'var(--muted)' : '') + '</div>' +
+      saScanHtml() +
       '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn" data-saallin data-ro-ok>الحضور الموحد للجميع (' + H.time_in + ')</button>' +
         '<button type="button" class="btn" data-saallout data-ro-ok>الانصراف الموحد للجميع (' + H.time_out + ')</button>' +
@@ -8284,6 +8298,100 @@
         '<span class="monthpick"><label class="field" for="sa-month">الشهر</label><input type="month" id="sa-month" data-ro-ok value="' + st.month + '"></span>' +
         '<button type="button" class="btn" data-sarep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-sarep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
         '<p class="hint" style="margin:8px 0 0">لكل موظف: أيام الحضور والغياب والإجازة والمأمورية، وأيام التأخير ومجموع دقائقه، ومجموع دقائق الانصراف المبكر. وملف Excel فيه أيضًا تفصيل كل يوم.</p></div>';
+  }
+
+  /* ----- قراءة كشف الدوام المصوَّر -----
+     تُرفع صورة الكشف الورقي (أو PDF)، فتقرؤها خدمة read-staff-sheet (نموذج يقرأ الصور على DeepInfra، بمفتاح على الخادم)
+     وتطابق كل سطر بموظف من القائمة. الناتج يُوضع في شاشة اليوم المختار تعديلاتٍ غير محفوظة: ما شكّ فيه النموذج يُعلَّم،
+     وما لم يُطابَق يُعرض لاختيار صاحبه. لا يُحفظ شيء حتى يراجع المستخدم ويضغط «حفظ» */
+  async function saReadSheet(file) {
+    var st = saState(), staff = saStaff(''), sc = st.scan = { busy: true, msg: 'جارٍ تجهيز الصورة…', unmatched: [], unsure: {}, fromSheet: {}, date: '', error: '' };
+    render();
+    try {
+      var pages = await scanFilePages(file), rows = [], chosen = scanModel(), model = '';
+      var list = staff.map(function (t, i) { return { key: 's' + (i + 1), name: t.name, title: t.job_title || staffCat(t) }; });
+      for (var p = 0; p < pages.length; p++) {
+        sc.msg = 'جارٍ قراءة الكشف' + (pages.length > 1 ? ' — الصفحة ' + (p + 1) + ' من ' + pages.length : '') + '… (قد تستغرق دقيقة)';
+        render();
+        var req = { file: pages[p], staff: list };
+        if (chosen) req.model = chosen;
+        var r = await sb.functions.invoke('read-staff-sheet', { body: req });
+        if (r.error || !r.data || r.data.error) {
+          var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
+          if (/Failed to send|not found|404/i.test(why)) why = 'خدمة قراءة الكشوف غير منشورة على الخادم بعد. شغّل «Deploy Supabase functions» من تبويب Actions في GitHub.';
+          else if (/API_KEY is not set/i.test(why)) why = 'خدمة القراءة منشورة لكن مفتاح DeepInfra لم يصلها. أعد تشغيل «Deploy Supabase functions» من تبويب Actions.';
+          else if (/forbidden/i.test(why)) why = 'قراءة الكشوف للمدير العام والمدير فقط.';
+          throw new Error(why || 'تعذر الاتصال بخدمة القراءة');
+        }
+        model = r.data.model || model;
+        if (r.data.date && !sc.date) sc.date = r.data.date;
+        rows = rows.concat(Array.isArray(r.data.rows) ? r.data.rows : []);
+      }
+      var used = {}, applied = 0;
+      rows.forEach(function (row) {
+        var idx = /^s\d+$/.test(row.key || '') ? Number(row.key.slice(1)) - 1 : -1, t = staff[idx];
+        var status = row.status || (row.in || row.out ? 'present' : '');
+        if (!status && !row.note) return; // سطر فارغ في الكشف
+        if (!t || used[t.id]) { sc.unmatched.push(Object.assign({ status: status, dup: !!(t && used[t.id]) }, row)); return; }
+        used[t.id] = 1;
+        saApplyRead(t.id, row, status);
+        applied++;
+      });
+      sc.busy = false;
+      sc.model = model;
+      var L = ['سطر واحد', 'سطران', 'أسطر', 'سطرًا'], E = ['موظف واحد', 'موظفَين', 'موظفين', 'موظفًا'];
+      sc.msg = 'قُرئ من الكشف ' + arCount(rows.length, L) + '، وطُبّقت القراءة على ' + arCount(applied, E) +
+        (Object.keys(sc.unsure).length ? '، منهم ' + arCount(Object.keys(sc.unsure).length, ['موظف واحد', 'موظفان', 'موظفين', 'موظفًا']) + ' بقراءة غير مؤكدة (بإطار برتقالي)' : '') +
+        (sc.unmatched.length ? '، وبقي ' + arCount(sc.unmatched.length, L) + ' لم يُعرف صاحبه (أسفل)' : '') +
+        '. راجع على الورقة ثم اضغط «حفظ».';
+      sc.missing = staff.filter(function (t) { return !used[t.id]; }).length;
+    } catch (err) {
+      sc.busy = false;
+      sc.error = err.message || String(err);
+    }
+    render();
+  }
+
+  // العدد مع المعدود بالعربية: 1 «سطر واحد»، 2 «سطران»، 3-10 «أسطر»، وما فوقها «سطرًا»
+  function arCount(n, w) { return n === 1 ? w[0] : n === 2 ? w[1] : n + ' ' + (n >= 3 && n <= 10 ? w[2] : w[3]); }
+
+  function saApplyRead(id, row, status) {
+    var sc = saState().scan, patch = { status: status || 'present', note: row.note || (saRow(id) || {}).note || '' };
+    if (patch.status === 'present') { patch.time_in = row.in || ''; patch.time_out = row.out || ''; }
+    saEdit(id, patch);
+    sc.fromSheet[id] = row.name || '';
+    if (row.unsure && row.unsure.length) sc.unsure[id] = row.unsure; else delete sc.unsure[id];
+  }
+
+  // بطاقة القراءة: الرفع، والحالة، والأسطر التي لم يُعرف صاحبها
+  function saScanHtml() {
+    var st = saState(), sc = st.scan;
+    var models = isAdmin() ? '<details style="margin-top:6px"><summary class="hint">نموذج القراءة</summary><div class="toolbar" style="align-items:center;margin-top:6px">' +
+      '<input type="text" id="sa-model" data-ro-ok list="sa-models" dir="ltr" placeholder="الافتراضي على الخادم" value="' + esc(scanModel()) + '" style="max-width:320px">' +
+      '<datalist id="sa-models">' + SCAN_MODELS.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></div></details>' : '';
+    var body = '';
+    if (sc) {
+      if (sc.busy) body = '<p class="hint" style="margin:8px 0 0">' + esc(sc.msg) + '</p>';
+      else if (sc.error) body = '<p class="formhint" style="margin:8px 0 0">' + esc(sc.error) + '</p>';
+      else {
+        body = '<p class="hint" style="margin:8px 0 0">' + esc(sc.msg) + (sc.model ? ' <span dir="ltr">(' + esc(sc.model) + ')</span>' : '') + '</p>' +
+          (sc.date && sc.date !== st.day ? '<p class="formhint" style="margin:6px 0 0">تنبيه: التاريخ المكتوب على الكشف ' + dmy(sc.date) + '، والقراءة طُبّقت على يوم ' + dmy(st.day) + '. تأكد أنه اليوم الصحيح قبل الحفظ.</p>' : '') +
+          (sc.missing ? '<p class="hint" style="margin:6px 0 0">لم يظهر في الكشف ' + arCount(sc.missing, ['موظف واحد', 'موظفان', 'موظفين', 'موظفًا']) + '؛ بقيت حالتهم كما هي.</p>' : '');
+        if (sc.unmatched.length) {
+          var opts = '<option value="">— اختر الموظف —</option>' + saStaff('').map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + '</option>'; }).join('');
+          body += '<div class="table-wrap" style="margin-top:8px"><table class="grid"><thead><tr><th>الاسم كما في الكشف</th><th>القراءة</th><th>صاحبه</th></tr></thead><tbody>' +
+            sc.unmatched.map(function (u, i) {
+              return '<tr><td><b>' + esc(u.name || '—') + '</b>' + (u.dup ? ' <span class="badge part">تكرر في الكشف</span>' : '') + '</td>' +
+                '<td>' + esc((u.status ? SA_STATUS[u.status] : '') + (u.in ? ' · ' + u.in : '') + (u.out ? ' – ' + u.out : '') + (u.note ? ' · ' + u.note : '')) + '</td>' +
+                '<td><select data-saunm="' + i + '" data-ro-ok style="width:auto">' + opts + '</select></td></tr>';
+            }).join('') + '</tbody></table></div>';
+        }
+      }
+    }
+    return '<div class="card"><h2>قراءة كشف الدوام المصوَّر</h2><div class="toolbar" style="align-items:center;margin:8px 0 0">' +
+      '<button type="button" class="btn" data-sascan data-ro-ok' + (sc && sc.busy ? ' disabled' : '') + '>رفع صورة الكشف لقراءته</button>' +
+      '<input type="file" id="sa-scan-file" accept="image/*,application/pdf" hidden>' +
+      '<span class="hint" style="margin:0">تُطبَّق القراءة على يوم ' + dayName(st.day) + ' ' + dmy(st.day) + ' تعديلاتٍ غير محفوظة، فراجعها ثم احفظ.</span></div>' + models + body + '</div>';
   }
 
   async function saSave() {
@@ -8301,6 +8409,7 @@
     st.busy = false;
     if (r.error) { render(); return fail(r.error); }
     st.draft = {};
+    st.scan = null;
     S.sa = null;
     render();
     toast('حُفظ دوام ' + rows.length + ' موظفًا');
@@ -8382,7 +8491,11 @@
       return render();
     }
     if (e.target.closest('[data-sasave]')) return saSave();
-    if (e.target.closest('[data-sacancel]')) { st.draft = {}; return render(); }
+    if (e.target.closest('[data-sacancel]')) { st.draft = {}; st.scan = null; return render(); }
+    if (e.target.closest('[data-sascan]')) {
+      if (Object.keys(st.draft).length && !confirm('في هذا اليوم تعديلات لم تُحفظ. القراءة تُضاف إليها (وتستبدل ما يخص الموظفين الذين في الكشف). متابعة؟')) return;
+      return document.getElementById('sa-scan-file').click();
+    }
     if ((el = e.target.closest('[data-sarep]'))) return saReport(el.getAttribute('data-sarep'));
     if ((el = e.target.closest('[data-satosubs]'))) {
       var tid = el.getAttribute('data-satosubs'), t = find(tid), r = S.sa.rows[tid];
@@ -8402,9 +8515,20 @@
     if (el.id === 'sa-day') {
       if (!el.value) return;
       if (Object.keys(st.draft).length && !confirm('في هذا اليوم تعديلات لم تُحفظ. الانتقال يلغيها؟')) { el.value = st.day; return; }
-      st.day = el.value; st.draft = {}; return render();
+      st.day = el.value; st.draft = {}; st.scan = null; return render();
     }
     if (el.id === 'sa-cat') { st.cat = el.value; return render(); }
+    if (el.id === 'sa-scan-file') { var file = el.files && el.files[0]; el.value = ''; if (file) saReadSheet(file); return; }
+    if (el.id === 'sa-model') { setScanModel(el.value); return; }
+    if (el.hasAttribute('data-saunm')) {
+      // سطر لم يُعرف صاحبه: يُنسب إلى الموظف المختار
+      var sc = st.scan, i = Number(el.getAttribute('data-saunm')), u = sc && sc.unmatched[i];
+      if (!u || !el.value) return;
+      if (st.draft[el.value] && sc.fromSheet[el.value] != null && !confirm('لهذا الموظف قراءة أخرى من الكشف («' + sc.fromSheet[el.value] + '»). استبدالها؟')) { el.value = ''; return; }
+      saApplyRead(el.value, Object.assign({}, u, { unsure: [] }), u.status);
+      sc.unmatched.splice(i, 1);
+      return render();
+    }
     if (el.id === 'sa-month') { st.month = el.value; return; }
     if (el.id === 'sa-hin' || el.id === 'sa-hout') {
       var hin = document.getElementById('sa-hin').value, hout = document.getElementById('sa-hout').value;
