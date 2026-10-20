@@ -5,42 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>تسجيل الغياب</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
 <style>
-  :root { --navy: #1b2a6b; --red: #b42318; --red-soft: #fde8e7; --green: #067647; --green-soft: #e3f5ec; --line: #e2e6ee; --muted: #667085; --bg: #f5f7fb; }
+  /* الهوية: كحلي #13306B وذهبي #C8A45D على خلفية عاجية */
+  :root { --navy: #13306B; --gold: #C8A45D; --gold-soft: #F6EFDF; --red: #B4493F; --red-soft: #F8E7E4; --green: #2F7D57; --green-soft: #E4F2EA; --line: #ECE6D8; --muted: #7E8494; --ink: #5A6070; --bg: #FAF7F0; --shadow: 0 1px 2px rgba(19,48,107,.04), 0 6px 20px rgba(19,48,107,.06); }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, "Segoe UI", Tahoma, sans-serif; background: var(--bg); color: #1d2433; font-size: 17px; }
-  header { background: var(--navy); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 2; }
-  header h1 { margin: 0; font-size: 1.15rem; }
-  header .sub { font-size: .85rem; opacity: .85; margin-top: 2px; }
-  main { padding: 14px 16px 120px; max-width: 640px; margin: 0 auto; }
-  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  body { margin: 0; font-family: "IBM Plex Sans Arabic", "Tajawal", system-ui, "Segoe UI", Tahoma, sans-serif; font-weight: 500; background: var(--bg); color: var(--ink); font-size: 17px; line-height: 1.6; }
+  header { display: flex; align-items: center; gap: 12px; background: var(--navy) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cg fill='none' stroke='%23C8A45D' stroke-opacity='.2' stroke-width='1'%3E%3Cpath d='M22 22h52v52H22z'/%3E%3Cpath d='M48 11.2L84.8 48 48 84.8 11.2 48z'/%3E%3Cpath d='M48 0v11.2M48 84.8V96M0 48h11.2M84.8 48H96M0 0l22 22M96 0L74 22M0 96l22-22M96 96L74 74'/%3E%3Cpath d='M48 29l19 19-19 19-19-19z'/%3E%3Cpath d='M34.6 34.6h26.8v26.8H34.6z'/%3E%3C/g%3E%3C/svg%3E") repeat; background-size: 96px; color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 2; }
+  header::after { content: ""; position: absolute; inset-inline: 0; top: 100%; height: 16px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1440' height='40' viewBox='0 0 1440 40' preserveAspectRatio='none'%3E%3Cpath d='M0 0H1440V12C1180 36 960 6 720 18 480 30 240 34 0 14Z' fill='%2313306B'/%3E%3Cpath d='M0 14C240 34 480 30 720 18 960 6 1180 36 1440 12' fill='none' stroke='%23C8A45D' stroke-width='3' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") no-repeat 0 0 / 100% 100%; pointer-events: none; }
+  header .logo { width: 44px; flex: none; aspect-ratio: 1; border-radius: 12px; background: #fff url(banner.jpg) no-repeat 11.8% 43% / 615% auto; }
+  header h1 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+  header .sub { font-size: .85rem; color: #E9DDBF; margin-top: 2px; }
+  main { padding: 28px 16px 120px; max-width: 640px; margin: 0 auto; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
   .msg { text-align: center; color: var(--muted); padding: 30px 10px; }
   .err { color: var(--red); }
   .classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .classes button { font: inherit; padding: 16px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; cursor: pointer; text-align: center; }
-  .classes button b { display: block; font-size: 1.05rem; }
+  .classes button { font: inherit; padding: 16px 10px; border-radius: 16px; border: 1px solid var(--line); border-top: 3px solid var(--gold); background: #fff; cursor: pointer; text-align: center; box-shadow: var(--shadow); }
+  .classes button b { display: block; font-size: 1.05rem; font-weight: 700; color: var(--navy); }
   .classes button span { font-size: .8rem; color: var(--muted); }
-  .classes button.done { border-color: #a6dcc0; background: var(--green-soft); }
+  .classes button.done { border-color: #B9DCC8; border-top-color: var(--green); background: var(--green-soft); }
   .row { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--line); cursor: pointer; user-select: none; }
   .row:last-child { border-bottom: 0; }
   .row .n { width: 26px; color: var(--muted); font-size: .85rem; }
   .row .name { flex: 1; }
-  .row .tag { font-size: .8rem; padding: 3px 10px; border-radius: 99px; background: var(--green-soft); color: var(--green); }
+  .row .tag { font-size: .8rem; font-weight: 700; padding: 3px 12px; border-radius: 99px; background: var(--green-soft); color: var(--green); }
   .row.absent { background: var(--red-soft); }
   .row.absent .tag { background: var(--red); color: #fff; }
   .list { padding: 0; overflow: hidden; }
-  .bar { position: fixed; bottom: 0; inset-inline: 0; background: #fff; border-top: 1px solid var(--line); padding: 12px 16px; display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .bar { position: fixed; bottom: 0; inset-inline: 0; background: #fff; border-top: 2px solid var(--gold); box-shadow: 0 -6px 20px rgba(19,48,107,.06); padding: 12px 16px; display: flex; gap: 10px; align-items: center; justify-content: center; }
   .bar[hidden] { display: none; }
   .bar .count { flex: 1; max-width: 300px; font-size: .95rem; }
-  button.primary { font: inherit; font-weight: 700; background: var(--navy); color: #fff; border: 0; border-radius: 10px; padding: 12px 22px; cursor: pointer; }
-  button.ghost { font: inherit; background: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  button.primary { font: inherit; font-weight: 700; background: var(--navy); color: #fff; border: 0; border-radius: 12px; padding: 12px 22px; cursor: pointer; }
+  button.ghost { font: inherit; font-weight: 600; color: var(--navy); background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; cursor: pointer; }
   button:disabled { opacity: .6; }
   .back { margin-bottom: 10px; }
   .hint { font-size: .85rem; color: var(--muted); margin: 0 0 10px; }
 </style>
 </head>
 <body>
-<header><h1 id="title">تسجيل الغياب</h1><div class="sub" id="sub"></div></header>
+<header><span class="logo" role="img" aria-label="شعار الأكاديمية"></span><div><h1 id="title">تسجيل الغياب</h1><div class="sub" id="sub"></div></div></header>
 <main id="main"><div class="msg">جارٍ التحميل…</div></main>
 <div class="bar" id="bar" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
