@@ -33,7 +33,9 @@ begin
     raise exception 'مفتاح النسخ غير صحيح';
   end if;
   foreach t in array array['teachers', 'visits', 'statements', 'students', 'transport_groups', 'transport_members', 'transport_payments',
-      'transport_voided', 'transport_refunds', 'transport_topups', 'attendance', 'timetable_config', 'timetable_sessions', 'timetable_proposals', 'teacher_absences', 'substitutions'] loop
+      'transport_voided', 'transport_refunds', 'transport_topups', 'transport_staff_members', 'transport_staff_payments',
+      'attendance', 'timetable_config', 'timetable_sessions', 'timetable_proposals', 'teacher_absences', 'substitutions',
+      'staff_hours', 'staff_attendance'] loop
     if to_regclass('public.' || t) is null then continue; end if;
     execute format('select coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from public.%I x', t) into rows;
     tables := tables || jsonb_build_object(t, rows);
