@@ -1108,6 +1108,8 @@
         if (isAdmin()) await loadBackupStatus();
         // فئة العامل ومسماه الوظيفي وواتسابه: أعمدة من supabase/staff.sql
         S.staffMissing = !!(await sb.from('teachers').select('category').limit(1)).error;
+        // تاريخ انتهاء العقد: عمود من supabase/staff_attendance.sql
+        S.contractMissing = !!(await sb.from('teachers').select('contract_end').limit(1)).error;
         S.accountsMissing = !!ps.error;
         S.defaultPw = (ps.data && ps.data.default_password) || '';
         await loadStudents();
@@ -1136,7 +1138,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 21';
+  var APP_BUILD = '20/10 — 22';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1841,7 +1843,8 @@
         f('tf-classes', 'الصفوف والشعب التي يدرّسها', classPick, true) + '</div>' +
         f('tf-phone', 'رقم الجوال', '<input type="text" id="tf-phone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('phone') + '">') +
         f('tf-qualification', 'المؤهل العلمي', '<input type="text" id="tf-qualification" placeholder="مثال: بكالوريوس تربية علوم" value="' + val('qualification') + '">') +
-        f('tf-hire', 'تاريخ التعيين', '<input type="date" id="tf-hire" value="' + val('hire_date') + '">') +
+        f('tf-hire', 'تاريخ التعيين', '<input type="date" id="tf-hire" value="' + val('hire_date') + '"><div class="day">منه يبدأ حساب دوامه.</div>') +
+        (S.contractMissing ? '' : f('tf-end', 'تاريخ انتهاء العقد (آخر يوم عمل)', '<input type="date" id="tf-end" value="' + val('contract_end') + '"><div class="day">فارغ: العقد مستمر. بعده لا يظهر في دوام الموظفين.</div>')) +
         (t && t.user_id
           ? f('tf-login-ro', 'حساب الدخول', '<input type="text" id="tf-login-ro" dir="ltr" readonly style="text-align:right" value="' + esc(displayName(t.login)) + '">')
           : f('tf-login', 'إنشاء حساب دخول: اسم المستخدم', '<input type="text" id="tf-login" dir="ltr" style="text-align:right"' +
@@ -1858,14 +1861,21 @@
     var catNow = ui.staffCat || '', counts = {};
     S.teachers.forEach(function (x) { counts[staffCat(x)] = (counts[staffCat(x)] || 0) + 1; });
     var rows = S.teachers.filter(function (x) { return !catNow || staffCat(x) === catNow; }).map(function (x) {
-      var teach = TEACHING_CATS.indexOf(staffCat(x)) > -1;
-      return '<tr><td><b>' + esc(x.name) + '</b></td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
+      var teach = TEACHING_CATS.indexOf(staffCat(x)) > -1, today = todayISO();
+      // مدة العمل: يبدأ لاحقًا، أو انتهى عقده، أو ينتهي في تاريخ
+      var term = x.contract_end && x.contract_end < today ? '<span class="badge unpaid">انتهى عقده ' + dmy(x.contract_end) + '</span>'
+        : x.hire_date && x.hire_date > today ? '<span class="badge part">يبدأ ' + dmy(x.hire_date) + '</span>'
+        : x.contract_end ? '<span class="badge part">ينتهي عقده ' + dmy(x.contract_end) + '</span>' : '';
+      return '<tr' + (x.contract_end && x.contract_end < today ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
         '<td>' + esc(x.job_title || x.subject || '—') + (teach && x.classes ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.classes) + '</span>' : '') + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.phone || '—') + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.whatsapp || '—') + '</td>' +
         '<td dir="ltr" style="text-align:right">' + (x.user_id ? esc(displayName(x.login)) : '<span class="badge pending" dir="rtl">بدون حساب</span>') + '</td>' +
         '<td style="white-space:nowrap"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button> ' +
         (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '">إعادة تعيين كلمة المرور</button> ' : '<button type="button" class="btn" data-tacc="' + x.id + '">إنشاء حساب</button> ') +
+        (S.contractMissing ? '' : x.contract_end && x.contract_end < today
+          ? '<button type="button" class="btn" data-tcontract="' + x.id + '">إعادة التعاقد</button> '
+          : '<button type="button" class="btn" data-tcontract="' + x.id + '">إنهاء العقد</button> ') +
         '<button type="button" class="btn danger" data-tdel="' + x.id + '">حذف</button></td></tr>';
     }).join('');
 
@@ -1895,6 +1905,10 @@
       classes: Array.prototype.map.call(document.querySelectorAll('[name="tf-class"]:checked'), function (c) { return c.value; }).join('، '),
       qualification: g('tf-qualification'), hire_date: g('tf-hire') || null, details: g('tf-details')
     };
+    if (!S.contractMissing) {
+      data.contract_end = g('tf-end') || null;
+      if (data.hire_date && data.contract_end && data.contract_end < data.hire_date) return toast('تاريخ انتهاء العقد قبل تاريخ التعيين', true);
+    }
     if (!S.staffMissing) {
       data.category = g('tf-cat') || 'هيئة تدريس';
       data.job_title = g('tf-job');
@@ -1977,6 +1991,27 @@
       var r = await sb.rpc('reset_teacher_password', { p_teacher: t.id, p_password: S.defaultPw });
       if (r.error) return fail(r.error);
       toast('تمت إعادة تعيين كلمة المرور');
+    } else if ((el = e.target.closest('[data-tcontract]'))) {
+      // إنهاء العقد: آخر يوم عمل، وبعده لا يظهر في دوام الموظفين. إعادة التعاقد تلغي تاريخ الانتهاء
+      t = find(el.getAttribute('data-tcontract'));
+      if (!t) return;
+      var ended = t.contract_end && t.contract_end < todayISO(), endVal = null;
+      if (ended) {
+        if (!confirm('إعادة التعاقد مع «' + t.name + '»؟\nيُلغى تاريخ انتهاء العقد (' + dmy(t.contract_end) + ') فيعود إلى دوام الموظفين.\nلتغيير تاريخ التعيين استخدم «تعديل».')) return;
+      } else {
+        var typed = prompt('إنهاء عقد «' + t.name + '»: آخر يوم عمل (يوم/شهر/سنة)\nمن اليوم التالي لا يظهر في دوام الموظفين، ويبقى سجله وما سُجّل من دوامه.', dmy(todayISO()));
+        if (typed == null) return;
+        var dm = latinDigits(typed).trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/), iso = latinDigits(typed).trim().match(/^\d{4}-\d{2}-\d{2}$/);
+        endVal = iso ? iso[0] : dm ? dm[3] + '-' + String(dm[2]).padStart(2, '0') + '-' + String(dm[1]).padStart(2, '0') : '';
+        if (!isoDay(endVal) || isNaN(new Date(endVal + 'T00:00'))) return toast('اكتب التاريخ مثل ' + dmy(todayISO()), true);
+        if (t.hire_date && endVal < t.hire_date) return toast('آخر يوم عمل قبل تاريخ التعيين (' + dmy(t.hire_date) + ')', true);
+      }
+      var cu = await sb.from('teachers').update({ contract_end: endVal }).eq('id', t.id);
+      if (cu.error) return fail(cu.error);
+      t.contract_end = endVal;
+      S.sa = null;
+      render();
+      toast(endVal ? 'انتهى عقد «' + t.name + '» بنهاية يوم ' + dmy(endVal) : 'أُعيد التعاقد مع «' + t.name + '»');
     } else if ((el = e.target.closest('[data-tdel]'))) {
       t = find(el.getAttribute('data-tdel'));
       if (!confirm('هل تريد حذف «' + t.name + '» مع تقييمه وتقارير زياراته وحسابه نهائيًا؟')) return;
@@ -8221,9 +8256,14 @@
     render();
   }
 
-  // العاملون بترتيب الفئات ثم الاسم
-  function saStaff(cat) {
-    return S.teachers.filter(function (t) { return !cat || staffCat(t) === cat; }).sort(function (a, b) {
+  // على رأس عمله في اليوم: من تاريخ التعيين إلى تاريخ انتهاء العقد (آخر يوم عمل)، إن وُجدا
+  function employedOn(t, day) {
+    var from = String(t.hire_date || '').slice(0, 10), to = String(t.contract_end || '').slice(0, 10);
+    return (!from || from <= day) && (!to || day <= to);
+  }
+  // العاملون (في يوم بعينه إن مُرّر) بترتيب الفئات ثم الاسم
+  function saStaff(cat, day) {
+    return S.teachers.filter(function (t) { return (!cat || staffCat(t) === cat) && (!day || employedOn(t, day)); }).sort(function (a, b) {
       return STAFF_CATS.indexOf(staffCat(a)) - STAFF_CATS.indexOf(staffCat(b)) || a.name.localeCompare(b.name, 'ar');
     });
   }
@@ -8246,7 +8286,7 @@
       app.innerHTML = head + '<div class="card empty">دوام الموظفين يحتاج إلى جدول جديد في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/staff_attendance.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
       return;
     }
-    var list = saStaff(st.cat), off = attOff(st.day), di = subDayIdx(st.day), dirty = Object.keys(st.draft).length;
+    var list = saStaff(st.cat, st.day), off = attOff(st.day), di = subDayIdx(st.day), dirty = Object.keys(st.draft).length;
     // ما قُرئ من الكشف المصوَّر ولم يُحفظ: اسم السطر في الكشف، والخانات غير المؤكدة بإطار برتقالي
     var sheet = (st.scan && st.scan.fromSheet) || {}, unsureMap = (st.scan && st.scan.unsure) || {};
     var uns = function (id, k) { return !!st.draft[id] && (unsureMap[id] || []).indexOf(k) > -1; };
@@ -8305,7 +8345,7 @@
      وتطابق كل سطر بموظف من القائمة. الناتج يُوضع في شاشة اليوم المختار تعديلاتٍ غير محفوظة: ما شكّ فيه النموذج يُعلَّم،
      وما لم يُطابَق يُعرض لاختيار صاحبه. لا يُحفظ شيء حتى يراجع المستخدم ويضغط «حفظ» */
   async function saReadSheet(file) {
-    var st = saState(), staff = saStaff(''), sc = st.scan = { busy: true, msg: 'جارٍ تجهيز الصورة…', unmatched: [], unsure: {}, fromSheet: {}, date: '', error: '' };
+    var st = saState(), staff = saStaff('', st.day), sc = st.scan = { busy: true, msg: 'جارٍ تجهيز الصورة…', unmatched: [], unsure: {}, fromSheet: {}, date: '', error: '' };
     render();
     try {
       var pages = await scanFilePages(file), rows = [], chosen = scanModel(), model = '';
@@ -8378,7 +8418,7 @@
           (sc.date && sc.date !== st.day ? '<p class="formhint" style="margin:6px 0 0">تنبيه: التاريخ المكتوب على الكشف ' + dmy(sc.date) + '، والقراءة طُبّقت على يوم ' + dmy(st.day) + '. تأكد أنه اليوم الصحيح قبل الحفظ.</p>' : '') +
           (sc.missing ? '<p class="hint" style="margin:6px 0 0">لم يظهر في الكشف ' + arCount(sc.missing, ['موظف واحد', 'موظفان', 'موظفين', 'موظفًا']) + '؛ بقيت حالتهم كما هي.</p>' : '');
         if (sc.unmatched.length) {
-          var opts = '<option value="">— اختر الموظف —</option>' + saStaff('').map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + '</option>'; }).join('');
+          var opts = '<option value="">— اختر الموظف —</option>' + saStaff('', st.day).map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + '</option>'; }).join('');
           body += '<div class="table-wrap" style="margin-top:8px"><table class="grid"><thead><tr><th>الاسم كما في الكشف</th><th>القراءة</th><th>صاحبه</th></tr></thead><tbody>' +
             sc.unmatched.map(function (u, i) {
               return '<tr><td><b>' + esc(u.name || '—') + '</b>' + (u.dup ? ' <span class="badge part">تكرر في الكشف</span>' : '') + '</td>' +
@@ -8423,9 +8463,15 @@
     var H = S.saHours || { time_in: '07:30', time_out: '13:30' }, days = [], by = {};
     for (var d = from; d <= to; d = addDays(d, 1)) days.push(d);
     rows.forEach(function (r) { r.time_in = hm5(r.time_in); r.time_out = hm5(r.time_out); (by[r.teacher_id] || (by[r.teacher_id] = {}))[r.day] = r; });
-    var staff = saStaff('').map(function (t) {
-      var mine = by[t.id] || {}, s = { t: t, present: 0, absent: 0, leave: 0, mission: 0, lateDays: 0, late: 0, early: 0, days: mine };
+    // من كان على رأس عمله يومًا واحدًا على الأقل من الشهر؛ ولا يُحسب له إلا ما سُجّل في مدة عمله
+    var staff = saStaff('').filter(function (t) { return days.some(function (dd) { return employedOn(t, dd); }); }).map(function (t) {
+      var mine = {}, s = { t: t, present: 0, absent: 0, leave: 0, mission: 0, lateDays: 0, late: 0, early: 0, days: mine, work: 0 };
+      Object.keys(by[t.id] || {}).forEach(function (k) { if (employedOn(t, k)) mine[k] = by[t.id][k]; });
       Object.keys(mine).forEach(function (k) { var r = mine[k], l = saLate(r, H); s[r.status]++; if (l) { s.lateDays++; s.late += l; } s.early += saEarly(r, H); });
+      days.forEach(function (dd) { if (employedOn(t, dd)) s.work++; });
+      // التحق أو انتهى عقده خلال الشهر
+      var hf = String(t.hire_date || '').slice(0, 10), ce = String(t.contract_end || '').slice(0, 10);
+      s.term = [hf && hf > from && hf <= to ? 'من ' + dmy(hf) : '', ce && ce >= from && ce < to ? 'حتى ' + dmy(ce) : ''].filter(Boolean).join(' ');
       return s;
     });
     return { month: month, from: from, to: to, days: days, staff: staff, H: H };
@@ -8441,17 +8487,17 @@
       wb.Workbook = { Views: [{ RTL: true }] };
       var top = [[schoolName()], ['دوام الموظفين — ' + monthLabel(D.month) + ' — الوقت الرسمي ' + D.H.time_in + ' إلى ' + D.H.time_out], []];
       var ws = XLSX.utils.aoa_to_sheet(top.concat([['م', 'الموظف', 'الفئة', 'المسمى', 'حضور', 'غياب', 'إجازة', 'مأمورية', 'أيام التأخير', 'دقائق التأخير', 'دقائق الانصراف المبكر']],
-        D.staff.map(function (s, i) { return [i + 1, s.t.name, staffCat(s.t), s.t.job_title || '', s.present, s.absent, s.leave, s.mission, s.lateDays, s.late, s.early]; })));
+        D.staff.map(function (s, i) { return [i + 1, s.t.name + (s.term ? ' (' + s.term + ')' : ''), staffCat(s.t), s.t.job_title || '', s.present, s.absent, s.leave, s.mission, s.lateDays, s.late, s.early]; })));
       ws['!cols'] = [5, 28, 14, 18, 7, 7, 7, 8, 11, 12, 18].map(function (w) { return { wch: w }; });
       XLSX.utils.book_append_sheet(wb, ws, 'الملخص');
       var ws2 = XLSX.utils.aoa_to_sheet(top.concat([['الموظف'].concat(D.days.map(function (d) { return Number(d.slice(8)) + ' ' + WEEKDAYS[new Date(d + 'T00:00').getDay()]; }))],
         D.staff.map(function (s) {
           return [s.t.name].concat(D.days.map(function (d) {
             var r = s.days[d];
-            if (!r) return '';
+            if (!r) return employedOn(s.t, d) ? '' : '—';
             return SA_CODE[r.status] + (r.status === 'present' && (r.time_in || r.time_out) ? ' ' + (r.time_in || '؟') + '-' + (r.time_out || '؟') : '');
           }));
-        }), [[], ['ح حاضر · غ غائب · إ إجازة · م مأمورية؛ والوقت: الحضور-الانصراف']]));
+        }), [[], ['ح حاضر · غ غائب · إ إجازة · م مأمورية؛ والوقت: الحضور-الانصراف؛ — خارج مدة عمله (قبل تعيينه أو بعد انتهاء عقده)']]));
       ws2['!cols'] = [{ wch: 26 }].concat(D.days.map(function () { return { wch: 12 }; }));
       XLSX.utils.book_append_sheet(wb, ws2, 'تفصيل الأيام');
       XLSX.writeFile(wb, 'دوام-الموظفين-' + D.month + '.xlsx');
@@ -8465,7 +8511,7 @@
     var n = 11, c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v === 0 ? '' : v) + '</td>'; };
     var head = reportHead('كشف دوام الموظفين', [['الشهر', monthLabel(D.month)], ['الوقت الرسمي', D.H.time_in + ' – ' + D.H.time_out], ['عدد الموظفين', D.staff.length]]).replace(/^<img class="wm"[^>]*>/, '');
     var body = D.staff.map(function (s, i) {
-      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(s.t.name) + '</b></td><td style="white-space:nowrap">' + esc(staffCat(s.t)) + '</td>' +
+      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(s.t.name) + '</b>' + (s.term ? ' <small>(' + esc(s.term) + ')</small>' : '') + '</td><td style="white-space:nowrap">' + esc(staffCat(s.t)) + '</td>' +
         c(s.present, true) + c(s.absent) + c(s.leave) + c(s.mission) + c(s.lateDays) + c(s.late) + c(s.early) + '<td style="min-width:5em"></td></tr>';
     }).join('');
     sheet.className = 'ls';
@@ -8483,7 +8529,7 @@
     var st = saState(), H = S.saHours, el;
     if (e.target.closest('[data-saallin]') || e.target.closest('[data-saallout]')) {
       var isIn = !!e.target.closest('[data-saallin]');
-      saStaff(st.cat).forEach(function (t) {
+      saStaff(st.cat, st.day).forEach(function (t) {
         var r = saRow(t.id);
         if (r && r.status !== 'present') return;
         saEdit(t.id, isIn ? { status: 'present', time_in: H.time_in } : { status: 'present', time_out: H.time_out });

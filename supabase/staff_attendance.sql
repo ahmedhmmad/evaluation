@@ -1,7 +1,11 @@
 -- دوام الموظفين: حضور كل العاملين (من «بيانات العاملين») وانصرافهم بالوقت، يومًا بيوم.
 -- يسجّله المدير العام والمدير؛ ويقرؤه المشرف التربوي أيضًا (ليرى غياب المعلمين في شاشة الاحتياط).
 -- الوقت الرسمي للحضور والانصراف واحد للجميع، في staff_hours، وبه يُحسب التأخير والانصراف المبكر.
--- شغّل هذا الملف مرة في محرر SQL في Supabase (بعد staff.sql). لا يغيّر أي بيانات موجودة.
+-- شغّل هذا الملف في محرر SQL في Supabase (بعد staff.sql)، ويمكن تشغيله مرة أخرى بعد أي تحديث له. لا يغيّر أي بيانات موجودة.
+
+-- مدة العمل: يُحسب دوام الموظف من «تاريخ التعيين» (hire_date، من teacher_accounts.sql) إلى «تاريخ انتهاء العقد» (آخر يوم عمل)، إن وُجدا
+alter table public.teachers
+  add column if not exists contract_end date;
 
 create table if not exists public.staff_attendance (
   teacher_id uuid not null references public.teachers (id) on delete cascade,
