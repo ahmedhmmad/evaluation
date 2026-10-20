@@ -3,7 +3,8 @@
 // matched to the staff list the page sends. The page fills the day's attendance screen with the result as
 // unsaved changes, so the person checks and corrects them against the paper before saving.
 //
-// Called from «دوام الموظفين» by the superadmin or the manager (the same people who record staff attendance).
+// Called from «دوام الموظفين» by the superadmin or the manager (the same people who record staff attendance),
+// or by the WhatsApp bot in n8n with the bot key (see supabase/staff_bot.sql and n8n/absence-bot.json).
 // Nothing is stored here: the image goes to the model and the answer comes back.
 //
 // Secrets: DEEPINFRA_API_KEY (required, the same key as read-registration-form), DEEPINFRA_MODEL (optional default).
@@ -54,22 +55,40 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
 
-  const authorization = req.headers.get("Authorization") ?? "";
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: authorization } },
-  });
-  const { data: role, error: roleError } = await supabase.rpc("my_role");
-  if (roleError || (role !== "superadmin" && role !== "manager")) return json({ error: "forbidden" }, 403);
-
-  const apiKey = Deno.env.get("DEEPINFRA_API_KEY");
-  if (!apiKey) return json({ error: "DEEPINFRA_API_KEY is not set for this function" }, 500);
-
-  let body: { file?: { media_type?: string; data?: string }; staff?: Staff[]; model?: string };
+  let body: { file?: { media_type?: string; data?: string }; staff?: Staff[]; model?: string; bot_key?: string; phone?: string };
   try {
     body = await req.json();
   } catch {
     return json({ error: "invalid JSON body" }, 400);
   }
+
+  // Two callers: the website (a signed-in superadmin or manager, who gets the rows back), or the WhatsApp bot in n8n
+  // (with the bot key and the sender's number; the sender must be allowed and waiting to send a sheet). For the bot the
+  // reading is saved to the staff_sheet_inbox for review on the website, and the WhatsApp reply text comes back.
+  const authorization = req.headers.get("Authorization") ?? "";
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+    global: { headers: { Authorization: authorization } },
+  });
+  const bot = typeof body.bot_key === "string" && body.bot_key.length >= 32;
+  let role = "";
+  let botStaff: { id: string; name: string; title?: string }[] = [];
+  if (bot) {
+    const { data: ok, error } = await supabase.rpc("staff_bot_image", { p_key: body.bot_key, p_phone: String(body.phone ?? "") });
+    if (error) return json({ error: `staff_bot_image: ${error.message}` }, 502);
+    if (ok?.error) return json({ error: ok.error }, 403);
+    if (!ok?.ok) return json({ ignored: true });   // not an allowed sender waiting for a sheet: the bot stays silent
+    botStaff = Array.isArray(ok.staff) ? ok.staff : [];
+    body.staff = botStaff.map((s, i) => ({ key: `s${i + 1}`, name: s.name, title: s.title }));
+    body.model = undefined;
+  } else {
+    const { data, error: roleError } = await supabase.rpc("my_role");
+    role = data ?? "";
+    if (roleError || (role !== "superadmin" && role !== "manager")) return json({ error: "forbidden" }, 403);
+  }
+
+  const apiKey = Deno.env.get("DEEPINFRA_API_KEY");
+  if (!apiKey) return json({ error: "DEEPINFRA_API_KEY is not set for this function" }, 500);
+
   const mediaType = body.file?.media_type ?? "";
   const data = body.file?.data ?? "";
   if (!data || !IMAGE_TYPES.includes(mediaType)) return json({ error: "send one image (JPEG, PNG or WebP)" }, 400);
@@ -163,5 +182,15 @@ Deno.serve(async (req) => {
     .filter((r) => r.name || r.key);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(parsed?.date ?? "")) ? String(parsed!.date) : "";
 
+  if (bot) {
+    // The inbox keeps the staff member's id instead of the short key
+    const stored = rows.map(({ key, ...r }) => ({ ...r, teacher_id: key ? botStaff[Number(key.slice(1)) - 1]?.id ?? "" : "" }));
+    const { data: saved, error } = await supabase.rpc("staff_bot_store", {
+      p_key: body.bot_key, p_phone: String(body.phone ?? ""), p_rows: stored, p_date: date || null, p_model: model,
+    });
+    if (error) return json({ error: `staff_bot_store: ${error.message}` }, 502);
+    if (saved?.error) return json({ error: saved.error }, 403);
+    return json({ reply: saved?.reply ?? "" });
+  }
   return json({ date, rows, model });
 });

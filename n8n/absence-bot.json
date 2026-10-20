@@ -1,5 +1,5 @@
 {
-  "name": "بوت تسجيل الغياب (واتساب)",
+  "name": "بوت الواتساب: تسجيل الغياب وكشف الدوام",
   "nodes": [
     {
       "parameters": {
@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// رسالة نصية واردة من محادثة فردية فقط (لا الرسائل المرسلة منا ولا المجموعات)\nconst body = $input.first().json.body || $input.first().json;\nconst d = body.data || {};\nconst key = d.key || {};\nif (key.fromMe) return [];\nlet jid = key.remoteJid || '';\nif (jid.endsWith('@g.us') || jid === 'status@broadcast') return [];\n// في بعض الإصدارات يأتي المعرّف بصيغة @lid والرقم الحقيقي في حقل آخر\nif (jid.endsWith('@lid')) jid = key.senderPn || key.remoteJidAlt || key.participantAlt || d.senderPn || d.remoteJidAlt || jid;\nif (String(jid).endsWith('@lid')) throw new Error('وصل المرسل بمعرّف @lid دون رقم الجوال: ' + JSON.stringify(key));\nconst phone = String(jid).split('@')[0].replace(/[^0-9]/g, '');\n// الرسائل المؤقتة والمعدّلة والمقتبسة تأتي مغلّفة؛ يُستخرج النص من داخلها\nlet m = d.message || {};\nfor (let i = 0; i < 4; i++) {\n  const inner = (m.ephemeralMessage || m.viewOnceMessage || m.viewOnceMessageV2 || m.documentWithCaptionMessage || {}).message\n    || (m.editedMessage && (m.editedMessage.message || {}).protocolMessage && m.editedMessage.message.protocolMessage.editedMessage)\n    || (m.protocolMessage && m.protocolMessage.editedMessage);\n  if (!inner) break;\n  m = inner;\n}\nconst text = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || d.text || '';\nif (!phone || !text.trim()) return [];\n// الرد يخرج من الـ instance نفسه الذي استقبل الرسالة\nconst instance = body.instance || 'ThirdPillar';\nreturn [{ json: { phone, text: text.trim(), instance } }];"
+        "jsCode": "// رسالة واردة من محادثة فردية فقط (لا الرسائل المرسلة منا ولا المجموعات): نص، أو صورة (لكشف الدوام)\nconst body = $input.first().json.body || $input.first().json;\nconst d = body.data || {};\nconst key = d.key || {};\nif (key.fromMe) return [];\nlet jid = key.remoteJid || '';\nif (jid.endsWith('@g.us') || jid === 'status@broadcast') return [];\n// في بعض الإصدارات يأتي المعرّف بصيغة @lid والرقم الحقيقي في حقل آخر\nif (jid.endsWith('@lid')) jid = key.senderPn || key.remoteJidAlt || key.participantAlt || d.senderPn || d.remoteJidAlt || jid;\nif (String(jid).endsWith('@lid')) throw new Error('وصل المرسل بمعرّف @lid دون رقم الجوال: ' + JSON.stringify(key));\nconst phone = String(jid).split('@')[0].replace(/[^0-9]/g, '');\n// الرسائل المؤقتة والمعدّلة والمقتبسة تأتي مغلّفة؛ يُستخرج النص من داخلها\nlet m = d.message || {};\nfor (let i = 0; i < 4; i++) {\n  const inner = (m.ephemeralMessage || m.viewOnceMessage || m.viewOnceMessageV2 || m.documentWithCaptionMessage || {}).message\n    || (m.editedMessage && (m.editedMessage.message || {}).protocolMessage && m.editedMessage.message.protocolMessage.editedMessage)\n    || (m.protocolMessage && m.protocolMessage.editedMessage);\n  if (!inner) break;\n  m = inner;\n}\n// الرد يخرج من الـ instance نفسه الذي استقبل الرسالة\nconst instance = body.instance || 'ThirdPillar';\nif (!phone) return [];\nconst img = m.imageMessage;\nif (img) {\n  return [{ json: { phone, text: (img.caption || '').trim(), instance, image: true, msgId: key.id || '', mimetype: img.mimetype || 'image/jpeg',\n    base64: (d.message && d.message.base64) || m.base64 || '' } }];\n}\nconst text = m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || d.text || '';\nif (!text.trim()) return [];\nreturn [{ json: { phone, text: text.trim(), instance, image: false } }];"
       },
       "id": "b1a1c0de-0002-4000-8000-000000000002",
       "name": "استخراج الرقم والنص",
@@ -54,7 +54,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { \"p_key\": \"PUT_BOT_KEY_HERE\", \"p_phone\": $json.phone, \"p_text\": $json.text } }}",
+        "jsonBody": "={{ { \"p_key\": \"PUT_BOT_KEY_HERE\", \"p_phone\": $('استخراج الرقم والنص').item.json.phone, \"p_text\": $('استخراج الرقم والنص').item.json.text } }}",
         "options": {}
       },
       "id": "b1a1c0de-0003-4000-8000-000000000003",
@@ -62,8 +62,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -760,
-        200
+        -100,
+        420
       ]
     },
     {
@@ -75,8 +75,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -540,
-        200
+        120,
+        420
       ]
     },
     {
@@ -106,8 +106,109 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -320,
+        340,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.image }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b1a1c0de-0006-4000-8000-000000000006",
+      "name": "صورة؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -760,
         200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://wvklhyjtzqomiyhzsfuf.supabase.co/rest/v1/rpc/staff_bot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"p_key\": \"PUT_BOT_KEY_HERE\", \"p_phone\": $json.phone, \"p_text\": $json.text } }}",
+        "options": {}
+      },
+      "id": "b1a1c0de-0007-4000-8000-000000000007",
+      "name": "محادثة الدوام؟",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -540,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.handled }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b1a1c0de-0008-4000-8000-000000000008",
+      "name": "للدوام؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// رد محادثة الدوام\nconst res = $input.first().json;\nif (res.error) throw new Error(res.error);\nconst reply = (res.reply || '').trim();\nif (!reply) return [];\nconst src = $('استخراج الرقم والنص').first().json;\nreturn [{ json: { number: src.phone, text: reply, instance: src.instance } }];"
+      },
+      "id": "b1a1c0de-0009-4000-8000-000000000009",
+      "name": "رد الدوام",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// صورة كشف الدوام: من مرسل مسموح ينتظر البوت صورته فقط (غير ذلك تُتجاهل الصورة بصمت)\nconst src = $input.first().json;\nconst PUB = 'sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr', BOT = 'PUT_BOT_KEY_HERE', EVO_KEY = 'PUT_EVOLUTION_API_KEY';\nconst sbHeaders = { apikey: PUB, Authorization: 'Bearer ' + PUB, 'Content-Type': 'application/json' };\nconst ok = await this.helpers.httpRequest({ method: 'POST', url: 'https://wvklhyjtzqomiyhzsfuf.supabase.co/rest/v1/rpc/staff_bot_image', headers: sbHeaders, body: { p_key: BOT, p_phone: src.phone }, json: true });\nif (ok.error) throw new Error(ok.error);\nif (!ok.ok) return [];\nconst say = (text) => this.helpers.httpRequest({ method: 'POST', url: 'https://evolution.ahmedhammad.page/message/sendText/' + encodeURIComponent(src.instance),\n  headers: { apikey: EVO_KEY, 'Content-Type': 'application/json' }, body: { number: src.phone, text }, json: true });\nawait say('وصلت الصورة، جارٍ قراءة الكشف… (قد تستغرق دقيقة)');\n// الصورة نفسها: من الرسالة إن أرسلها Evolution معها، وإلا تُطلب منه\nlet b64 = src.base64, mime = String(src.mimetype || 'image/jpeg').split(';')[0];\nif (!b64) {\n  const media = await this.helpers.httpRequest({ method: 'POST', url: 'https://evolution.ahmedhammad.page/chat/getBase64FromMediaMessage/' + encodeURIComponent(src.instance),\n    headers: { apikey: EVO_KEY, 'Content-Type': 'application/json' }, body: { message: { key: { id: src.msgId } }, convertToMp4: false }, json: true });\n  b64 = media.base64 || '';\n  if (media.mimetype) mime = String(media.mimetype).split(';')[0];\n}\nif (!b64) { await say('تعذر استلام الصورة. أرسلها مرة أخرى.'); throw new Error('لم تُجلب صورة الرسالة من Evolution'); }\nif (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) mime = 'image/jpeg';\nlet res;\ntry {\n  res = await this.helpers.httpRequest({ method: 'POST', url: 'https://wvklhyjtzqomiyhzsfuf.supabase.co/functions/v1/read-staff-sheet', headers: sbHeaders, json: true, timeout: 180000,\n    body: { bot_key: BOT, phone: src.phone, file: { media_type: mime, data: b64 } } });\n} catch (e) {\n  await say('تعذرت قراءة الكشف الآن. أرسل الصورة مرة أخرى بعد قليل، أو ارفعها من شاشة «دوام الموظفين» في الموقع.');\n  throw e;\n}\nif (res.ignored) return [];\nif (res.error) { await say('تعذرت قراءة الكشف: ' + res.error); throw new Error(res.error); }\nreturn [{ json: { number: src.phone, text: res.reply, instance: src.instance } }];"
+      },
+      "id": "b1a1c0de-0010-4000-8000-000000000010",
+      "name": "قراءة كشف الدوام",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -540,
+        60
       ]
     }
   ],
@@ -127,7 +228,76 @@
       "main": [
         [
           {
+            "node": "صورة؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "صورة؟": {
+      "main": [
+        [
+          {
+            "node": "قراءة كشف الدوام",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "محادثة الدوام؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "قراءة كشف الدوام": {
+      "main": [
+        [
+          {
+            "node": "إرسال الرد واتساب",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "محادثة الدوام؟": {
+      "main": [
+        [
+          {
+            "node": "للدوام؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "للدوام؟": {
+      "main": [
+        [
+          {
+            "node": "رد الدوام",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "سؤال قاعدة البيانات عن الرد",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "رد الدوام": {
+      "main": [
+        [
+          {
+            "node": "إرسال الرد واتساب",
             "type": "main",
             "index": 0
           }

@@ -737,6 +737,8 @@
   table.grid.pay input[type=number] { width: 78px; }
   table.grid.pay select, table.grid.pay td .mnote { width: 135px; }
   table.grid .acts { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; white-space: nowrap; }
+  table.grid .staff-acts { display: flex; flex-wrap: wrap; gap: 6px; max-width: 230px; }
+  table.grid .staff-acts .btn { white-space: nowrap; }
   table.grid .acts .btn, #t-members td.no-print .btn { padding: 6px 10px; font-size: .85rem; white-space: nowrap; }
   table.grid .acts input[type=date] { width: auto; padding: 5px 8px; font-size: .85rem; }
   #t-members td.no-print { white-space: nowrap; }
@@ -1138,7 +1140,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 22';
+  var APP_BUILD = '20/10 — 23';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1868,15 +1870,17 @@
         : x.contract_end ? '<span class="badge part">ينتهي عقده ' + dmy(x.contract_end) + '</span>' : '';
       return '<tr' + (x.contract_end && x.contract_end < today ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
         '<td>' + esc(x.job_title || x.subject || '—') + (teach && x.classes ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.classes) + '</span>' : '') + '</td>' +
-        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.phone || '—') + '</td>' +
-        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(x.whatsapp || '—') + '</td>' +
+        // الجوال، والواتساب تحته إن اختلف عنه (عمود واحد يوفّر عرض الجدول)
+        '<td><span dir="ltr" style="white-space:nowrap">' + esc(x.phone || '—') + '</span>' +
+          (x.whatsapp && plainPhone(x.whatsapp) !== plainPhone(x.phone) ? '<br><span style="color:var(--muted);font-size:.85rem">واتساب <span dir="ltr" style="white-space:nowrap">' + esc(x.whatsapp) + '</span></span>' : '') + '</td>' +
         '<td dir="ltr" style="text-align:right">' + (x.user_id ? esc(displayName(x.login)) : '<span class="badge pending" dir="rtl">بدون حساب</span>') + '</td>' +
-        '<td style="white-space:nowrap"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button> ' +
-        (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '">إعادة تعيين كلمة المرور</button> ' : '<button type="button" class="btn" data-tacc="' + x.id + '">إنشاء حساب</button> ') +
+        // الأزرار في شبكة من عمودين تلتف، فلا يخرج أحدها عن الجدول مهما ضاقت الشاشة
+        '<td><div class="staff-acts"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button>' +
+        (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '" title="إعادة تعيين كلمة المرور">كلمة مرور جديدة</button>' : '<button type="button" class="btn" data-tacc="' + x.id + '">إنشاء حساب</button>') +
         (S.contractMissing ? '' : x.contract_end && x.contract_end < today
-          ? '<button type="button" class="btn" data-tcontract="' + x.id + '">إعادة التعاقد</button> '
-          : '<button type="button" class="btn" data-tcontract="' + x.id + '">إنهاء العقد</button> ') +
-        '<button type="button" class="btn danger" data-tdel="' + x.id + '">حذف</button></td></tr>';
+          ? '<button type="button" class="btn" data-tcontract="' + x.id + '">إعادة التعاقد</button>'
+          : '<button type="button" class="btn" data-tcontract="' + x.id + '">إنهاء العقد</button>') +
+        '<button type="button" class="btn danger" data-tdel="' + x.id + '">حذف</button></div></td></tr>';
     }).join('');
 
     app.innerHTML = tabs('staff') +
@@ -1893,7 +1897,7 @@
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
       '<div class="card">' + (rows
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>' + (S.staffMissing ? '' : 'الفئة') + '</th><th>المسمى / المباحث</th><th>الجوال</th><th>واتساب</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>' + (S.staffMissing ? '' : 'الفئة') + '</th><th>المسمى / المباحث</th><th>الجوال / واتساب</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="empty">لا يوجد عاملون في هذا التصنيف.</div>') + '</div>';
   }
 
@@ -8248,10 +8252,17 @@
     var h = rows ? await sb.from('staff_hours').select('*').eq('id', 1).maybeSingle() : { data: null };
     // المعلمون المسجَّل غيابهم في الاحتياط هذا اليوم (لاقتراح تسجيل الباقين)
     var ab = rows && canEditTT() ? await sb.from('teacher_absences').select('teacher_id').eq('day', day) : { data: [] };
+    // قراءات واردة من واتساب بانتظار المراجعة، والأرقام المسموح لها بالإرسال (supabase/staff_bot.sql)
+    var inbox = rows ? await sb.from('staff_sheet_inbox').select('*').eq('status', 'pending').order('created_at') : { data: [] };
+    var phones = rows && isAdmin() ? await sb.from('staff_bot_phones').select('*').order('created_at') : { data: [] };
     loadingSa = false;
     var map = {};
     (rows || []).forEach(function (r) { map[r.teacher_id] = r; });
-    S.sa = { day: day, missing: !rows, rows: map, subsAbs: (ab.data || []).map(function (a) { return a.teacher_id; }), subsMissing: !!ab.error };
+    S.sa = { day: day, missing: !rows, rows: map, subsAbs: (ab.data || []).map(function (a) { return a.teacher_id; }), subsMissing: !!ab.error,
+      inbox: inbox.data || [], botMissing: !!inbox.error, phones: phones.data || [] };
+    // قراءة فُتحت من صندوق الوارد: تُطبَّق على يومها بعد تحميله
+    var st0 = saState();
+    if (st0.openInbox && st0.openInbox.day === day) { var it = st0.openInbox; st0.openInbox = null; saApplyInbox(it); }
     S.saHours = { time_in: hm5((h.data || {}).time_in) || '07:30', time_out: hm5((h.data || {}).time_out) || '13:30' };
     render();
   }
@@ -8324,7 +8335,7 @@
       '</div></div>' +
       '<div class="stats">' + card('حاضرون', n.present, lateN ? 'منهم ' + lateN + ' متأخرون' : 'بلا تأخير') + card('غائبون', n.absent, 'هذا اليوم', n.absent ? 'var(--red)' : '') +
         card('إجازة ومأمورية', n.leave + n.mission, 'إجازة ' + n.leave + ' · مأمورية ' + n.mission) + card('غير مسجَّلين', n.none, 'من ' + list.length + ' موظفًا', n.none ? 'var(--muted)' : '') + '</div>' +
-      saScanHtml() +
+      saInboxHtml() + saScanHtml() + saPhonesHtml() +
       '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn" data-saallin data-ro-ok>الحضور الموحد للجميع (' + H.time_in + ')</button>' +
         '<button type="button" class="btn" data-saallout data-ro-ok>الانصراف الموحد للجميع (' + H.time_out + ')</button>' +
@@ -8392,6 +8403,56 @@
     render();
   }
 
+  /* ----- كشوف الدوام الواردة من واتساب -----
+     من رقم مسموح: «دوام» ← صورة الكشف ← تأكيد التاريخ، فتُحفظ القراءة هنا بانتظار المراجعة (n8n/absence-bot.json، supabase/staff_bot.sql).
+     «فتح للمراجعة» يضعها في يومها تعديلاتٍ غير محفوظة كقراءة صورة مرفوعة من الشاشة؛ وبعد «حفظ» تُعلَّم «طُبّقت» */
+  function saApplyInbox(it) {
+    var st = saState(), sc = st.scan = { busy: false, unmatched: [], unsure: {}, fromSheet: {}, date: '', error: '', inboxId: it.id, model: it.model, msg: '' };
+    var staff = saStaff('', it.day), used = {}, applied = 0, rows = Array.isArray(it.rows) ? it.rows : [];
+    rows.forEach(function (row) {
+      var t = row.teacher_id && staff.filter(function (x) { return x.id === row.teacher_id; })[0];
+      var status = row.status || (row.in || row.out ? 'present' : '');
+      if (!status && !row.note) return;
+      if (!t || used[t.id]) { sc.unmatched.push(Object.assign({ status: status, dup: !!(t && used[t.id]) }, row)); return; }
+      used[t.id] = 1;
+      saApplyRead(t.id, row, status);
+      applied++;
+    });
+    var L = ['سطر واحد', 'سطران', 'أسطر', 'سطرًا'], E = ['موظف واحد', 'موظفَين', 'موظفين', 'موظفًا'];
+    sc.msg = 'كشف وارد من واتساب (' + (it.sender || it.phone) + '، ' + new Date(it.created_at).toLocaleString('ar-u-nu-latn', { dateStyle: 'short', timeStyle: 'short' }) + '): ' +
+      arCount(rows.length, L) + '، طُبّقت على ' + arCount(applied, E) +
+      (Object.keys(sc.unsure).length ? '، منهم ' + arCount(Object.keys(sc.unsure).length, ['موظف واحد', 'موظفان', 'موظفين', 'موظفًا']) + ' بقراءة غير مؤكدة (بإطار برتقالي)' : '') +
+      (sc.unmatched.length ? '، وبقي ' + arCount(sc.unmatched.length, L) + ' لم يُعرف صاحبه (أسفل)' : '') + '. راجع على الورقة ثم اضغط «حفظ».';
+    sc.missing = staff.filter(function (t) { return !used[t.id]; }).length;
+  }
+
+  function saInboxHtml() {
+    var list = (S.sa && S.sa.inbox) || [], st = saState();
+    if (!list.length) return '';
+    return '<div class="card" style="border-color:#f79009"><h2>قراءات واردة من واتساب بانتظار مراجعتك (' + list.length + ')</h2><ul style="margin:6px 0 0;padding-inline-start:18px">' +
+      list.map(function (it) {
+        var n = Array.isArray(it.rows) ? it.rows.length : 0;
+        return '<li style="margin:6px 0"><b>كشف يوم ' + dayName(it.day) + ' ' + dmy(it.day) + '</b> — ' + arCount(n, ['سطر واحد', 'سطران', 'أسطر', 'سطرًا']) + '، من ' + esc(it.sender || it.phone) +
+          ' · ' + new Date(it.created_at).toLocaleString('ar-u-nu-latn', { dateStyle: 'short', timeStyle: 'short' }) +
+          (st.scan && st.scan.inboxId === it.id ? ' <span class="badge part">مفتوح الآن</span>' :
+            ' <button type="button" class="btn" data-saibopen="' + it.id + '" data-ro-ok>فتح للمراجعة</button>') +
+          ' <button type="button" class="btn link" data-saibdrop="' + it.id + '" data-ro-ok>تجاهل</button></li>';
+      }).join('') + '</ul></div>';
+  }
+
+  // الأرقام المسموح لها بإرسال كشف الدوام عبر واتساب (المدير العام)
+  function saPhonesHtml() {
+    if (!isAdmin() || !S.sa || S.sa.botMissing) return '';
+    var ph = S.sa.phones || [];
+    return '<details class="card"><summary><b>إرسال كشف الدوام عبر واتساب</b> <span class="hint" style="margin:0">(' + (ph.length ? arCount(ph.length, ['رقم واحد مسموح', 'رقمان مسموحان', 'أرقام مسموحة', 'رقمًا مسموحًا']) : 'لا أرقام بعد') + ')</span></summary>' +
+      '<p class="hint" style="margin:8px 0">من هذه الأرقام فقط: يرسل «دوام» إلى رقم الأكاديمية، ثم صورة الكشف، ثم يؤكد التاريخ؛ فتظهر القراءة هنا لمراجعتها وحفظها.</p>' +
+      (ph.length ? '<ul style="margin:0 0 8px;padding-inline-start:18px">' + ph.map(function (p) {
+        return '<li><span dir="ltr">+' + esc(p.phone) + '</span>' + (p.name ? ' — ' + esc(p.name) : '') + ' <button type="button" class="btn link" data-saphdel="' + esc(p.phone) + '">حذف</button></li>';
+      }).join('') + '</ul>' : '') +
+      '<div class="toolbar" style="align-items:center;margin:0"><input type="text" id="sa-ph-num" dir="ltr" inputmode="tel" placeholder="+972599… أو 010…" style="max-width:200px;text-align:right">' +
+      '<input type="text" id="sa-ph-name" placeholder="الاسم (اختياري)" style="max-width:200px"><button type="button" class="btn" data-saphadd>إضافة رقم</button></div></details>';
+  }
+
   // العدد مع المعدود بالعربية: 1 «سطر واحد»، 2 «سطران»، 3-10 «أسطر»، وما فوقها «سطرًا»
   function arCount(n, w) { return n === 1 ? w[0] : n === 2 ? w[1] : n + ' ' + (n >= 3 && n <= 10 ? w[2] : w[3]); }
 
@@ -8448,6 +8509,10 @@
     var r = await sb.from('staff_attendance').upsert(rows, { onConflict: 'teacher_id,day' });
     st.busy = false;
     if (r.error) { render(); return fail(r.error); }
+    // كشف وارد من واتساب حُفظ: يُعلَّم «طُبّق» فيخرج من قائمة الانتظار
+    if (st.scan && st.scan.inboxId) {
+      await sb.from('staff_sheet_inbox').update({ status: 'applied', done_at: new Date().toISOString(), done_by: who }).eq('id', st.scan.inboxId);
+    }
     st.draft = {};
     st.scan = null;
     S.sa = null;
@@ -8534,6 +8599,42 @@
         if (r && r.status !== 'present') return;
         saEdit(t.id, isIn ? { status: 'present', time_in: H.time_in } : { status: 'present', time_out: H.time_out });
       });
+      return render();
+    }
+    if ((el = e.target.closest('[data-saibopen]'))) {
+      var it = (S.sa.inbox || []).filter(function (x) { return x.id === el.getAttribute('data-saibopen'); })[0];
+      if (!it) return;
+      if (Object.keys(st.draft).length && !confirm('في اليوم المعروض تعديلات لم تُحفظ، وفتح الكشف الوارد يلغيها. متابعة؟')) return;
+      st.draft = {};
+      st.scan = null;
+      if (it.day === st.day && S.sa && S.sa.day === st.day) { saApplyInbox(it); return render(); }
+      st.openInbox = it;
+      st.day = it.day;
+      return render();
+    }
+    if ((el = e.target.closest('[data-saibdrop]'))) {
+      var drop = (S.sa.inbox || []).filter(function (x) { return x.id === el.getAttribute('data-saibdrop'); })[0];
+      if (!drop || !confirm('تجاهل كشف يوم ' + dmy(drop.day) + ' الوارد من واتساب؟ لا يُسجَّل منه شيء.')) return;
+      var dr = await sb.from('staff_sheet_inbox').update({ status: 'discarded', done_at: new Date().toISOString(), done_by: (S.profile && S.profile.full_name) || displayName(S.email) }).eq('id', drop.id);
+      if (dr.error) return fail(dr.error);
+      if (st.scan && st.scan.inboxId === drop.id) { st.scan = null; st.draft = {}; }
+      S.sa = null;
+      return render();
+    }
+    if (e.target.closest('[data-saphadd]')) {
+      var num = waNumber(document.getElementById('sa-ph-num').value), nm = document.getElementById('sa-ph-name').value.trim();
+      if (num.length < 9) return toast('اكتب رقم الواتساب كاملًا مع رمز الدولة، مثل +972599… أو 010…', true);
+      var pa = await sb.from('staff_bot_phones').upsert({ phone: num, name: nm }, { onConflict: 'phone' });
+      if (pa.error) return fail(pa.error);
+      S.sa = null;
+      render();
+      return toast('أُضيف الرقم +' + num);
+    }
+    if ((el = e.target.closest('[data-saphdel]'))) {
+      if (!confirm('حذف الرقم +' + el.getAttribute('data-saphdel') + ' من المسموح لهم بإرسال كشف الدوام؟')) return;
+      var pd = await sb.from('staff_bot_phones').delete().eq('phone', el.getAttribute('data-saphdel'));
+      if (pd.error) return fail(pd.error);
+      S.sa = null;
       return render();
     }
     if (e.target.closest('[data-sasave]')) return saSave();
