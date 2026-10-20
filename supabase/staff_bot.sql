@@ -90,7 +90,9 @@ declare
 begin
   if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the settings screen (الإعدادات والمستخدمون)'); end if;
   who := staff_bot_sender(p_phone);
-  if who.phone is null then return jsonb_build_object('handled', false); end if;
+  if who.phone is null then
+    return jsonb_build_object('handled', false, 'note', 'الرقم +' || att_phone(p_phone) || ' ليس من الأرقام المسموحة في «دوام الموظفين»، فذهبت الرسالة إلى بوت الغياب');
+  end if;
   select * into st from staff_bot_state where phone = pk and updated_at > now() - interval '30 minutes';
 
   if msg = 'دوام' then
@@ -98,7 +100,7 @@ begin
       on conflict (phone) do update set step = 'image', inbox_id = null, updated_at = now();
     return jsonb_build_object('handled', true, 'reply', 'أرسل صورة كشف توقيعات الدوام (صورة واحدة واضحة للكشف كاملًا).' || E'\nللإلغاء أرسل «إلغاء».');
   end if;
-  if st.phone is null then return jsonb_build_object('handled', false); end if;
+  if st.phone is null then return jsonb_build_object('handled', false, 'note', 'لا محادثة دوام مفتوحة لهذا الرقم (تبدأ بكلمة «دوام»)، فذهبت الرسالة إلى بوت الغياب'); end if;
 
   if msg in ('الغاء', 'إلغاء') then
     if st.inbox_id is not null then update staff_sheet_inbox set status = 'discarded', done_at = now(), done_by = who.name where id = st.inbox_id and status = 'await_date'; end if;
@@ -112,7 +114,7 @@ begin
 
   -- بانتظار تأكيد التاريخ
   select * into ib from staff_sheet_inbox where id = st.inbox_id;
-  if ib.id is null then delete from staff_bot_state where phone = pk; return jsonb_build_object('handled', false); end if;
+  if ib.id is null then delete from staff_bot_state where phone = pk; return jsonb_build_object('handled', false, 'note', 'انتهت محادثة الدوام السابقة'); end if;
   if msg in ('1', 'نعم', 'تم', 'موافق', 'اه', 'أكيد', 'اكيد') then d := coalesce(ib.sheet_date, att_today());
   else d := staff_bot_date(msg); end if;
   if d is null then
@@ -137,10 +139,14 @@ create or replace function public.staff_bot_image(p_key text, p_phone text) retu
 language plpgsql stable security definer set search_path = public as $$
 declare who staff_bot_phones;
 begin
-  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key'); end if;
+  if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the settings screen (الإعدادات والمستخدمون)'); end if;
   who := staff_bot_sender(p_phone);
-  if who.phone is null or not exists (select 1 from staff_bot_state where phone = right(att_phone(p_phone), 9) and step = 'image' and updated_at > now() - interval '30 minutes') then
-    return jsonb_build_object('ok', false);
+  -- غير مسموح: تُتجاهل صورته بصمت. مسموح لكن لم يبدأ بـ«دوام»: يُذكَّر بذلك
+  if who.phone is null then
+    return jsonb_build_object('ok', false, 'allowed', false, 'note', 'الرقم +' || att_phone(p_phone) || ' ليس من الأرقام المسموحة في «دوام الموظفين»؛ تُتجاهل صورته');
+  end if;
+  if not exists (select 1 from staff_bot_state where phone = right(att_phone(p_phone), 9) and step = 'image' and updated_at > now() - interval '30 minutes') then
+    return jsonb_build_object('ok', false, 'allowed', true, 'note', 'لإرسال كشف الدوام أرسل كلمة «دوام» أولًا، ثم الصورة.');
   end if;
   return jsonb_build_object('ok', true, 'staff', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'title', coalesce(nullif(to_jsonb(t) ->> 'job_title', ''), to_jsonb(t) ->> 'category', '')) order by t.name)
     from teachers t where coalesce((to_jsonb(t) ->> 'contract_end')::date, att_today()) >= att_today() - 60), '[]'::jsonb));
