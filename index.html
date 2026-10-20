@@ -1098,38 +1098,43 @@
       S.settings = res[1].data || null;
       S.users = res[2].data || [];
 
-      var vis = await Promise.all([
-        sb.from('visits').select('*').order('visit_date', { ascending: false }),
-        sb.from('statements').select('*').order('created_at')
+      // كل ما يلي مستقل بعضه عن بعض، فيُجلب معًا
+      S.bk = null;
+      var all = await Promise.all([
+        // الجدولان غير موجودين إلى أن يُشغَّل الملف supabase/visits.sql
+        Promise.all([
+          sb.from('visits').select('*').order('visit_date', { ascending: false }),
+          sb.from('statements').select('*').order('created_at')
+        ]),
+        canView() ? Promise.all([
+          // غير موجود إلى أن يُشغَّل الملف supabase/teacher_accounts.sql
+          isAdmin() ? sb.from('private_settings').select('*').eq('id', 1).maybeSingle() : Promise.resolve({ data: null, error: null }),
+          isAdmin() ? loadBackupStatus() : null,
+          // فئة العامل ومسماه الوظيفي وواتسابه: أعمدة من supabase/staff.sql
+          colMissing('teachers', 'category'),
+          // تاريخ انتهاء العقد: عمود من supabase/staff_attendance.sql
+          colMissing('teachers', 'contract_end'),
+          loadStudents(),
+          loadTransport()
+        ]) : role() === 'supervisor' ? loadStudents() /* للحضور والغياب (قراءة فقط) */ : null,
+        loadTimetable()
       ]);
-      // الجدولان غير موجودين إلى أن يُشغَّل الملف supabase/visits.sql
+      var vis = all[0];
       if (canView()) {
-        // غير موجود إلى أن يُشغَّل الملف supabase/teacher_accounts.sql
-        var ps = isAdmin() ? await sb.from('private_settings').select('*').eq('id', 1).maybeSingle() : { data: null, error: null };
-        S.bk = null;
-        if (isAdmin()) await loadBackupStatus();
-        // فئة العامل ومسماه الوظيفي وواتسابه: أعمدة من supabase/staff.sql
-        S.staffMissing = !!(await sb.from('teachers').select('category').limit(1)).error;
-        // تاريخ انتهاء العقد: عمود من supabase/staff_attendance.sql
-        S.contractMissing = !!(await sb.from('teachers').select('contract_end').limit(1)).error;
+        var ps = all[1][0];
+        S.staffMissing = all[1][2];
+        S.contractMissing = all[1][3];
         S.accountsMissing = !!ps.error;
         S.defaultPw = (ps.data && ps.data.default_password) || '';
-        await loadStudents();
-        await loadTransport();
-      } else if (role() === 'supervisor') {
-        await loadStudents(); // للحضور والغياب (قراءة فقط)
       }
-      await loadTimetable();
       S.visitsMissing = !!(vis[0].error || vis[1].error);
       S.visits = vis[0].data || [];
       S.statements = vis[1].data || [];
     } else if (isTeacherRole()) {
       await loadTimetable(); // «جدولي»
     } else if (isRegistrar()) {
-      var cfg = await sb.from('settings').select('*').eq('id', 1).maybeSingle();
-      S.settings = cfg.data || null;
-      await loadStudents();
-      await loadTransport();
+      var reg = await Promise.all([sb.from('settings').select('*').eq('id', 1).maybeSingle(), loadStudents(), loadTransport()]);
+      S.settings = reg[0].data || null;
     }
     S.ready = true;
     S.syncedAt = new Date();
@@ -1140,7 +1145,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '20/10 — 24';
+  var APP_BUILD = '20/10 — 25';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1215,52 +1220,72 @@
     }
   }
 
+  // الطلبات المستقلة تُرسل معًا لا واحدًا بعد الآخر، فيصير زمن التحميل زمن أبطأ طلب لا مجموعها.
+  // فحص وجود عمود: طلب صف واحد منه؛ الخطأ يعني أن ملف SQL الذي يضيفه لم يُشغَّل بعد
+  function colMissing(table, cols) { return sb.from(table).select(cols).limit(1).then(function (r) { return !!r.error; }); }
+
   async function loadStudents() {
-    // الجدول غير موجود إلى أن يُشغَّل الملف supabase/students.sql
-    var all = await fetchAll(function () { return sb.from('students').select('*').order('full_name').order('id'); });
+    var res = await Promise.all([
+      // الجدول غير موجود إلى أن يُشغَّل الملف supabase/students.sql
+      fetchAll(function () { return sb.from('students').select('*').order('full_name').order('id'); }),
+      // أعمدة التسجيل على مرحلتين غير موجودة إلى أن يُشغَّل الملف supabase/student_registration.sql
+      colMissing('students', 'status, details'),
+      // عمود «يحتاج مواصلات» أُضيف لاحقًا إلى الملف نفسه
+      colMissing('students', 'wants_transport')
+    ]);
+    var all = res[0];
     S.studentsMissing = !all;
     S.students = all || [];
-    // أعمدة التسجيل على مرحلتين غير موجودة إلى أن يُشغَّل الملف supabase/student_registration.sql
-    S.regMissing = !!all && !!(await sb.from('students').select('status, details').limit(1)).error;
-    // عمود «يحتاج مواصلات» أُضيف لاحقًا إلى الملف نفسه
-    S.wantsMissing = !!all && !!(await sb.from('students').select('wants_transport').limit(1)).error;
+    S.regMissing = !!all && res[1];
+    S.wantsMissing = !!all && res[2];
   }
 
   async function loadTransport() {
-    // الجداول غير موجودة إلى أن يُشغَّل الملف supabase/transport.sql
-    var g = await sb.from('transport_groups').select('*').order('assembly_point');
-    var m = g.error ? null : await fetchAll(function () { return sb.from('transport_members').select('*').order('joined_at').order('student_id'); });
+    var res = await Promise.all([
+      // الجداول غير موجودة إلى أن يُشغَّل الملف supabase/transport.sql
+      sb.from('transport_groups').select('*').order('assembly_point'),
+      fetchAll(function () { return sb.from('transport_members').select('*').order('joined_at').order('student_id'); }),
+      // عمود التسميات البديلة أُضيف لاحقًا إلى supabase/transport.sql
+      colMissing('transport_groups', 'aliases'),
+      // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
+      colMissing('transport_voided', 'id'),
+      // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
+      fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month').order('student_id'); }),
+      // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
+      colMissing('transport_payments', 'issued_by'),
+      // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
+      fetchAll(function () { return sb.from('transport_refunds').select('*').order('created_at', { ascending: false }); }),
+      // عمود إيقاف الاشتراك يأتي من supabase/transport_unsubscribe.sql
+      colMissing('transport_members', 'left_from'),
+      // بيانات الباص ونقطة الركوب والمهلة والتعليق: أعمدتها تأتي من supabase/transport_buses.sql
+      colMissing('transport_members', 'pickup, grace_until, suspended_month'),
+      // الإعفاء بالأشهر: أعمدته من supabase/reserve_and_exempt.sql
+      colMissing('transport_members', 'exempt_from'),
+      // المبلغ المطلوب وقت إصدار الإيصال: عمود من supabase/receipts_due.sql
+      colMissing('transport_payments', 'due'),
+      // مواصلات الموظفين: جداولها من supabase/transport_staff.sql
+      loadStaffTransport()
+    ]);
+    var g = res[0], m = g.error ? null : res[1];
     S.transportMissing = !m;
-    // عمود التسميات البديلة أُضيف لاحقًا إلى supabase/transport.sql
-    S.aliasMissing = !!m && !!(await sb.from('transport_groups').select('aliases').limit(1)).error;
+    S.aliasMissing = !!m && res[2];
     S.tGroups = g.data || [];
     S.tMembers = m || [];
     S.tPay = {};
-    // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
-    S.archiveMissing = !!m && !!(await sb.from('transport_voided').select('id').limit(1)).error;
-    // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
+    S.archiveMissing = !!m && res[3];
     S.tFirstPaid = {};
-    var paidRows = m ? await fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month').order('student_id'); }) : null;
-    (paidRows || []).forEach(function (p) {
+    (m ? res[4] || [] : []).forEach(function (p) {
       if (Number(p.amount) > 0 && (!S.tFirstPaid[p.student_id] || p.month < S.tFirstPaid[p.student_id])) S.tFirstPaid[p.student_id] = p.month;
     });
-    // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
-    S.issuerMissing = !!m && !!(await sb.from('transport_payments').select('issued_by').limit(1)).error;
-    // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
-    var refunds = m ? await fetchAll(function () { return sb.from('transport_refunds').select('*').order('created_at', { ascending: false }); }) : null;
+    S.issuerMissing = !!m && res[5];
+    var refunds = m ? res[6] : null;
     S.refundMissing = !!m && !refunds;
     S.tRefunds = (refunds || []).sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
-    // عمود إيقاف الاشتراك يأتي من supabase/transport_unsubscribe.sql
-    S.leaveMissing = !!m && !!(await sb.from('transport_members').select('left_from').limit(1)).error;
-    // بيانات الباص ونقطة الركوب والمهلة والتعليق: أعمدتها تأتي من supabase/transport_buses.sql
-    S.busMissing = !!m && !!(await sb.from('transport_members').select('pickup, grace_until, suspended_month').limit(1)).error;
-    // الإعفاء بالأشهر: أعمدته من supabase/reserve_and_exempt.sql
-    S.exemptMissing = !!m && !!(await sb.from('transport_members').select('exempt_from').limit(1)).error;
-    // المبلغ المطلوب وقت إصدار الإيصال: عمود من supabase/receipts_due.sql
-    S.dueMissing = !!m && !!(await sb.from('transport_payments').select('due').limit(1)).error;
+    S.leaveMissing = !!m && res[7];
+    S.busMissing = !!m && res[8];
+    S.exemptMissing = !!m && res[9];
+    S.dueMissing = !!m && res[10];
     S.tVoided = null;
-    // مواصلات الموظفين: جداولها من supabase/transport_staff.sql
-    if (m) await loadStaffTransport();
   }
 
   /* إيصالات الدفعات المكمِّلة: من دفع جزءًا ثم أكمل يصدر له عن الإكمال إيصال جديد برقمه ومبلغه ووسيلته،
@@ -4434,10 +4459,13 @@
   S.staffTMissing = false;
 
   async function loadStaffTransport() {
-    var m = await fetchAll(function () { return sb.from('transport_staff_members').select('*').order('joined_at').order('staff_id'); });
+    var res = await Promise.all([
+      fetchAll(function () { return sb.from('transport_staff_members').select('*').order('joined_at').order('staff_id'); }),
+      fetchAll(function () { return sb.from('transport_staff_payments').select('*').order('receipt_no'); })
+    ]);
+    var m = res[0], p = m ? res[1] : null;
     S.staffTMissing = !m;
     S.sMembers = m || [];
-    var p = m ? await fetchAll(function () { return sb.from('transport_staff_payments').select('*').order('receipt_no'); }) : null;
     S.sPay = (p || []).map(function (r) { r.amount = Number(r.amount) || 0; return r; });
   }
 
@@ -8023,13 +8051,18 @@
   function isTeacherRole() { return role() === 'teacher'; }
 
   async function loadTimetable() {
-    var rows = await fetchAll(function () { return sb.from('timetable_sessions').select('*').order('created_at').order('id'); });
+    var res = await Promise.all([
+      fetchAll(function () { return sb.from('timetable_sessions').select('*').order('created_at').order('id'); }),
+      sb.from('timetable_config').select('*').eq('id', 1).maybeSingle(),
+      // النصاب والقواعد والاقتراحات: من supabase/timetable_plan.sql
+      !isTeacherRole() ? sb.from('timetable_proposals').select('*').order('created_at', { ascending: false }) : Promise.resolve({ data: [], error: null })
+    ]);
+    var rows = res[0];
     S.ttMissing = !rows;
     S.ttSessions = rows || [];
-    var c = rows ? await sb.from('timetable_config').select('*').eq('id', 1).maybeSingle() : { data: null };
+    var c = rows ? res[1] : { data: null };
     S.ttConfig = c.data || null;
-    // النصاب والقواعد والاقتراحات: من supabase/timetable_plan.sql
-    var pr = rows && !isTeacherRole() ? await sb.from('timetable_proposals').select('*').order('created_at', { ascending: false }) : { data: [], error: null };
+    var pr = rows && !isTeacherRole() ? res[2] : { data: [], error: null };
     S.ttPlanMissing = !!rows && !isTeacherRole() && (!!pr.error || !(S.ttConfig && 'quota' in S.ttConfig));
     S.ttProposals = pr.data || [];
     // المعلم صاحب الحساب لا تُجلب له بيانات العاملين؛ يكفيه سجله
