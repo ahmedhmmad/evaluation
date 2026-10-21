@@ -8,6 +8,12 @@ alter table public.transport_groups
   add column if not exists driver_phone text,
   add column if not exists capacity integer check (capacity is null or capacity >= 0);
 
+-- رقم الباص والمنطقة وخط السير المفصّل (من جدول خطوط الباصات)
+alter table public.transport_groups
+  add column if not exists bus_no integer,
+  add column if not exists area text not null default '',
+  add column if not exists route text not null default '';
+
 alter table public.transport_members
   add column if not exists pickup text,                 -- where the student boards the bus
   add column if not exists grace_until date,            -- extra time to pay, given to this student

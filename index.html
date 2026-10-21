@@ -1168,7 +1168,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 3';
+  var APP_BUILD = '21/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1286,6 +1286,8 @@
       colMissing('transport_members', 'exempt_from'),
       // المبلغ المطلوب وقت إصدار الإيصال: عمود من supabase/receipts_due.sql
       colMissing('transport_payments', 'due'),
+      // رقم الباص والمنطقة وخط السير: أعمدة من supabase/transport_buses.sql
+      colMissing('transport_groups', 'bus_no, area, route'),
       // مواصلات الموظفين: جداولها من supabase/transport_staff.sql
       loadStaffTransport()
     ]);
@@ -1308,6 +1310,7 @@
     S.busMissing = !!m && res[8];
     S.exemptMissing = !!m && res[9];
     S.dueMissing = !!m && res[10];
+    S.routeMissing = !!m && res[11];
     S.tVoided = null;
   }
 
@@ -4042,6 +4045,10 @@
           f('gf-driver', 'السائق', '<input type="text" id="gf-driver" value="' + val('driver_name') + '">') +
           f('gf-dphone', 'هاتف السائق', '<input type="text" id="gf-dphone" dir="ltr" inputmode="tel" style="text-align:right" value="' + val('driver_phone') + '">') +
           f('gf-cap', 'سعة الباص (عدد المقاعد)', '<input type="number" id="gf-cap" min="0" step="1" value="' + val('capacity') + '">')) +
+        (S.routeMissing ? '' :
+          f('gf-no', 'رقم الباص', '<input type="number" id="gf-no" min="1" step="1" value="' + val('bus_no') + '">') +
+          f('gf-area', 'المنطقة', '<input type="text" id="gf-area" placeholder="مثال: مدينة نصر" value="' + val('area') + '">') +
+          f('gf-route', 'خط السير', '<textarea id="gf-route" rows="2" placeholder="مثال: من الواحة ثم الحي العاشر ثم المدرسة">' + val('route') + '</textarea>', true)) +
         f('gf-notes', 'ملاحظات', '<input type="text" id="gf-notes" value="' + val('notes') + '">') +
       '</div><div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
       '<button type="button" class="btn" data-gedit="">إلغاء</button></div></form>';
@@ -4949,27 +4956,40 @@
       var b = box(g), share = shareOf(m);
       b.n++; b.unpaid++; b.notStarted++; b.due += share; b.left += share;
     });
-    var rows = S.tGroups.slice().sort(function (a, b) { return String(a.assembly_point).localeCompare(String(b.assembly_point), 'ar', { numeric: true }); })
+    // بترتيب رقم الباص، ثم الاسم (الباص بلا رقم آخرًا)
+    var rows = S.tGroups.slice().sort(function (a, b) {
+      return (a.bus_no == null ? 1e9 : a.bus_no) - (b.bus_no == null ? 1e9 : b.bus_no) || String(a.assembly_point).localeCompare(String(b.assembly_point), 'ar', { numeric: true });
+    })
       .map(function (g) { return by[g.id] || { g: g, n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 }; });
     var t = { n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 };
     rows.forEach(function (b) { Object.keys(t).forEach(function (k) { t[k] += b[k]; }); });
     return { rows: rows, t: t };
   }
 
+  // رقم الباص (المحفوظ، وإلا ترتيبه في التقرير)، والمنطقة، وخط السير مع اسم الباص، والمشرف
+  function busNo(b, i) { return b.g.bus_no != null ? b.g.bus_no : i + 1; }
+  function busRouteText(g) { return [g.assembly_point, g.route].filter(Boolean).join(' — '); }
+
   function busReportHtml() {
     var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
     var line = function (b, i) {
-      return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) +
-        '<td class="c">' + (b.unpaid ? '<b style="color:var(--red)">' + b.unpaid + '</b>' : 0) + (b.part ? '<div class="hint" style="margin:0">منهم سدّد جزءًا ' + b.part + '</div>' : '') + (b.notStarted ? '<div class="hint" style="margin:0">منهم لم يدفع أي اشتراك بعد ' + b.notStarted + '</div>' : '') + '</td>' +
+      return '<tr>' + c(busNo(b, i), true) + '<td>' + esc(b.g.area || '—') + '</td>' +
+        '<td><b>' + esc(b.g.assembly_point) + '</b>' + (b.g.route ? '<div class="hint" style="margin:2px 0 0">' + esc(b.g.route) + '</div>' : '') + '</td>' +
+        '<td>' + esc(b.g.supervisor_name || '—') + (b.g.supervisor_phone ? '<div class="hint" style="margin:0" dir="ltr">' + esc(b.g.supervisor_phone) + '</div>' : '') + '</td>' +
+        c(b.n) + c(b.paid) +
+        '<td class="c">' + (b.unpaid ? '<b style="color:var(--red)">' + b.unpaid + '</b>' : 0) +
+          (b.part ? '<div class="hint" style="margin:0">منهم سدّد جزءًا ' + b.part + '</div>' : '') + (b.notStarted ? '<div class="hint" style="margin:0">منهم لم يدفع أي اشتراك بعد ' + b.notStarted + '</div>' : '') + '</td>' +
         c(b.exempt ? '<b style="color:#6d28d9">' + b.exempt + '</b>' : 0) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
     };
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">تقرير الباصات — ' + tLabel(ui.tMonth) + '</h2>' +
         '<button type="button" class="btn" data-busrep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-busrep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
+      (S.routeMissing ? '<p class="formhint">لإضافة رقم الباص والمنطقة وخط السير شغّل الملف <code dir="ltr">supabase/transport_buses.sql</code> في محرر SQL ثم حدّث الصفحة، ثم أدخلها من «تعديل» كل باص.</p>' : '') +
       (D.rows.length
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>خط سير الباص</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم الباص</th><th>المنطقة</th><th>خط السير</th><th>المشرف</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
             D.rows.map(line).join('') +
-            '<tr class="total"><td></td><td><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt, true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
-          '<p class="hint" style="margin:8px 0 0">عدد الطلاب: كل المشتركين في الباص في هذه الدورة (عدا من أُوقف اشتراكه). المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا، ومنهم من لم يدفع أي اشتراك بعد. المعفون: معفون من اشتراك هذه الدورة، لا يُطالَبون. إجمالي السداد: ما سُدّد عن هذه الدورة صافيًا بعد أي استرداد.</p>'
+            '<tr class="total"><td colspan="4"><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt, true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
+          '<p class="hint" style="margin:8px 0 0">عدد الطلاب: كل المشتركين في الباص في هذه الدورة (عدا من أُوقف اشتراكه). المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا، ومنهم من لم يدفع أي اشتراك بعد. المعفون: معفون من اشتراك هذه الدورة، لا يُطالَبون. ' +
+            'رقم الباص والمنطقة وخط السير والمشرف من «تعديل» كل باص في صفحة الباصات.</p>'
         : '<div class="empty">لا توجد باصات بعد.</div>') + '</div>';
   }
 
@@ -4980,28 +5000,38 @@
       var wb = XLSX.utils.book_new(), used = {};
       wb.Workbook = { Views: [{ RTL: true }] };
       xlsxSheet(wb, used, 'تقرير الباصات', [[schoolName()], ['تقرير الباصات — ' + tLabel(ui.tMonth)], [],
-        ['م', 'خط سير الباص', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
-        D.rows.map(function (b, i) { return [i + 1, b.g.assembly_point, b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.sum, b.left]; }),
-        [['', 'المجموع', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.sum, D.t.left]]), [5, 34, 11, 11, 13, 14, 15, 10, 18, 14]);
+        ['رقم الباص', 'المنطقة', 'اسم الباص', 'خط السير', 'المشرف', 'هاتف المشرف', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
+        D.rows.map(function (b, i) { return [busNo(b, i), b.g.area || '', b.g.assembly_point, b.g.route || '', b.g.supervisor_name || '', b.g.supervisor_phone || '', b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.sum, b.left]; }),
+        [['', '', 'المجموع', '', '', '', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.sum, D.t.left]]), [9, 16, 28, 50, 24, 15, 11, 11, 13, 14, 15, 10, 18, 14]);
       XLSX.writeFile(wb, 'تقرير-الباصات-' + ui.tMonth + '.xlsx');
     } catch (err) {
       toast(err.message, true);
     }
   }
 
+  // PDF: صفحة أفقية (الأعمدة كثيرة وخط السير طويل)، في صفحة واحدة
   var pendingBusRep = false;
   function buildBusRepSheet() {
-    var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
-    sheet.className = 'rm';
-    sheet.innerHTML = reportHead('تقرير الباصات', [['الدورة', tLabel(ui.tMonth)], ['عدد الباصات', D.rows.length], ['عدد الطلاب', D.t.n], ['إجمالي السداد', money(D.t.sum)]]) +
-      '<table class="rz"><thead><tr><th>م</th><th>خط سير الباص</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
+    var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; }, n = 10;
+    printLandscape = true;
+    var head = reportHead('تقرير الباصات', [['الدورة', tLabel(ui.tMonth)], ['عدد الباصات', D.rows.length], ['عدد الطلاب', D.t.n], ['إجمالي السداد', money(D.t.sum)]]).replace(/^<img class="wm"[^>]*>/, '');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.style.width = '267mm';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>رقم<br>الباص</th><th>المنطقة</th><th>خط السير</th><th>المشرف</th><th>عدد<br>الطلاب</th><th>المسددون</th><th>غير<br>المسددين</th><th>المعفون</th><th>إجمالي السداد<br>(ج.م)</th><th>المتبقي<br>(ج.م)</th></tr></thead><tbody>' +
       D.rows.map(function (b, i) {
-        return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '') + (b.notStarted ? ' <small>(لم يدفع بعد ' + b.notStarted + ')</small>' : '')) +
+        return '<tr>' + c(busNo(b, i), true) + '<td>' + esc(b.g.area || '') + '</td>' +
+          '<td><b>' + esc(b.g.assembly_point) + '</b>' + (b.g.route ? '<br><span style="font-size:.85em">' + esc(b.g.route) + '</span>' : '') + '</td>' +
+          '<td>' + esc(b.g.supervisor_name || '') + (b.g.supervisor_phone ? '<br><span style="font-size:.85em" dir="ltr">' + esc(b.g.supervisor_phone) + '</span>' : '') + '</td>' +
+          c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '') + (b.notStarted ? ' <small>(لم يدفع بعد ' + b.notStarted + ')</small>' : '')) +
           c(b.exempt) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
       }).join('') +
-      '<tr class="total"><td colspan="2">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody></table>' +
+      '<tr class="total"><td colspan="4">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
-    fitSheet();
   }
 
   document.addEventListener('click', function (e) {
@@ -5836,6 +5866,11 @@
       data.driver_name = v('gf-driver');
       data.driver_phone = latinDigits(v('gf-dphone'));
       data.capacity = v('gf-cap') === '' ? null : Math.max(0, Math.round(Number(v('gf-cap')) || 0));
+    }
+    if (!S.routeMissing) {
+      data.bus_no = v('gf-no') === '' ? null : Math.max(1, Math.round(Number(latinDigits(v('gf-no'))) || 1));
+      data.area = v('gf-area');
+      data.route = v('gf-route');
     }
     if (g) {
       var up = await sb.from('transport_groups').update(data).eq('id', g.id);
