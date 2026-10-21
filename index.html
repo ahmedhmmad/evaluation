@@ -1168,7 +1168,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 1';
+  var APP_BUILD = '21/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4924,12 +4924,92 @@
       oneClass: !!cls, whole: !cls && !ui.tpStatus && !ui.tpSearch.trim() };
   }
 
+  /* ----- تقرير الباصات -----
+     لكل باص (خط سيره من اسمه) في الدورة المعروضة: عدد الطلاب المطالَبين، والمسددون كاملًا، وغير المسددين (ومنهم من دفع جزءًا)،
+     والمعفون، وإجمالي ما سُدّد والمتبقي. من payRows نفسها التي تبني «دفعات الطلاب» فتتطابق الأرقام */
+  function busReportData() {
+    var by = {};
+    payRows().forEach(function (r) {
+      var b = by[r.g.id] || (by[r.g.id] = { g: r.g, n: 0, paid: 0, unpaid: 0, part: 0, exempt: 0, sum: 0, due: 0, left: 0 });
+      b.n++;
+      if (r.status === 'paid') b.paid++;
+      else if (r.status === 'exempt') b.exempt++;
+      else if (r.status === 'part') { b.unpaid++; b.part++; }
+      else if (r.status === 'unpaid') b.unpaid++;
+      b.sum += r.paid;
+      if (!r.exempt) b.due += r.share;
+      b.left += r.left;
+    });
+    var rows = S.tGroups.slice().sort(function (a, b) { return String(a.assembly_point).localeCompare(String(b.assembly_point), 'ar', { numeric: true }); })
+      .map(function (g) { return by[g.id] || { g: g, n: 0, paid: 0, unpaid: 0, part: 0, exempt: 0, sum: 0, due: 0, left: 0 }; });
+    var t = { n: 0, paid: 0, unpaid: 0, part: 0, exempt: 0, sum: 0, due: 0, left: 0 };
+    rows.forEach(function (b) { Object.keys(t).forEach(function (k) { t[k] += b[k]; }); });
+    return { rows: rows, t: t };
+  }
+
+  function busReportHtml() {
+    var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
+    var line = function (b, i) {
+      return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) +
+        '<td class="c">' + (b.unpaid ? '<b style="color:var(--red)">' + b.unpaid + '</b>' : 0) + (b.part ? '<div class="hint" style="margin:0">منهم جزئي ' + b.part + '</div>' : '') + '</td>' +
+        c(b.exempt || '') + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
+    };
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">تقرير الباصات — ' + tLabel(ui.tMonth) + '</h2>' +
+        '<button type="button" class="btn" data-busrep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-busrep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
+      (D.rows.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>خط سير الباص</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
+            D.rows.map(line).join('') +
+            '<tr class="total"><td></td><td><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt || '', true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
+          '<p class="hint" style="margin:8px 0 0">الطلاب: المطالَبون باشتراك هذه الدورة في كل باص. المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا. إجمالي السداد: ما سُدّد عن هذه الدورة صافيًا بعد أي استرداد.</p>'
+        : '<div class="empty">لا توجد باصات بعد.</div>') + '</div>';
+  }
+
+  async function busReportXlsx() {
+    var D = busReportData();
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      xlsxSheet(wb, used, 'تقرير الباصات', [[schoolName()], ['تقرير الباصات — ' + tLabel(ui.tMonth)], [],
+        ['م', 'خط سير الباص', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
+        D.rows.map(function (b, i) { return [i + 1, b.g.assembly_point, b.n, b.paid, b.unpaid, b.part, b.exempt, b.sum, b.left]; }),
+        [['', 'المجموع', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.exempt, D.t.sum, D.t.left]]), [5, 34, 11, 11, 13, 14, 10, 18, 14]);
+      XLSX.writeFile(wb, 'تقرير-الباصات-' + ui.tMonth + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  var pendingBusRep = false;
+  function buildBusRepSheet() {
+    var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
+    sheet.className = 'rm';
+    sheet.innerHTML = reportHead('تقرير الباصات', [['الدورة', tLabel(ui.tMonth)], ['عدد الباصات', D.rows.length], ['عدد الطلاب', D.t.n], ['إجمالي السداد', money(D.t.sum)]]) +
+      '<table class="rz"><thead><tr><th>م</th><th>خط سير الباص</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
+      D.rows.map(function (b, i) {
+        return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '')) +
+          c(b.exempt || '') + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
+      }).join('') +
+      '<tr class="total"><td colspan="2">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt || '') + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody></table>' +
+      reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
+    fitSheet();
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/transport/buses' || !canView()) return;
+    var el = e.target.closest('[data-busrep]');
+    if (!el) return;
+    if (el.getAttribute('data-busrep') === 'xlsx') return busReportXlsx();
+    pendingBusRep = true;
+    printNow();
+  });
+
   function transportNav(view) {
     var item = function (key, hash, label) {
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + '</button>';
     };
     return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + item('groups', '#/transport', 'الباصات') + item('late', '#/transport/late', 'المتأخرون والتعليق') +
-      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('ledger', '#/transport/ledger', 'سجل الدفعات') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('refunds', '#/transport/refunds', 'المستردات') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
+      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('ledger', '#/transport/ledger', 'سجل الدفعات') + item('busrep', '#/transport/buses', 'تقرير الباصات') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('refunds', '#/transport/refunds', 'المستردات') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
   }
 
   function payStatsHtml(t, firstSub) {
@@ -5515,7 +5595,7 @@
       return;
     }
 
-    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : 'groups';
+    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : hash === '#/transport/buses' ? 'busrep' : 'groups';
     var all = payRows();
     var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
       '<span style="flex:1"></span>' + monthPick + '</div>';
@@ -5527,6 +5607,11 @@
 
     if (view === 'ledger') {
       app.innerHTML = head + ledgerHtml();
+      return;
+    }
+
+    if (view === 'busrep') {
+      app.innerHTML = head + busReportHtml();
       return;
     }
 
@@ -13258,7 +13343,8 @@
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.removeAttribute('data-pages');
-    if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
+    if (pendingBusRep) buildBusRepSheet();
+    else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
     else if (pendingSubs) buildSubsSheet(pendingSubs);
     else if (pendingTT) buildTtSheet(pendingTT);
     else if (pendingLed) buildLedSheet();
@@ -13280,6 +13366,7 @@
     pendingTT = null;
     pendingSubs = null;
     pendingSa = null;
+    pendingBusRep = false;
     pendingReceipt = null;
     pendingProfile = null;
     pendingBlank = false;
