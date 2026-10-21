@@ -1168,7 +1168,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 2';
+  var APP_BUILD = '21/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4928,21 +4928,30 @@
      لكل باص (خط سيره من اسمه) في الدورة المعروضة: عدد الطلاب المطالَبين، والمسددون كاملًا، وغير المسددين (ومنهم من دفع جزءًا)،
      والمعفون، وإجمالي ما سُدّد والمتبقي. من payRows نفسها التي تبني «دفعات الطلاب» فتتطابق الأرقام */
   function busReportData() {
-    var by = {};
+    var by = {}, inRows = {};
+    var box = function (g) { return by[g.id] || (by[g.id] = { g: g, n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 }); };
     payRows().forEach(function (r) {
-      var b = by[r.g.id] || (by[r.g.id] = { g: r.g, n: 0, paid: 0, unpaid: 0, part: 0, exempt: 0, sum: 0, due: 0, left: 0 });
+      var b = box(r.g);
+      inRows[r.x.id] = 1;
       b.n++;
       if (r.status === 'paid') b.paid++;
       else if (r.status === 'exempt') b.exempt++;
       else if (r.status === 'part') { b.unpaid++; b.part++; }
-      else if (r.status === 'unpaid') b.unpaid++;
+      else b.unpaid++;
       b.sum += r.paid;
       if (!r.exempt) b.due += r.share;
       b.left += r.left;
     });
+    // من في الباص ولم يدفع أي اشتراك بعد (اختيرت له نقطة التجمع فقط): لا يُطالَب في الشاشات الأخرى، لكنه في الباص وغير مسدِّد
+    S.tMembers.forEach(function (m) {
+      var x = findStudent(m.student_id), g = findGroup(m.group_id);
+      if (!x || !g || inRows[x.id] || !subscribedIn(m, ui.tMonth)) return;
+      var b = box(g), share = shareOf(m);
+      b.n++; b.unpaid++; b.notStarted++; b.due += share; b.left += share;
+    });
     var rows = S.tGroups.slice().sort(function (a, b) { return String(a.assembly_point).localeCompare(String(b.assembly_point), 'ar', { numeric: true }); })
-      .map(function (g) { return by[g.id] || { g: g, n: 0, paid: 0, unpaid: 0, part: 0, exempt: 0, sum: 0, due: 0, left: 0 }; });
-    var t = { n: 0, paid: 0, unpaid: 0, part: 0, exempt: 0, sum: 0, due: 0, left: 0 };
+      .map(function (g) { return by[g.id] || { g: g, n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 }; });
+    var t = { n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 };
     rows.forEach(function (b) { Object.keys(t).forEach(function (k) { t[k] += b[k]; }); });
     return { rows: rows, t: t };
   }
@@ -4951,16 +4960,16 @@
     var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
     var line = function (b, i) {
       return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) +
-        '<td class="c">' + (b.unpaid ? '<b style="color:var(--red)">' + b.unpaid + '</b>' : 0) + (b.part ? '<div class="hint" style="margin:0">منهم جزئي ' + b.part + '</div>' : '') + '</td>' +
-        c(b.exempt || '') + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
+        '<td class="c">' + (b.unpaid ? '<b style="color:var(--red)">' + b.unpaid + '</b>' : 0) + (b.part ? '<div class="hint" style="margin:0">منهم سدّد جزءًا ' + b.part + '</div>' : '') + (b.notStarted ? '<div class="hint" style="margin:0">منهم لم يدفع أي اشتراك بعد ' + b.notStarted + '</div>' : '') + '</td>' +
+        c(b.exempt ? '<b style="color:#6d28d9">' + b.exempt + '</b>' : 0) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
     };
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">تقرير الباصات — ' + tLabel(ui.tMonth) + '</h2>' +
         '<button type="button" class="btn" data-busrep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-busrep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
       (D.rows.length
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>خط سير الباص</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
             D.rows.map(line).join('') +
-            '<tr class="total"><td></td><td><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt || '', true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
-          '<p class="hint" style="margin:8px 0 0">الطلاب: المطالَبون باشتراك هذه الدورة في كل باص. المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا. إجمالي السداد: ما سُدّد عن هذه الدورة صافيًا بعد أي استرداد.</p>'
+            '<tr class="total"><td></td><td><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt, true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
+          '<p class="hint" style="margin:8px 0 0">عدد الطلاب: كل المشتركين في الباص في هذه الدورة (عدا من أُوقف اشتراكه). المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا، ومنهم من لم يدفع أي اشتراك بعد. المعفون: معفون من اشتراك هذه الدورة، لا يُطالَبون. إجمالي السداد: ما سُدّد عن هذه الدورة صافيًا بعد أي استرداد.</p>'
         : '<div class="empty">لا توجد باصات بعد.</div>') + '</div>';
   }
 
@@ -4971,9 +4980,9 @@
       var wb = XLSX.utils.book_new(), used = {};
       wb.Workbook = { Views: [{ RTL: true }] };
       xlsxSheet(wb, used, 'تقرير الباصات', [[schoolName()], ['تقرير الباصات — ' + tLabel(ui.tMonth)], [],
-        ['م', 'خط سير الباص', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
-        D.rows.map(function (b, i) { return [i + 1, b.g.assembly_point, b.n, b.paid, b.unpaid, b.part, b.exempt, b.sum, b.left]; }),
-        [['', 'المجموع', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.exempt, D.t.sum, D.t.left]]), [5, 34, 11, 11, 13, 14, 10, 18, 14]);
+        ['م', 'خط سير الباص', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
+        D.rows.map(function (b, i) { return [i + 1, b.g.assembly_point, b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.sum, b.left]; }),
+        [['', 'المجموع', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.sum, D.t.left]]), [5, 34, 11, 11, 13, 14, 15, 10, 18, 14]);
       XLSX.writeFile(wb, 'تقرير-الباصات-' + ui.tMonth + '.xlsx');
     } catch (err) {
       toast(err.message, true);
@@ -4987,10 +4996,10 @@
     sheet.innerHTML = reportHead('تقرير الباصات', [['الدورة', tLabel(ui.tMonth)], ['عدد الباصات', D.rows.length], ['عدد الطلاب', D.t.n], ['إجمالي السداد', money(D.t.sum)]]) +
       '<table class="rz"><thead><tr><th>م</th><th>خط سير الباص</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
       D.rows.map(function (b, i) {
-        return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '')) +
-          c(b.exempt || '') + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
+        return '<tr>' + c(i + 1) + '<td><b>' + esc(b.g.assembly_point) + '</b></td>' + c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '') + (b.notStarted ? ' <small>(لم يدفع بعد ' + b.notStarted + ')</small>' : '')) +
+          c(b.exempt) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
       }).join('') +
-      '<tr class="total"><td colspan="2">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt || '') + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody></table>' +
+      '<tr class="total"><td colspan="2">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody></table>' +
       reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
     fitSheet();
   }
