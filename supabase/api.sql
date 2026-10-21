@@ -44,7 +44,7 @@ language sql stable security definer set search_path = public as $$ select (publ
 -- ===================================================================================================
 -- المطالَب: من بدأ اشتراكه (صدر له إيصال عن الشهر أو قبله) ولم يُوقَف، أو المعفى المشترك، أو من له دفعة عن الشهر.
 -- المطلوب: المحفوظ في إيصال الشهر إن صدر، وإلا المحدد له يدويًا، وإلا رسوم الأسرة: الأول من الإخوة المشتركين بمبلغ، ومن بعده بمبلغ أقل.
--- الإخوة: يجمعهم رقم هوية ولي الأمر أو الهاتف (آخر 10 أرقام) أو اسم الأب والجد والعائلة؛ والأول من بدأ اشتراكه أولًا ثم الأكبر سنًّا ثم بالاسم.
+-- الإخوة: يجمعهم رقم هوية ولي الأمر أو الهاتف (آخر 10 أرقام) أو اسم الأب والجد والعائلة؛ والأول من بدأ اشتراكه أولًا (شهر أول دفعة ثم رقم إيصالها) ثم الأكبر سنًّا ثم بالاسم.
 -- الحالة: ok (لا متبقي)، grace (ضمن المهلة)، extended (مهلة إضافية)، late (متأخر)، suspended (موقوف عن الركوب).
 create or replace function public.api_transport_dues(p_month text)
 returns table (student_id uuid, group_id uuid, share numeric, paid numeric, left_amount numeric, exempt boolean, status text, state text, family_rank int, family_size int)
@@ -56,12 +56,14 @@ begin
   if p_month !~ '^\d{4}-\d{2}$' then raise exception 'الشهر بصيغة YYYY-MM'; end if;
   return query
   with first_paid as (
-    select p.student_id as sid, min(p.month) as m from transport_payments p where p.amount > 0 group by p.student_id
+    select p.student_id as sid, min(p.month) as m,
+           min(p.month || '#' || lpad(coalesce(p.receipt_no, 999999999999)::text, 12, '0')) as k   -- أول دفعة: شهرها ثم رقم إيصالها
+    from transport_payments p where p.amount > 0 group by p.student_id
   ), pay as (
     select p.student_id as sid, p.amount, p.due from transport_payments p where p.month = p_month
   ), mem as (
     select m.student_id as sid, m.group_id as gid, m.share as mshare, m.left_from, m.exempt_from, m.exempt_to, m.grace_until, m.suspended_month,
-           x.full_name, x.phone, x.details, to_jsonb(x) ->> 'birth_date' as birth, fp.m as first_m, py.amount as pamount, py.due as pdue,
+           x.full_name, x.phone, x.details, to_jsonb(x) ->> 'birth_date' as birth, fp.m as first_m, fp.k as first_k, py.amount as pamount, py.due as pdue,
            (m.exempt_from is not null and p_month >= m.exempt_from and (m.exempt_to is null or m.exempt_to = '' or p_month <= m.exempt_to)) as ex,
            (m.left_from is null or p_month < m.left_from) as subscribed
     from transport_members m
@@ -92,7 +94,7 @@ begin
     select r.a as sid, min(r.b::text) as root from reach r group by r.a
   ), ranked as (
     select o.sid, f.root,
-      row_number() over (partition by f.root order by coalesce(o.first_m, '9999'), coalesce(o.birth, '9999'), o.full_name collate public.api_ar) as rnk,
+      row_number() over (partition by f.root order by coalesce(o.first_k, '9999'), coalesce(o.birth, '9999'), o.full_name collate public.api_ar) as rnk,
       count(*) over (partition by f.root) as size
     from owing o join fam f on f.sid = o.sid
   ), calc as (

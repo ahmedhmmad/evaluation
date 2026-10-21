@@ -1172,7 +1172,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 8';
+  var APP_BUILD = '21/10 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1277,7 +1277,7 @@
       // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
       colMissing('transport_voided', 'id'),
       // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
-      fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount').order('month').order('student_id'); }),
+      fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount, receipt_no').order('month').order('student_id'); }),
       // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
       colMissing('transport_payments', 'issued_by'),
       // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
@@ -1304,7 +1304,8 @@
     S.archiveMissing = !!m && res[3];
     S.tFirstPaid = {};
     (m ? res[4] || [] : []).forEach(function (p) {
-      if (Number(p.amount) > 0 && (!S.tFirstPaid[p.student_id] || p.month < S.tFirstPaid[p.student_id])) S.tFirstPaid[p.student_id] = p.month;
+      var k = firstPaidKey(p);
+      if (Number(p.amount) > 0 && (!S.tFirstPaid[p.student_id] || k < S.tFirstPaid[p.student_id])) S.tFirstPaid[p.student_id] = k;
     });
     S.issuerMissing = !!m && res[5];
     var refunds = m ? res[6] : null;
@@ -3824,7 +3825,7 @@
   // من اختيرت له نقطة تجمع فقط (في التسجيل مثلًا) ليس مشتركًا بعد، فلا يُطالَب بشيء حتى يصدر له أول إيصال
   function startedBy(m, month) {
     var first = (S.tFirstPaid || {})[m.student_id];
-    return !!first && first <= month;
+    return !!first && first.slice(0, 7) <= month;
   }
 
   // من يُطلب منه اشتراك الشهر المعروض: من بدأ اشتراكه ولم يُوقَف، ومن له دفعة مسجلة عن هذا الشهر (حتى لا تختفي)
@@ -3843,11 +3844,17 @@
   }
 
   // بعد تسجيل دفعة أو حذفها أو ردّها: يُعاد حساب أول شهر دفع عنه الطالب
+  // أول دفعة للطالب: شهرها ثم رقم إيصالها ("2026-10#000000000123")، فمن دفع قبل أخيه في الشهر نفسه يبقى قبله.
+  // كانت بالشهر وحده، فإذا دفع الإخوة في شهر واحد رُتّبوا بالسن وتغيّر بعد الدفع من هو «الأول» (وحصته)
+  function firstPaidKey(p) {
+    return p.month + '#' + ('000000000000' + (p.receipt_no != null ? p.receipt_no : 999999999999)).slice(-12);
+  }
+
   async function refreshFirstPaid(studentId) {
-    var r = await sb.from('transport_payments').select('student_id, month, amount').eq('student_id', studentId);
+    var r = await sb.from('transport_payments').select('student_id, month, amount, receipt_no').eq('student_id', studentId);
     if (r.error) return;
     var first = '';
-    (r.data || []).forEach(function (p) { if (Number(p.amount) > 0 && (!first || p.month < first)) first = p.month; });
+    (r.data || []).forEach(function (p) { var k = firstPaidKey(p); if (Number(p.amount) > 0 && (!first || k < first)) first = k; });
     if (first) S.tFirstPaid[studentId] = first; else delete S.tFirstPaid[studentId];
   }
 
