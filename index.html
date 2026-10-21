@@ -1172,7 +1172,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 6';
+  var APP_BUILD = '21/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1187,7 +1187,7 @@
       toast('احفظ النموذج المفتوح أو أغلقه أولًا، ثم زامن', true);
       return false;
     }
-    var KEYS = ['sMembers', 'sPay', 'staffTMissing', 'settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
+    var KEYS = ['sMembers', 'sPay', 'staffTMissing', 'sRefunds', 'staffRefundMissing', 'settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
       'tTop', 'topupMissing', 'ttSessions', 'ttConfig', 'ttMissing', 'ttProposals', 'ttPlanMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
@@ -4490,16 +4490,22 @@
   S.sMembers = [];
   S.sPay = [];
   S.staffTMissing = false;
+  S.sRefunds = [];
+  S.staffRefundMissing = false;
 
   async function loadStaffTransport() {
     var res = await Promise.all([
       fetchAll(function () { return sb.from('transport_staff_members').select('*').order('joined_at').order('staff_id'); }),
-      fetchAll(function () { return sb.from('transport_staff_payments').select('*').order('receipt_no'); })
+      fetchAll(function () { return sb.from('transport_staff_payments').select('*').order('receipt_no'); }),
+      fetchAll(function () { return sb.from('transport_staff_refunds').select('*').order('created_at'); })
     ]);
     var m = res[0], p = m ? res[1] : null;
     S.staffTMissing = !m;
     S.sMembers = m || [];
     S.sPay = (p || []).map(function (r) { r.amount = Number(r.amount) || 0; return r; });
+    // المستردات من الموظفين: جدولها أُضيف لاحقًا إلى supabase/transport_staff.sql
+    S.staffRefundMissing = !!m && !res[2];
+    S.sRefunds = (res[2] || []).map(function (r) { r.amount = Number(r.amount) || 0; return r; });
   }
 
   var STAFF_SQL_MSG = 'مواصلات الموظفين تحتاج إلى جداول جديدة: شغّل الملف supabase/transport_staff.sql في محرر SQL ثم حدّث الصفحة.';
@@ -4514,8 +4520,73 @@
     return S.sPay.filter(function (p) { return p.staff_id === id && p.month === (month || ui.tMonth) && !p.voided_at; });
   }
 
+  function staffRefunds(id, month) {
+    return S.sRefunds.filter(function (v) { return v.staff_id === id && v.month === (month || ui.tMonth); });
+  }
+
+  // صافي ما دفعه الموظف عن الدورة: إيصالاته السارية ناقص ما رُدّ إليه (الإيصال نفسه لا يتغير)
   function staffPaid(id, month) {
-    return staffReceipts(id, month).reduce(function (a, p) { return a + p.amount; }, 0);
+    var paid = staffReceipts(id, month).reduce(function (a, p) { return a + p.amount; }, 0);
+    return Math.round((paid - refundTotal(staffRefunds(id, month))) * 100) / 100;
+  }
+
+  // صافي كل إيصال بعد المستردات: يُنقص المسترد من أحدث الإيصالات أولًا (لسجل الدفعات)
+  function staffNetOfReceipts(id, month) {
+    var left = refundTotal(staffRefunds(id, month)), net = {};
+    staffReceipts(id, month).slice().sort(function (a, b) { return b.receipt_no - a.receipt_no; }).forEach(function (p) {
+      var cut = Math.min(left, p.amount);
+      left = Math.round((left - cut) * 100) / 100;
+      net[p.receipt_no] = Math.round((p.amount - cut) * 100) / 100;
+    });
+    return net;
+  }
+
+  var STAFF_REFUND_SQL_MSG = 'استرداد مبالغ الموظفين يحتاج إلى جدول جديد: شغّل الملف supabase/transport_staff.sql مرة أخرى في محرر SQL ثم حدّث الصفحة.';
+
+  // سجل المستردات: مستردات الموظفين بهيئة مستردات الطلاب، بشعبة «موظفون»
+  function staffRefundRows() {
+    return S.sRefunds.map(function (v) {
+      var m = staffMember(v.staff_id), g = m && findGroup(m.group_id), t = find(v.staff_id);
+      return Object.assign({}, v, { staff: true, student_name: v.staff_name, guardian_name: v.staff_name, class_name: 'موظفون', assembly_point: g ? g.assembly_point : '',
+        job: t ? [t.job_title, t.category].filter(Boolean).join(' — ') : '' });
+    });
+  }
+
+  function allRefunds() {
+    return (S.tRefunds || []).concat(staffRefundRows()).sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });
+  }
+
+  async function staffRefundSave(print) {
+    if (S.staffRefundMissing) return toast(STAFF_REFUND_SQL_MSG, true);
+    var t = find(ui.rcStaff), paid = t ? staffPaid(t.id) : 0;
+    if (!t || !(paid > 0)) return;
+    var amount = Math.round((Number(document.getElementById('rf-amount').value) || 0) * 100) / 100;
+    var reason = document.getElementById('rf-reason').value.trim(), method = document.getElementById('rf-method').value;
+    var stopBox = document.getElementById('rf-stop'), stop = !!(stopBox && stopBox.checked);
+    if (!(amount > 0)) return toast('اكتب المبلغ المسترد.', true);
+    if (amount > paid) return toast('المبلغ المسترد أكبر من صافي المدفوع عن الدورة (' + plainNum(paid) + ' ج.م).', true);
+    if (!reason) return toast('اكتب سبب الاسترداد.', true);
+    var net = Math.round((paid - amount) * 100) / 100;
+    if (!confirm('استرداد ' + money(amount) + ' للموظف «' + t.name + '» من المدفوع عن ' + tLabel(ui.tMonth) + '؟\n\nالمدفوع الآن: ' + money(paid) + '\nالصافي بعد الاسترداد: ' + money(net) +
+      '\n\nالإيصالات تبقى كما صدرت، ويُسجَّل الاسترداد بسند مستقل.' + (stop && net === 0 ? '\nوسيُوقف ركوبه ابتداءً من هذه الدورة.' : ''))) return;
+    var recs = staffReceipts(t.id), last = recs.length ? recs[recs.length - 1] : null;
+    var row = { staff_id: t.id, staff_name: t.name, month: ui.tMonth, receipt_no: last ? last.receipt_no : null, paid_before: paid, amount: amount,
+      method: method, method_note: document.getElementById('rf-note').value.trim(), reason: reason,
+      refunded_by: (S.profile && S.profile.full_name) || displayName(S.email), refunded_on: todayISO() };
+    var ins = await sb.from('transport_staff_refunds').insert(row).select().single();
+    if (ins.error) return fail(ins.error);
+    var saved = Object.assign({}, row, ins.data || {});
+    saved.amount = Number(saved.amount) || amount;
+    S.sRefunds.push(saved);
+    var m = staffMember(t.id);
+    if (stop && net === 0 && m) {
+      var left = await sb.from('transport_staff_members').update({ left_from: ui.tMonth }).eq('staff_id', t.id);
+      if (left.error) fail(left.error); else m.left_from = ui.tMonth;
+    }
+    ui.rcRefund = false;
+    document.getElementById('rc-body').innerHTML = deskBodyHtml();
+    toast('سُجّل استرداد ' + money(amount));
+    if (print) { pendingRefund = staffRefundRows().filter(function (v) { return v.id === saved.id; })[0] || null; if (pendingRefund) printNow(); }
   }
 
   // موظفو الباص في الدورة المعروضة (من أُوقف ركوبه قبلها لا يُعدّ)
@@ -4591,7 +4662,7 @@
     var method = ui.rcMethod || 'cash', ref = hasPayRef(method);
     var voided = S.sPay.filter(function (p) { return p.staff_id === t.id && p.month === ui.tMonth && p.voided_at; });
     return head +
-      '<div class="stats" style="margin:14px 0 6px"><div class="card stat"><span class="lbl">المدفوع عن ' + tLabel(ui.tMonth) + '</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span>' +
+      '<div class="stats" style="margin:14px 0 6px"><div class="card stat"><span class="lbl">' + (staffRefunds(t.id).length ? 'صافي المدفوع عن ' : 'المدفوع عن ') + tLabel(ui.tMonth) + '</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span>' +
         '<span class="sub">' + (recs.length ? recs.length + ' إيصال' : 'لم يُسجَّل دفع لهذه الدورة') + '</span></div></div>' +
       (recs.length ? '<div class="table-wrap" style="margin-bottom:10px"><table class="grid pay"><thead><tr><th>رقم الإيصال</th><th>المبلغ</th><th>الوسيلة</th><th>التاريخ</th><th>المسجِّل</th><th></th></tr></thead><tbody>' +
         recs.map(function (p) {
@@ -4599,6 +4670,13 @@
             '<td><div class="acts"><button type="button" class="btn" data-sprint="' + p.receipt_no + '">طباعة</button>' +
             (isAdmin() ? '<button type="button" class="btn danger" data-svoid="' + p.receipt_no + '" title="يبقى محفوظًا بسبب الإلغاء ولا يُحتسب">إلغاء</button>' : '') + '</div></td></tr>';
         }).join('') + '</tbody></table></div>' : '') +
+      (function () {
+        var back = staffRefunds(t.id);
+        return back.length ? '<p class="st-count" style="margin:0 0 10px">رُدّ له عن هذه الدورة: ' + money(refundTotal(back)) + ' (' + back.map(function (v) {
+          return 'سند ' + (v.refund_no != null ? v.refund_no : '—') + ' بتاريخ ' + dmy(v.refunded_on);
+        }).join('، ') + ') — والمدفوع أعلاه صافٍ بعده. التفاصيل في «المستردات».</p>' : '';
+      })() +
+      (isAdmin() && paid > 0 ? (ui.rcRefund ? refundFormHtml(null, paid, true) : '<div class="actions" style="margin:0 0 12px"><button type="button" class="btn" data-rcrefund>استرداد مبلغ</button></div>') : '') +
       (voided.length ? '<p class="st-count" style="margin:0 0 10px">إيصالات ملغاة لهذه الدورة: ' + voided.map(function (p) { return p.receipt_no + ' (' + money(p.amount) + ' — ' + esc(p.void_reason || '') + ')'; }).join('، ') + '</p>' : '') +
       (isAdmin() ? '<div class="grid2">' +
         '<div><label class="field" for="rc-amount">المبلغ المدفوع (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="">' +
@@ -4636,6 +4714,9 @@
   async function staffVoid(no) {
     var p = S.sPay.filter(function (r) { return String(r.receipt_no) === String(no); })[0];
     if (!p || p.voided_at) return;
+    if (staffPaid(p.staff_id, p.month) - p.amount < 0) {
+      return toast('استُرد للموظف من هذه الدورة ' + money(refundTotal(staffRefunds(p.staff_id, p.month))) + '؛ إلغاء هذا الإيصال يجعل المسترد أكبر من المدفوع، فلا يُلغى.', true);
+    }
     var reason = prompt('إلغاء الإيصال رقم ' + p.receipt_no + ' للموظف «' + p.staff_name + '» بمبلغ ' + money(p.amount) + '.\n' +
       'يبقى محفوظًا مع سبب الإلغاء ولا يُحتسب في المحصَّل، ثم يمكن إصدار إيصال صحيح.\n\nاكتب سبب الإلغاء:', '');
     if (reason == null) return;
@@ -4760,11 +4841,14 @@
 
   // سجل الدفعات: إيصالات الموظفين السارية في الفترة، بشعبة «موظفون»
   function staffLedgerRows(from, to) {
+    var nets = {};
     return S.sPay.filter(function (p) { var d = String(p.paid_on || '').slice(0, 10); return !p.voided_at && d >= from && d <= to; }).map(function (p) {
+      var k = p.staff_id + '|' + p.month;
+      if (!nets[k]) nets[k] = staffNetOfReceipts(p.staff_id, p.month);
       var m = staffMember(p.staff_id), g = m && findGroup(m.group_id), t = find(p.staff_id);
-      return { p: p, x: null, staff: true, name: t ? t.name : p.staff_name, cls: 'موظفون', bus: g ? g.assembly_point : '', amount: p.amount,
+      return { p: p, x: null, staff: true, name: t ? t.name : p.staff_name, cls: 'موظفون', bus: g ? g.assembly_point : '', amount: nets[k][p.receipt_no],
         method: PAY_METHODS[p.method] ? p.method : 'cash', ref: p.method_note || '', who: p.issued_by || '', day: String(p.paid_on || '').slice(0, 10) };
-    });
+    }).filter(function (r) { return r.amount > 0; });
   }
 
   document.addEventListener('click', async function (e) {
@@ -4773,6 +4857,7 @@
     if ((el = e.target.closest('[data-sdesk]'))) {
       ui.rcStaff = el.getAttribute('data-sdesk');
       ui.rcStudent = null;
+      ui.rcRefund = false;
       ui.rcQuery = (find(ui.rcStaff) || {}).name || '';
       ui.rcMethod = '';
       return go('#/transport/receipt');
@@ -4781,6 +4866,7 @@
       ui.rcStaff = el.getAttribute('data-rcstaff');
       ui.rcStudent = null;
       ui.rcMethod = '';
+      ui.rcRefund = false;
       document.getElementById('rc-body').innerHTML = deskBodyHtml();
       var amt = document.getElementById('rc-amount');
       if (amt) amt.focus();
@@ -5494,10 +5580,11 @@
   }
 
   // نموذج الاسترداد داخل شاشة «إصدار إيصال»
-  function refundFormHtml(x, paid) {
+  function refundFormHtml(x, paid, staff) {
     var opts = Object.keys(PAY_METHODS).map(function (k) { return '<option value="' + k + '">' + PAY_METHODS[k] + '</option>'; }).join('');
     return '<div class="refund-box"><h3 style="margin:0 0 4px">استرداد مبلغ</h3>' +
-      '<p class="hint">يُردّ المبلغ من المدفوع عن ' + tLabel(ui.tMonth) + ' (' + plainNum(paid) + ' ج.م)، فينقص المحصَّل بقدره، ويُحفظ الاسترداد في سجل المستردات بسند مستقل.</p>' +
+      '<p class="hint">يُردّ المبلغ من ' + (staff ? 'صافي ' : '') + 'المدفوع عن ' + tLabel(ui.tMonth) + ' (' + plainNum(paid) + ' ج.م)، فينقص المحصَّل بقدره، ويُحفظ الاسترداد في سجل المستردات بسند مستقل.' +
+        (staff ? ' إيصالات الموظف تبقى كما صدرت.' : '') + '</p>' +
       '<div class="grid2">' +
         '<div><label class="field" for="rf-amount">المبلغ المسترد (ج.م) <span class="req">*</span></label><input type="number" id="rf-amount" min="0" max="' + paid + '" step="any" value="' + paid + '"></div>' +
         '<div><label class="field" for="rf-method">طريقة الرد</label><select id="rf-method">' + opts + '</select></div>' +
@@ -5505,13 +5592,15 @@
         '<div><label class="field" for="rf-reason">سبب الاسترداد <span class="req">*</span></label><input type="text" id="rf-reason" list="dl-refund" autocomplete="off">' +
           '<datalist id="dl-refund"><option value="انسحاب من المواصلات"><option value="دفع زائد عن المطلوب"><option value="دفعة مكررة"><option value="تغيير مكان السكن"><option value="انسحاب من الأكاديمية"></datalist></div>' +
       '</div>' +
-      (S.leaveMissing ? '' : '<label class="check" style="margin-top:10px"><input type="checkbox" id="rf-stop">عند استرداد المبلغ كاملًا: أوقف اشتراكه في المواصلات ابتداءً من هذا الشهر</label>') +
+      (staff ? '<label class="check" style="margin-top:10px"><input type="checkbox" id="rf-stop">عند استرداد المبلغ كاملًا: أوقف ركوبه الباص ابتداءً من هذه الدورة</label>'
+        : S.leaveMissing ? '' : '<label class="check" style="margin-top:10px"><input type="checkbox" id="rf-stop">عند استرداد المبلغ كاملًا: أوقف اشتراكه في المواصلات ابتداءً من هذا الشهر</label>') +
       '<div class="actions"><button type="button" class="btn primary" data-rfsave="print">تسجيل الاسترداد وطباعة السند</button>' +
         '<button type="button" class="btn" data-rfsave="save">تسجيل دون طباعة</button>' +
         '<button type="button" class="btn" data-rfcancel>إلغاء</button></div></div>';
   }
 
   async function saveRefund(print) {
+    if (ui.rcStaff) return staffRefundSave(print);
     if (S.refundMissing) return toast(REFUND_SQL_MSG, true);
     var x = findStudent(ui.rcStudent), rec = x && (S.tPay[ui.tMonth] || {})[x.id];
     if (!rec || !(rec.amount > 0)) return;
@@ -5558,10 +5647,11 @@
   }
 
   function refundsHtml() {
-    if (S.refundMissing) return '<div class="card empty">' + REFUND_SQL_MSG + '.</div>';
-    var list = S.tRefunds || [];
-    if (!list.length) return '<div class="card empty">لا توجد مبالغ مستردة. الاسترداد يُسجَّل من «إصدار إيصال» بعد اختيار الطالب.</div>';
-    var month = list.filter(function (v) { return v.month === ui.tMonth; });
+    if (S.refundMissing && !S.sRefunds.length) return '<div class="card empty">' + REFUND_SQL_MSG + '.</div>';
+    var list = allRefunds();
+    if (!list.length) return '<div class="card empty">لا توجد مبالغ مستردة. الاسترداد يُسجَّل من «إصدار إيصال» بعد اختيار الطالب أو الموظف.</div>';
+    var month = list.filter(function (v) { return v.month === ui.tMonth && !v.staff; }), all = list.filter(function (v) { return !v.staff; });
+    var sMonth = list.filter(function (v) { return v.month === ui.tMonth && v.staff; }), sAll = list.filter(function (v) { return v.staff; });
     var rows = list.map(function (v, i) {
       return '<tr><td>' + (i + 1) + '</td><td>' + (v.refund_no != null ? v.refund_no : '—') + '</td><td><b>' + esc(v.student_name) + '</b><br><span style="color:var(--muted);font-size:.85rem">' +
         esc(v.class_name || 'بدون شعبة') + (v.assembly_point ? ' · ' + esc(v.assembly_point) : '') + '</span></td>' +
@@ -5571,23 +5661,26 @@
     }).join('');
     return '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">سجل المستردات (' + list.length + ')</h2>' +
       '<button type="button" class="btn" data-rfxlsx>تصدير Excel</button></div>' +
-      '<p class="st-count">مستردات عن ' + tLabel(ui.tMonth) + ': ' + money(refundTotal(month)) + ' (' + month.length + ') · مجموع كل المستردات: ' + money(refundTotal(list)) + '</p>' +
-      '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>رقم السند</th><th>الطالب</th><th>عن شهر</th><th>المدفوع قبله</th><th>المسترد (ج.م)</th><th>طريقة الرد</th>' +
+      '<p class="st-count">مستردات الطلاب عن ' + tLabel(ui.tMonth) + ': ' + money(refundTotal(month)) + ' (' + month.length + ') · مجموع مستردات الطلاب: ' + money(refundTotal(all)) + '</p>' +
+      (sAll.length ? '<p class="st-count">مستردات الموظفين عن ' + tLabel(ui.tMonth) + ': ' + money(refundTotal(sMonth)) + ' (' + sMonth.length + ') · مجموع مستردات الموظفين: ' + money(refundTotal(sAll)) + '</p>' : '') +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>رقم السند</th><th>الاسم</th><th>عن شهر</th><th>المدفوع قبله</th><th>المسترد (ج.م)</th><th>طريقة الرد</th>' +
       '<th>التاريخ</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
 
   async function exportRefundsXlsx() {
-    var list = S.tRefunds || [];
+    var list = allRefunds();
     if (!list.length) return toast('لا توجد مستردات للتصدير', true);
     try {
       await loadXlsx();
       var aoa = [[schoolName()], ['سجل مستردات المواصلات — ' + dmy(todayISO())], [],
-        ['م', 'رقم السند', 'اسم الطالب', 'الشعبة', 'الباص', 'عن شهر', 'رقم الإيصال', 'المدفوع قبله (ج.م)', 'المسترد (ج.م)', 'الصافي بعده (ج.م)', 'طريقة الرد', 'التاريخ', 'السبب', 'سجّله']];
+        ['م', 'رقم السند', 'الاسم', 'الشعبة', 'الباص', 'عن شهر', 'رقم الإيصال', 'المدفوع قبله (ج.م)', 'المسترد (ج.م)', 'الصافي بعده (ج.م)', 'طريقة الرد', 'التاريخ', 'السبب', 'سجّله']];
       list.forEach(function (v, i) {
         aoa.push([i + 1, v.refund_no != null ? v.refund_no : '', v.student_name, v.class_name, v.assembly_point, v.month, v.receipt_no != null ? v.receipt_no : '',
           Number(v.paid_before) || 0, Number(v.amount) || 0, (Number(v.paid_before) || 0) - (Number(v.amount) || 0), payMethodLabel(v), dmy(v.refunded_on), v.reason, v.refunded_by]);
       });
-      aoa.push(['', 'المجموع', '', '', '', '', '', '', refundTotal(list)]);
+      var stu = list.filter(function (v) { return !v.staff; }), stf = list.filter(function (v) { return v.staff; });
+      aoa.push(['', 'مجموع مستردات الطلاب', '', '', '', '', '', '', refundTotal(stu)]);
+      if (stf.length) aoa.push(['', 'مجموع مستردات الموظفين', '', '', '', '', '', '', refundTotal(stf)]);
       var ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new();
       ws['!cols'] = [5, 11, 32, 14, 22, 10, 12, 16, 14, 16, 20, 13, 34, 20].map(function (w) { return { wch: w }; });
       wb.Workbook = { Views: [{ RTL: true }] };
@@ -6248,7 +6341,7 @@
       return go('#/transport/receipt');
     }
     if (e.target.closest('[data-rcrefund]') || e.target.closest('[data-rfcancel]')) {
-      if (S.refundMissing) return toast(REFUND_SQL_MSG, true);
+      if (ui.rcStaff ? S.staffRefundMissing : S.refundMissing) return toast(ui.rcStaff ? STAFF_REFUND_SQL_MSG : REFUND_SQL_MSG, true);
       ui.rcRefund = !e.target.closest('[data-rfcancel]');
       document.getElementById('rc-body').innerHTML = deskBodyHtml();
       var rfBox = document.getElementById('rf-reason');
@@ -6257,7 +6350,7 @@
     }
     if ((el = e.target.closest('[data-rfsave]'))) return saveRefund(el.getAttribute('data-rfsave') === 'print');
     if ((el = e.target.closest('[data-rfprint]'))) {
-      pendingRefund = (S.tRefunds || []).filter(function (v) { return v.id === el.getAttribute('data-rfprint'); })[0] || null;
+      pendingRefund = allRefunds().filter(function (v) { return v.id === el.getAttribute('data-rfprint'); })[0] || null;
       if (pendingRefund) printNow();
       return;
     }
@@ -7769,6 +7862,7 @@
     // مواصلات الموظفين (supabase/transport_staff.sql): إيصالاتهم لا تُعدَّل، فيُضاف الناقص منها فقط
     { name: 'transport_staff_members', label: 'مواصلات الموظفين', key: 'staff_id' },
     { name: 'transport_staff_payments', label: 'إيصالات مواصلات الموظفين', key: 'receipt_no', insertOnly: true },
+    { name: 'transport_staff_refunds', label: 'مستردات مواصلات الموظفين', key: 'id', insertOnly: true },
     { name: 'attendance', label: 'الحضور والغياب', key: 'student_id,day' },
     { name: 'timetable_config', label: 'إعدادات جدول الحصص', key: 'id' },
     { name: 'timetable_sessions', label: 'حصص الجدول', key: 'id' },
@@ -7850,7 +7944,7 @@
     students: 'الطلاب', teachers: 'المعلمون والعاملون', profiles: 'المستخدمون', settings: 'الإعدادات',
     transport_groups: 'الباصات', transport_members: 'اشتراكات المواصلات', transport_payments: 'إيصالات المواصلات',
     transport_topups: 'الإيصالات المكمِّلة', transport_refunds: 'المستردات', transport_voided: 'أرشيف الإيصالات المحذوفة',
-    transport_staff_members: 'مواصلات الموظفين', transport_staff_payments: 'إيصالات مواصلات الموظفين',
+    transport_staff_members: 'مواصلات الموظفين', transport_staff_payments: 'إيصالات مواصلات الموظفين', transport_staff_refunds: 'مستردات الموظفين',
     timetable_sessions: 'جدول الحصص', timetable_config: 'إعدادات الجدول', timetable_proposals: 'مقترحات تحسين الجدول', attendance: 'الحضور والغياب',
     teacher_absences: 'غياب المعلمين', substitutions: 'حصص الاحتياط', staff_attendance: 'دوام الموظفين', staff_hours: 'الوقت الرسمي للدوام'
   };
@@ -7922,7 +8016,7 @@
     }
     if (r.tbl === 'transport_groups') { var g = findGroup(r.row_key); parts.push(row.assembly_point || (g && g.assembly_point) || ''); }
     if (r.tbl === 'timetable_sessions') parts.push([row.class_name, auditVal('day', row.day, r.tbl), row.period ? 'الحصة ' + row.period : ''].filter(Boolean).join(' · '));
-    if (r.tbl === 'transport_refunds' && row.refund_no) parts.push('سند استرداد رقم ' + row.refund_no);
+    if ((r.tbl === 'transport_refunds' || r.tbl === 'transport_staff_refunds') && row.refund_no) parts.push('سند استرداد رقم ' + row.refund_no);
     return parts.filter(Boolean).join(' · ');
   }
 
@@ -13113,13 +13207,14 @@
         '</div>' +
         '<div class="rv-body">' +
           line('رُدّ إلى السيد/ة', 'Refunded to', v.guardian_name) +
-          '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', v.student_name) + '<div class="rv-line short"><span class="k">الشعبة</span><span class="v">' + esc(v.class_name) + '</span><span class="e">Class</span></div></div>' +
+          (v.staff ? '<div class="rv-two">' + line('الوظيفة', 'Position', v.job || 'موظف') + '<div class="rv-line short"><span class="k">الصفة</span><span class="v">موظف</span><span class="e">Type</span></div></div>'
+            : '<div class="rv-two">' + line('ولي أمر الطالب/ـة', 'Student', v.student_name) + '<div class="rv-line short"><span class="k">الشعبة</span><span class="v">' + esc(v.class_name) + '</span><span class="e">Class</span></div></div>') +
           line('مبلغ وقدره', 'The sum of', amountInWords(amount)) +
-          line('وذلك عن', 'Being for', 'استرداد من اشتراك المواصلات لشهر ' + tLabel(v.month) + (v.reason ? ' — ' + v.reason : '')) +
+          line('وذلك عن', 'Being for', 'استرداد من اشتراك المواصلات ' + (v.staff ? 'للموظف عن ' : 'لشهر ') + tLabel(v.month) + (v.reason ? ' — ' + v.reason : '')) +
           '<div class="rv-line"><span class="k">طريقة الرد</span><span class="rv-ms">' + methods + '</span><span class="e">Method</span></div>' +
-          line('توقيع المستلم (ولي الأمر)', 'Received by', '') +
+          line(v.staff ? 'توقيع المستلم' : 'توقيع المستلم (ولي الأمر)', 'Received by', '') +
         '</div>' +
-        '<div class="rv-end"><div class="rv-sum"><div><span>المدفوع عن الشهر</span><b>' + money(paid) + '</b></div><div><span>المسترد</span><b class="bad">' + money(amount) + '</b></div>' +
+        '<div class="rv-end"><div class="rv-sum"><div><span>' + (v.staff ? 'المدفوع عن الدورة' : 'المدفوع عن الشهر') + '</span><b>' + money(paid) + '</b></div><div><span>المسترد</span><b class="bad">' + money(amount) + '</b></div>' +
           '<div><span>الصافي بعد الاسترداد</span><b>' + money(paid - amount) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>';
     };

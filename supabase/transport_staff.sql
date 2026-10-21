@@ -106,3 +106,114 @@ begin
       for each row execute function public.audit_row('receipt_no');
   end if;
 end $$;
+
+-- ===== Refunds to staff =====
+-- Money given back to a staff member from what they paid for a cycle. The receipt itself is never changed:
+-- the refund is its own record (with a voucher number from the same book as the students' refunds when
+-- transport_refunds.sql is installed), and the cycle's net is the receipts minus the refunds.
+-- A refund is never edited or deleted from the app. Safe to re-run.
+create table if not exists public.transport_staff_refunds (
+  id uuid primary key default gen_random_uuid(),
+  refund_no bigint,
+  staff_id uuid not null references public.teachers (id) on delete restrict,
+  staff_name text not null default '',
+  month text not null check (month ~ '^\d{4}-\d{2}$'),
+  receipt_no bigint,                                   -- the latest receipt the money was paid with
+  paid_before numeric not null default 0,              -- net paid for the cycle before this refund
+  amount numeric not null check (amount > 0),
+  method text not null default 'cash' check (method in ('cash', 'instapay', 'vodafone', 'other')),
+  method_note text not null default '',
+  reason text not null check (btrim(reason) <> ''),
+  refunded_by text not null default '',
+  refunded_on date not null default current_date,
+  created_at timestamptz not null default now()
+);
+create index if not exists transport_staff_refunds_month_idx on public.transport_staff_refunds (month, staff_id);
+
+do $$
+declare
+  seq text := case when to_regclass('public.transport_refunds') is not null
+                   then pg_get_serial_sequence('public.transport_refunds', 'refund_no') end;
+begin
+  if seq is null then
+    create sequence if not exists public.transport_staff_refunds_no_seq;
+    seq := 'public.transport_staff_refunds_no_seq';
+  end if;
+  execute format('alter table public.transport_staff_refunds alter column refund_no set default nextval(%L::regclass)', seq);
+  execute format('grant usage, select on sequence %s to authenticated', seq);
+end $$;
+create unique index if not exists transport_staff_refunds_no_idx on public.transport_staff_refunds (refund_no);
+
+alter table public.transport_staff_refunds enable row level security;
+revoke all on public.transport_staff_refunds from anon;
+grant select, insert, update, delete on public.transport_staff_refunds to authenticated;
+drop policy if exists transport_staff_refunds_admin on public.transport_staff_refunds;
+create policy transport_staff_refunds_admin on public.transport_staff_refunds
+  for all to authenticated using (public.my_role() = 'superadmin') with check (public.my_role() = 'superadmin');
+drop policy if exists transport_staff_refunds_manager_read on public.transport_staff_refunds;
+create policy transport_staff_refunds_manager_read on public.transport_staff_refunds
+  for select to authenticated using (public.my_role() = 'manager');
+
+-- net paid for a staff member's cycle: valid receipts minus refunds
+create or replace function public.staff_transport_net(p_staff uuid, p_month text)
+returns numeric
+language sql stable
+set search_path = public
+as $$
+  select coalesce((select sum(amount) from public.transport_staff_payments
+                    where staff_id = p_staff and month = p_month and voided_at is null), 0)
+       - coalesce((select sum(amount) from public.transport_staff_refunds
+                    where staff_id = p_staff and month = p_month), 0)
+$$;
+
+-- a refund cannot exceed what is left of the cycle's payments, and is never edited or deleted
+create or replace function public.guard_transport_staff_refund()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user in ('postgres', 'supabase_admin') then
+    if tg_op = 'DELETE' then return old; end if;
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    perform pg_advisory_xact_lock(hashtext('staff_refund:' || new.staff_id || ':' || new.month));
+    if new.amount > public.staff_transport_net(new.staff_id, new.month) then
+      raise exception 'المبلغ المسترد أكبر من صافي ما دفعه الموظف عن هذه الدورة.';
+    end if;
+    return new;
+  end if;
+  raise exception 'لا يُعدَّل سند استرداد مسجَّل ولا يُحذف.';
+end $$;
+
+drop trigger if exists guard_transport_staff_refund on public.transport_staff_refunds;
+create trigger guard_transport_staff_refund before insert or update or delete on public.transport_staff_refunds
+  for each row execute function public.guard_transport_staff_refund();
+
+-- voiding a receipt must not leave the cycle refunded more than was paid
+create or replace function public.guard_transport_staff_void()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if old.voided_at is null and new.voided_at is not null
+     and public.staff_transport_net(new.staff_id, new.month) < 0 then
+    raise exception 'استُرد من هذه الدورة مبلغ لا يبقى له غطاء إن أُلغي هذا الإيصال.';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists guard_transport_staff_void on public.transport_staff_payments;
+create trigger guard_transport_staff_void after update on public.transport_staff_payments
+  for each row execute function public.guard_transport_staff_void();
+
+do $$
+begin
+  if to_regprocedure('public.audit_row()') is not null then
+    drop trigger if exists audit_row on public.transport_staff_refunds;
+    create trigger audit_row after insert or update or delete on public.transport_staff_refunds
+      for each row execute function public.audit_row('refund_no');
+  end if;
+end $$;

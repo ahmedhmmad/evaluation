@@ -33,7 +33,7 @@ begin
     raise exception 'مفتاح النسخ غير صحيح';
   end if;
   foreach t in array array['teachers', 'visits', 'statements', 'students', 'transport_groups', 'transport_members', 'transport_payments',
-      'transport_voided', 'transport_refunds', 'transport_topups', 'transport_staff_members', 'transport_staff_payments',
+      'transport_voided', 'transport_refunds', 'transport_topups', 'transport_staff_members', 'transport_staff_payments', 'transport_staff_refunds',
       'attendance', 'timetable_config', 'timetable_sessions', 'timetable_proposals', 'teacher_absences', 'substitutions',
       'staff_hours', 'staff_attendance'] loop
     if to_regclass('public.' || t) is null then continue; end if;
