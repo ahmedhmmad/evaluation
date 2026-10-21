@@ -1172,7 +1172,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 9';
+  var APP_BUILD = '21/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1277,7 +1277,7 @@
       // أرشيف الإيصالات المحذوفة: جدوله يأتي من supabase/receipt_archive.sql، ويُجلب عند فتح شاشته
       colMissing('transport_voided', 'id'),
       // أول شهر دفع عنه كل طالب: به يبدأ اشتراكه الفعلي. اختيار نقطة التجمع وحده لا يُنشئ مطالبة
-      fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount, receipt_no').order('month').order('student_id'); }),
+      fetchAll(function () { return sb.from('transport_payments').select('student_id, month, amount, paid_on').order('month').order('student_id'); }),
       // من سجّل الدفعة ومتى: عمودان يأتيان من supabase/transport_issuer.sql
       colMissing('transport_payments', 'issued_by'),
       // سجل المستردات: جدوله يأتي من supabase/transport_refunds.sql
@@ -3844,14 +3844,14 @@
   }
 
   // بعد تسجيل دفعة أو حذفها أو ردّها: يُعاد حساب أول شهر دفع عنه الطالب
-  // أول دفعة للطالب: شهرها ثم رقم إيصالها ("2026-10#000000000123")، فمن دفع قبل أخيه في الشهر نفسه يبقى قبله.
-  // كانت بالشهر وحده، فإذا دفع الإخوة في شهر واحد رُتّبوا بالسن وتغيّر بعد الدفع من هو «الأول» (وحصته)
+  // أول دفعة للطالب: شهرها ثم يوم سدادها ("2026-10#2026-10-12"). الإخوة الذين دفعوا في اليوم نفسه يُرتَّبون بالسن
+  // (هكذا تُصدر إيصالات الأسرة معًا: الأكبر بالرسم الأول)، ومن دفع في يوم لاحق يأتي بعدهم فلا يأخذ مكان من دفع قبله
   function firstPaidKey(p) {
-    return p.month + '#' + ('000000000000' + (p.receipt_no != null ? p.receipt_no : 999999999999)).slice(-12);
+    return p.month + '#' + (String(p.paid_on || '').slice(0, 10) || '9999');
   }
 
   async function refreshFirstPaid(studentId) {
-    var r = await sb.from('transport_payments').select('student_id, month, amount, receipt_no').eq('student_id', studentId);
+    var r = await sb.from('transport_payments').select('student_id, month, amount, paid_on').eq('student_id', studentId);
     if (r.error) return;
     var first = '';
     (r.data || []).forEach(function (p) { var k = firstPaidKey(p); if (Number(p.amount) > 0 && (!first || k < first)) first = k; });

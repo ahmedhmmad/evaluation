@@ -44,7 +44,7 @@ language sql stable security definer set search_path = public as $$ select (publ
 -- ===================================================================================================
 -- المطالَب: من بدأ اشتراكه (صدر له إيصال عن الشهر أو قبله) ولم يُوقَف، أو المعفى المشترك، أو من له دفعة عن الشهر.
 -- المطلوب: المحفوظ في إيصال الشهر إن صدر، وإلا المحدد له يدويًا، وإلا رسوم الأسرة: الأول من الإخوة المشتركين بمبلغ، ومن بعده بمبلغ أقل.
--- الإخوة: يجمعهم رقم هوية ولي الأمر أو الهاتف (آخر 10 أرقام) أو اسم الأب والجد والعائلة؛ والأول من بدأ اشتراكه أولًا (شهر أول دفعة ثم رقم إيصالها) ثم الأكبر سنًّا ثم بالاسم.
+-- الإخوة: يجمعهم رقم هوية ولي الأمر أو الهاتف (آخر 10 أرقام) أو اسم الأب والجد والعائلة؛ والأول من بدأ اشتراكه أولًا (شهر أول دفعة ثم يوم سدادها؛ من دفعوا في يوم واحد بالسن) ثم الأكبر سنًّا ثم بالاسم.
 -- الحالة: ok (لا متبقي)، grace (ضمن المهلة)، extended (مهلة إضافية)، late (متأخر)، suspended (موقوف عن الركوب).
 create or replace function public.api_transport_dues(p_month text)
 returns table (student_id uuid, group_id uuid, share numeric, paid numeric, left_amount numeric, exempt boolean, status text, state text, family_rank int, family_size int)
@@ -57,7 +57,7 @@ begin
   return query
   with first_paid as (
     select p.student_id as sid, min(p.month) as m,
-           min(p.month || '#' || lpad(coalesce(p.receipt_no, 999999999999)::text, 12, '0')) as k   -- أول دفعة: شهرها ثم رقم إيصالها
+           min(p.month || '#' || coalesce(left(p.paid_on::text, 10), '9999')) as k   -- أول دفعة: شهرها ثم يوم سدادها
     from transport_payments p where p.amount > 0 group by p.student_id
   ), pay as (
     select p.student_id as sid, p.amount, p.due from transport_payments p where p.month = p_month
