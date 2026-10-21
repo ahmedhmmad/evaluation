@@ -1168,7 +1168,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 4';
+  var APP_BUILD = '21/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4047,7 +4047,6 @@
           f('gf-cap', 'سعة الباص (عدد المقاعد)', '<input type="number" id="gf-cap" min="0" step="1" value="' + val('capacity') + '">')) +
         (S.routeMissing ? '' :
           f('gf-no', 'رقم الباص', '<input type="number" id="gf-no" min="1" step="1" value="' + val('bus_no') + '">') +
-          f('gf-area', 'المنطقة', '<input type="text" id="gf-area" placeholder="مثال: مدينة نصر" value="' + val('area') + '">') +
           f('gf-route', 'خط السير', '<textarea id="gf-route" rows="2" placeholder="مثال: من الواحة ثم الحي العاشر ثم المدرسة">' + val('route') + '</textarea>', true)) +
         f('gf-notes', 'ملاحظات', '<input type="text" id="gf-notes" value="' + val('notes') + '">') +
       '</div><div class="actions"><button type="submit" class="btn primary">حفظ</button>' +
@@ -4973,7 +4972,7 @@
   function busReportHtml() {
     var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
     var line = function (b, i) {
-      return '<tr>' + c(busNo(b, i), true) + '<td>' + esc(b.g.area || '—') + '</td>' +
+      return '<tr>' + c(busNo(b, i), true) +
         '<td><b>' + esc(b.g.assembly_point) + '</b>' + (b.g.route ? '<div class="hint" style="margin:2px 0 0">' + esc(b.g.route) + '</div>' : '') + '</td>' +
         '<td>' + esc(b.g.supervisor_name || '—') + (b.g.supervisor_phone ? '<div class="hint" style="margin:0" dir="ltr">' + esc(b.g.supervisor_phone) + '</div>' : '') + '</td>' +
         c(b.n) + c(b.paid) +
@@ -4983,13 +4982,13 @@
     };
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">تقرير الباصات — ' + tLabel(ui.tMonth) + '</h2>' +
         '<button type="button" class="btn" data-busrep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-busrep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
-      (S.routeMissing ? '<p class="formhint">لإضافة رقم الباص والمنطقة وخط السير شغّل الملف <code dir="ltr">supabase/transport_buses.sql</code> في محرر SQL ثم حدّث الصفحة، ثم أدخلها من «تعديل» كل باص.</p>' : '') +
+      (S.routeMissing ? '<p class="formhint">لإضافة خط السير ورقم الباص شغّل الملف <code dir="ltr">supabase/transport_buses.sql</code> في محرر SQL ثم حدّث الصفحة، ثم أدخلها من «تعديل» كل باص.</p>' : '') +
       (D.rows.length
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم الباص</th><th>المنطقة</th><th>خط السير</th><th>المشرف</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم الباص</th><th>خط السير</th><th>المشرف</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
             D.rows.map(line).join('') +
-            '<tr class="total"><td colspan="4"><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt, true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
+            '<tr class="total"><td colspan="3"><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt, true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
           '<p class="hint" style="margin:8px 0 0">عدد الطلاب: كل المشتركين في الباص في هذه الدورة (عدا من أُوقف اشتراكه). المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا، ومنهم من لم يدفع أي اشتراك بعد. المعفون: معفون من اشتراك هذه الدورة، لا يُطالَبون. ' +
-            'رقم الباص والمنطقة وخط السير والمشرف من «تعديل» كل باص في صفحة الباصات.</p>'
+            'خط السير والمشرف من «تعديل» كل باص في صفحة الباصات.</p>'
         : '<div class="empty">لا توجد باصات بعد.</div>') + '</div>';
   }
 
@@ -5000,9 +4999,9 @@
       var wb = XLSX.utils.book_new(), used = {};
       wb.Workbook = { Views: [{ RTL: true }] };
       xlsxSheet(wb, used, 'تقرير الباصات', [[schoolName()], ['تقرير الباصات — ' + tLabel(ui.tMonth)], [],
-        ['رقم الباص', 'المنطقة', 'اسم الباص', 'خط السير', 'المشرف', 'هاتف المشرف', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
-        D.rows.map(function (b, i) { return [busNo(b, i), b.g.area || '', b.g.assembly_point, b.g.route || '', b.g.supervisor_name || '', b.g.supervisor_phone || '', b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.sum, b.left]; }),
-        [['', '', 'المجموع', '', '', '', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.sum, D.t.left]]), [9, 16, 28, 50, 24, 15, 11, 11, 13, 14, 15, 10, 18, 14]);
+        ['رقم الباص', 'اسم الباص', 'خط السير', 'المشرف', 'هاتف المشرف', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
+        D.rows.map(function (b, i) { return [busNo(b, i), b.g.assembly_point, b.g.route || '', b.g.supervisor_name || '', b.g.supervisor_phone || '', b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.sum, b.left]; }),
+        [['', 'المجموع', '', '', '', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.sum, D.t.left]]), [9, 28, 50, 24, 15, 11, 11, 13, 14, 15, 10, 18, 14]);
       XLSX.writeFile(wb, 'تقرير-الباصات-' + ui.tMonth + '.xlsx');
     } catch (err) {
       toast(err.message, true);
@@ -5012,7 +5011,7 @@
   // PDF: صفحة أفقية (الأعمدة كثيرة وخط السير طويل)، في صفحة واحدة
   var pendingBusRep = false;
   function buildBusRepSheet() {
-    var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; }, n = 10;
+    var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; }, n = 9;
     printLandscape = true;
     var head = reportHead('تقرير الباصات', [['الدورة', tLabel(ui.tMonth)], ['عدد الباصات', D.rows.length], ['عدد الطلاب', D.t.n], ['إجمالي السداد', money(D.t.sum)]]).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
@@ -5021,15 +5020,15 @@
     sheet.style.width = '267mm';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th>رقم<br>الباص</th><th>المنطقة</th><th>خط السير</th><th>المشرف</th><th>عدد<br>الطلاب</th><th>المسددون</th><th>غير<br>المسددين</th><th>المعفون</th><th>إجمالي السداد<br>(ج.م)</th><th>المتبقي<br>(ج.م)</th></tr></thead><tbody>' +
+      '<tr><th>رقم<br>الباص</th><th>خط السير</th><th>المشرف</th><th>عدد<br>الطلاب</th><th>المسددون</th><th>غير<br>المسددين</th><th>المعفون</th><th>إجمالي السداد<br>(ج.م)</th><th>المتبقي<br>(ج.م)</th></tr></thead><tbody>' +
       D.rows.map(function (b, i) {
-        return '<tr>' + c(busNo(b, i), true) + '<td>' + esc(b.g.area || '') + '</td>' +
+        return '<tr>' + c(busNo(b, i), true) +
           '<td><b>' + esc(b.g.assembly_point) + '</b>' + (b.g.route ? '<br><span style="font-size:.85em">' + esc(b.g.route) + '</span>' : '') + '</td>' +
           '<td>' + esc(b.g.supervisor_name || '') + (b.g.supervisor_phone ? '<br><span style="font-size:.85em" dir="ltr">' + esc(b.g.supervisor_phone) + '</span>' : '') + '</td>' +
           c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '') + (b.notStarted ? ' <small>(لم يدفع بعد ' + b.notStarted + ')</small>' : '')) +
           c(b.exempt) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
       }).join('') +
-      '<tr class="total"><td colspan="4">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody>' +
+      '<tr class="total"><td colspan="3">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
   }
@@ -5869,7 +5868,6 @@
     }
     if (!S.routeMissing) {
       data.bus_no = v('gf-no') === '' ? null : Math.max(1, Math.round(Number(latinDigits(v('gf-no'))) || 1));
-      data.area = v('gf-area');
       data.route = v('gf-route');
     }
     if (g) {
