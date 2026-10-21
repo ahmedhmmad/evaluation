@@ -217,3 +217,11 @@ begin
       for each row execute function public.audit_row('refund_no');
   end if;
 end $$;
+
+-- ===== Exemption for staff =====
+-- Like the students' exemption: a range of cycles (first and last start month; last empty = until changed)
+-- in which the staff member rides without paying. Exempt cycles are never added to any money total. Safe to re-run.
+alter table public.transport_staff_members
+  add column if not exists exempt_from text check (exempt_from is null or exempt_from ~ '^\d{4}-\d{2}$'),
+  add column if not exists exempt_to text check (exempt_to is null or exempt_to ~ '^\d{4}-\d{2}$'),
+  add column if not exists exempt_note text not null default '';

@@ -1172,7 +1172,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 7';
+  var APP_BUILD = '21/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1187,7 +1187,7 @@
       toast('احفظ النموذج المفتوح أو أغلقه أولًا، ثم زامن', true);
       return false;
     }
-    var KEYS = ['sMembers', 'sPay', 'staffTMissing', 'sRefunds', 'staffRefundMissing', 'settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
+    var KEYS = ['sMembers', 'sPay', 'staffTMissing', 'sRefunds', 'staffRefundMissing', 'staffExemptMissing', 'settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
       'tTop', 'topupMissing', 'ttSessions', 'ttConfig', 'ttMissing', 'ttProposals', 'ttPlanMissing', 'transportMissing', 'aliasMissing', 'archiveMissing', 'issuerMissing', 'busMissing', 'exemptMissing', 'dueMissing', 'refundMissing', 'leaveMissing'];
     var keep = {};
     KEYS.forEach(function (k) { keep[k] = S[k]; });
@@ -4127,31 +4127,35 @@
   }
 
   // بطاقة إعفاء طالب من اشتراك المواصلات لأشهر محددة (في صفحة باصه)
+  function exemptStaffId() {
+    return ui.exemptFor && String(ui.exemptFor).indexOf('s:') === 0 ? ui.exemptFor.slice(2) : null;
+  }
+
   function exemptFormHtml(g) {
-    var m = ui.exemptFor && memberOf(ui.exemptFor);
+    var sid = exemptStaffId(), m = ui.exemptFor && (sid ? staffMember(sid) : memberOf(ui.exemptFor));
     if (!m || m.group_id !== g.id) return '';
-    var x = findStudent(m.student_id);
-    if (S.exemptMissing) {
-      return '<div class="card"><p class="formhint" style="margin:0">الإعفاء يحتاج إلى أعمدة جديدة: شغّل الملف <code dir="ltr">supabase/reserve_and_exempt.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' +
+    var name = sid ? (find(sid) || {}).name || '' : findStudent(m.student_id).full_name;
+    if (sid ? S.staffExemptMissing : S.exemptMissing) {
+      return '<div class="card"><p class="formhint" style="margin:0">الإعفاء يحتاج إلى أعمدة جديدة: شغّل الملف <code dir="ltr">supabase/' + (sid ? 'transport_staff.sql' : 'reserve_and_exempt.sql') + '</code> في محرر SQL ثم حدّث الصفحة.</p>' +
         '<div class="actions"><button type="button" class="btn" data-excancel>إغلاق</button></div></div>';
     }
-    return '<div class="card" style="border:2px solid #c4b5fd"><h2>إعفاء «' + esc(x.full_name) + '» من اشتراك المواصلات</h2>' +
-      '<p class="hint">في أشهر الإعفاء يظهر الطالب «مدفوع (إعفاء)» بلون بنفسجي، ولا يُطلب منه اشتراك ولا يدخل في المطلوب. اترك «إلى شهر» فارغًا لإعفاء مستمر.</p>' +
+    return '<div class="card" style="border:2px solid #c4b5fd"><h2>إعفاء ' + (sid ? 'الموظف ' : '') + '«' + esc(name) + '» من اشتراك المواصلات</h2>' +
+      '<p class="hint">في أشهر الإعفاء يظهر ' + (sid ? 'الموظف' : 'الطالب') + ' «مدفوع (إعفاء)» بلون بنفسجي، ولا يُطلب منه اشتراك ولا يدخل في المطلوب' + (sid ? ' ولا في المتأخرين' : '') + '. اترك «إلى شهر» فارغًا لإعفاء مستمر.</p>' +
       '<div class="toolbar" style="align-items:center">' +
         '<span class="monthpick"><label class="field" for="ex-from">من شهر</label><input type="month" id="ex-from" value="' + esc(m.exempt_from || ui.tMonth) + '"></span>' +
         '<span class="monthpick"><label class="field" for="ex-to">إلى شهر</label><input type="month" id="ex-to" value="' + esc(m.exempt_from ? m.exempt_to || '' : ui.tMonth) + '"></span>' +
-        '<input type="text" id="ex-note" placeholder="سبب الإعفاء (مثلًا: ابن موظف، حالة خاصة)" value="' + esc(m.exempt_note || '') + '" style="flex:1;min-width:220px"></div>' +
+        '<input type="text" id="ex-note" placeholder="' + (sid ? 'سبب الإعفاء' : 'سبب الإعفاء (مثلًا: ابن موظف، حالة خاصة)') + '" value="' + esc(m.exempt_note || '') + '" style="flex:1;min-width:220px"></div>' +
       '<div class="actions"><button type="button" class="btn primary" data-exsave>حفظ الإعفاء</button>' +
         (m.exempt_from ? '<button type="button" class="btn danger" data-exdel>إلغاء الإعفاء</button>' : '') +
         '<button type="button" class="btn" data-excancel>إغلاق</button></div></div>';
   }
 
   async function saveExempt(remove) {
-    var sid = ui.exemptFor, m = memberOf(sid);
+    var staffId = exemptStaffId(), sid = ui.exemptFor, m = staffId ? staffMember(staffId) : memberOf(sid);
     if (!m) return;
     var patch;
     if (remove) {
-      if (!confirm('إلغاء إعفاء هذا الطالب؟ يعود مطالَبًا باشتراك الأشهر التي كان معفى منها ولم يدفعها.')) return;
+      if (!confirm('إلغاء إعفاء ' + (staffId ? 'هذا الموظف' : 'هذا الطالب') + '؟ يعود مطالَبًا باشتراك الأشهر التي كان معفى منها ولم يدفعها.')) return;
       patch = { exempt_from: null, exempt_to: null, exempt_note: '' };
     } else {
       var from = document.getElementById('ex-from').value, to = document.getElementById('ex-to').value;
@@ -4159,7 +4163,8 @@
       if (to && to < from) return toast('«إلى شهر» قبل «من شهر»', true);
       patch = { exempt_from: from, exempt_to: to || null, exempt_note: document.getElementById('ex-note').value.trim() };
     }
-    var r = await sb.from('transport_members').update(patch).eq('student_id', sid);
+    var r = staffId ? await sb.from('transport_staff_members').update(patch).eq('staff_id', staffId)
+      : await sb.from('transport_members').update(patch).eq('student_id', sid);
     if (r.error) return fail(r.error);
     Object.assign(m, patch);
     ui.exemptFor = null;
@@ -4473,7 +4478,7 @@
       (rows || '<tr><td colspan="7" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + staffPart.html + '</tbody><tfoot><tr><td class="pg-space" colspan="7"></td></tr></tfoot></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
         (list.some(function (r) { return isReserve(r.x); }) ? ' &nbsp;&nbsp;&nbsp; * احتياط' : '') + ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') +
-        (staffPart.n ? ' &nbsp;&nbsp;&nbsp; الموظفون: ' + staffPart.n + ' (سدّدوا: ' + staffPart.paid + ')' : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
+        (staffPart.n ? ' &nbsp;&nbsp;&nbsp; الموظفون: ' + staffPart.n + ' (سدّدوا: ' + staffPart.paid + (staffPart.exempt ? '، معفون: ' + staffPart.exempt : '') + ')' : '') + (g.capacity != null ? ' &nbsp;&nbsp;&nbsp; سعة الباص: ' + g.capacity : '') + '</p>';
   }
 
   // تفصيل وسائل الدفع لنقطة تجمع
@@ -4505,6 +4510,8 @@
     S.sPay = (p || []).map(function (r) { r.amount = Number(r.amount) || 0; return r; });
     // المستردات من الموظفين: جدولها أُضيف لاحقًا إلى supabase/transport_staff.sql
     S.staffRefundMissing = !!m && !res[2];
+    // إعفاء الموظفين: أعمدته أُضيفت لاحقًا إلى supabase/transport_staff.sql
+    S.staffExemptMissing = !!m && !!(await sb.from('transport_staff_members').select('exempt_from').limit(1)).error;
     S.sRefunds = (res[2] || []).map(function (r) { r.amount = Number(r.amount) || 0; return r; });
   }
 
@@ -4518,6 +4525,11 @@
   // إيصالات الموظف السارية عن دورة (الملغاة لا تُحتسب)
   function staffReceipts(id, month) {
     return S.sPay.filter(function (p) { return p.staff_id === id && p.month === (month || ui.tMonth) && !p.voided_at; });
+  }
+
+  // الموظف معفى من اشتراك الدورة (الإعفاء بأول دورة وآخرها، كالطلاب)
+  function staffExempt(id, month) {
+    return exemptIn(staffMember(id), month || ui.tMonth);
   }
 
   function staffRefunds(id, month) {
@@ -4616,9 +4628,11 @@
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(t.name) + '</b><br><span class="meta" style="font-size:.85rem">' + staffMeta(t) + '</span>' +
           (isAdmin() ? '<input type="text" class="mnote" data-spickup="' + t.id + '" placeholder="نقطة الركوب" aria-label="نقطة ركوب ' + esc(t.name) + '" value="' + esc(m.pickup || '') + '">' : (m.pickup ? '<br><span class="meta">' + esc(m.pickup) + '</span>' : '')) + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(t.whatsapp) || '—') + '</td>' +
-        '<td>' + (paid ? '<span class="badge paid">مدفوع ' + plainNum(paid) + '</span><br><span class="meta" style="font-size:.8rem">' +
-          recs.map(function (p) { return 'إيصال ' + p.receipt_no; }).join('، ') + '</span>' : '<span class="badge unpaid">لم يسدد</span>') + '</td>' +
+        '<td>' + (staffExempt(t.id) ? '<span class="badge exempt">مدفوع (إعفاء)</span><br><span class="meta" style="font-size:.8rem">' + exemptText(m) + '</span>'
+          : paid ? '<span class="badge paid">مدفوع ' + plainNum(paid) + '</span><br><span class="meta" style="font-size:.8rem">' +
+          recs.map(function (p) { return 'إيصال ' + p.receipt_no; }).join('، ') + '</span>' : '<span class="badge unpaid">لم يسدد</span>' + (m.exempt_from ? '<br><span class="meta" style="font-size:.8rem">' + exemptText(m) + '</span>' : '')) + '</td>' +
         '<td class="no-print"><div class="acts">' + (isAdmin() ? '<button type="button" class="btn" data-sdesk="' + t.id + '">إصدار إيصال</button>' +
+          '<button type="button" class="btn" data-sexempt="' + t.id + '" title="إعفاء من الاشتراك لدورات محددة">إعفاء</button>' +
           '<button type="button" class="btn" data-sdel="' + t.id + '" title="إزالة من الباص">إزالة</button>' : '') + '</div></td></tr>';
     }).join('');
     var inBus = {};
@@ -4663,7 +4677,8 @@
     var voided = S.sPay.filter(function (p) { return p.staff_id === t.id && p.month === ui.tMonth && p.voided_at; });
     return head +
       '<div class="stats" style="margin:14px 0 6px"><div class="card stat"><span class="lbl">' + (staffRefunds(t.id).length ? 'صافي المدفوع عن ' : 'المدفوع عن ') + tLabel(ui.tMonth) + '</span><span class="num" style="color:var(--green)">' + plainNum(paid) + ' <small>ج.م</small></span>' +
-        '<span class="sub">' + (recs.length ? recs.length + ' إيصال' : 'لم يُسجَّل دفع لهذه الدورة') + '</span></div></div>' +
+        '<span class="sub">' + (recs.length ? recs.length + ' إيصال' : 'لم يُسجَّل دفع لهذه الدورة') + '</span></div>' +
+        (staffExempt(t.id) ? '<div class="card stat"><span class="lbl">الاشتراك</span><span class="num" style="color:#6d28d9">إعفاء</span><span class="sub">' + exemptText(m) + '</span></div>' : '') + '</div>' +
       (recs.length ? '<div class="table-wrap" style="margin-bottom:10px"><table class="grid pay"><thead><tr><th>رقم الإيصال</th><th>المبلغ</th><th>الوسيلة</th><th>التاريخ</th><th>المسجِّل</th><th></th></tr></thead><tbody>' +
         recs.map(function (p) {
           return '<tr><td><b>' + p.receipt_no + '</b></td><td>' + money(p.amount) + '</td><td>' + esc(payMethodLabel(p)) + '</td><td>' + dmy(p.paid_on) + '</td><td>' + esc(p.issued_by || '—') + '</td>' +
@@ -4781,16 +4796,16 @@
 
   // كشف الباص: صفوف الموظفين بعد الطلاب
   function staffBusSheetRows(g, start) {
-    var riders = staffRiders(g), paidN = 0;
+    var riders = staffRiders(g), paidN = 0, exemptN = 0;
     var rows = riders.map(function (m, i) {
-      var t = find(m.staff_id), paid = staffPaid(t.id) > 0;
-      if (paid) paidN++;
+      var t = find(m.staff_id), ex = exemptIn(m, ui.tMonth), paid = !ex && staffPaid(t.id) > 0;
+      if (ex) exemptN++; else if (paid) paidN++;
       return '<tr><td class="c" style="white-space:nowrap;padding-inline:.2em">' + (start + i + 1) + '</td><td class="big" style="white-space:nowrap"><b>' + esc(t.name) + '</b></td>' +
         '<td class="c" style="white-space:nowrap">موظف</td><td class="big">' + esc([t.job_title || t.category, m.pickup ? 'الركوب: ' + m.pickup : ''].filter(Boolean).join(' — ')) + '</td>' +
         '<td class="c big" dir="ltr" style="white-space:nowrap">' + esc(plainPhone(t.whatsapp)) + '</td><td class="c" style="color:#7d8597">—</td>' +
-        '<td class="c" style="white-space:nowrap' + (paid ? ';font-weight:700' : '') + '">' + (paid ? '✓ مدفوع' : '') + '</td></tr>';
+        '<td class="c" style="white-space:nowrap' + (paid || ex ? ';font-weight:700' : '') + (ex ? ';color:#6d28d9' : '') + '">' + (ex ? '✓ إعفاء' : paid ? '✓ مدفوع' : '') + '</td></tr>';
     }).join('');
-    return { n: riders.length, paid: paidN, html: rows ? '<tr><td colspan="7" style="background:#eef2f7;font-weight:700">الموظفون (' + riders.length + ')</td></tr>' + rows : '' };
+    return { n: riders.length, paid: paidN, exempt: exemptN, html: rows ? '<tr><td colspan="7" style="background:#eef2f7;font-weight:700">الموظفون (' + riders.length + ')</td></tr>' + rows : '' };
   }
 
   // المتأخرون من الموظفين: في باص ولم يصدر لهم إيصال عن الدورة بعد موعد السداد
@@ -4798,7 +4813,7 @@
     if (S.staffTMissing || todayISO() <= payDeadline(ui.tMonth)) return [];
     var out = [];
     S.tGroups.forEach(function (g) {
-      staffRiders(g).forEach(function (m) { if (!staffPaid(m.staff_id)) out.push({ t: find(m.staff_id), g: g, m: m }); });
+      staffRiders(g).forEach(function (m) { if (!exemptIn(m, ui.tMonth) && !(staffPaid(m.staff_id) > 0)) out.push({ t: find(m.staff_id), g: g, m: m }); });
     });
     return out.sort(function (a, b) { return a.g.assembly_point.localeCompare(b.g.assembly_point, 'ar') || a.t.name.localeCompare(b.t.name, 'ar'); });
   }
@@ -4825,17 +4840,17 @@
       if (p.month === ui.tMonth && !p.voided_at && !list.some(function (r) { return r.t && r.t.id === p.staff_id; })) list.push({ t: find(p.staff_id) || { id: p.staff_id, name: p.staff_name }, g: null });
     });
     if (!list.length) return '';
-    var sum = 0, n = 0;
+    var sum = 0, n = 0, ex = 0;
     var rows = list.map(function (r, i) {
-      var recs = staffReceipts(r.t.id), paid = staffPaid(r.t.id);
-      sum += paid; if (paid) n++;
+      var recs = staffReceipts(r.t.id), paid = staffPaid(r.t.id), exempt = staffExempt(r.t.id);
+      sum += paid; if (paid > 0) n++; if (exempt) ex++;
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(r.t.name) + '</b></td><td>' + esc(r.g ? r.g.assembly_point : '—') + '</td>' +
-        '<td>' + (paid ? '<b>' + plainNum(paid) + '</b>' : '<span class="badge unpaid">لم يسدد</span>') + '</td>' +
+        '<td>' + (paid > 0 ? '<b>' + plainNum(paid) + '</b>' + (exempt ? ' <span class="badge exempt">إعفاء</span>' : '') : exempt ? '<span class="badge exempt">مدفوع (إعفاء)</span>' : '<span class="badge unpaid">لم يسدد</span>') + '</td>' +
         '<td style="font-size:.85rem">' + recs.map(function (p) { return p.receipt_no + ' · ' + esc(PAY_METHODS[p.method] || '') + ' · ' + dmy(p.paid_on); }).join('<br>') + '</td>' +
         '<td class="no-print">' + (isAdmin() ? '<button type="button" class="btn" data-sdesk="' + r.t.id + '">إيصال</button>' : '') + '</td></tr>';
     }).join('');
     return '<div class="card"><h2 style="margin:0 0 8px">إيصالات الموظفين — ' + tLabel(ui.tMonth) + '</h2>' +
-      '<p class="st-count" style="margin:0 0 8px">المحصَّل من الموظفين: <b>' + money(sum) + '</b> من ' + n + ' موظفًا · خارج مجموع اشتراكات الطلاب أعلاه</p>' +
+      '<p class="st-count" style="margin:0 0 8px">المحصَّل من الموظفين: <b>' + money(sum) + '</b> من ' + n + ' موظفًا' + (ex ? ' · المعفون: <b style="color:#6d28d9">' + ex + '</b> (خارج المحصَّل)' : '') + ' · خارج مجموع اشتراكات الطلاب أعلاه</p>' +
       '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الموظف</th><th>الباص</th><th>المدفوع (ج.م)</th><th>الإيصالات</th><th class="no-print"></th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
 
@@ -4878,6 +4893,12 @@
     }
     if (!isAdmin()) return;
     if ((el = e.target.closest('[data-svoid]'))) return staffVoid(el.getAttribute('data-svoid'));
+    if ((el = e.target.closest('[data-sexempt]'))) {
+      ui.exemptFor = 's:' + el.getAttribute('data-sexempt');
+      render();
+      window.scrollTo(0, 0);
+      return;
+    }
     if ((el = e.target.closest('[data-sjoin]'))) {
       var gid = (document.getElementById('rc-sgroup') || {}).value;
       if (!gid) return toast('اختر الباص أولًا.', true);
