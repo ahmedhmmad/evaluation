@@ -84,6 +84,9 @@ Deno.serve(async (req) => {
     const { data, error: roleError } = await supabase.rpc("my_role");
     role = data ?? "";
     if (roleError || (role !== "superadmin" && role !== "manager")) return json({ error: "forbidden" }, 403);
+    // «جهة مشرفة (مشاهدة وتصدير فقط)»: دور المدير بلا أي كتابة (supabase/outside_accounts.sql)
+    const { data: readOnly } = await supabase.rpc("my_read_only");
+    if (readOnly === true) return json({ error: "forbidden" }, 403);
   }
 
   const apiKey = Deno.env.get("DEEPINFRA_API_KEY");
