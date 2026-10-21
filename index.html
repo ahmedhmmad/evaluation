@@ -404,6 +404,10 @@
 
   /* كشف الغياب المفصّل (أفقي): الترويسة بارتفاع محدود حتى يبقى للجدول مكانه */
   #print-sheet.att-detail .rh-banner { width: 100%; height: 22mm; object-fit: contain; margin: 0; }
+  /* تقرير الباصات: ترويسة وشريط معلومات أصغر لتتسع الصفحة الأفقية للجدول */
+  #print-sheet.bus-rep .rh-banner { width: 100%; height: 18mm; object-fit: contain; margin: 0; }
+  #print-sheet.bus-rep .rt h1 { font-size: 1.25em; margin: .15em 0; }
+  #print-sheet.bus-rep .rt-info { font-size: .85em; padding: .2em .5em; }
   /* جدول الحصص المطبوع: كل صفحة تُضبط وحدها، والصفحات بعد الأولى تبدأ بهامش الورقة نفسه */
   #print-sheet.tt-pages .tt-page + .tt-page { break-before: page; page-break-before: always; padding-top: var(--pad-y); }
   #print-sheet.tt-pages .tt-page { break-inside: avoid; }
@@ -1168,7 +1172,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 5';
+  var APP_BUILD = '21/10 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -5014,7 +5018,7 @@
     var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; }, n = 9;
     printLandscape = true;
     var head = reportHead('تقرير الباصات', [['الدورة', tLabel(ui.tMonth)], ['عدد الباصات', D.rows.length], ['عدد الطلاب', D.t.n], ['إجمالي السداد', money(D.t.sum)]]).replace(/^<img class="wm"[^>]*>/, '');
-    sheet.className = 'ls';
+    sheet.className = 'ls bus-rep';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     sheet.style.width = '267mm';
