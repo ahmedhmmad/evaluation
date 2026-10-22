@@ -885,21 +885,26 @@
     viewer: 'مشاهد',
     teacher: 'معلم',
     registrar: 'مسجِّل طلاب',
-    supervisor: 'مشرف',
+    supervisor: 'مشرف تربوي',
     manager: 'مدير (مشاهدة فقط)',
+    // ليس دورًا في القاعدة: دور المدير مع role_title (supabase/general_supervisor.sql)، فصلاحياته صلاحيات المدير
+    gensup: 'مشرف عام (مثل المدير)',
     // ليس دورًا في القاعدة: دور المدير مع read_only (supabase/outside_accounts.sql)، فيرى ما يراه المدير ولا يكتب شيئًا
     observer: 'جهة مشرفة (مشاهدة وتصدير فقط)',
     superadmin: 'مدير النظام'
   };
 
   // الصلاحية كما تُعرض وتُختار: «جهة مشرفة» لحساب المدير المقيَّد بالمشاهدة
-  function roleKey(p) { return p && p.role === 'manager' && p.read_only ? 'observer' : p ? p.role : 'pending'; }
+  function roleKey(p) { return p && p.role === 'manager' && p.read_only ? 'observer' : p && p.role === 'manager' && p.role_title === 'general_supervisor' ? 'gensup' : p ? p.role : 'pending'; }
+  // عمود role_title موجود؟ (قبل تشغيل supabase/general_supervisor.sql لا يوجد)
+  function titleColumn() { return !!S.profile && 'role_title' in S.profile; }
   // عمود read_only موجود؟ (قبل تشغيل supabase/outside_accounts.sql لا يوجد)
   function roColumn() { return !!S.profile && 'read_only' in S.profile; }
   // ما يُكتب في profiles لاختيار صلاحية
   function rolePatch(k) {
-    var p = { role: k === 'observer' ? 'manager' : k };
+    var p = { role: k === 'observer' || k === 'gensup' ? 'manager' : k };
     if (roColumn()) p.read_only = k === 'observer';
+    if (titleColumn()) p.role_title = k === 'gensup' ? 'general_supervisor' : '';
     return p;
   }
 
@@ -1052,6 +1057,8 @@
   function isStaff() { return role() === 'supervisor' || isAdmin() || isManager(); }
   // مسجِّل الطلاب: يسجّل الطلاب ويعدّل بياناتهم ويرى الشعب فقط؛ لا حذف ولا مدفوعات ولا تقييمات (supabase/registrar.sql)
   function isRegistrar() { return role() === 'registrar'; }
+  // المواصلات: يراها المدير العام والمدير، والمسجِّل (الباصات وإصدار الإيصالات)
+  function canTransport() { return canView() || isRegistrar(); }
   function canStudents() { return isAdmin() || isRegistrar() || isManager(); }
   // شاشة الحضور والغياب: يراها ويصدّر كشوفها من يرى الطلاب والمشرف (supabase/attendance_supervisor.sql)؛ ويسجّل الحضور المدير العام والمسجِّل فقط
   function canAttView() { return canStudents() || role() === 'supervisor'; }
@@ -1196,7 +1203,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 5';
+  var APP_BUILD = '23/10 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1497,7 +1504,7 @@
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
-    if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير']] }];
+    if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']] }];
     if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']].concat(isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
     var groups = [
       { items: [['#/', 'home', 'الرئيسية']] },
@@ -1518,7 +1525,7 @@
   // الصفحة الحالية كما يدل عليها العنوان (صفحات التفاصيل تتبع قائمتها)
   function activeKey() {
     var h = location.hash;
-    if (isRegistrar()) return /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
+    if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
     if (h === '#/attendance' && canAttView()) return 'attendance';
     if (!isStaff()) return 'results';
@@ -1942,7 +1949,7 @@
               ' placeholder="اتركه فارغًا إن لم يلزمه حساب" autocomplete="off">' +
               '<div class="day">يُنشأ الحساب بكلمة المرور الافتراضية، ويُطلب من صاحبه تغييرها عند أول دخول.</div>') +
             '<div class="tf-nonteach" style="display:' + (TEACHING_CATS.indexOf(staffCat(t)) > -1 ? 'none' : 'contents') + '">' +
-              f('tf-role', 'صلاحية الحساب', '<select id="tf-role"><option value="viewer">مشاهد (يرى النتائج المنشورة)</option><option value="registrar">مسجِّل طلاب</option><option value="supervisor">مشرف</option><option value="manager">مدير (مشاهدة فقط)</option>' + (roColumn() ? '<option value="observer">' + ROLES.observer + '</option>' : '') + '</select>' +
+              f('tf-role', 'صلاحية الحساب', '<select id="tf-role"><option value="viewer">مشاهد (يرى النتائج المنشورة)</option><option value="registrar">مسجِّل طلاب</option><option value="supervisor">مشرف تربوي</option><option value="manager">مدير (مشاهدة فقط)</option>' + (titleColumn() ? '<option value="gensup">' + ROLES.gensup + '</option>' : '') + (roColumn() ? '<option value="observer">' + ROLES.observer + '</option>' : '') + '</select>' +
                 '<div class="day">لهيئة التدريس والمحفظين يكون الحساب حساب معلم يرى تقييمه فقط.</div>') + '</div>') +
         f('tf-details', 'بيانات أخرى', '<textarea id="tf-details" placeholder="أي معلومات إضافية عن المعلم">' + val('details') + '</textarea>', true) +
         (S.notStaffMissing ? '' : '<div style="grid-column:1/-1"><label class="check"><input type="checkbox" id="tf-notstaff"' + (t && t.not_staff ? ' checked' : '') + '>' +
@@ -3839,7 +3846,7 @@
 
   function currentGroup() {
     var m = location.hash.match(/^#\/transport\/(.+)$/);
-    return m && canView() ? findGroup(m[1]) : null;
+    return m && canTransport() ? findGroup(m[1]) : null;
   }
 
   function membersOf(gid) {
@@ -5189,7 +5196,7 @@
   }
 
   document.addEventListener('click', function (e) {
-    if (location.hash !== '#/transport/buses' || !canView()) return;
+    if (location.hash !== '#/transport/buses' || !canTransport()) return;
     var el = e.target.closest('[data-busrep]');
     if (!el) return;
     if (el.getAttribute('data-busrep') === 'xlsx') return busReportXlsx();
@@ -6260,14 +6267,14 @@
   }
 
   app.addEventListener('click', function (e) {
-    if (location.hash !== '#/transport/ledger' || !canView()) return;
+    if (location.hash !== '#/transport/ledger' || !canTransport()) return;
     if (e.target.closest('[data-ledrun]')) loadLedger();
     else if (e.target.closest('[data-ledxlsx]')) exportLedXlsx();
     else if (e.target.closest('[data-ledpdf]')) { if (ledState().rows) { pendingLed = true; printNow(); } }
   });
 
   app.addEventListener('change', function (e) {
-    if (location.hash !== '#/transport/ledger' || !canView()) return;
+    if (location.hash !== '#/transport/ledger' || !canTransport()) return;
     var el = e.target, l = ledState(), map = { 'led-from': 'from', 'led-to': 'to', 'led-method': 'method', 'led-bus': 'bus', 'led-cls': 'cls', 'led-issuer': 'issuer', 'led-sort': 'sort' };
     if (!map[el.id]) return;
     l[map[el.id]] = el.value;
@@ -6394,7 +6401,9 @@
 
 
   document.addEventListener('click', async function (e) {
-    if (!canView() || !/^#\/transport/.test(location.hash)) return;
+    if (!canTransport() || !/^#\/transport/.test(location.hash)) return;
+    // المسجِّل: الباصات وإصدار الإيصالات فقط
+    if (isRegistrar() && e.target.closest(REG_T_BLOCK)) return;
     var el, g = currentGroup(), r;
     if ((el = e.target.closest('[data-tgo]'))) return go(el.getAttribute('data-tgo'));
     if (e.target.closest('[data-rcfind]')) return deskSearch();
@@ -6529,8 +6538,9 @@
   });
 
   app.addEventListener('change', async function (e) {
-    if (!canView() || !/^#\/transport/.test(location.hash)) return;
+    if (!canTransport() || !/^#\/transport/.test(location.hash)) return;
     var el = e.target, g = currentGroup();
+    if (isRegistrar() && (REG_T_IDS.indexOf(el.id) > -1 || el.matches(REG_T_INPUTS))) return;
     if (el.id === 'rc-method') {
       // خانة رقم الدفع تظهر وتختفي بحسب الطريقة، مع بقاء المبلغ المكتوب
       var typed = document.getElementById('rc-amount').value;
@@ -6586,14 +6596,14 @@
   });
 
   app.addEventListener('keydown', function (e) {
-    if (!isAdmin() || location.hash !== '#/transport/receipt' || e.key !== 'Enter') return;
+    if (!(isAdmin() || isRegistrar()) || location.hash !== '#/transport/receipt' || e.key !== 'Enter') return;
     if (e.target.id === 'rc-id') { e.preventDefault(); deskSearch(); }
     else if (e.target.id === 'rc-amount' || e.target.id === 'rc-note') { e.preventDefault(); deskSave(true); }
   });
 
   app.addEventListener('input', function (e) {
     var g = currentGroup();
-    if (e.target.id === 'tp-search' && canView()) {
+    if (e.target.id === 'tp-search' && canTransport()) {
       ui.tpSearch = e.target.value;
       return refreshPay();
     }
@@ -7344,7 +7354,7 @@
       var self = u.id === S.uid;
       // حسابات المعلمين تُدار من تبويب «بيانات العاملين»
       var isTeacher = u.role === 'teacher';
-      var opts = Object.keys(ROLES).filter(function (k) { return (isTeacher || k !== 'teacher') && (k !== 'observer' || roColumn()); }).map(function (k) {
+      var opts = Object.keys(ROLES).filter(function (k) { return (isTeacher || k !== 'teacher') && (k !== 'observer' || roColumn()) && (k !== 'gensup' || titleColumn()); }).map(function (k) {
         return '<option value="' + k + '"' + (roleKey(u) === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
       }).join('');
       return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
@@ -8325,6 +8335,7 @@
       if (/^#\/classes/.test(h)) return renderClasses();
       if (h === '#/attendance') return renderAttendance();
       if (h === '#/reports') return renderReports();
+      if (/^#\/transport/.test(h)) return renderTransport();
       if (h !== '#/students') return go('#/students');
       return renderStudents();
     }
@@ -13194,6 +13205,23 @@
   var VIEW_ACTS = ['back', 'print', 'reload', 'signout', 'sync', 'auth-mode'];
   var VIEW_INPUTS = ['tp-class', 'tp-search', 't-month', 't-search', 'att-cls', 'att-day', 'att-from', 'att-to', 'att-exp-month', 'att-exp-day', 'cls-search', 'rc-id', 'st-class'];
 
+  var REG_T_BLOCK = '[data-mrefund],[data-rcrefund],[data-rfsave],[data-mvoid],[data-mexempt],[data-exsave],[data-exdel],[data-suspend],[data-unsuspend],[data-gracegive],' +
+    '[data-suspendall],[data-mstop],[data-mresume],[data-gedit],[data-gdel],[data-clopen],[data-rcstaff],[data-sdesk],[data-sadd],[data-sdel],[data-sjoin],[data-svoid],[data-sexempt],' +
+    '[data-tgo="#/transport/refunds"],[data-tgo="#/transport/archive"]';
+  var REG_T_IDS = ['fee-first', 'fee-next', 'fee-due', 'cyc-start', 'cyc-grace'];
+  var REG_T_INPUTS = '[data-cyc],[data-mpaid],[data-mmethod],[data-mnote],[data-mshare],[data-spickup]';
+  function applyRegistrarTransport(root) {
+    root.querySelectorAll(REG_T_BLOCK).forEach(function (b) { b.style.display = 'none'; });
+    root.querySelectorAll(REG_T_INPUTS).forEach(function (el) { el.disabled = true; });
+    REG_T_IDS.forEach(function (id) { var el = document.getElementById(id); if (el) el.disabled = true; });
+  }
+  var regPending = false;
+  new MutationObserver(function () {
+    if (!isRegistrar() || regPending || !/^#\/transport/.test(location.hash)) return;
+    regPending = true;
+    Promise.resolve().then(function () { regPending = false; applyRegistrarTransport(app); });
+  }).observe(app, { childList: true, subtree: true });
+
   function applyReadOnly(root) {
     Array.prototype.forEach.call(root.querySelectorAll('button, a.btn'), function (b) {
       if (b.closest('#userbar') || b.hasAttribute('data-ro-ok') || (b.hasAttribute('data-ro-mgr') && !isReadOnly())) return;
@@ -14205,7 +14233,7 @@
     else if (pendingProfile) buildProfileSheet(pendingProfile);
     else if (location.hash === '#/students' && canStudents() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (currentClass() && canStudents()) buildStudentsSheet(currentClass());
-    else if (canView() && S.tPay[ui.tMonth] && (currentGroup() || /^#\/transport\/(payments|classes)$/.test(location.hash))) buildPaymentsSheet(payScope());
+    else if (canTransport() && S.tPay[ui.tMonth] && (currentGroup() || /^#\/transport\/(payments|classes)$/.test(location.hash))) buildPaymentsSheet(payScope());
     else if (location.hash === '#/rooms' && canView() && classConfig().list.length) buildRoomsSheet();
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
