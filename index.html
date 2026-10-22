@@ -1190,7 +1190,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '21/10 — 12';
+  var APP_BUILD = '23/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1482,7 +1482,9 @@
     // سجل التعديلات: ساعة بسهم رجوع
     audit: 'M3 12a9 9 0 103-6.7M3 4v4h4M12 7v5l3 2',
     // دوام الموظفين: بطاقة موظف مع ساعة
-    staffatt: 'M4 6h16v13H4zM8 12a2 2 0 104 0 2 2 0 00-4 0M6.5 17a3.5 3.5 0 017 0M15 10h3M15 13h3M15 16h2'
+    staffatt: 'M4 6h16v13H4zM8 12a2 2 0 104 0 2 2 0 00-4 0M6.5 17a3.5 3.5 0 017 0M15 10h3M15 13h3M15 16h2',
+    // الرواتب: ورقة نقدية
+    payroll: 'M3 7h18v10H3zM7 7v10M17 7v10M12 10a2 2 0 100 4 2 2 0 000-4'
   };
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
@@ -1500,6 +1502,7 @@
         { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']].concat(isAdmin() ? [['#/parents', 'parents', 'روابط أولياء الأمور']] : []) },
         { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']].concat(isAdmin() ? [['#/audit', 'audit', 'سجل التعديلات']] : []) }
       );
+      if (isAdmin()) groups.splice(groups.length - 1, 0, { title: 'الرواتب', items: [['#/payroll', 'payroll', 'إعدادات الرواتب']] });
     }
     return groups;
   }
@@ -1519,6 +1522,7 @@
     if (h === '#/audit' && isAdmin()) return 'audit';
     if (h === '#/parents' && isAdmin()) return 'parents';
     if (h === '#/staffatt' && canView()) return 'staffatt';
+    if (h === '#/payroll' && isAdmin()) return 'payroll';
     var m = h.match(/^#\/(staff|students|admin|rooms|attendance|reports)$/);
     return m && canView() ? m[1] : 'home';
   }
@@ -8326,6 +8330,7 @@
     if (h === '#/visits' || /^#\/v\//.test(h)) return renderVisits();
     if (h === '#/staff' && canView()) return renderStaff();
     if (h === '#/staffatt' && canView()) return renderStaffAtt();
+    if (h === '#/payroll' && isAdmin()) return renderPayroll();
     if (h === '#/students' && canView()) return renderStudents();
     if (/^#\/classes/.test(h) && canView()) return renderClasses();
     if (/^#\/transport/.test(h) && canView()) return renderTransport();
@@ -8687,6 +8692,241 @@
         '<p class="hint" style="margin:8px 0 0"><b>كشف الحضور</b> مثل كشف الطلاب: اسم كل موظف وعمود لكل يوم من الشهر؛ + حاضر، L إجازة، غ غائب، م مأمورية، وتظليل الجمعة والسبت والعطل والإجازات. ' +
           '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>';
   }
+
+  /* ---------- الرواتب ← إعدادات الرواتب (المدير العام) ----------
+     لكل شهر: راتب كل موظف من «بيانات العاملين» وقواعد الدوام، في payroll_setup (supabase/payroll.sql).
+     الشهر الذي لم تُحفظ له إعدادات يعتمد آخر شهر قبله حُفظت إعداداته؛ والحفظ يكتب إعدادات الشهر المعروض وحده */
+  var PR_RULES = [
+    ['late_days', 'أيام التأخير المسموح بها في الشهر', 'يوم', 1],
+    ['late_hours', 'ساعات التأخير المسموح بها في الشهر', 'ساعة', 0.25],
+    ['leave_days', 'أيام الإجازات المسموح بها في الفترة', 'يوم', 1]
+  ];
+  function prState() {
+    if (!ui.pr) ui.pr = { month: todayISO().slice(0, 7), sal: {}, rules: {}, busy: false, imp: null };
+    return ui.pr;
+  }
+  // العام الدراسي الذي فيه الشهر: من 1 سبتمبر إلى 30 يونيو
+  function prSchoolYear(month) {
+    var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7)), a = m >= 9 ? y : y - 1;
+    return { from: a + '-09-01', to: (a + 1) + '-06-30' };
+  }
+  // إعدادات الشهر: المحفوظة له، وإلا آخر شهر قبله
+  function prBase(month) {
+    var rows = (S.pr && S.pr.rows) || [], hit = null;
+    rows.forEach(function (r) { if (r.month <= month && (!hit || r.month > hit.month)) hit = r; });
+    return hit;
+  }
+  function prRules(month) {
+    var b = prBase(month), st = prState(), sy = prSchoolYear(month);
+    return Object.assign({ late_days: '', late_hours: '', leave_days: '', leave_from: sy.from, leave_to: sy.to }, b ? b.rules || {} : {}, st.rules);
+  }
+  function prSalary(id) {
+    var st = prState(), b = prBase(st.month);
+    if (id in st.sal) return st.sal[id];
+    var v = b && b.salaries ? b.salaries[id] : null;
+    return v == null ? '' : String(v);
+  }
+  function prDirty() { var st = prState(); return Object.keys(st.sal).length + Object.keys(st.rules).length; }
+  // العاملون في الشهر: من عُيّن قبل نهايته ولم ينته عقده قبل بدايته، ومعهم من له راتب محفوظ
+  function prStaff(month) {
+    var first = month + '-01', last = month + '-' + String(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate()).padStart(2, '0'), b = prBase(month);
+    return saStaff('').filter(function (t) {
+      var from = String(t.hire_date || '').slice(0, 10), to = String(t.contract_end || '').slice(0, 10);
+      return ((!from || from <= last) && (!to || to >= first)) || (b && b.salaries && b.salaries[t.id] != null);
+    });
+  }
+  function prNum(v) { var n = Number(latinDigits(String(v == null ? '' : v)).replace(/[,،\s]/g, '')); return isFinite(n) ? n : NaN; }
+
+  var loadingPr = false;
+  async function loadPr() {
+    if (loadingPr) return;
+    loadingPr = true;
+    var r = await sb.from('payroll_setup').select('*').order('month');
+    loadingPr = false;
+    S.pr = { rows: r.data || [], missing: !!r.error };
+    render();
+  }
+
+  function renderPayroll() {
+    var st = prState();
+    var head = '<div class="page-head"><div><h1>إعدادات الرواتب</h1><p>راتب كل موظف وقواعد الدوام لكل شهر. الشهر الذي لا تُحفظ إعداداته يعتمد أرقام آخر شهر قبله.</p></div></div>';
+    if (!S.pr) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadPr(); return; }
+    if (S.pr.missing) {
+      app.innerHTML = head + '<div class="card empty">إعدادات الرواتب تحتاج إلى جدول جديد في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/payroll.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+      return;
+    }
+    var b = prBase(st.month), own = b && b.month === st.month, list = prStaff(st.month), R = prRules(st.month), dirty = prDirty();
+    var src = own ? '<span class="badge paid">محفوظة لهذا الشهر</span>' + (b.updated_by ? ' <span class="hint" style="margin:0">' + esc(b.updated_by) + ' · ' + dmy(String(b.updated_at || '').slice(0, 10)) + '</span>' : '')
+      : b ? '<span class="badge part">معتمدة من ' + esc(monthLabel(b.month)) + '</span> <span class="hint" style="margin:0">لم تُحفظ إعدادات لهذا الشهر؛ تُحفظ له عند «حفظ».</span>'
+      : '<span class="badge pending">لا توجد إعدادات بعد</span>';
+    var rows = list.map(function (t, i) {
+      var v = prSalary(t.id), changed = t.id in st.sal;
+      return '<tr' + (changed ? ' style="background:#fffbeb"' : '') + '><td>' + (i + 1) + '</td>' +
+        '<td><b>' + esc(t.name) + '</b><div class="hint" style="margin:0">' + esc(staffCat(t)) + (t.job_title ? ' · ' + esc(t.job_title) : '') + '</div></td>' +
+        '<td><input type="text" inputmode="decimal" dir="ltr" data-prsal="' + t.id + '" value="' + esc(v) + '" placeholder="—" style="width:130px;text-align:right"></td></tr>';
+    }).join('');
+    var ruleIn = function (k, label, unit, step) {
+      return '<label class="field" for="pr-r-' + k + '">' + label + '</label><span style="display:flex;gap:6px;align-items:center"><input type="number" min="0" step="' + step + '" id="pr-r-' + k + '" data-prrule="' + k + '" value="' + esc(R[k]) + '" placeholder="بلا حد" style="width:120px">' + unit + '</span>';
+    };
+    app.innerHTML = head +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
+        '<span class="monthpick"><label class="field" for="pr-month">الشهر</label><input type="month" id="pr-month" value="' + st.month + '"></span>' + src + '</div></div>' +
+      (st.imp ? prImportHtml(list) : '') +
+      '<div class="card"><h2>قواعد الدوام</h2><div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">' +
+        PR_RULES.map(function (r) { return '<div>' + ruleIn(r[0], r[1], r[2], r[3]) + '</div>'; }).join('') +
+        '<div><label class="field">فترة الإجازات (العام الدراسي)</label><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">من <input type="date" data-prrule="leave_from" value="' + esc(R.leave_from) + '" style="width:auto"> إلى <input type="date" data-prrule="leave_to" value="' + esc(R.leave_to) + '" style="width:auto"></span></div>' +
+      '</div><p class="hint" style="margin:8px 0 0">الخانة الفارغة تعني بلا حد. أيام الإجازات تُحسب لكل موظف داخل الفترة المحددة كلها، لا كل شهر.</p></div>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<button type="button" class="btn primary" data-prsave' + ((dirty || (!own && b)) && !st.busy ? '' : ' disabled') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ إعدادات ' + esc(monthLabel(st.month)) + (dirty ? ' (' + dirty + ')' : '')) + '</button>' +
+        (dirty ? '<button type="button" class="btn link" data-prcancel>تراجع عن غير المحفوظ</button>' : '') +
+        '<button type="button" class="btn" data-primp>استيراد الرواتب من Excel</button><input type="file" id="pr-file" accept=".xlsx,.xls,.csv" hidden>' + '</div>' +
+      '<div class="card">' + (list.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>الراتب (ج.م)</th></tr></thead><tbody>' + rows + '</tbody>' +
+          '<tfoot><tr><th colspan="2" style="text-align:right">مجموع الرواتب الشهرية</th><th id="pr-total" style="text-align:right"></th></tr></tfoot></table></div>'
+        : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>';
+    prTotal();
+  }
+
+  // مجموع الرواتب: يُحدَّث مع الكتابة، من الخانات المعروضة
+  function prTotal() {
+    var el = document.getElementById('pr-total');
+    if (!el) return;
+    var sum = 0, n = 0, none = 0, bad = 0;
+    document.querySelectorAll('[data-prsal]').forEach(function (inp) {
+      var v = inp.value.trim();
+      if (!v) { none++; return; }
+      var x = prNum(v);
+      if (isNaN(x) || x < 0) { bad++; inp.style.outline = '2px solid var(--red)'; return; }
+      inp.style.outline = '';
+      sum += x; n++;
+    });
+    el.innerHTML = '<b>' + money(sum) + '</b><div class="hint" style="margin:0">عدد الموظفين: ' + n + (none ? ' · بلا راتب: ' + none : '') + (bad ? ' · <span style="color:var(--red)">أرقام غير صحيحة: ' + bad + '</span>' : '') + '</div>';
+  }
+
+  async function prSave() {
+    var st = prState(), b = prBase(st.month), sal = Object.assign({}, (b && b.salaries) || {}), bad = [];
+    Object.keys(st.sal).forEach(function (id) {
+      var v = String(st.sal[id]).trim();
+      if (!v) { delete sal[id]; return; }
+      var x = prNum(v);
+      if (isNaN(x) || x < 0) { var t = find(id); bad.push(t ? t.name : id); return; }
+      sal[id] = x;
+    });
+    if (bad.length) return toast('راتب غير صحيح: ' + bad.join('، '), true);
+    var R = prRules(st.month), rules = {};
+    PR_RULES.forEach(function (r) { var v = String(R[r[0]] == null ? '' : R[r[0]]).trim(); if (v !== '') rules[r[0]] = Number(v); });
+    if (R.leave_from && R.leave_to && R.leave_from > R.leave_to) return toast('بداية فترة الإجازات بعد نهايتها', true);
+    rules.leave_from = R.leave_from || ''; rules.leave_to = R.leave_to || '';
+    st.busy = true; render();
+    var res = await sb.from('payroll_setup').upsert({ month: st.month, salaries: sal, rules: rules, updated_by: ttWho(), updated_at: new Date().toISOString() }, { onConflict: 'month' });
+    st.busy = false;
+    if (res.error) { render(); return fail(res.error); }
+    st.sal = {}; st.rules = {};
+    S.pr = null;
+    render();
+    toast('حُفظت إعدادات ' + monthLabel(st.month) + '. الأشهر التالية التي لم تُحفظ لها إعدادات تعتمدها.');
+  }
+
+  // استيراد الرواتب من كشف Excel: عمود «الاسم» وعمود «الراتب»؛ كل سطر يُطابَق بموظف، ويمكن تغيير المطابقة قبل التطبيق
+  async function prReadFile(file) {
+    try {
+      await loadXlsx();
+      var wb = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+      var aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+      var hi = -1, col = {};
+      for (var i = 0; i < Math.min(aoa.length, 15) && hi < 0; i++) {
+        aoa[i].forEach(function (h, j) {
+          var n = norm(String(h));
+          if (/^الاسم|اسم الموظف|اسم العامل/.test(n) && col.name == null) col.name = j;
+          else if (/راتب|الاجر|المرتب/.test(n) && col.sal == null) col.sal = j;
+        });
+        if (col.name != null && col.sal != null) hi = i;
+      }
+      if (hi < 0) throw new Error('لم يُعثر على عمودي «الاسم» و«الراتب» في الملف');
+      var staff = prStaff(prState().month), used = {};
+      var rows = aoa.slice(hi + 1).map(function (r) {
+        var name = String(r[col.name] == null ? '' : r[col.name]).replace(/\s+/g, ' ').trim(), sal = prNum(r[col.sal]);
+        if (!name || /^\d+$/.test(name) || /مجموع|اجمالي|الاجمالي/.test(norm(name))) return null;
+        var hit = staff.filter(function (t) { return norm(t.name) === norm(name); });
+        if (!hit.length) hit = staff.filter(function (t) { return ttSameName(t.name, name); });
+        var id = hit.length === 1 && !used[hit[0].id] ? hit[0].id : '';
+        if (id) used[id] = 1;
+        return { name: name, salary: isNaN(sal) ? '' : sal, id: id };
+      }).filter(Boolean);
+      if (!rows.length) throw new Error('لا توجد صفوف بأسماء في الملف');
+      prState().imp = { file: file.name, rows: rows };
+      render();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function prImportHtml(staff) {
+    var imp = prState().imp, ok = imp.rows.filter(function (r) { return r.id && r.salary !== ''; }).length, sum = 0;
+    var taken = {};
+    imp.rows.forEach(function (r) { if (r.id) taken[r.id] = (taken[r.id] || 0) + 1; });
+    var missing = staff.filter(function (t) { return !taken[t.id]; });
+    return '<div class="card"><h2>استيراد الرواتب من «' + esc(imp.file) + '»</h2>' +
+      '<p class="hint">سطور الملف: ' + imp.rows.length + ' · طوبق منها: ' + ok + '. راجع المطابقة؛ السطر الذي لم يُعرف صاحبه اختر له موظفًا أو اتركه «لا يُستورد». ' +
+        'من ليس في «بيانات العاملين» أضفه هناك أولًا. لا يُحفظ شيء حتى «تطبيق» ثم «حفظ».</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الاسم في الملف</th><th>الراتب</th><th>الموظف</th></tr></thead><tbody>' +
+      imp.rows.map(function (r, i) {
+        if (r.id && r.salary !== '') sum += Number(r.salary);
+        return '<tr' + (!r.id ? ' style="background:#fff4e5"' : taken[r.id] > 1 ? ' style="background:#fde8e8"' : '') + '><td>' + (i + 1) + '</td><td>' + esc(r.name) + '</td><td dir="ltr" style="text-align:right">' + (r.salary === '' ? '—' : esc(r.salary.toLocaleString('en'))) + '</td>' +
+          '<td><select data-primpm="' + i + '" style="width:auto;max-width:260px"><option value="">— لا يُستورد —</option>' +
+            staff.map(function (t) { return '<option value="' + t.id + '"' + (r.id === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select>' +
+            (r.id && taken[r.id] > 1 ? ' <span class="badge" style="background:#fde8e8;color:var(--red)">مكرر</span>' : '') + '</td></tr>';
+      }).join('') + '</tbody><tfoot><tr><th colspan="2" style="text-align:right">مجموع المطابَق</th><th colspan="2" style="text-align:right">' + money(sum) + '</th></tr></tfoot></table></div>' +
+      (missing.length ? '<p class="hint">ليس لهم سطر في الملف (يبقى راتبهم كما هو): ' + missing.map(function (t) { return esc(t.name); }).join('، ') + '</p>' : '') +
+      '<div class="actions"><button type="button" class="btn primary" data-primpapply>تطبيق الرواتب المطابَقة (' + ok + ') على ' + esc(monthLabel(prState().month)) + '</button>' +
+        '<button type="button" class="btn link" data-primpclose>إلغاء الاستيراد</button></div></div>';
+  }
+
+  function prSaveBtn() {
+    var btn = document.querySelector('[data-prsave]'), st = prState();
+    if (btn && !st.busy) { btn.disabled = false; btn.textContent = 'حفظ إعدادات ' + monthLabel(st.month) + ' (' + prDirty() + ')'; }
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/payroll' || !isAdmin()) return;
+    var st = prState();
+    if (e.target.closest('[data-prsave]')) return prSave();
+    if (e.target.closest('[data-prcancel]')) { st.sal = {}; st.rules = {}; return render(); }
+    if (e.target.closest('[data-primp]')) return document.getElementById('pr-file').click();
+    if (e.target.closest('[data-primpclose]')) { st.imp = null; return render(); }
+    if (e.target.closest('[data-primpapply]')) {
+      var ids = {}, dup = [];
+      st.imp.rows.forEach(function (r) { if (r.id) { if (ids[r.id]) dup.push(find(r.id).name); ids[r.id] = 1; } });
+      if (dup.length) return toast('موظف مختار لأكثر من سطر: ' + dup.join('، '), true);
+      var n = 0;
+      st.imp.rows.forEach(function (r) { if (r.id && r.salary !== '') { st.sal[r.id] = String(r.salary); n++; } });
+      st.imp = null;
+      render();
+      return toast('طُبّقت الرواتب المطابَقة (' + n + ') بخلفية صفراء. راجع ثم اضغط «حفظ».');
+    }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/payroll' || !isAdmin()) return;
+    var el = e.target, st = prState();
+    if (el.hasAttribute('data-prsal')) {
+      st.sal[el.getAttribute('data-prsal')] = el.value;
+      el.closest('tr').style.background = '#fffbeb';
+      prTotal();
+      prSaveBtn();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/payroll' || !isAdmin()) return;
+    var el = e.target, st = prState();
+    if (el.id === 'pr-month') {
+      if (!el.value) return;
+      if (prDirty() && !confirm('في هذا الشهر تعديلات لم تُحفظ. الانتقال يلغيها؟')) { el.value = st.month; return; }
+      st.month = el.value; st.sal = {}; st.rules = {}; st.imp = null; return render();
+    }
+    if (el.id === 'pr-file') { var file = el.files && el.files[0]; el.value = ''; if (file) prReadFile(file); return; }
+    if (el.hasAttribute('data-prrule')) { st.rules[el.getAttribute('data-prrule')] = el.value; return prSaveBtn(); }
+    if (el.hasAttribute('data-primpm')) { st.imp.rows[Number(el.getAttribute('data-primpm'))].id = el.value; return render(); }
+  });
 
   /* ----- قراءة كشف الدوام المصوَّر -----
      تُرفع صورة الكشف الورقي (أو PDF)، فتقرؤها خدمة read-staff-sheet (نموذج يقرأ الصور على DeepInfra، بمفتاح على الخادم)
