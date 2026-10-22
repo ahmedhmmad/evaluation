@@ -33,15 +33,22 @@ create table if not exists public.payroll_runs (
   updated_at timestamptz not null default now()
 );
 
--- صلاحية الحساب الحالي في الرواتب: 'edit' أو 'view' أو ''
+-- صلاحية الحساب الحالي في الرواتب: 'edit' أو 'view' أو ''.
+-- حساب «جهة مشرفة» (read_only، من outside_accounts.sql) مشاهدة فقط حتى لو مُنح التعديل
 create or replace function public.payroll_level() returns text
-language sql stable security definer set search_path = public as $$
-  select case
-    when public.my_role() = 'superadmin' then 'edit'
-    when public.my_role() not in ('manager', 'supervisor') then ''
-    when exists (select 1 from public.payroll_access a where a.user_id = auth.uid() and a.can_edit) then 'edit'
-    when exists (select 1 from public.payroll_access a where a.user_id = auth.uid()) then 'view'
-    else '' end;
+language plpgsql stable security definer set search_path = public as $$
+declare
+  ro boolean := false;
+begin
+  if public.my_role() = 'superadmin' then return 'edit'; end if;
+  if public.my_role() not in ('manager', 'supervisor') then return ''; end if;
+  if not exists (select 1 from public.payroll_access a where a.user_id = auth.uid()) then return ''; end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'read_only') then
+    execute 'select coalesce((select read_only from public.profiles where id = auth.uid()), false)' into ro;
+  end if;
+  if not ro and exists (select 1 from public.payroll_access a where a.user_id = auth.uid() and a.can_edit) then return 'edit'; end if;
+  return 'view';
+end;
 $$;
 revoke all on function public.payroll_level() from public, anon;
 grant execute on function public.payroll_level() to authenticated;

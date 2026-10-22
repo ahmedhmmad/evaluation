@@ -1196,7 +1196,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 2';
+  var APP_BUILD = '23/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8767,9 +8767,15 @@
     var r = await Promise.all([
       sb.from('payroll_setup').select('*').order('month'),
       sb.from('payroll_runs').select('*').order('month'),
-      isAdmin() ? sb.from('payroll_access').select('*') : Promise.resolve({ data: [] })
+      isAdmin() ? sb.from('payroll_access').select('*') : Promise.resolve({ data: [] }),
+      isAdmin() ? Promise.resolve({ data: null }) : sb.from('payroll_access').select('can_edit').eq('user_id', S.uid).maybeSingle()
     ]);
     loadingPr = false;
+    if (!isAdmin()) {
+      S.prAccess = r[3].data ? (r[3].data.can_edit ? 'edit' : 'view') : '';
+      if (!S.prAccess) { S.pr = null; renderSide(); return go('#/'); }
+      renderSide();
+    }
     var runs = {};
     (r[1].data || []).forEach(function (x) { runs[x.month] = x; });
     S.pr = { rows: r[0].data || [], missing: !!r[0].error, runs: runs, runsMissing: !!r[1].error, access: r[2].data || [], accessMissing: !!r[2].error };
@@ -8777,7 +8783,10 @@
   }
 
   function prHead(title, sub) {
-    return '<div class="page-head"><div><h1>' + title + '</h1><p>' + sub + '</p></div></div>';
+    var note = isAdmin() || !S.pr ? '' : prCanEdit() ? '' : prLevel() === 'edit'
+      ? '<p class="formhint">مُنح هذا الحساب تعديل الرواتب، لكنه حساب «جهة مشرفة» (مشاهدة وتصدير فقط في كل البرنامج)، فيبقى للمشاهدة. لتعديل الرواتب غيّر صلاحيته إلى «مدير» أو «مشرف».</p>'
+      : '<p class="hint">صلاحيتك على الرواتب: مشاهدة (عرض وطباعة وتصدير).</p>';
+    return '<div class="page-head"><div><h1>' + title + '</h1><p>' + sub + '</p>' + note + '</div></div>';
   }
   function prMissingHtml() {
     return '<div class="card empty">الرواتب تحتاج إلى جداول في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/payroll.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
@@ -8853,7 +8862,8 @@
           var v = u.id in st.acc ? st.acc[u.id] : lvl[u.id] || '';
           var o = function (k, l) { return '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>' + l + '</option>'; };
           return '<tr' + (u.id in st.acc ? ' style="background:#fffbeb"' : '') + '><td><b>' + esc(u.full_name || u.email) + '</b><div class="hint" style="margin:0" dir="ltr">' + esc(u.email || '') + '</div></td><td>' + esc(ROLES[roleKey(u)] || u.role) + '</td>' +
-            '<td><select data-pracc="' + u.id + '" style="width:auto">' + o('', 'بلا وصول') + o('view', 'مشاهدة') + o('edit', 'تعديل') + '</select></td></tr>';
+            '<td><select data-pracc="' + u.id + '" style="width:auto">' + o('', 'بلا وصول') + o('view', 'مشاهدة') + (u.read_only ? '' : o('edit', 'تعديل')) + '</select>' +
+              (u.read_only ? '<div class="hint" style="margin:0">«جهة مشرفة»: مشاهدة فقط</div>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>' +
         '<div class="actions"><button type="button" class="btn primary" data-praccsave' + (dirty ? '' : ' disabled') + '>حفظ الصلاحيات' + (dirty ? ' (' + dirty + ')' : '') + '</button></div>'
         : '<div class="empty">لا توجد حسابات بصلاحية مدير أو مشرف.</div>') + '</div>';
@@ -13230,7 +13240,11 @@
     window.scrollTo(0, 0);
   }
 
+  var prevHash = location.hash;
   window.addEventListener('hashchange', function () {
+    // الدخول إلى الرواتب من صفحة أخرى: تُقرأ الرواتب وصلاحية الحساب من جديد
+    if (/^#\/pay(roll|run)$/.test(location.hash) && !/^#\/pay(roll|run)$/.test(prevHash)) { S.pr = null; S.prAtt = null; }
+    prevHash = location.hash;
     closeMenu();
     ui.error = '';
     flush();
