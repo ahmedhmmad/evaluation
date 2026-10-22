@@ -1196,7 +1196,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 3';
+  var APP_BUILD = '23/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1786,7 +1786,7 @@
   /* ---------- بيانات العاملين (مدير النظام) ----------
      جدول teachers يضم كل العاملين، ولكل واحد فئة. التقييم والزيارات الإشرافية لهيئة التدريس والمحفظين فقط */
 
-  var STAFF_CATS = ['إدارية', 'هيئة تدريس', 'محفظون', 'خدمات مساندة', 'خدمات معاونة'];
+  var STAFF_CATS = ['إدارية', 'مشرفون', 'هيئة تدريس', 'محفظون', 'خدمات مساندة', 'خدمات معاونة'];
   var TEACHING_CATS = ['هيئة تدريس', 'محفظون'];
 
   function staffCat(t) { return t && STAFF_CATS.indexOf(t.category) > -1 ? t.category : 'هيئة تدريس'; }
@@ -1799,6 +1799,7 @@
   function parseStaffCat(v) {
     var n = norm(v);
     if (/محفظ/.test(n)) return 'محفظون';
+    if (/مشرف|اشراف/.test(n)) return 'مشرفون';
     if (/ادار/.test(n)) return 'إدارية';
     if (/مساند/.test(n)) return 'خدمات مساندة';
     if (/معاون/.test(n)) return 'خدمات معاونة';
@@ -1960,7 +1961,8 @@
         : x.hire_date && x.hire_date > today ? '<span class="badge part">يبدأ ' + dmy(x.hire_date) + '</span>'
         : x.contract_end ? '<span class="badge part">ينتهي عقده ' + dmy(x.contract_end) + '</span>' : '';
       if (x.not_staff) term = '<span class="badge pending">ليس من العاملين</span>';
-      return '<tr' + (x.not_staff || (x.contract_end && x.contract_end < today) ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
+      var hide = ui.staffQ && norm(x.name).indexOf(norm(ui.staffQ)) < 0;
+      return '<tr data-staffname="' + esc(norm(x.name)) + '"' + (hide ? ' hidden' : '') + (x.not_staff || (x.contract_end && x.contract_end < today) ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
         '<td>' + esc(x.job_title || x.subject || '—') + (teach && x.classes ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.classes) + '</span>' : '') + '</td>' +
         // الجوال، والواتساب تحته إن اختلف عنه (عمود واحد يوفّر عرض الجدول)
         '<td><span dir="ltr" style="white-space:nowrap">' + esc(x.phone || '—') + '</span>' +
@@ -1988,10 +1990,18 @@
       (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', S.teachers.length]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
+      '<div class="toolbar" style="align-items:center"><input type="search" id="staff-q" data-ro-ok placeholder="بحث بالاسم…" aria-label="بحث بالاسم" value="' + esc(ui.staffQ || '') + '" style="max-width:320px"></div>' +
       '<div class="card">' + (rows
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>' + (S.staffMissing ? '' : 'الفئة') + '</th><th>المسمى / المباحث</th><th>الجوال / واتساب</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="empty">لا يوجد عاملون في هذا التصنيف.</div>') + '</div>';
   }
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'staff-q') return;
+    ui.staffQ = e.target.value;
+    var q = norm(ui.staffQ);
+    document.querySelectorAll('[data-staffname]').forEach(function (tr) { tr.hidden = !!q && tr.getAttribute('data-staffname').indexOf(q) < 0; });
+  });
 
   async function saveTeacherForm() {
     var g = function (id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
