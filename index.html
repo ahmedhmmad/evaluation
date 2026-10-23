@@ -501,6 +501,8 @@
   #print-sheet.att-regs table.att-reg thead { display: table-header-group; }
   #print-sheet.att-regs table.att-reg thead th { white-space: nowrap; padding-inline: 0; font-size: .9em; }
   #print-sheet.att-regs .att-sub { display: flex; gap: 3em; margin: 0 0 .5em; font-size: 1.15em; }
+  /* عدد الحاضرين في اليوم: الرقم في سطر واحد داخل خانة اليوم الضيقة */
+  #print-sheet.att-regs table.att-reg td.pd { font-size: .72em; white-space: nowrap; padding-inline: 0; letter-spacing: -.03em; }
   #print-sheet.att-regs table.att-reg { width: 100%; table-layout: fixed; border-collapse: collapse; }
   #print-sheet.att-regs table.att-reg th, #print-sheet.att-regs table.att-reg td { padding: .22em .1em; border: 1px solid #9aa3b2; text-align: center; line-height: 1.35; overflow: hidden; }
   #print-sheet.att-regs table.att-reg th:nth-child(2), #print-sheet.att-regs table.att-reg td.nm { width: 62mm; text-align: right; white-space: nowrap; padding-inline-start: .4em; }
@@ -1220,7 +1222,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 11';
+  var APP_BUILD = '23/10 — 12';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1231,8 +1233,13 @@
   async function doSync(quiet) {
     if (!S.ready) return false;
     if (!canStudents()) { await flush(); await loadAll(); return true; }
+    // نموذج بقي مفتوحًا في صفحة غير المعروضة: لا يُرى ولا يُحفظ منه شيء، فيُغلق
+    if (ui.editStudent != null && location.hash !== '#/students') ui.editStudent = null;
+    if (ui.editTeacher != null && location.hash !== '#/staff') ui.editTeacher = null;
     if (!quiet && (ui.editStudent != null || ui.editTeacher != null)) {
-      toast('احفظ النموذج المفتوح أو أغلقه أولًا، ثم زامن', true);
+      var who = ui.editStudent != null ? (ui.editStudent === 'new' ? 'تسجيل طالب جديد' : 'تعديل بيانات الطالب «' + ((findStudent(ui.editStudent) || {}).full_name || '') + '»')
+        : (ui.editTeacher === 'new' ? 'إضافة عامل جديد' : 'تعديل بيانات «' + ((find(ui.editTeacher) || {}).name || '') + '»');
+      toast('نموذج ' + who + ' مفتوح في هذه الصفحة: احفظه أو اضغط «إلغاء»، ثم زامن', true);
       return false;
     }
     var KEYS = ['sMembers', 'sPay', 'staffTMissing', 'sRefunds', 'staffRefundMissing', 'staffExemptMissing', 'settings', 'students', 'studentsMissing', 'regMissing', 'wantsMissing', 'tGroups', 'tMembers', 'tPay', 'tFirstPaid', 'tRefunds', 'tVoided',
@@ -9754,7 +9761,7 @@
     var perDay = D.days.map(function (dd) {
       if (off(dd)) return '<td class="c fr">' + (attHoliday(dd) ? 'ع' : '') + '</td>';
       if (!saDayRecorded(D, dd)) return '<td class="c"></td>';
-      return '<td class="c">' + D.staff.filter(function (s) { return (s.days[dd] || {}).status === 'present' && employedOn(s.t, dd); }).length + '</td>';
+      return '<td class="c pd">' + D.staff.filter(function (s) { return (s.days[dd] || {}).status === 'present' && employedOn(s.t, dd); }).length + '</td>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
