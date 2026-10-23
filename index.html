@@ -1137,6 +1137,11 @@
     var p = await sb.from('profiles').select('*').eq('id', S.uid).maybeSingle();
     if (p.error) fail(p.error);
     S.profile = p.data || null;
+    S.myStaff = null; S.mine = null;
+    if (S.profile && S.profile.role !== 'pending') {
+      var ms = await sb.rpc('my_staff_month', { p_month: null });
+      S.myStaff = !ms.error && ms.data && ms.data.id ? ms.data : null;
+    }
     S.teachers = []; S.users = []; S.settings = null; S.results = null;
     S.visits = []; S.statements = []; S.visitsMissing = false; S.defaultPw = ''; S.accountsMissing = false;
     S.students = []; S.studentsMissing = false; S.regMissing = false;
@@ -1222,7 +1227,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 12';
+  var APP_BUILD = '23/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1501,6 +1506,8 @@
   var sideNav = document.getElementById('side-nav');
 
   var ICONS = {
+    // دوامي وراتبي: ساعة
+    mine: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
     home: 'M3 11l9-8 9 8M5 10v10h14V10',
     teachers: 'M12 3l2.7 5.6 6.3.9-4.5 4.3 1 6.2L12 17l-5.5 3 1-6.2L3 9.5l6.3-.9z',
     visits: 'M9 4h6v3H9zM7 5H5v16h14V5h-2M8 11h8M8 15h8',
@@ -1528,6 +1535,11 @@
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
+    var groups = navModel0();
+    if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي']] });
+    return groups;
+  }
+  function navModel0() {
     if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']] }];
     if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']].concat(isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
     var groups = [
@@ -1552,6 +1564,7 @@
   // الصفحة الحالية كما يدل عليها العنوان (صفحات التفاصيل تتبع قائمتها)
   function activeKey() {
     var h = location.hash;
+    if (h === '#/mine' && S.myStaff) return 'mine';
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
     if (h === '#/attendance' && canAttView()) return 'attendance';
@@ -8357,6 +8370,7 @@
     if (!S.ready) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; return; }
     if (role() === 'pending') return renderPending();
     if (S.profile && S.profile.must_change_password) return renderChangePw();
+    if (location.hash === '#/mine' && S.myStaff) return renderMine();
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
@@ -9522,6 +9536,81 @@
       return el.getAttribute('data-prrule') === 'late_mode' ? render() : prSaveBtn();
     }
     if (el.hasAttribute('data-primpm')) { st.imp.rows[Number(el.getAttribute('data-primpm'))].id = el.value; return render(); }
+  });
+
+  /* ---------- دوامي وراتبي ----------
+     لكل حساب مربوط بسجل في «بيانات العاملين»: دوامه هو شهرًا بشهر (بحسب مجموعة دوامه)، وسليب راتبه إن اعتُمدت رواتب الشهر.
+     البيانات من my_staff_month (supabase/staff_self.sql)، ولا يصل منها إلا ما يخص صاحب الحساب */
+  function mineState() {
+    if (!ui.mine) ui.mine = { month: todayISO().slice(0, 7) };
+    return ui.mine;
+  }
+  var loadingMine = false;
+  async function loadMine(month) {
+    if (loadingMine) return;
+    loadingMine = true;
+    var r = await sb.rpc('my_staff_month', { p_month: month });
+    loadingMine = false;
+    S.mine = { month: month, data: r.error ? null : r.data, error: r.error ? r.error.message : '' };
+    render();
+  }
+  function renderMine() {
+    var st = mineState(), head = '<div class="page-head"><div><h1>دوامي وراتبي</h1><p>دوامك في الشهر بحسب مواعيد دوامك، وسليب راتبك بعد اعتماد رواتب الشهر.</p></div></div>';
+    var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><span class="monthpick"><label class="field" for="mine-month">الشهر</label><input type="month" id="mine-month" data-ro-ok value="' + st.month + '"></span></div></div>';
+    if (!S.mine || S.mine.month !== st.month) { app.innerHTML = head + bar + '<div class="card empty">جارٍ التحميل…</div>'; loadMine(st.month); return; }
+    var D = S.mine.data;
+    if (!D) { app.innerHTML = head + bar + '<div class="card empty">تعذّر جلب بياناتك' + (S.mine.error ? ': ' + esc(S.mine.error) : '') + '.</div>'; return; }
+    var sh = D.shift || { time_in: '07:30', time_out: '13:30', name: 'الوقت الرسمي' }, rec = {};
+    (D.days || []).forEach(function (r) { rec[String(r.day).slice(0, 10)] = r; });
+    var last = prMonthEnd(st.month), today = todayISO(), list = [], n = { present: 0, absent: 0, leave: 0, mission: 0, none: 0 }, lateDays = 0, lateMins = 0;
+    for (var d = new Date(st.month + '-01T00:00'); ; d.setDate(d.getDate() + 1)) {
+      var iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (iso > last || iso > today) break;
+      if (attOff(iso) && !rec[iso]) continue;
+      var r = rec[iso], late = r ? saLate(r, sh) : 0;
+      if (r) n[r.status] = (n[r.status] || 0) + 1; else n.none++;
+      if (late) { lateDays++; lateMins += late; }
+      list.push({ day: iso, r: r, late: late });
+    }
+    var card = function (lbl, num, sub, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
+    var rows = list.map(function (x, i) {
+      var r = x.r;
+      return '<tr><td>' + (i + 1) + '</td><td style="white-space:nowrap">' + dayName(x.day) + ' ' + dmy(x.day) + '</td><td>' + (r ? SA_STATUS[r.status] || r.status : '<span class="hint" style="margin:0">لم يُسجَّل</span>') + '</td>' +
+        '<td class="c" dir="ltr">' + (r && r.time_in ? r.time_in : '') + '</td><td class="c" dir="ltr">' + (r && r.time_out ? r.time_out : '') + '</td>' +
+        '<td class="c">' + (x.late ? '<b style="color:var(--red)">' + x.late + ' د</b>' : '') + '</td><td>' + esc(r && r.note || '') + '</td></tr>';
+    }).join('');
+    var x = D.slip, slip;
+    if (x) {
+      var ded = [['الغياب', x.absent ? x.absent + ' يوم' : '', x.dAbsent], ['الإجازات الزائدة عن الرصيد', x.leaveExtra ? x.leaveExtra + ' يوم' : '', x.dLeave], ['التأخير', x.lateNote || '', x.dLate],
+        ['أيام خارج مدة العمل', x.notEmp ? x.notEmp + ' يوم' : '', x.dNotEmp], ['خصومات أخرى', x.dedNote || '', x.ded]].filter(function (q) { return q[2]; });
+      slip = '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">راتب ' + esc(monthLabel(st.month)) + '</h2>' +
+          '<button type="button" class="btn primary" data-mineslip data-ro-ok>طباعة السليب</button></div>' +
+        '<div class="table-wrap"><table class="grid"><tbody>' +
+          '<tr><th style="text-align:right">الراتب الأساسي</th><td>' + prMoney(x.salary) + ' ج.م' + (x.salNote ? '<div class="hint" style="margin:0">' + esc(x.salNote) + '</div>' : '') + '</td></tr>' +
+          (x.add ? '<tr><th style="text-align:right">إضافات' + (x.addNote ? ' (' + esc(x.addNote) + ')' : '') + '</th><td>+ ' + prMoney(x.add) + ' ج.م</td></tr>' : '') +
+          (ded.length ? ded.map(function (q) { return '<tr><th style="text-align:right">خصم: ' + q[0] + (q[1] ? ' (' + esc(q[1]) + ')' : '') + '</th><td style="color:var(--red)">− ' + prMoney(q[2]) + ' ج.م</td></tr>'; }).join('')
+            : '<tr><th style="text-align:right">الخصومات</th><td>لا خصومات هذا الشهر</td></tr>') +
+          '<tr><th style="text-align:right">صافي الراتب</th><td><b>' + prMoney(x.net) + ' ج.م</b></td></tr></tbody></table></div></div>';
+    } else slip = '<div class="card empty">لم تُعتمد رواتب ' + esc(monthLabel(st.month)) + ' بعد. يظهر سليبك وخصوماته هنا بعد اعتمادها.</div>';
+    app.innerHTML = head + bar +
+      '<p class="hint">مواعيد دوامك: <b>' + esc(sh.name || '') + '</b> من ' + sh.time_in + ' إلى ' + sh.time_out + '. التأخير يُحسب من وقت الحضور هذا.</p>' +
+      '<div class="stats">' + card('أيام الحضور', n.present, lateDays ? 'منها ' + lateDays + ' بتأخير' : 'بلا تأخير') + card('أيام الغياب', n.absent, 'في الشهر', n.absent ? 'var(--red)' : '') +
+        card('الإجازات والمأموريات', n.leave + n.mission, 'إجازة ' + n.leave + ' · مأمورية ' + n.mission) + card('دقائق التأخير', lateMins, lateDays + ' يوم', lateMins ? 'var(--red)' : '') + '</div>' +
+      slip +
+      '<div class="card"><h2>دوام ' + esc(monthLabel(st.month)) + '</h2>' + (list.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>اليوم</th><th>الحالة</th><th>الحضور</th><th>الانصراف</th><th>تأخير</th><th>ملاحظة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا أيام في هذا الشهر بعد.</div>') + '</div>';
+  }
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/mine' || e.target.id !== 'mine-month' || !e.target.value) return;
+    mineState().month = e.target.value;
+    render();
+  });
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/mine' || !e.target.closest('[data-mineslip]') || !S.mine || !S.mine.data || !S.mine.data.slip) return;
+    var D = S.mine.data;
+    pendingPay = { kind: 'slip', id: D.slip.id, P: { month: D.month, approved: true, rules: D.rules || {}, rows: [D.slip] } };
+    printNow();
   });
 
   /* ----- قراءة كشف الدوام المصوَّر -----
