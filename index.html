@@ -1151,6 +1151,18 @@
       S.teachers = res[0].data || [];
       S.settings = res[1].data || null;
       S.users = res[2].data || [];
+      // حساب معلم فقد ربطه بسجله (teacher_id فارغ أو لسجل آخر) وسجله يشير إليه: يُعاد الربط، فيرى المعلم جدوله وتقييمه
+      if (isAdmin()) {
+        var relink = S.teachers.filter(function (t) {
+          var u = t.user_id && S.users.filter(function (x) { return x.id === t.user_id; })[0];
+          return u && u.role === 'teacher' && u.teacher_id !== t.id;
+        });
+        for (var ri = 0; ri < relink.length; ri++) {
+          var rl = await sb.from('profiles').update({ teacher_id: relink[ri].id }).eq('id', relink[ri].user_id);
+          if (!rl.error) S.users.forEach(function (x) { if (x.id === relink[ri].user_id) x.teacher_id = relink[ri].id; });
+        }
+        if (relink.length) toast('أُعيد ربط ' + relink.length + ' من حسابات المعلمين بسجلاتهم: ' + relink.map(function (t) { return t.name; }).join('، '));
+      }
       S.prAccess = '';
       if (isManager()) {
         var pa = await sb.from('payroll_access').select('can_edit').eq('user_id', S.uid).maybeSingle();
@@ -1208,7 +1220,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 10';
+  var APP_BUILD = '23/10 — 11';
 
   var syncing = null;
   function syncData(quiet) {
