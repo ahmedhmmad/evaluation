@@ -359,6 +359,7 @@
   /* العلامة المائية: الشعار في منتصف كل صفحة بشفافية خفيفة */
   #print-sheet .wm { position: fixed; top: 50%; left: 50%; width: 115mm; height: auto; transform: translate(-50%, -50%); opacity: .055; z-index: 2; }
   #print-sheet .wm.wm-baked { opacity: 1; }
+  #print-sheet .wm.wm-pay { width: 150mm; }
 
   /* الترويسة */
   /* الصورة العريضة تمتد على عرض الورقة كله (تتجاوز هوامشها) وتحتها سطر باسم الأكاديمية والعام الدراسي */
@@ -1207,7 +1208,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 8';
+  var APP_BUILD = '23/10 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -14339,8 +14340,9 @@
   // أزرار الطباعة: تُطبع الورقة من إطار مستقل لا يحتوي إلا عليها وعلى تنسيقها،
   // فلا تتأثر الطباعة بحجم الصفحة الأصلية ولا بتخطيطها
   // الشعار المائي: صورة باهتة جاهزة (ألوان فاتحة وشفافية في الصورة نفسها)، لا شفافية CSS قد تتجاهلها بعض الطابعات وبرامج PDF
-  var wmFaded = null;
-  function fadedLogo() {
+  var wmFaded = null, wmGrey = null;
+  function fadedLogo(grey) {
+    if (grey) return greyLogo();
     if (wmFaded) return Promise.resolve(wmFaded);
     return new Promise(function (resolve) {
       var img = new Image();
@@ -14368,10 +14370,40 @@
     });
   }
 
+  // كشوف الرواتب: شعار رمادي أكبر وأوضح خلف النص
+  function greyLogo() {
+    if (wmGrey) return Promise.resolve(wmGrey);
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || 600, h = img.naturalHeight || 600, k = Math.min(1, 1200 / Math.max(w, h));
+          var c = document.createElement('canvas');
+          c.width = Math.round(w * k); c.height = Math.round(h * k);
+          var g = c.getContext('2d');
+          g.drawImage(img, 0, 0, c.width, c.height);
+          var d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+          for (var i = 0; i < p.length; i += 4) {
+            var y = 0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2], v = 255 - (255 - y) * 0.6;
+            p[i] = p[i + 1] = p[i + 2] = v;
+            p[i + 3] = Math.round(p[i + 3] * 0.24);
+          }
+          g.putImageData(d, 0, 0);
+          wmGrey = c.toDataURL('image/png');
+        } catch (err) { wmGrey = ''; }
+        resolve(wmGrey);
+      };
+      img.onerror = function () { wmGrey = ''; resolve(''); };
+      img.src = REPORT.logo;
+    });
+  }
+
   async function printNow() {
     await reportFontsReady(document);
-    var faded = await fadedLogo();
+    var payWm = !!pendingPay, faded = await fadedLogo(payWm);
     if (!buildCurrentSheet()) return window.print();
+    if (faded && payWm) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.classList.add('wm-pay'); });
     if (faded) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.src = faded; im.classList.add('wm-baked'); });
     var css = pageCss() + 'html,body{margin:0;background:#fff}';
     var rules = document.getElementById('app-css').sheet.cssRules;
