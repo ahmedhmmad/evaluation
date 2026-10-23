@@ -1208,7 +1208,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 9';
+  var APP_BUILD = '23/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8615,6 +8615,92 @@
   function hm5(t) { return t ? String(t).slice(0, 5) : ''; }
   function minsOf(t) { var m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; }
   // دقائق التأخير والانصراف المبكر عن الوقت الرسمي
+  /* ----- مجموعات الدوام -----
+     لكل مجموعة اسم ووقت حضور وانصراف (8:00–12:30، 8:00–10:00…)، ولكل موظف مجموعته؛ من لا مجموعة له فدوامه الوقت الرسمي.
+     بها يُحسب التأخير والانصراف المبكر، ويُملأ الحضور والانصراف الموحدان، ويُحسب أجر الساعة في الرواتب */
+  function saParseHours(row) {
+    row = row || {};
+    return { time_in: hm5(row.time_in) || '07:30', time_out: hm5(row.time_out) || '13:30',
+      groups: Array.isArray(row.groups) ? row.groups : [], assign: row.assign && typeof row.assign === 'object' ? row.assign : {}, shiftsMissing: !('groups' in row) };
+  }
+  function shiftGroup(id) { return ((S.saHours || {}).groups || []).filter(function (g) { return g.id === id; })[0] || null; }
+  // دوام الموظف: مجموعته، وإلا الوقت الرسمي
+  function shiftOf(t) {
+    var H = S.saHours || { time_in: '07:30', time_out: '13:30', assign: {} }, g = t && H.assign ? shiftGroup(H.assign[t.id]) : null;
+    return g ? { time_in: g.time_in, time_out: g.time_out, name: g.name, id: g.id } : { time_in: H.time_in, time_out: H.time_out, name: 'الوقت الرسمي', id: '' };
+  }
+  async function saveShifts(groups, assign, msg) {
+    var r = await sb.from('staff_hours').update({ groups: groups, assign: assign, updated_by: (S.profile && S.profile.full_name) || displayName(S.email), updated_at: new Date().toISOString() }).eq('id', 1);
+    if (r.error) { render(); return fail(r.error); }
+    S.saHours.groups = groups; S.saHours.assign = assign;
+    render();
+    toast(msg || 'تم الحفظ');
+  }
+  function shiftsHtml() {
+    var H = S.saHours, staff = saStaff(''), cnt = {};
+    if (H.shiftsMissing) return '<div class="card"><h2>مجموعات الدوام</h2><p class="formhint" style="margin:0">لتعريف مجموعات دوام بأوقات مختلفة شغّل الملف <code dir="ltr">supabase/staff_shifts.sql</code> في محرر SQL ثم حدّث الصفحة.</p></div>';
+    staff.forEach(function (t) { var g = shiftOf(t).id; cnt[g] = (cnt[g] || 0) + 1; });
+    var open = ui.shiftsOpen ? ' open' : '';
+    return '<details class="card"' + open + ' data-shiftsbox><summary><b>مجموعات الدوام</b> <span class="hint" style="margin:0">— ' + (H.groups.length ? H.groups.map(function (g) { return esc(g.name) + ' ' + g.time_in + '–' + g.time_out + ' (' + (cnt[g.id] || 0) + ')'; }).join('، ') + '، والوقت الرسمي (' + (cnt[''] || 0) + ')' : 'الجميع على الوقت الرسمي') + '</span></summary>' +
+      '<p class="hint">لكل مجموعة وقت حضور وانصراف، وبه يُحسب تأخير أفرادها وانصرافهم المبكر، والحضور والانصراف الموحدان، وأجر الساعة في الرواتب. من لا مجموعة له فدوامه الوقت الرسمي (' + H.time_in + '–' + H.time_out + ').</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>المجموعة</th><th>الحضور</th><th>الانصراف</th><th>الموظفون</th><th></th></tr></thead><tbody>' +
+        H.groups.map(function (g) {
+          return '<tr><td><input type="text" data-shname="' + g.id + '" data-ro-mgr value="' + esc(g.name) + '" style="min-width:140px"></td>' +
+            '<td><input type="time" data-shin="' + g.id + '" data-ro-mgr value="' + g.time_in + '" style="width:auto"></td><td><input type="time" data-shout="' + g.id + '" data-ro-mgr value="' + g.time_out + '" style="width:auto"></td>' +
+            '<td class="c">' + (cnt[g.id] || 0) + '</td><td><button type="button" class="btn danger" data-shdel="' + g.id + '" data-ro-mgr>حذف</button></td></tr>';
+        }).join('') +
+        '<tr><td><input type="text" id="sh-new-name" data-ro-mgr placeholder="اسم مجموعة جديدة (مثل: المحفظون)" style="min-width:140px"></td><td><input type="time" id="sh-new-in" data-ro-mgr value="' + H.time_in + '" style="width:auto"></td>' +
+          '<td><input type="time" id="sh-new-out" data-ro-mgr style="width:auto"></td><td></td><td><button type="button" class="btn primary" data-shadd data-ro-mgr>إضافة</button></td></tr>' +
+      '</tbody></table></div>' +
+      (H.groups.length ? '<h3 style="margin:14px 0 6px">مجموعة كل موظف</h3><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>المجموعة</th></tr></thead><tbody>' +
+        staff.map(function (t, i) {
+          var cur = shiftOf(t).id;
+          return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(t.name) + '</b> <span class="hint" style="margin:0">' + esc(staffCat(t)) + '</span></td><td><select data-shset="' + t.id + '" data-ro-mgr style="width:auto">' +
+            '<option value="">الوقت الرسمي (' + H.time_in + '–' + H.time_out + ')</option>' +
+            H.groups.map(function (g) { return '<option value="' + g.id + '"' + (cur === g.id ? ' selected' : '') + '>' + esc(g.name) + ' (' + g.time_in + '–' + g.time_out + ')</option>'; }).join('') + '</select></td></tr>';
+        }).join('') + '</tbody></table></div>' : '') + '</details>';
+  }
+  document.addEventListener('toggle', function (e) { if (e.target.hasAttribute && e.target.hasAttribute('data-shiftsbox')) ui.shiftsOpen = e.target.open; }, true);
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staffatt' || !canView() || isReadOnly() || !S.saHours) return;
+    var H = S.saHours, el;
+    if (e.target.closest('[data-shadd]')) {
+      var nm = document.getElementById('sh-new-name').value.trim(), a = document.getElementById('sh-new-in').value, b = document.getElementById('sh-new-out').value;
+      if (!nm) return toast('اكتب اسم المجموعة', true);
+      if (!a || !b || a >= b) return toast('وقت الحضور يجب أن يكون قبل وقت الانصراف', true);
+      return saveShifts(H.groups.concat([{ id: 'g' + Date.now().toString(36), name: nm, time_in: a, time_out: b }]), H.assign, 'أُضيفت المجموعة؛ اختر أفرادها في «مجموعة كل موظف»');
+    }
+    if ((el = e.target.closest('[data-shdel]'))) {
+      var gid = el.getAttribute('data-shdel'), g = shiftGroup(gid);
+      if (!g || !confirm('حذف مجموعة «' + g.name + '»؟ يعود أفرادها إلى الوقت الرسمي.')) return;
+      var asg = {};
+      Object.keys(H.assign).forEach(function (k) { if (H.assign[k] !== gid) asg[k] = H.assign[k]; });
+      return saveShifts(H.groups.filter(function (x) { return x.id !== gid; }), asg, 'حُذفت المجموعة');
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/staffatt' || !canView() || isReadOnly() || !S.saHours) return;
+    var H = S.saHours, el = e.target, id;
+    if ((id = el.getAttribute('data-shset')) != null) {
+      var asg = Object.assign({}, H.assign);
+      if (el.value) asg[id] = el.value; else delete asg[id];
+      return saveShifts(H.groups, asg, 'حُفظت مجموعة الموظف');
+    }
+    var gid = el.getAttribute('data-shname') || el.getAttribute('data-shin') || el.getAttribute('data-shout');
+    if (gid) {
+      var groups = H.groups.map(function (g) {
+        if (g.id !== gid) return g;
+        var n = Object.assign({}, g);
+        if (el.hasAttribute('data-shname')) n.name = el.value.trim() || g.name;
+        if (el.hasAttribute('data-shin')) n.time_in = el.value;
+        if (el.hasAttribute('data-shout')) n.time_out = el.value;
+        return n;
+      }), c = groups.filter(function (g) { return g.id === gid; })[0];
+      if (!c.time_in || !c.time_out || c.time_in >= c.time_out) { render(); return toast('وقت الحضور يجب أن يكون قبل وقت الانصراف', true); }
+      return saveShifts(groups, H.assign, 'حُفظت المجموعة');
+    }
+  });
+
   function saLate(r, H) { var a = minsOf(r.time_in), b = minsOf(H.time_in); return r.status === 'present' && a != null && b != null && a > b ? a - b : 0; }
   function saEarly(r, H) { var a = minsOf(r.time_out), b = minsOf(H.time_out); return r.status === 'present' && a != null && b != null && a < b ? b - a : 0; }
 
@@ -8637,7 +8723,7 @@
     // قراءة فُتحت من صندوق الوارد: تُطبَّق على يومها بعد تحميله
     var st0 = saState();
     if (st0.openInbox && st0.openInbox.day === day) { var it = st0.openInbox; st0.openInbox = null; saApplyInbox(it); }
-    S.saHours = { time_in: hm5((h.data || {}).time_in) || '07:30', time_out: hm5((h.data || {}).time_out) || '13:30' };
+    S.saHours = saParseHours(h.data);
     render();
   }
 
@@ -8678,7 +8764,7 @@
     var UNSURE = 'outline:2px solid #f79009;outline-offset:1px';
     var n = { present: 0, absent: 0, leave: 0, mission: 0, none: 0 }, lateN = 0;
     var rows = list.map(function (t, i) {
-      var r = saRow(t.id), status = r ? r.status : '', late = r ? saLate(r, H) : 0, early = r ? saEarly(r, H) : 0;
+      var r = saRow(t.id), status = r ? r.status : '', T = shiftOf(t), late = r ? saLate(r, T) : 0, early = r ? saEarly(r, T) : 0;
       n[status || 'none']++;
       if (late) lateN++;
       var opt = function (v, l) { return '<option value="' + v + '"' + (status === v ? ' selected' : '') + '>' + l + '</option>'; };
@@ -8709,10 +8795,10 @@
       '</div></div>' +
       '<div class="stats">' + card('حاضرون', n.present, lateN ? 'منهم ' + lateN + ' متأخرون' : 'بلا تأخير') + card('غائبون', n.absent, 'هذا اليوم', n.absent ? 'var(--red)' : '') +
         card('إجازة ومأمورية', n.leave + n.mission, 'إجازة ' + n.leave + ' · مأمورية ' + n.mission) + card('غير مسجَّلين', n.none, 'من ' + list.length + ' موظفًا', n.none ? 'var(--muted)' : '') + '</div>' +
-      saInboxHtml() + saScanHtml() + saPhonesHtml() +
+      saInboxHtml() + saScanHtml() + saPhonesHtml() + shiftsHtml() +
       '<div class="toolbar" style="align-items:center">' +
-        '<button type="button" class="btn" data-saallin data-ro-mgr>الحضور الموحد للجميع (' + H.time_in + ')</button>' +
-        '<button type="button" class="btn" data-saallout data-ro-mgr>الانصراف الموحد للجميع (' + H.time_out + ')</button>' +
+        '<button type="button" class="btn" data-saallin data-ro-mgr>الحضور الموحد للجميع' + (H.groups && H.groups.length ? ' (كلٌّ بمجموعته)' : ' (' + H.time_in + ')') + '</button>' +
+        '<button type="button" class="btn" data-saallout data-ro-mgr>الانصراف الموحد للجميع' + (H.groups && H.groups.length ? ' (كلٌّ بمجموعته)' : ' (' + H.time_out + ')') + '</button>' +
         '<button type="button" class="btn primary" data-sasave data-ro-mgr' + (dirty && !st.busy ? '' : ' disabled') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ' + (dirty ? ' (' + dirty + ')' : '')) + '</button>' +
         (dirty ? '<button type="button" class="btn link" data-sacancel data-ro-mgr>تراجع عن غير المحفوظ</button>' : '') + '</div>' +
       '<p class="hint">الحضور والانصراف الموحدان يُطبَّقان على الحاضرين وغير المسجَّلين' + (st.cat ? ' من فئة «' + esc(st.cat) + '»' : '') + ' فقط؛ الغائب والإجازة والمأمورية لا تتغير. ما تعدّله يظهر بخلفية صفراء حتى تحفظ.</p>' +
@@ -8878,8 +8964,8 @@
         '<div style="margin:6px 0 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><label class="field" for="pr-r-late_fraction" style="margin:0">جزء اليوم المخصوم عن كل يوم تأخير زائد</label>' +
           '<select id="pr-r-late_fraction" data-prrule="late_fraction" style="width:auto"' + dis + '>' + [[0.25, 'ربع يوم'], [0.5, 'نصف يوم'], [1, 'يوم كامل']].map(function (o) { return '<option value="' + o[0] + '"' + (Number(R.late_fraction) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
       '<h3 style="margin:16px 0 6px">ساعات الدوام</h3>' +
-        '<p class="hint" style="margin:0 0 6px">العاملون: ' + (H ? H.time_in + ' إلى ' + H.time_out : 'من «دوام الموظفين»') + ' (الوقت الرسمي في «دوام الموظفين»). ويُحسب تأخير المحفظين وأجر ساعتهم بدوامهم هنا:</p>' +
-        '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">المحفظون: من <input type="time" data-prrule="quran_in" value="' + esc(R.quran_in || (H ? H.time_in : '')) + '" style="width:auto"' + dis + '> إلى <input type="time" data-prrule="quran_out" value="' + esc(R.quran_out) + '" style="width:auto"' + dis + '></span>' +
+        '<p class="hint" style="margin:0">من «دوام الموظفين» ← «مجموعات الدوام»: لكل موظف دوام مجموعته (8:00–12:30، 8:00–10:00…)، وبه يُحسب تأخيره وأجر ساعته. ' +
+          (H ? 'الآن: الوقت الرسمي ' + H.time_in + '–' + H.time_out + ((H.groups || []).length ? '، و' + H.groups.map(function (g) { return esc(g.name) + ' ' + g.time_in + '–' + g.time_out; }).join('، ') : '، بلا مجموعات بعد') + '.' : '') + '</p>' +
       '<h3 style="margin:16px 0 6px">التوقيع على السليبات وكشف الرواتب</h3>' +
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">الصفة <input type="text" data-prrule="signer_title" value="' + esc(R.signer_title) + '" style="width:160px"' + dis + '>' +
         ' الاسم <input type="text" data-prrule="signer_name" value="' + esc(R.signer_name) + '" placeholder="اسم المشرف العام" style="width:220px"' + dis + '></span>' +
@@ -8899,7 +8985,7 @@
   }
   async function prLoadHours() {
     var h = await sb.from('staff_hours').select('*').eq('id', 1).maybeSingle();
-    S.saHours = { time_in: hm5((h.data || {}).time_in) || '07:30', time_out: hm5((h.data || {}).time_out) || '13:30' };
+    S.saHours = saParseHours(h.data);
     if (/^#\/pay/.test(location.hash)) render();
   }
 
@@ -9067,7 +9153,7 @@
     var rows = await fetchAll(function () { return sb.from('staff_attendance').select('teacher_id,day,status,time_in').gte('day', from).lte('day', last).order('day').order('teacher_id'); });
     if (!S.saHours) {
       var h = await sb.from('staff_hours').select('*').eq('id', 1).maybeSingle();
-      S.saHours = { time_in: hm5((h.data || {}).time_in) || '07:30', time_out: hm5((h.data || {}).time_out) || '13:30' };
+      S.saHours = saParseHours(h.data);
     }
     loadingPrAtt = false;
     var map = {};
@@ -9102,7 +9188,8 @@
           ' (' + before + ' و' + (days.length - before) + ' يوم عمل)';
         sal = days.length ? Math.round((sal * before + nw * (days.length - before)) / days.length * 100) / 100 : nw;
       }
-      var quran = staffCat(t) === 'محفظون', tin = quran ? (R.quran_in || H.time_in) : H.time_in, tout = quran ? (R.quran_out || H.time_out) : H.time_out;
+      var T = shiftOf(t), quran = !T.id && staffCat(t) === 'محفظون' && R.quran_out && !(S.saHours.groups || []).length;
+      var tin = quran ? (R.quran_in || T.time_in) : T.time_in, tout = quran ? R.quran_out : T.time_out;
       var hours = Math.max(0.5, ((minsOf(tout) || 0) - (minsOf(tin) || 0)) / 60), dayVal = sal / W, minVal = dayVal / (hours * 60);
       var rec = (S.prAtt.rows[t.id]) || {}, x = { t: t, salary: sal, salNote: salNote, dayVal: dayVal, hours: hours, present: 0, absent: 0, leave: 0, mission: 0, none: [], notEmp: 0, lateDays: 0, lateMins: 0, leaveBefore: 0 };
       // الإجازات المأخوذة في الفترة قبل هذا الشهر
@@ -9599,7 +9686,8 @@
     var staff = saStaff('').filter(function (t) { return days.some(function (dd) { return employedOn(t, dd); }); }).map(function (t) {
       var mine = {}, s = { t: t, present: 0, absent: 0, leave: 0, mission: 0, lateDays: 0, late: 0, early: 0, days: mine, work: 0 };
       Object.keys(by[t.id] || {}).forEach(function (k) { if (employedOn(t, k)) mine[k] = by[t.id][k]; });
-      Object.keys(mine).forEach(function (k) { var r = mine[k], l = saLate(r, H); s[r.status]++; if (l) { s.lateDays++; s.late += l; } s.early += saEarly(r, H); });
+      var T = shiftOf(t);
+      Object.keys(mine).forEach(function (k) { var r = mine[k], l = saLate(r, T); s[r.status]++; if (l) { s.lateDays++; s.late += l; } s.early += saEarly(r, T); });
       days.forEach(function (dd) { if (employedOn(t, dd)) s.work++; });
       // التحق أو انتهى عقده خلال الشهر
       var hf = String(t.hire_date || '').slice(0, 10), ce = String(t.contract_end || '').slice(0, 10);
@@ -9728,7 +9816,8 @@
       saStaff(st.cat, st.day).forEach(function (t) {
         var r = saRow(t.id);
         if (r && r.status !== 'present') return;
-        saEdit(t.id, isIn ? { status: 'present', time_in: H.time_in } : { status: 'present', time_out: H.time_out });
+        var T = shiftOf(t);
+        saEdit(t.id, isIn ? { status: 'present', time_in: T.time_in } : { status: 'present', time_out: T.time_out });
       });
       return render();
     }
@@ -9813,7 +9902,7 @@
       if (!hin || !hout || hin >= hout) { render(); return toast('وقت الحضور يجب أن يكون قبل وقت الانصراف', true); }
       var r = await sb.from('staff_hours').update({ time_in: hin, time_out: hout, updated_by: (S.profile && S.profile.full_name) || displayName(S.email), updated_at: new Date().toISOString() }).eq('id', 1);
       if (r.error) return fail(r.error);
-      S.saHours = { time_in: hin, time_out: hout };
+      S.saHours.time_in = hin; S.saHours.time_out = hout;
       render();
       return toast('حُفظ الوقت الرسمي');
     }
