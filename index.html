@@ -1227,7 +1227,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 13';
+  var APP_BUILD = '23/10 — 14';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9290,7 +9290,8 @@
     if (!approved && (!S.prAtt || S.prAtt.month !== st.month)) { app.innerHTML = head + '<div class="card empty">جارٍ جلب الدوام…</div>'; loadPrAtt(st.month); return; }
     var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
       '<span class="monthpick"><label class="field" for="prun-month">الشهر</label><input type="month" id="prun-month" data-ro-ok value="' + st.month + '"></span>' +
-      (approved ? '<span class="badge paid">معتمد</span> <span class="hint" style="margin:0">' + esc(run.approved_by || '') + ' · ' + dmy(String(run.approved_at || '').slice(0, 10)) + ' — الكشف محفوظ كما اعتُمد</span>' : '<span class="badge pending">غير معتمد</span>') + '</div></div>';
+      (approved ? '<span class="badge paid">معتمد</span> <span class="hint" style="margin:0">' + esc(run.approved_by || '') + ' · ' + dmy(String(run.approved_at || '').slice(0, 10)) + ' — الكشف محفوظ كما اعتُمد</span> ' +
+        (run.show_slip ? '<span class="badge part">السليبات ظاهرة للموظفين في «دوامي وراتبي»</span>' : '<span class="badge pending">السليبات مخفية عن الموظفين</span>') : '<span class="badge pending">غير معتمد</span>') + '</div></div>';
     if (!approved && !prBase(st.month)) { app.innerHTML = head + bar + '<div class="card empty">لا توجد إعدادات رواتب لهذا الشهر ولا لما قبله. أدخل الرواتب في «إعدادات الرواتب».</div>'; return; }
     if (!approved && S.prAtt.missing) { app.innerHTML = head + bar + '<div class="card empty">تعذّر جلب «دوام الموظفين». شغّل <code dir="ltr">supabase/staff_attendance.sql</code> إن لم يُشغَّل.</div>'; return; }
     var P = prSheet(st.month), rows = P.rows, R = P.rules, sum = { salary: 0, ded: 0, add: 0, net: 0 }, noneN = 0, noneStaff = 0;
@@ -9326,6 +9327,7 @@
         (!P.approved && edit ? '<button type="button" class="btn" data-pradjsave data-ro-mgr' + (dirtyAdj && !st.busy ? '' : ' disabled') + '>حفظ الإضافات والخصومات' + (dirtyAdj ? ' (' + dirtyAdj + ')' : '') + '</button>' +
           '<button type="button" class="btn primary" data-prapprove data-ro-mgr' + (st.busy ? ' disabled' : '') + '>اعتماد رواتب ' + esc(monthLabel(st.month)) + '</button>' : '') +
         (P.approved && isAdmin() ? '<button type="button" class="btn" data-prreopen>إلغاء الاعتماد</button>' : '') +
+        (P.approved && edit ? '<button type="button" class="btn" data-prshowslips="' + (run.show_slip ? '0' : '1') + '" data-ro-mgr>' + (run.show_slip ? 'إخفاء السليبات عن الموظفين' : 'إظهار السليبات للموظفين') + '</button>' : '') +
         '<b style="margin-inline-start:8px">كشف الرواتب:</b><button type="button" class="btn" data-prrep="xlsx" data-ro-ok>Excel</button><button type="button" class="btn" data-prrep="pdf" data-ro-ok>PDF / طباعة</button>' +
         '<button type="button" class="btn primary" data-prslip="all" data-ro-ok>طباعة كل السليبات</button></div>' +
       '<div class="card">' + (rows.length
@@ -9456,9 +9458,19 @@
       if (!prCanEdit()) return;
       if (e.target.closest('[data-pradjsave]')) { rs.busy = true; return prAdjSave().then(function () { rs.busy = false; render(); }); }
       if (e.target.closest('[data-prapprove]')) return prApprove();
+      if ((el = e.target.closest('[data-prshowslips]'))) {
+        var show = el.getAttribute('data-prshowslips') === '1';
+        if (!confirm((show ? 'إظهار' : 'إخفاء') + ' سليبات ' + monthLabel(rs.month) + (show ? ' لكل موظف (يرى سليبه هو فقط) في «دوامي وراتبي»؟' : ' عن الموظفين؟'))) return;
+        return sb.rpc('set_payroll_slips', { p_month: rs.month, p_show: show }).then(function (r) {
+          if (r.error) return fail(r.error);
+          S.pr.runs[rs.month].show_slip = show;
+          render();
+          toast(show ? 'السليبات ظاهرة للموظفين' : 'السليبات مخفية عن الموظفين');
+        });
+      }
       if (e.target.closest('[data-prreopen]') && isAdmin()) {
         if (!confirm('إلغاء اعتماد رواتب ' + monthLabel(rs.month) + '؟\nيعود الكشف يُحسب من الدوام والإعدادات الحالية، وقد تتغير أرقامه عمّا طُبع من سليبات.')) return;
-        return sb.from('payroll_runs').update({ status: 'draft', rows: null, approved_by: '', approved_at: null, updated_by: ttWho(), updated_at: new Date().toISOString() }).eq('month', rs.month).then(function (r) {
+        return sb.from('payroll_runs').update({ status: 'draft', rows: null, show_slip: false, approved_by: '', approved_at: null, updated_by: ttWho(), updated_at: new Date().toISOString() }).eq('month', rs.month).then(function (r) {
           if (r.error) return fail(r.error);
           S.pr = null; S.prAtt = null; render();
         });
@@ -9555,7 +9567,7 @@
     render();
   }
   function renderMine() {
-    var st = mineState(), head = '<div class="page-head"><div><h1>دوامي وراتبي</h1><p>دوامك في الشهر بحسب مواعيد دوامك، وسليب راتبك بعد اعتماد رواتب الشهر.</p></div></div>';
+    var st = mineState(), head = '<div class="page-head"><div><h1>دوامي وراتبي</h1><p>دوامك في الشهر بحسب مواعيد دوامك.</p></div></div>';
     var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><span class="monthpick"><label class="field" for="mine-month">الشهر</label><input type="month" id="mine-month" data-ro-ok value="' + st.month + '"></span></div></div>';
     if (!S.mine || S.mine.month !== st.month) { app.innerHTML = head + bar + '<div class="card empty">جارٍ التحميل…</div>'; loadMine(st.month); return; }
     var D = S.mine.data;
@@ -9591,7 +9603,7 @@
           (ded.length ? ded.map(function (q) { return '<tr><th style="text-align:right">خصم: ' + q[0] + (q[1] ? ' (' + esc(q[1]) + ')' : '') + '</th><td style="color:var(--red)">− ' + prMoney(q[2]) + ' ج.م</td></tr>'; }).join('')
             : '<tr><th style="text-align:right">الخصومات</th><td>لا خصومات هذا الشهر</td></tr>') +
           '<tr><th style="text-align:right">صافي الراتب</th><td><b>' + prMoney(x.net) + ' ج.م</b></td></tr></tbody></table></div></div>';
-    } else slip = '<div class="card empty">لم تُعتمد رواتب ' + esc(monthLabel(st.month)) + ' بعد. يظهر سليبك وخصوماته هنا بعد اعتمادها.</div>';
+    } else slip = '';
     app.innerHTML = head + bar +
       '<p class="hint">مواعيد دوامك: <b>' + esc(sh.name || '') + '</b> من ' + sh.time_in + ' إلى ' + sh.time_out + '. التأخير يُحسب من وقت الحضور هذا.</p>' +
       '<div class="stats">' + card('أيام الحضور', n.present, lateDays ? 'منها ' + lateDays + ' بتأخير' : 'بلا تأخير') + card('أيام الغياب', n.absent, 'في الشهر', n.absent ? 'var(--red)' : '') +

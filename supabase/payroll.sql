@@ -36,6 +36,10 @@ create table if not exists public.payroll_runs (
 -- تغيير راتب موظف خلال الشهر (نصف نصاب ثم نصاب كامل من تاريخ): { "<teacher_id>": { "from": "2026-11-10", "amount": 15000 } }
 alter table public.payroll_setup add column if not exists changes jsonb not null default '{}'::jsonb;
 
+-- إظهار سليبات شهر معتمد للموظفين في «دوامي وراتبي»: ممنوع افتراضيًا، ويُظهرها من له تعديل الرواتب
+-- (المدير العام، والمدير والمشرف العام إن مُنحوا التعديل) بالدالة set_payroll_slips أدناه
+alter table public.payroll_runs add column if not exists show_slip boolean not null default false;
+
 -- صلاحية الحساب الحالي في الرواتب: 'edit' أو 'view' أو ''.
 -- حساب «جهة مشرفة» (read_only، من outside_accounts.sql) مشاهدة فقط حتى لو مُنح التعديل
 create or replace function public.payroll_level() returns text
@@ -91,6 +95,17 @@ create policy payroll_access_read on public.payroll_access
 drop policy if exists payroll_access_write on public.payroll_access;
 create policy payroll_access_write on public.payroll_access
   for all to authenticated using (public.my_role() = 'superadmin') with check (public.my_role() = 'superadmin');
+
+create or replace function public.set_payroll_slips(p_month text, p_show boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.payroll_level() <> 'edit' then raise exception 'لا تملك صلاحية تعديل الرواتب'; end if;
+  update public.payroll_runs set show_slip = coalesce(p_show, false) where month = p_month and status = 'approved';
+  if not found then raise exception 'رواتب هذا الشهر غير معتمدة'; end if;
+end;
+$$;
+revoke all on function public.set_payroll_slips(text, boolean) from public, anon;
+grant execute on function public.set_payroll_slips(text, boolean) to authenticated;
 
 -- «حساب الرواتب» يقرأ «دوام الموظفين» ووقته الرسمي (المدير والمشرف يقرآنه أصلًا؛ هذا لمن أُعطي الرواتب)
 do $$

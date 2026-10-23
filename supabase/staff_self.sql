@@ -1,5 +1,5 @@
 -- «دوامي وراتبي»: كل حساب مربوط بسجل في «بيانات العاملين» يرى دوامه هو فقط، شهرًا بشهر (الحضور والغياب والإجازات والتأخير
--- بحسب مجموعة دوامه)، وسليب راتبه للشهر المعتمد (الخصومات والإضافات والصافي). لا يرى دوام غيره ولا رواتبهم.
+-- بحسب مجموعة دوامه)، وسليب راتبه للشهر المعتمد إن أظهر المسؤول سليبات ذلك الشهر (ممنوعة افتراضيًا). لا يرى دوام غيره ولا رواتبهم.
 -- الحساب مربوط بسجله إن كان profiles.teacher_id له، أو teachers.user_id يشير إليه.
 -- شغّل هذا الملف في محرر SQL في Supabase (بعد staff_attendance.sql، ويُفضّل بعد staff_shifts.sql و payroll.sql)، ويمكن تشغيله مرة أخرى.
 
@@ -43,10 +43,10 @@ begin
      where a.teacher_id = tid and to_char(a.day, 'YYYY-MM') = p_month;
   end if;
 
-  -- سليبه من كشف الشهر المعتمد فقط
+  -- سليبه من كشف الشهر المعتمد، وفقط إن أُظهرت سليبات ذلك الشهر للموظفين (show_slip، ممنوعة افتراضيًا)
   if to_regclass('public.payroll_runs') is not null then
     execute 'select e, r.rules from public.payroll_runs r, jsonb_array_elements(coalesce(r.rows, ''[]''::jsonb)) e
-              where r.month = $1 and r.status = ''approved'' and e->>''id'' = $2 limit 1'
+              where r.month = $1 and r.status = ''approved'' and coalesce(r.show_slip, false) and e->>''id'' = $2 limit 1'
       into slip, rules using p_month, tid::text;
   end if;
 
