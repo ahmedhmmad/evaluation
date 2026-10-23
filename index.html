@@ -358,6 +358,7 @@
   #print-sheet * { box-sizing: border-box; }
   /* العلامة المائية: الشعار في منتصف كل صفحة بشفافية خفيفة */
   #print-sheet .wm { position: fixed; top: 50%; left: 50%; width: 115mm; height: auto; transform: translate(-50%, -50%); opacity: .055; z-index: 2; }
+  #print-sheet .wm.wm-baked { opacity: 1; }
 
   /* الترويسة */
   /* الصورة العريضة تمتد على عرض الورقة كله (تتجاوز هوامشها) وتحتها سطر باسم الأكاديمية والعام الدراسي */
@@ -1206,7 +1207,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 7';
+  var APP_BUILD = '23/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8743,7 +8744,8 @@
   function prCanEdit() { return prLevel() === 'edit' && !isReadOnly(); }
 
   function prState() {
-    if (!ui.pr) ui.pr = { month: todayISO().slice(0, 7), sal: {}, rules: {}, busy: false, imp: null, acc: {} };
+    if (!ui.pr) ui.pr = { month: todayISO().slice(0, 7), sal: {}, rules: {}, chg: {}, busy: false, imp: null, acc: {} };
+    if (!ui.pr.chg) ui.pr.chg = {};
     return ui.pr;
   }
   // العام الدراسي الذي فيه الشهر: من 1 سبتمبر إلى 30 يونيو
@@ -8760,22 +8762,46 @@
   }
   function prRules(month, noDraft) {
     var b = prBase(month), sy = prSchoolYear(month);
-    return Object.assign({ late_days: '', late_hours: '', leave_days: '', leave_from: sy.from, leave_to: sy.to, work_days: 22, late_mode: 'minutes', late_fraction: 0.25, quran_in: '', quran_out: '10:00' },
+    return Object.assign({ late_days: '', late_hours: '', leave_days: '', leave_from: sy.from, leave_to: sy.to, work_days: 22, late_mode: 'minutes', late_fraction: 0.25, quran_in: '', quran_out: '10:00',
+      signer_title: 'المشرف العام', signer_name: prDefaultSigner() },
       b ? b.rules || {} : {}, noDraft ? {} : prState().rules);
   }
-  function prSalary(id) {
-    var st = prState(), b = prBase(st.month);
-    if (id in st.sal) return st.sal[id];
-    var v = b && b.salaries ? b.salaries[id] : null;
-    return v == null ? '' : String(v);
+  // الموقِّع على الرواتب افتراضيًا: صاحب حساب «مشرف عام» إن وُجد واحد
+  function prDefaultSigner() {
+    var g = (S.users || []).filter(function (u) { return roleKey(u) === 'gensup'; });
+    return g.length === 1 ? g[0].full_name || '' : '';
   }
-  function prDirty() { var st = prState(); return Object.keys(st.sal).length + Object.keys(st.rules).length; }
+  function prSigns(P, first) {
+    var R = P.rules || {}, list = first ? [first] : [['المحاسب', '']];
+    list.push([R.signer_title || 'المشرف العام', R.signer_name || '']);
+    return reportSigns(list);
+  }
+  // راتب الموظف في بداية الشهر، وتغييره خلاله إن وُجد: { from, amount }
+  function prEff(month, id) {
+    var b = prBase(month), v = b && b.salaries ? b.salaries[id] : null, c = b && b.changes ? b.changes[id] : null;
+    if (c && c.from && c.from <= month + '-01') { v = c.amount; c = null; }        // تغيير سبق هذا الشهر: صار راتبه
+    else if (c && c.from && c.from > prMonthEnd(month)) c = null;                   // تغيير بعد هذا الشهر
+    return { salary: v == null ? null : Number(v), change: c };
+  }
+  function prSalary(id) {
+    var st = prState();
+    if (id in st.sal) return st.sal[id];
+    var e = prEff(st.month, id);
+    return e.salary == null ? '' : String(e.salary);
+  }
+  function prChange(id) {
+    var st = prState();
+    if (id in st.chg) return st.chg[id];
+    var b = prBase(st.month), c = b && b.changes ? b.changes[id] : null;
+    return c && c.from && c.from > st.month + '-01' ? { from: c.from, amount: String(c.amount) } : { from: '', amount: '' };
+  }
+  function prDirty() { var st = prState(); return Object.keys(st.sal).length + Object.keys(st.rules).length + Object.keys(st.chg || {}).length; }
   // العاملون في الشهر: من عُيّن قبل نهايته ولم ينته عقده قبل بدايته، ومعهم من له راتب محفوظ
   function prStaff(month) {
     var first = month + '-01', last = prMonthEnd(month), b = prBase(month);
     return saStaff('').filter(function (t) {
       var from = String(t.hire_date || '').slice(0, 10), to = String(t.contract_end || '').slice(0, 10);
-      return ((!from || from <= last) && (!to || to >= first)) || (b && b.salaries && b.salaries[t.id] != null);
+      return ((!from || from <= last) && (!to || to >= first)) || (b && ((b.salaries && b.salaries[t.id] != null) || (b.changes && b.changes[t.id])));
     });
   }
   function prNum(v) { var n = Number(latinDigits(String(v == null ? '' : v)).replace(/[,،\s]/g, '')); return isFinite(n) ? n : NaN; }
@@ -8824,10 +8850,12 @@
       : '<span class="badge pending">لا توجد إعدادات بعد</span>';
     var run = S.pr.runs[st.month], locked = run && run.status === 'approved';
     var rows = list.map(function (t, i) {
-      var v = prSalary(t.id), changed = t.id in st.sal;
+      var v = prSalary(t.id), c = prChange(t.id), changed = t.id in st.sal || t.id in st.chg;
       return '<tr' + (changed ? ' style="background:#fffbeb"' : '') + '><td>' + (i + 1) + '</td>' +
         '<td><b>' + esc(t.name) + '</b><div class="hint" style="margin:0">' + esc(staffCat(t)) + (t.job_title ? ' · ' + esc(t.job_title) : '') + '</div></td>' +
-        '<td><input type="text" inputmode="decimal" dir="ltr" data-prsal="' + t.id + '" value="' + esc(v) + '" placeholder="—" style="width:130px;text-align:right"' + dis + '></td></tr>';
+        '<td><input type="text" inputmode="decimal" dir="ltr" data-prsal="' + t.id + '" value="' + esc(v) + '" placeholder="—" style="width:130px;text-align:right"' + dis + '></td>' +
+        '<td><span style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">من <input type="date" data-prchg="' + t.id + '" data-k="from" value="' + esc(c.from) + '" style="width:auto"' + dis + '>' +
+          ' يصبح <input type="text" inputmode="decimal" dir="ltr" data-prchg="' + t.id + '" data-k="amount" value="' + esc(c.amount) + '" placeholder="—" style="width:100px;text-align:right"' + dis + '></span></td></tr>';
     }).join('');
     var num = function (k, label, unit, step, hint) {
       return '<div><label class="field" for="pr-r-' + k + '">' + label + '</label><span style="display:flex;gap:6px;align-items:center"><input type="number" min="0" step="' + step + '" id="pr-r-' + k + '" data-prrule="' + k + '" value="' + esc(R[k]) + '" placeholder="بلا حد" style="width:120px"' + dis + '>' + unit + '</span>' + (hint ? '<div class="hint" style="margin:2px 0 0">' + hint + '</div>' : '') + '</div>';
@@ -8851,14 +8879,18 @@
       '<h3 style="margin:16px 0 6px">ساعات الدوام</h3>' +
         '<p class="hint" style="margin:0 0 6px">العاملون: ' + (H ? H.time_in + ' إلى ' + H.time_out : 'من «دوام الموظفين»') + ' (الوقت الرسمي في «دوام الموظفين»). ويُحسب تأخير المحفظين وأجر ساعتهم بدوامهم هنا:</p>' +
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">المحفظون: من <input type="time" data-prrule="quran_in" value="' + esc(R.quran_in || (H ? H.time_in : '')) + '" style="width:auto"' + dis + '> إلى <input type="time" data-prrule="quran_out" value="' + esc(R.quran_out) + '" style="width:auto"' + dis + '></span>' +
+      '<h3 style="margin:16px 0 6px">التوقيع على السليبات وكشف الرواتب</h3>' +
+        '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">الصفة <input type="text" data-prrule="signer_title" value="' + esc(R.signer_title) + '" style="width:160px"' + dis + '>' +
+        ' الاسم <input type="text" data-prrule="signer_name" value="' + esc(R.signer_name) + '" placeholder="اسم المشرف العام" style="width:220px"' + dis + '></span>' +
       '<p class="hint" style="margin:10px 0 0">الخانة الفارغة تعني بلا حد (لا خصم). أيام الإجازات تُحسب لكل موظف داخل الفترة المحددة كلها، لا كل شهر. لا يُحسب الانصراف المبكر.</p></div>' +
       (edit ? '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn primary" data-prsave data-ro-mgr' + ((dirty || (!own && b)) && !st.busy ? '' : ' disabled') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ إعدادات ' + esc(monthLabel(st.month)) + (dirty ? ' (' + dirty + ')' : '')) + '</button>' +
         (dirty ? '<button type="button" class="btn link" data-prcancel data-ro-mgr>تراجع عن غير المحفوظ</button>' : '') +
         '<button type="button" class="btn" data-primp data-ro-mgr>استيراد الرواتب من Excel</button><input type="file" id="pr-file" accept=".xlsx,.xls,.csv" hidden>' + '</div>' : '') +
       '<div class="card">' + (list.length
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>الراتب (ج.م)</th></tr></thead><tbody>' + rows + '</tbody>' +
-          '<tfoot><tr><th colspan="2" style="text-align:right">مجموع الرواتب الشهرية</th><th id="pr-total" style="text-align:right"></th></tr></tfoot></table></div>'
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>الراتب (ج.م)</th><th>تغيير الراتب من تاريخ (اختياري)</th></tr></thead><tbody>' + rows + '</tbody>' +
+          '<tfoot><tr><th colspan="2" style="text-align:right">مجموع الرواتب الشهرية</th><th id="pr-total" style="text-align:right"></th><th></th></tr></tfoot></table></div>' +
+          '<p class="hint" style="margin:8px 0 0">تغيير الراتب خلال الشهر (مثل نصف نصاب ثم نصاب كامل): يُحسب الشهر بأيام العمل قبل التاريخ بالراتب القديم وبعده بالجديد، والأشهر التالية بالجديد.</p>'
         : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>' +
       (isAdmin() ? prAccessHtml() : '');
     prTotal();
@@ -8920,7 +8952,22 @@
   }
 
   async function prSave() {
-    var st = prState(), b = prBase(st.month), sal = Object.assign({}, (b && b.salaries) || {}), bad = [];
+    var st = prState(), b = prBase(st.month), sal = {}, changes = {}, bad = [];
+    // رواتب بداية هذا الشهر، وما بقي من تغييرات خلاله أو بعده
+    Object.keys((b && b.salaries) || {}).concat(Object.keys((b && b.changes) || {})).forEach(function (id) {
+      var e = prEff(st.month, id);
+      if (e.salary != null) sal[id] = e.salary;
+      var c = b.changes && b.changes[id];
+      if (c && c.from > st.month + '-01') changes[id] = c;
+    });
+    Object.keys(st.chg).forEach(function (id) {
+      var c = st.chg[id], from = String(c.from || '').trim(), amt = String(c.amount || '').trim();
+      if (!from && !amt) { delete changes[id]; return; }
+      var x = prNum(amt), t = find(id);
+      if (!from || !amt || isNaN(x) || x < 0) { bad.push((t ? t.name : id) + ' (التغيير يحتاج تاريخًا ومبلغًا)'); return; }
+      if (from <= st.month + '-01') { bad.push((t ? t.name : id) + ' (تاريخ التغيير قبل بداية الشهر؛ اكتب الراتب الجديد في خانة الراتب)'); return; }
+      changes[id] = { from: from, amount: x };
+    });
     Object.keys(st.sal).forEach(function (id) {
       var v = String(st.sal[id]).trim();
       if (!v) { delete sal[id]; return; }
@@ -8938,11 +8985,12 @@
     rules.leave_from = R.leave_from || ''; rules.leave_to = R.leave_to || '';
     rules.work_days = wd; rules.late_mode = R.late_mode === 'days' ? 'days' : 'minutes'; rules.late_fraction = Number(R.late_fraction) || 0.25;
     rules.quran_in = R.quran_in || ''; rules.quran_out = R.quran_out || '';
+    rules.signer_title = String(R.signer_title || '').trim() || 'المشرف العام'; rules.signer_name = String(R.signer_name || '').trim();
     st.busy = true; render();
-    var res = await sb.from('payroll_setup').upsert({ month: st.month, salaries: sal, rules: rules, updated_by: ttWho(), updated_at: new Date().toISOString() }, { onConflict: 'month' });
+    var res = await sb.from('payroll_setup').upsert({ month: st.month, salaries: sal, changes: changes, rules: rules, updated_by: ttWho(), updated_at: new Date().toISOString() }, { onConflict: 'month' });
     st.busy = false;
     if (res.error) { render(); return fail(res.error); }
-    st.sal = {}; st.rules = {};
+    st.sal = {}; st.rules = {}; st.chg = {};
     S.pr = null;
     render();
     toast('حُفظت إعدادات ' + monthLabel(st.month) + '. الأشهر التالية التي لم تُحفظ لها إعدادات تعتمدها.');
@@ -9044,12 +9092,18 @@
     var allowDays = R.late_days === '' || R.late_days == null ? null : Number(R.late_days);
     var out = [];
     prStaff(month).forEach(function (t) {
-      var sal = b && b.salaries ? b.salaries[t.id] : null;
+      var eff = prEff(month, t.id), sal = eff.salary, salNote = '';
       if (sal == null) return;
       sal = Number(sal) || 0;
+      if (eff.change) {
+        var before = days.filter(function (dd) { return dd < eff.change.from; }).length, nw = Number(eff.change.amount) || 0;
+        salNote = prMoney(sal) + ' حتى ' + dmy(days.filter(function (dd) { return dd < eff.change.from; }).pop() || first) + '، و' + prMoney(nw) + ' من ' + dmy(eff.change.from) +
+          ' (' + before + ' و' + (days.length - before) + ' يوم عمل)';
+        sal = days.length ? Math.round((sal * before + nw * (days.length - before)) / days.length * 100) / 100 : nw;
+      }
       var quran = staffCat(t) === 'محفظون', tin = quran ? (R.quran_in || H.time_in) : H.time_in, tout = quran ? (R.quran_out || H.time_out) : H.time_out;
       var hours = Math.max(0.5, ((minsOf(tout) || 0) - (minsOf(tin) || 0)) / 60), dayVal = sal / W, minVal = dayVal / (hours * 60);
-      var rec = (S.prAtt.rows[t.id]) || {}, x = { t: t, salary: sal, dayVal: dayVal, hours: hours, present: 0, absent: 0, leave: 0, mission: 0, none: [], notEmp: 0, lateDays: 0, lateMins: 0, leaveBefore: 0 };
+      var rec = (S.prAtt.rows[t.id]) || {}, x = { t: t, salary: sal, salNote: salNote, dayVal: dayVal, hours: hours, present: 0, absent: 0, leave: 0, mission: 0, none: [], notEmp: 0, lateDays: 0, lateMins: 0, leaveBefore: 0 };
       // الإجازات المأخوذة في الفترة قبل هذا الشهر
       Object.keys(rec).forEach(function (dd) { if (dd < first && rec[dd].status === 'leave' && inPeriod(dd) && !attOff(dd)) x.leaveBefore++; });
       var leaveIn = 0;
@@ -9091,7 +9145,7 @@
   // ما يُحفظ عند الاعتماد: كل الأرقام كما حُسبت
   function prSnap(C) {
     return C.rows.map(function (x) {
-      return { id: x.t.id, name: x.t.name, cat: staffCat(x.t), job: x.t.job_title || '', salary: x.salary, dayVal: Math.round(x.dayVal * 100) / 100,
+      return { id: x.t.id, name: x.t.name, cat: staffCat(x.t), job: x.t.job_title || '', salary: x.salary, salNote: x.salNote || '', dayVal: Math.round(x.dayVal * 100) / 100,
         present: x.present, absent: x.absent, leave: x.leave, mission: x.mission, none: x.none.length, notEmp: x.notEmp, lateDays: x.lateDays, lateMins: x.lateMins,
         leaveExtra: x.leaveExtra, leaveLeft: x.leaveLeft, lateExtra: x.lateExtra, lateNote: x.lateNote,
         dAbsent: Math.round(x.dAbsent * 100) / 100, dLeave: Math.round(x.dLeave * 100) / 100, dLate: Math.round(x.dLate * 100) / 100, dNotEmp: Math.round(x.dNotEmp * 100) / 100,
@@ -9237,7 +9291,7 @@
       '<tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>تأخير<br>يوم/دقيقة</th><th>الخصومات</th><th>الإضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>' +
       '<tbody>' + body + '<tr><td></td><td><b>المجموع</b></td>' + c(prMoney(tot.salary), true) + '<td colspan="5"></td>' + c(prMoney(tot.ded), true) + c(prMoney(tot.add), true) + c(prMoney(tot.net), true) + '<td></td></tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
-      reportSigns([['المحاسب', ''], ['مدير الأكاديمية', principalName()]]);
+      prSigns(P);
   }
   function prSlipHtml(x, P, withHead) {
     var tr = function (a, b, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + a + '</th><td>' + b + '</td></tr>'; };
@@ -9253,13 +9307,13 @@
         '<tr><th>الإجازات</th><td>' + x.leave + (x.leaveLeft != null ? ' (المتبقي من الرصيد: ' + x.leaveLeft + ')' : '') + '</td><th>المأموريات</th><td>' + x.mission + '</td></tr>' +
         '<tr><th>أيام التأخير</th><td>' + x.lateDays + '</td><th>دقائق التأخير</th><td>' + x.lateMins + '</td></tr></table>' +
       '<div class="rsec">الراتب</div><table class="rk">' +
-        tr('الراتب الأساسي', prMoney(x.salary) + ' ج.م') +
+        tr('الراتب الأساسي', prMoney(x.salary) + ' ج.م' + (x.salNote ? '<div style="font-size:.85em">' + esc(x.salNote) + '</div>' : '')) +
         (x.add ? tr('إضافات' + (x.addNote ? ' (' + esc(x.addNote) + ')' : ''), '+ ' + prMoney(x.add) + ' ج.م') : '') +
         ded.map(function (d) { return tr('خصم: ' + d[0] + (d[1] ? ' (' + esc(d[1]) + ')' : ''), '− ' + prMoney(d[2]) + ' ج.م'); }).join('') +
         (ded.length ? tr('مجموع الخصومات', '− ' + prMoney(dsum) + ' ج.م') : '') +
         '<tr><th style="font-size:1.15em">صافي الراتب</th><td style="font-size:1.25em"><b>' + prMoney(x.net) + ' ج.م</b></td></tr></table>' +
       '<p style="margin:.6em 0 0;font-size:.85em">أجر اليوم = الراتب ÷ ' + esc(P.rules.work_days || 22) + (P.approved ? '' : ' · كشف غير معتمد') + '</p>' +
-      reportSigns([['الموظف', x.name], ['مدير الأكاديمية', principalName()]]);
+      prSigns(P, ['الموظف', x.name]);
   }
   function buildPaySlipSheet(q) {
     var list = q.id === 'all' ? q.P.rows : q.P.rows.filter(function (x) { return x.id === q.id; });
@@ -9294,7 +9348,7 @@
     if (e.target.closest('[data-praccsave]') && isAdmin()) return prAccessSave();
     if (!prCanEdit()) return;
     if (e.target.closest('[data-prsave]')) return prSave();
-    if (e.target.closest('[data-prcancel]')) { st.sal = {}; st.rules = {}; return render(); }
+    if (e.target.closest('[data-prcancel]')) { st.sal = {}; st.rules = {}; st.chg = {}; return render(); }
     if (e.target.closest('[data-primp]')) return document.getElementById('pr-file').click();
     if (e.target.closest('[data-primpclose]')) { st.imp = null; return render(); }
     if (e.target.closest('[data-primpapply]')) {
@@ -9321,6 +9375,13 @@
       prTotal();
       prSaveBtn();
     }
+    if (el.hasAttribute('data-prchg')) {
+      var pid = el.getAttribute('data-prchg'), pst = prState(), cur0 = pst.chg[pid] || Object.assign({}, prChange(pid));
+      cur0[el.getAttribute('data-k')] = el.value;
+      pst.chg[pid] = cur0;
+      el.closest('tr').style.background = '#fffbeb';
+      prSaveBtn();
+    }
     if (el.hasAttribute('data-pradj')) {
       var rs = prunState(), id = el.getAttribute('data-pradj');
       var run = S.pr.runs[rs.month], cur = rs.adj[id] || Object.assign({}, ((run && run.adj) || {})[id] || {});
@@ -9344,7 +9405,7 @@
     if (el.id === 'pr-month') {
       if (!el.value) return;
       if (prDirty() && !confirm('في هذا الشهر تعديلات لم تُحفظ. الانتقال يلغيها؟')) { el.value = st.month; return; }
-      st.month = el.value; st.sal = {}; st.rules = {}; st.imp = null; return render();
+      st.month = el.value; st.sal = {}; st.rules = {}; st.chg = {}; st.imp = null; return render();
     }
     if (el.hasAttribute('data-pracc')) { st.acc[el.getAttribute('data-pracc')] = el.value; return render(); }
     if (!prCanEdit()) return;
@@ -14277,9 +14338,41 @@
 
   // أزرار الطباعة: تُطبع الورقة من إطار مستقل لا يحتوي إلا عليها وعلى تنسيقها،
   // فلا تتأثر الطباعة بحجم الصفحة الأصلية ولا بتخطيطها
+  // الشعار المائي: صورة باهتة جاهزة (ألوان فاتحة وشفافية في الصورة نفسها)، لا شفافية CSS قد تتجاهلها بعض الطابعات وبرامج PDF
+  var wmFaded = null;
+  function fadedLogo() {
+    if (wmFaded) return Promise.resolve(wmFaded);
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || 600, h = img.naturalHeight || 600, k = Math.min(1, 900 / Math.max(w, h));
+          var c = document.createElement('canvas');
+          c.width = Math.round(w * k); c.height = Math.round(h * k);
+          var g = c.getContext('2d');
+          g.drawImage(img, 0, 0, c.width, c.height);
+          var d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+          for (var i = 0; i < p.length; i += 4) {
+            // يُخلط اللون بالأبيض ثم تُخفَّف شفافيته: يبقى خلفه مقروءًا مهما كانت الطابعة
+            p[i] = 255 - (255 - p[i]) * 0.35; p[i + 1] = 255 - (255 - p[i + 1]) * 0.35; p[i + 2] = 255 - (255 - p[i + 2]) * 0.35;
+            p[i + 3] = Math.round(p[i + 3] * 0.16);
+          }
+          g.putImageData(d, 0, 0);
+          wmFaded = c.toDataURL('image/png');
+        } catch (err) { wmFaded = ''; }
+        resolve(wmFaded);
+      };
+      img.onerror = function () { wmFaded = ''; resolve(''); };
+      img.src = REPORT.logo;
+    });
+  }
+
   async function printNow() {
     await reportFontsReady(document);
+    var faded = await fadedLogo();
     if (!buildCurrentSheet()) return window.print();
+    if (faded) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.src = faded; im.classList.add('wm-baked'); });
     var css = pageCss() + 'html,body{margin:0;background:#fff}';
     var rules = document.getElementById('app-css').sheet.cssRules;
     for (var i = 0; i < rules.length; i++) {

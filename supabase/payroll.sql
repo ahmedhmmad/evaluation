@@ -33,6 +33,9 @@ create table if not exists public.payroll_runs (
   updated_at timestamptz not null default now()
 );
 
+-- تغيير راتب موظف خلال الشهر (نصف نصاب ثم نصاب كامل من تاريخ): { "<teacher_id>": { "from": "2026-11-10", "amount": 15000 } }
+alter table public.payroll_setup add column if not exists changes jsonb not null default '{}'::jsonb;
+
 -- صلاحية الحساب الحالي في الرواتب: 'edit' أو 'view' أو ''.
 -- حساب «جهة مشرفة» (read_only، من outside_accounts.sql) مشاهدة فقط حتى لو مُنح التعديل
 create or replace function public.payroll_level() returns text
