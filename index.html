@@ -608,6 +608,13 @@
   .tgroup .progress { display: block; margin: 2px 0 0; }
   table.grid input[type=number] { width: 90px; padding: 6px 8px; }
   table.grid tfoot td { font-weight: 700; color: var(--head); background: #F7F3EA; }
+  /* حساب الرواتب: جدول مضغوط يتسع للشاشة بلا تمرير أفقي */
+  table.grid.pr-run { font-size: .8rem; width: 100%; }
+  table.grid.pr-run th, table.grid.pr-run td { padding: 5px 4px; }
+  table.grid.pr-run td .hint { font-size: .72rem; line-height: 1.25; }
+  table.grid.pr-run td[style*="nowrap"] { white-space: normal !important; }
+  table.grid.pr-run input { width: 64px !important; padding: 3px 5px; font-size: .78rem; display: block; }
+  table.grid.pr-run .btn.link { padding: 0; font-size: .78rem; }
   .badge.paid { background: var(--green-soft); color: var(--green); }
   .badge.part { background: var(--amber-soft); color: var(--amber); }
   .rsv, #print-sheet .rsv { color: #b45309; font-weight: 800; margin-inline-start: 3px; }
@@ -1227,7 +1234,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '23/10 — 14';
+  var APP_BUILD = '23/10 — 15';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9331,7 +9338,7 @@
         '<b style="margin-inline-start:8px">كشف الرواتب:</b><button type="button" class="btn" data-prrep="xlsx" data-ro-ok>Excel</button><button type="button" class="btn" data-prrep="pdf" data-ro-ok>PDF / طباعة</button>' +
         '<button type="button" class="btn primary" data-prslip="all" data-ro-ok>طباعة كل السليبات</button></div>' +
       '<div class="card">' + (rows.length
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>تأخير</th><th>غير مسجَّل</th><th>إضافات</th><th>خصومات أخرى</th><th>الصافي</th><th></th></tr></thead><tbody>' + body + '</tbody>' +
+        ? '<div class="table-wrap"><table class="grid pr-run"><thead><tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>تأخير</th><th>غير مسجَّل</th><th>إضافات</th><th>خصومات أخرى</th><th>الصافي</th><th></th></tr></thead><tbody>' + body + '</tbody>' +
           '<tfoot><tr><th colspan="2" style="text-align:right">المجموع</th><th class="c">' + prMoney(sum.salary) + '</th><th colspan="8"></th><th class="c">' + prMoney(sum.net) + '</th><th></th></tr></tfoot></table></div>'
         : '<div class="empty">لا يوجد موظفون لهم رواتب في هذا الشهر.</div>') + '</div>';
   }
