@@ -2,7 +2,7 @@
 --   payroll_setup: راتب كل موظف (من «بيانات العاملين») وقواعد الدوام، شهرًا بشهر. الشهر الذي لم تُحفظ له إعدادات
 --                  يعتمد آخر شهر قبله حُفظت إعداداته (يُحسب ذلك في الصفحة).
 --   payroll_runs:  الإضافات والخصومات اليدوية لكل شهر، وكشف الشهر كما اعتُمد (لا يتغير بعد الاعتماد بتعديل الدوام أو الرواتب).
---   payroll_access: من يصل إلى الرواتب غير المدير العام (حسابات المدير والمشرف): مشاهدة، أو تعديل.
+--   payroll_access: من يصل إلى الرواتب غير المدير العام (حسابات المدير والمشرف العام): مشاهدة، أو تعديل.
 -- المدير العام يرى ويعدّل دائمًا، وهو وحده يمنح الصلاحيات ويلغي اعتماد شهر.
 -- شغّل هذا الملف في محرر SQL في Supabase (بعد staff.sql و staff_attendance.sql)، ويمكن تشغيله مرة أخرى. لا يغيّر أي بيانات موجودة.
 
@@ -41,7 +41,7 @@ declare
   ro boolean := false;
 begin
   if public.my_role() = 'superadmin' then return 'edit'; end if;
-  if public.my_role() not in ('manager', 'supervisor') then return ''; end if;
+  if public.my_role() <> 'manager' then return ''; end if;   -- المدير والمشرف العام (دوره manager)؛ لا المشرف التربوي
   if not exists (select 1 from public.payroll_access a where a.user_id = auth.uid()) then return ''; end if;
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'read_only') then
     execute 'select coalesce((select read_only from public.profiles where id = auth.uid()), false)' into ro;
