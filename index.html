@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '25/10 — 4';
+  var APP_BUILD = '26/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1562,6 +1562,7 @@
       { items: [['#/', 'home', 'الرئيسية']] },
       { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة'], ['#/timetable', 'timetable', 'جدول الحصص']] }
     ];
+    if (canCm()) groups[1].items.push(['#/committees', 'committees', 'اللجان المدرسية']);
     if (isSup()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين']);
       groups.push({ title: 'الطلاب', items: [['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب']] });
@@ -1584,6 +1585,7 @@
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
     if (h === '#/attendance' && canAttView()) return 'attendance';
+    if (/^#\/committees/.test(h) && canCm()) return 'committees';
     if (!isStaff()) return 'results';
     if (h === '#/staff' && isSup()) return 'staff';
     if (/^#\/classes/.test(h) && isSup()) return 'classes';
@@ -8416,6 +8418,7 @@
     var v = currentVisit();
     if (v) return renderVisit(v);
     if (h === '#/visits' || /^#\/v\//.test(h)) return renderVisits();
+    if (/^#\/committees/.test(h) && canCm()) return renderCommittees();
     if (h === '#/staff' && canView()) return renderStaff();
     if (h === '#/staff' && isSup()) return renderStaff();
     if (/^#\/classes/.test(h) && isSup()) return renderClasses();
@@ -8436,6 +8439,254 @@
     if (h === '#/results' || r) return renderResults(r && r[1]);
     if (h === '#/teachers') return renderList();
     renderHome();
+  }
+
+  /* ---------- اللجان المدرسية ----------
+     لجنة بأعضاء من العاملين وطلاب، تُضاف كما يُضاف الباص: يُختار عامل أو أكثر ثم طالب أو أكثر.
+     يعدّلها المدير العام، ويراها المدير والمشرف التربوي. الجدولان committees و committee_members من supabase/committees.sql */
+
+  var CM_NAMES = ['لجنة النظام والانضباط', 'لجنة الإرشاد والدعم النفسي', 'لجنة الأنشطة والمواهب', 'لجنة الصحة والنظافة', 'لجنة الإعلام', 'لجنة القرآن الكريم', 'لجنة النقل المدرسي'];
+  var pendingCm = null;
+
+  function canCm() { return canView() || isSup(); }
+  function cmState() { return S.cm || (S.cm = { list: [], members: [], missing: false, loaded: false, loading: false }); }
+  function cmUi() { return ui.cm || (ui.cm = { id: '', s: {}, t: {}, sq: '', tq: '', tcls: '' }); }
+  function cmCurrent() {
+    var m = location.hash.match(/^#\/committees\/(.+)$/), c = cmState();
+    return m ? c.list.filter(function (x) { return x.id === m[1]; })[0] || null : null;
+  }
+  function cmMembers(id, kind) { return cmState().members.filter(function (m) { return m.committee_id === id && m.kind === kind; }); }
+
+  async function loadCommittees() {
+    var c = cmState();
+    if (c.loading) return;
+    c.loading = true;
+    var a = await fetchAll(function () { return sb.from('committees').select('*').order('created_at').order('id'); });
+    var m = a ? await fetchAll(function () { return sb.from('committee_members').select('*').order('created_at').order('id'); }) : null;
+    c.loading = false; c.loaded = true; c.missing = !a || !m;
+    c.list = a || []; c.members = m || [];
+    render();
+  }
+
+  function renderCommittees() {
+    var c = cmState();
+    if (!c.loaded) {
+      app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>';
+      loadCommittees();
+      return;
+    }
+    if (c.missing) {
+      app.innerHTML = '<div class="card empty">اللجان تحتاج جداول جديدة.<br>' + (isAdmin() ? 'شغّل الملف <code dir="ltr">supabase/committees.sql</code> في محرر SQL، ثم حدّث الصفحة.' : 'يشغّل المدير العام الملف <code dir="ltr">supabase/committees.sql</code>.') + '</div>';
+      return;
+    }
+    var cur = cmCurrent();
+    if (location.hash !== '#/committees' && !cur) return go('#/committees');
+    app.innerHTML = cur ? cmDetailHtml(cur) : cmListHtml();
+  }
+
+  function cmListHtml() {
+    var c = cmState(), edit = isAdmin();
+    var rows = c.list.map(function (x, i) {
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.name) + '</b></td><td>' + cmMembers(x.id, 'staff').length + '</td><td>' + cmMembers(x.id, 'student').length + '</td>' +
+        '<td style="white-space:nowrap"><button type="button" class="btn" data-cmopen="' + x.id + '" data-ro-ok>' + (edit ? 'فتح وتعديل' : 'عرض') + '</button> ' +
+        '<button type="button" class="btn" data-cmprint="' + x.id + '" data-ro-ok>طباعة</button></td></tr>';
+    }).join('');
+    return '<div class="card"><h2>اللجان المدرسية</h2>' +
+      (edit ? '<form id="cm-form" class="toolbar" style="align-items:flex-end;margin:10px 0 0"><div style="flex:1;min-width:240px"><label class="field" for="cm-name">لجنة جديدة <span class="req">*</span></label>' +
+        '<input type="text" id="cm-name" required list="cm-names" placeholder="اختر من القائمة أو اكتب اسم لجنة" autocomplete="off"><datalist id="cm-names">' +
+        CM_NAMES.filter(function (n) { return !c.list.some(function (x) { return x.name === n; }); }).map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist></div>' +
+        '<button type="submit" class="btn primary">إضافة اللجنة</button></form>' : '') + '</div>' +
+      '<div class="card">' + (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>اللجنة</th><th>العاملون</th><th>الطلاب</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا توجد لجان بعد' + (edit ? '؛ أضف لجنة من الأعلى.' : '.') + '</div>') + '</div>';
+  }
+
+  // مرشحو الإضافة: عاملون على رأس عملهم، أو طلاب مسجَّلون نهائيًا، ليسوا في اللجنة، مع البحث
+  function cmStaffCands(com) {
+    var u = cmUi(), q = norm(u.sq), inC = {};
+    cmMembers(com.id, 'staff').forEach(function (m) { inC[m.staff_id] = 1; });
+    var list = saStaff('', todayISO()).filter(function (t) { return !inC[t.id] && (!q || norm(t.name + ' ' + (t.job_title || '')).indexOf(q) > -1); });
+    return list.map(function (t) {
+      return '<label class="cand" style="cursor:pointer"><span><input type="checkbox" data-cmsel="s|' + t.id + '"' + (u.s[t.id] ? ' checked' : '') + '> <b>' + esc(t.name) + '</b><br><span class="meta">' + esc(t.job_title || staffCat(t)) + '</span></span></label>';
+    }).join('') || '<div class="empty">لا يوجد عاملون مطابقون.</div>';
+  }
+  function cmStudentCands(com) {
+    var u = cmUi(), q = norm(u.tq), inC = {}, LIMIT = 40;
+    cmMembers(com.id, 'student').forEach(function (m) { inC[m.student_id] = 1; });
+    var list = S.students.filter(function (x) {
+      if (inC[x.id] || !enrolled(x)) return false;
+      if (u.tcls && x.class_name !== u.tcls) return false;
+      return !q || norm(x.full_name + ' ' + x.class_name).indexOf(q) > -1 || String(x.national_id || '').indexOf(latinDigits(u.tq)) > -1;
+    }).sort(function (a, b) { return classRank(a.class_name) - classRank(b.class_name) || a.full_name.localeCompare(b.full_name, 'ar'); });
+    return list.slice(0, LIMIT).map(function (x) {
+      return '<label class="cand" style="cursor:pointer"><span><input type="checkbox" data-cmsel="t|' + x.id + '"' + (u.t[x.id] ? ' checked' : '') + '> <b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta">' + esc(x.class_name || 'بدون صف') + '</span></span></label>';
+    }).join('') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ اكتب في البحث أو اختر شعبة لتضييق القائمة.</p>' : '') ||
+      '<div class="empty">' + (S.students.length ? 'لا يوجد طلاب مطابقون.' : 'سجّل الطلاب أولًا.') + '</div>';
+  }
+  function cmSelCount(kind) { return Object.keys(cmUi()[kind]).filter(function (k) { return cmUi()[kind][k]; }).length; }
+  function cmAddBtn(kind) {
+    var n = cmSelCount(kind);
+    return '<button type="button" class="btn primary" data-cmaddsel="' + kind + '"' + (n ? '' : ' disabled') + '>إضافة المحدَّدين' + (n ? ' (' + n + ')' : '') + '</button>';
+  }
+
+  function cmDetailHtml(com) {
+    var edit = isAdmin(), u = cmUi();
+    if (u.id !== com.id) { u.id = com.id; u.s = {}; u.t = {}; u.sq = ''; u.tq = ''; u.tcls = ''; }
+    var staff = cmMembers(com.id, 'staff').map(function (m) { return { m: m, t: find(m.staff_id) }; }).filter(function (p) { return p.t; })
+      .sort(function (a, b) { return a.t.name.localeCompare(b.t.name, 'ar'); });
+    var studs = cmMembers(com.id, 'student').map(function (m) { return { m: m, x: findStudent(m.student_id) }; }).filter(function (p) { return p.x; })
+      .sort(function (a, b) { return classRank(a.x.class_name) - classRank(b.x.class_name) || a.x.full_name.localeCompare(b.x.full_name, 'ar'); });
+    var rm = function (id) { return edit ? '<td class="no-print"><button type="button" class="btn" data-cmrm="' + id + '">إزالة</button></td>' : ''; };
+    var th = edit ? '<th></th>' : '';
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><button type="button" class="btn" data-cmback data-ro-ok>→ كل اللجان</button><h2 style="margin:0;flex:1">' + esc(com.name) + '</h2>' +
+        '<button type="button" class="btn" data-cmprint="' + com.id + '" data-ro-ok>طباعة / PDF</button>' +
+        (edit ? '<button type="button" class="btn danger" data-cmdel="' + com.id + '">حذف اللجنة</button>' : '') + '</div></div>' +
+      '<div class="card"><h2>أعضاء اللجنة من العاملين (' + staff.length + ')</h2>' + (staff.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الاسم</th><th>الوظيفة</th>' + th + '</tr></thead><tbody>' + staff.map(function (p, i) {
+            return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(p.t.name) + '</b></td><td>' + esc(p.t.job_title || staffCat(p.t)) + '</td>' + rm(p.m.id) + '</tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty">لم يُضف عاملون بعد.</div>') +
+        (edit ? '<h3 style="margin:16px 0 6px">إضافة عاملين</h3><input type="search" id="cm-sq" placeholder="ابحث بالاسم أو الوظيفة" aria-label="بحث عن عامل" style="margin:0 0 8px" value="' + esc(u.sq) + '">' +
+          '<div id="cm-scands" style="max-height:260px;overflow:auto">' + cmStaffCands(com) + '</div><div class="actions" id="cm-sadd">' + cmAddBtn('s') + '</div>' : '') + '</div>' +
+      '<div class="card"><h2>الطلاب (' + studs.length + ')</h2>' + (studs.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th>' + th + '</tr></thead><tbody>' + studs.map(function (p, i) {
+            return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(p.x.full_name) + '</b>' + rsvMark(p.x) + '</td><td>' + esc(p.x.class_name || '—') + '</td>' + rm(p.m.id) + '</tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty">لم يُضف طلاب بعد.</div>') +
+        (edit ? '<h3 style="margin:16px 0 6px">إضافة طلاب</h3><div class="toolbar" style="align-items:center;margin:0 0 8px"><input type="search" id="cm-tq" placeholder="ابحث بالاسم أو رقم الهوية" aria-label="بحث عن طالب" style="flex:1;min-width:200px" value="' + esc(u.tq) + '">' +
+          '<select id="cm-tcls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === u.tcls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>' +
+          '<div id="cm-tcands" style="max-height:300px;overflow:auto">' + cmStudentCands(com) + '</div><div class="actions" id="cm-tadd">' + cmAddBtn('t') + '</div>' : '') + '</div>';
+  }
+
+  async function cmAddSelected(kind) {
+    var com = cmCurrent(), u = cmUi();
+    if (!com || !isAdmin()) return;
+    var ids = Object.keys(u[kind]).filter(function (k) { return u[kind][k]; });
+    if (!ids.length) return;
+    var who = (S.profile && S.profile.full_name) || displayName(S.email);
+    var rows = ids.map(function (id) { return { committee_id: com.id, kind: kind === 's' ? 'staff' : 'student', staff_id: kind === 's' ? id : null, student_id: kind === 't' ? id : null, created_by: who }; });
+    var r = await sb.from('committee_members').insert(rows).select();
+    if (r.error) return fail(r.error);
+    cmState().members = cmState().members.concat(r.data || []);
+    u[kind] = {};
+    render();
+    toast('أُضيف ' + ids.length + (kind === 's' ? ' من العاملين' : ' من الطلاب') + ' إلى ' + com.name);
+  }
+
+  function buildCommitteeSheet(id) {
+    var com = cmState().list.filter(function (x) { return x.id === id; })[0];
+    if (!com) { sheet.className = 'ps'; sheet.innerHTML = '<p>لا توجد لجنة.</p>'; return; }
+    var staff = cmMembers(id, 'staff').map(function (m) { return find(m.staff_id); }).filter(Boolean).sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    var studs = cmMembers(id, 'student').map(function (m) { return findStudent(m.student_id); }).filter(Boolean)
+      .sort(function (a, b) { return classRank(a.class_name) - classRank(b.class_name) || a.full_name.localeCompare(b.full_name, 'ar'); });
+    var head = reportHead(com.name, [['عدد العاملين', staff.length], ['عدد الطلاب', studs.length]]).replace(/^<img class="wm"[^>]*>/, '');
+    var sec = function (t) { return '<tr><td class="bf-sec" colspan="3">' + t + '</td></tr>'; };
+    var body = sec('أعضاء اللجنة من العاملين (' + staff.length + ')') + (staff.length ? staff.map(function (t, i) {
+        return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(t.name) + '</b></td><td>' + esc(t.job_title || staffCat(t)) + '</td></tr>';
+      }).join('') : '<tr><td colspan="3" class="c">—</td></tr>') +
+      sec('الطلاب (' + studs.length + ')') + (studs.length ? studs.map(function (x, i) {
+        return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="3" class="c">—</td></tr>');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="3"></td></tr><tr><td class="ls-head" colspan="3">' + head + '</td></tr>' +
+      '<tr><th>الرقم</th><th>الاسم</th><th>الوظيفة / الشعبة</th></tr></thead><tbody>' + body + '</tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="3"></td></tr></tfoot></table>' + reportSigns([['رئيس اللجنة', ''], ['مدير/ة الأكاديمية', principalName()]]);
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (!/^#\/committees/.test(location.hash) || !canCm()) return;
+    var el;
+    if ((el = e.target.closest('[data-cmopen]'))) return go('#/committees/' + el.getAttribute('data-cmopen'));
+    if (e.target.closest('[data-cmback]')) return go('#/committees');
+    if ((el = e.target.closest('[data-cmprint]'))) { pendingCm = el.getAttribute('data-cmprint'); return printNow(); }
+    if (!isAdmin()) return;
+    if ((el = e.target.closest('[data-cmaddsel]'))) return cmAddSelected(el.getAttribute('data-cmaddsel'));
+    if ((el = e.target.closest('[data-cmrm]'))) {
+      var id = el.getAttribute('data-cmrm'), r = await sb.from('committee_members').delete().eq('id', id);
+      if (r.error) return fail(r.error);
+      cmState().members = cmState().members.filter(function (m) { return m.id !== id; });
+      return render();
+    }
+    if ((el = e.target.closest('[data-cmdel]'))) {
+      var com = cmCurrent();
+      if (!com || !confirm('حذف «' + com.name + '» وكل أعضائها؟ (لا يُحذف أي عامل ولا طالب)')) return;
+      var d = await sb.from('committees').delete().eq('id', com.id);
+      if (d.error) return fail(d.error);
+      var c = cmState();
+      c.list = c.list.filter(function (x) { return x.id !== com.id; });
+      c.members = c.members.filter(function (m) { return m.committee_id !== com.id; });
+      toast('حُذفت اللجنة');
+      return go('#/committees');
+    }
+  });
+
+  document.addEventListener('submit', async function (e) {
+    if (e.target.id !== 'cm-form' || !isAdmin()) return;
+    e.preventDefault();
+    var name = document.getElementById('cm-name').value.trim().replace(/\s+/g, ' '), c = cmState();
+    if (!name) return;
+    if (c.list.some(function (x) { return norm(x.name) === norm(name); })) return toast('هذه اللجنة موجودة', true);
+    var r = await sb.from('committees').insert({ name: name, created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+    if (r.error) return fail(r.error);
+    c.list.push(r.data);
+    go('#/committees/' + r.data.id);
+    toast('أُضيفت ' + name + '؛ اختر أعضاءها');
+  });
+
+  document.addEventListener('change', function (e) {
+    if (!/^#\/committees\//.test(location.hash) || !isAdmin()) return;
+    var el = e.target, u = cmUi();
+    if (el.hasAttribute && el.hasAttribute('data-cmsel')) {
+      var p = el.getAttribute('data-cmsel').split('|');
+      u[p[0]][p[1]] = el.checked;
+      var box = document.getElementById(p[0] === 's' ? 'cm-sadd' : 'cm-tadd');
+      if (box) box.innerHTML = cmAddBtn(p[0]);
+    } else if (el.id === 'cm-tcls') {
+      u.tcls = el.value;
+      var com = cmCurrent();
+      if (com) document.getElementById('cm-tcands').innerHTML = cmStudentCands(com);
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (!/^#\/committees\//.test(location.hash) || !isAdmin()) return;
+    var com = cmCurrent(), u = cmUi();
+    if (!com) return;
+    if (e.target.id === 'cm-sq') { u.sq = e.target.value; document.getElementById('cm-scands').innerHTML = cmStaffCands(com); }
+    else if (e.target.id === 'cm-tq') { u.tq = e.target.value; document.getElementById('cm-tcands').innerHTML = cmStudentCands(com); }
+  });
+
+  /* تشكيل المعلمين: لكل معلم موادّه والصفوف التي يدرّسها وعدد حصصه الأسبوعية، من جدول الحصص الحالي (ومحفّظو القرآن في النهاية) */
+  function buildTeacherFormationSheet() {
+    var by = {}, clsOrder = ttClasses();
+    ttLive().forEach(function (s) {
+      if (!s.teacher_id) return;
+      var t = by[s.teacher_id] || (by[s.teacher_id] = { subs: {}, n: 0 }), sub = ttFixSubject(s.subject) || '—';
+      var o = t.subs[sub] || (t.subs[sub] = { cls: {}, n: 0 });
+      o.cls[s.class_name] = 1; o.n++; t.n++;
+    });
+    var rows = '', i = 0, total = 0;
+    ttTeachers().forEach(function (t) {
+      var d = by[t.id];
+      if (!d) return;
+      var subs = Object.keys(d.subs).sort(function (a, b) { return d.subs[b].n - d.subs[a].n || a.localeCompare(b, 'ar'); });
+      i++; total += d.n;
+      subs.forEach(function (sub, j) {
+        var o = d.subs[sub], cls = Object.keys(o.cls).sort(function (a, b) { return clsOrder.indexOf(a) - clsOrder.indexOf(b); });
+        rows += '<tr>' + (j ? '' : '<td class="c" rowspan="' + subs.length + '">' + i + '</td><td rowspan="' + subs.length + '" style="white-space:nowrap"><b>' + esc(ttName(t)) + '</b></td>') +
+          '<td>' + esc(sub) + '</td><td>' + esc(cls.join('، ')) + '</td><td class="c">' + o.n + '</td>' +
+          (j ? '' : '<td class="c" rowspan="' + subs.length + '"><b>' + d.n + '</b></td>') + '</tr>';
+      });
+    });
+    var head = reportHead('تشكيل المعلمين', [['عدد المعلمين', i], ['مجموع الحصص الأسبوعية', total]]).replace(/^<img class="wm"[^>]*>/, '');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="6"></td></tr><tr><td class="ls-head" colspan="6">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>المعلم / ة</th><th>المادة</th><th>الصفوف التي يدرّسها</th><th>حصص المادة</th><th>نصاب الحصص</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="6" class="c">لا توجد حصص في جدول الحصص.</td></tr>') + '</tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="6"></td></tr></tfoot></table>';
   }
 
   /* ---------- جدول الحصص ----------
@@ -8647,7 +8898,7 @@
     return '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b style="font-size:.95rem">طباعة / PDF:</b>' + one +
       ttHeadBox() + '<label class="check" style="padding:0"><input type="checkbox" id="tt-sign" data-ro-ok' + (ttSignOn() ? ' checked' : '') + '> مع خانات التوقيع</label>' +
       b('data-ttprint="c|"', 'جداول كل الصفوف') + b('data-ttprint="t|"', 'جداول كل المعلمين') +
-      b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + '</div></div>';
+      b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + b('data-ttprint="form|"', 'تشكيل المعلمين') + '</div></div>';
   }
 
   // خانات التوقيع في جداول المعلمين والصفوف المطبوعة: اختيارية، ويُحفظ الاختيار في هذا المتصفح
@@ -11901,6 +12152,7 @@
   function buildTtSheet(q) {
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
+    if (q.kind === 'form') return buildTeacherFormationSheet();
     if (q.kind === 'prop') {
       var pr = q.id ? (S.ttProposals || []).filter(function (x) { return x.id === q.id; })[0] : ui.ttOpt && { title: ((document.getElementById('tt-proptitle') || {}).value || '') || (ui.ttOpt.tid ? 'تحسين جدول ' + ttTName(ui.ttOpt.tid) : 'تحسين الجدول لكل المعلمين') + ' (مسودة)',
         changes: ui.ttOpt.changes, summary: ui.ttOpt.summary, status: 'draft', created_by: ttWho(), created_at: new Date().toISOString(),
@@ -14595,6 +14847,7 @@
     sheet.removeAttribute('data-pages');
     if (pendingSign) buildSignSheet(pendingSign);
     else if (pendingStList) buildStaffListSheet(pendingStList);
+    else if (pendingCm) buildCommitteeSheet(pendingCm);
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -14620,6 +14873,7 @@
     pendingPay = null;
     pendingSign = null;
     pendingStList = null;
+    pendingCm = null;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
