@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@400;600;700;800&family=Montserrat:wght@600;700&display=swap">
 <style id="page-css"></style>
 <style id="app-css">
   /* الهوية البصرية: كحلي #13306B، ذهبي #C8A45D، خلفيات بيضاء وعاجية، نص رمادي #5A6070 وعناوين كحلية */
@@ -342,8 +342,9 @@
     --gold: #C8A45D; --gold-soft: #F4ECDA; --ivory: #FAF7F0;
     --body: #2B2B2B; --rule: #D9D9D9;
     --ok: #2F7D57; --bad: #B4493F; --warn: #B7791F;
-    --font-head: "IBM Plex Sans Arabic", "Tajawal", "Segoe UI", Tahoma, sans-serif;
-    --font-body: "IBM Plex Sans Arabic", "Noto Naskh Arabic", "Segoe UI", Tahoma, sans-serif;
+    --font-head: "Cairo", "Tajawal", "Segoe UI", Tahoma, sans-serif;
+    --font-body: "Cairo", "Noto Naskh Arabic", "Segoe UI", Tahoma, sans-serif;
+    --font-data: "Times New Roman", Times, "Noto Naskh Arabic", serif;
     --font-en: "Montserrat", "Poppins", "Segoe UI", Arial, sans-serif;
     /* هوامش الصفحة التي تحملها الورقة عند الطباعة (صفر على الشاشة)؛ بها تمتد الترويسة إلى حافة الصفحة */
     --pad-x: 0mm; --pad-y: 0mm;
@@ -357,6 +358,8 @@
   }
   #print-sheet * { box-sizing: border-box; }
   /* العلامة المائية: الشعار في منتصف كل صفحة بشفافية خفيفة */
+  /* الكشوف الكثيرة البيانات (قوائم، دفاتر حضور، كشف الرواتب): جداولها بخط Times New Roman، وما عداها بخط Cairo */
+  #print-sheet.ls table.rz td, #print-sheet.ls table.rz th, #print-sheet.att-regs table td, #print-sheet.att-regs table th { font-family: var(--font-data); }
   #print-sheet .wm { position: fixed; top: 50%; left: 50%; width: 115mm; height: auto; transform: translate(-50%, -50%); opacity: .055; z-index: 2; }
   #print-sheet .wm.wm-baked { opacity: 1; }
   /* كشف التوقيع اليومي: خطوط واضحة وخانات فارغة للكتابة باليد */
@@ -1240,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '25/10 — 2';
+  var APP_BUILD = '25/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9530,8 +9533,9 @@
     sheet.className = 'ps';
     if (list.length === 1) { sheet.innerHTML = prSlipHtml(list[0], q.P, true); fitSheet(); return; }
     sheet.removeAttribute('data-fit');
-    sheet.innerHTML = list.map(function (x, i) {
-      return '<div style="position:relative;' + (i < list.length - 1 ? 'break-after:page;page-break-after:always' : '') + '">' + prSlipHtml(x, q.P, true) + '</div>';
+    // العلامة المائية ثابتة الموضع وتتكرر في كل صفحة: صورة واحدة للملف كله، لا صورة لكل سليب (تراكمها يُغمّق الخلفية)
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + list.map(function (x, i) {
+      return '<div style="position:relative;' + (i < list.length - 1 ? 'break-after:page;page-break-after:always' : '') + '">' + prSlipHtml(x, q.P, true).replace(/^<img class="wm"[^>]*>/, '') + '</div>';
     }).join('');
   }
 
@@ -13999,7 +14003,7 @@
     banner: 'banner.jpg', // الترويسة أعلى كل ملف مطبوع
     // A4 عمودي: 12mm أعلى وأسفل، 15mm من الجانبين
     page: { width: 210, height: 297, marginY: 12, marginX: 15 },
-    fonts: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Montserrat:wght@600;700&display=swap',
+    fonts: 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Montserrat:wght@600;700&display=swap',
     baseSize: 10.5, // pt: نص التقرير؛ بقية الأحجام نسبة منه
     minSize: 6.5
   };
@@ -14631,7 +14635,7 @@
 
   // خطوط الهوية تُحمَّل قبل بناء الورقة حتى يكون قياس الصفحة الواحدة صحيحًا (مع مهلة قصوى)
   function reportFontsReady(doc) {
-    var wanted = ['700 12pt "IBM Plex Sans Arabic"', '400 12pt "IBM Plex Sans Arabic"', '600 12pt "IBM Plex Sans Arabic"', '700 12pt Montserrat'];
+    var wanted = ['700 12pt Cairo', '400 12pt Cairo', '600 12pt Cairo', '800 12pt Cairo', '700 12pt Montserrat'];
     var load = doc.fonts && doc.fonts.load
       ? Promise.all(wanted.map(function (f) { return doc.fonts.load(f, 'أ A').catch(function () {}); }))
       : Promise.resolve();
