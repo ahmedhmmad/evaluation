@@ -80,12 +80,15 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Records a class for today: the given students absent, everyone else present.
+-- A student already recorded as excused (مأذون) from the app stays excused while the list still shows them as absent.
 create or replace function public.att_save(p_class text, p_absent uuid[], p_by text) returns int
 language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
   insert into attendance (student_id, day, status, note, class_name, recorded_by, updated_at)
-  select s.id, att_today(), case when s.id = any(coalesce(p_absent, '{}')) then 'absent' else 'present' end,
+  select s.id, att_today(), case when s.id = any(coalesce(p_absent, '{}')) then
+           case when exists (select 1 from attendance a where a.student_id = s.id and a.day = att_today() and a.status = 'excused') then 'excused' else 'absent' end
+         else 'present' end,
          coalesce((select a.note from attendance a where a.student_id = s.id and a.day = att_today()), ''),
          p_class, p_by, now()
   from students s where s.status = 'final' and s.class_name = p_class

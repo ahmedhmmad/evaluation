@@ -496,8 +496,8 @@
   #print-sheet table.rz.bus .addr { display: block; font-size: .72em; font-weight: 400; color: #374151; line-height: 1.25; }
   #print-sheet table.rz.bus .addr.in { display: inline; }
   #print-sheet table.rz.bus td { padding-top: .2em; padding-bottom: .2em; line-height: 1.25; }
-  #print-sheet .att-notes { margin-top: 1.2em; border: 1px solid #b9c0cc; border-radius: 6px; padding: .6em .9em; min-height: 85mm; box-sizing: border-box; }
-  #print-sheet .att-notes .att-lines { white-space: pre-wrap; min-height: 72mm; line-height: 2.2em; margin-top: .3em;
+  #print-sheet .att-notes { margin-top: 1.2em; border: 1px solid #b9c0cc; border-radius: 6px; padding: .6em .9em; min-height: 52mm; box-sizing: border-box; }
+  #print-sheet .att-notes .att-lines { white-space: pre-wrap; min-height: 38mm; line-height: 2.2em; margin-top: .3em;
     background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(2.2em - 1px), #c9ced8 calc(2.2em - 1px), #c9ced8 2.2em); }
   #print-sheet.att-regs .att-page + .att-page { break-before: page; page-break-before: always; }
   #print-sheet.att-regs .att-page { padding-top: 2mm; }
@@ -1240,7 +1240,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '25/10 — 1';
+  var APP_BUILD = '25/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -12112,15 +12112,15 @@
 
   /* ---------- الحضور والغياب ----------
      يُسجَّل لكل شعبة يومًا بيوم: صف لكل طالب في جدول attendance (supabase/attendance.sql).
-     حالتان فقط: حاضر وغائب (السجلات القديمة: «متأخر» تُعدّ حاضرًا، و«بعذر» تُعدّ غائبًا).
+     ثلاث حالات: حاضر وغائب ومأذون (المأذون لا يُعدّ حاضرًا ولا غائبًا: لا يظهر اسمه بين الغائبين ولا يدخل في النسبة؛ «متأخر» القديمة تُعدّ حاضرًا).
      اليوم: تسجيل شعبة، أو ملخص المدرسة مع الغائبين. الفترة: نسب الحضور لكل طالب ولكل شعبة */
 
-  var ATT = { present: 'حاضر', absent: 'غائب' };
-  var ATT_BADGE = { present: 'paid', absent: 'unpaid' };
+  var ATT = { present: 'حاضر', absent: 'غائب', excused: 'مأذون' };
+  var ATT_BADGE = { present: 'paid', absent: 'unpaid', excused: 'part' };
   S.attDay = {};          // { 'YYYY-MM-DD': { studentId: صف } }
   S.attMissing = false;
 
-  function attNorm(status) { return status === 'late' ? 'present' : status === 'excused' ? 'absent' : status === 'absent' ? 'absent' : 'present'; }
+  function attNorm(status) { return status === 'excused' ? 'excused' : status === 'absent' ? 'absent' : 'present'; }
   function attNormRows(rows) { (rows || []).forEach(function (r) { r.status = attNorm(r.status); }); return rows; }
 
   function attState() {
@@ -12174,7 +12174,7 @@
   }
 
   function attCounts(list, get) {
-    var n = { present: 0, absent: 0 };
+    var n = { present: 0, absent: 0, excused: 0 };
     list.forEach(function (x) { n[attNorm(get(x))]++; });
     return n;
   }
@@ -12186,7 +12186,7 @@
 
   function attStatsHtml(n, sub) {
     var card = function (lbl, num, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
-    return '<div class="stats">' + card('حاضر', n.present) + card('غائب', n.absent, n.absent ? 'var(--red)' : '') + card('نسبة الحضور', attPct(n)) + '</div>';
+    return '<div class="stats">' + card('حاضر', n.present) + card('غائب', n.absent, n.absent ? 'var(--red)' : '') + (n.excused ? card('مأذون', n.excused) : '') + card('نسبة الحضور', attPct(n)) + '</div>';
   }
 
   function attClassHtml(cls) {
@@ -12230,14 +12230,14 @@
   }
 
   function attSchoolHtml() {
-    var a = attState(), saved = S.attDay[a.day] || {}, all = { present: 0, absent: 0 }, missing = [], absentees = [];
+    var a = attState(), saved = S.attDay[a.day] || {}, all = { present: 0, absent: 0, excused: 0 }, missing = [], absentees = [];
     var rows = attClasses().map(function (cls) {
       var roll = classRoll(cls);
       if (!roll.length) return '';
       var taken = roll.filter(function (x) { return saved[x.id]; });
       if (!taken.length) missing.push(cls);
       var n = attCounts(taken, function (x) { return saved[x.id].status; });
-      all.present += n.present; all.absent += n.absent;
+      all.present += n.present; all.absent += n.absent; all.excused += n.excused;
       var gone = taken.filter(function (x) { return saved[x.id].status === 'absent'; });
       gone.forEach(function (x) { absentees.push({ x: x, r: saved[x.id] }); });
       return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>' + roll.length + '</td>' +
@@ -12267,11 +12267,11 @@
   function attCollect(rows) {
     var per = {}, byClass = {}, cell = {};
     rows.forEach(function (r) {
-      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, notes: [], days: {} });
+      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, notes: [], days: {} });
       p[r.status]++;
       p.days[r.day] = r.status;
       if (r.note && r.status === 'absent' && p.notes.indexOf(r.note) < 0) p.notes.push(r.note);
-      var c = byClass[r.class_name] || (byClass[r.class_name] = { days: {}, n: { present: 0, absent: 0 } });
+      var c = byClass[r.class_name] || (byClass[r.class_name] = { days: {}, n: { present: 0, absent: 0, excused: 0 } });
       c.days[r.day] = 1;
       c.n[r.status]++;
       var key = r.class_name + '|' + r.day, v = cell[key] || (cell[key] = { absent: 0, all: 0 });
@@ -12410,7 +12410,7 @@
   /* ----- كشوف الحضور: Excel و PDF -----
      كشف شهري لكل شعبة بالأسماء وأيام الشهر، وتقارير المدرسة: يومي وأسبوعي (السبت إلى الجمعة) وشهري */
 
-  var ATT_MARK = { present: '✓', absent: 'غـ' };
+  var ATT_MARK = { present: '✓', absent: 'غـ', excused: 'مأ' };
 
   // يوم لا دراسة فيه: الجمعة والسبت، وما أُضيف عطلةً
   function attOff(day) {
@@ -12512,7 +12512,7 @@
           });
           var foot = ['', 'عدد الغائبين في اليوم'].concat(absentPerDay.map(function (v, j) { return recorded[j] ? v : ''; }));
           xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + monthLabel(month)], ['الصف: ' + cls, '', 'مربي الصف: ' + (classTeacher(cls) || ''), '', '', '', '', '', 'عدد الطلاب: ' + roll.length], [], head].concat(body, [foot, [],
-            ['', 'المفتاح: ✓ حاضر · غـ غائب · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
+            ['', 'المفتاح: ✓ حاضر · غـ غائب · مأ مأذون · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
             [4, 30].concat(days.map(function (dd) { return attOff(dd) ? 9 : 5; }), [10, 10]));
         });
         XLSX.writeFile(wb, ('كشف-الحضور-' + (a.cls || 'كل-الشعب') + '-' + month).replace(/\s+/g, '-') + '.xlsx');
@@ -12586,13 +12586,13 @@
   function buildAttSheet(p) {
     if (p.kind === 'register') return buildAttRegisterSheet(p);
     if (p.kind === 'detail') return buildAttDetailSheet(p.D);
-    var d = p.d, all = { present: 0, absent: 0 }, total = 0;
+    var d = p.d, all = { present: 0, absent: 0, excused: 0 }, total = 0;
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
     var rows = attClasses().filter(function (cls) { return classRoll(cls).length; }).map(function (cls, i) {
       var k = d.byClass[cls], n = classRoll(cls).length;
       total += n;
       if (!k) return '<tr>' + c(i + 1) + '<td><b>' + esc(cls) + '</b></td>' + c(n) + '<td class="c" colspan="3" style="color:#7d8597">لم يُسجَّل</td><td></td></tr>';
-      all.present += k.n.present; all.absent += k.n.absent;
+      all.present += k.n.present; all.absent += k.n.absent; all.excused += k.n.excused;
       return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(cls) + '</b></td>' + c(n) + c(k.n.present) + c(k.n.absent ? '<b>' + k.n.absent + '</b>' : 0) + c(attPct(k.n)) +
         '<td style="font-size:.88em">' + esc(absentNames(cls, d.per, p.kind).join('، ') || '—') + '</td></tr>';
     }).join('');
@@ -12600,7 +12600,7 @@
     var noteTitle = p.kind === 'day' ? 'ملاحظات حول اليوم الدراسي' : p.kind === 'week' ? 'ملاحظات حول الأسبوع الدراسي' : 'ملاحظات حول الشهر الدراسي';
     sheet.className = 'rm att-sch';
     sheet.innerHTML =
-      reportHead('الحضور والغياب — ' + p.range.label.split(' — ')[0], [[p.kind === 'day' ? 'اليوم' : 'الفترة', p.range.label.split(' — ')[1]], ['عدد الطلاب', total], ['الحاضرون' + per, all.present], ['الغائبون' + per, all.absent], ['نسبة الحضور', attPct(all)]]) +
+      reportHead('الحضور والغياب — ' + p.range.label.split(' — ')[0], [[p.kind === 'day' ? 'اليوم' : 'الفترة', p.range.label.split(' — ')[1]], ['عدد الطلاب', total], ['الحاضرون' + per, all.present], ['الغائبون' + per, all.absent]].concat(all.excused ? [['المأذونون' + per, all.excused]] : [], [['نسبة الحضور', attPct(all)]])) +
       '<table class="rz"><colgroup><col style="width:5%"><col style="width:13%"><col style="width:8%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:47%"></colgroup>' +
       '<thead><tr><th>م</th><th>الشعبة</th><th>الطلاب</th><th>حاضر' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>غائب' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>نسبة الحضور</th><th>أسماء الغائبين' + (per ? ' (عدد أيام الغياب)' : '') + '</th></tr></thead><tbody>' + rows +
       '<tr class="total"><td colspan="2">المدرسة</td>' + c(total) + c(all.present) + c(all.absent) + c(attPct(all)) + '<td></td></tr></tbody></table>' +
@@ -12634,7 +12634,7 @@
         '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
           (p.teacher ? '' : '<th class="tot">حضور</th><th class="tot">غياب</th>') + '</tr></thead>' +
         '<tbody>' + body + (p.teacher ? '</tbody></table>' : '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>') +
-        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
+        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · مأ مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · مأ مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
@@ -13026,7 +13026,7 @@
     a.draft = {};
     render();
     var n = attCounts(rows, function (row) { return row.status; });
-    toast('حُفظ حضور ' + a.cls + ' — حاضر: ' + n.present + ' · غائب: ' + n.absent);
+    toast('حُفظ حضور ' + a.cls + ' — حاضر: ' + n.present + ' · غائب: ' + n.absent + (n.excused ? ' · مأذون: ' + n.excused : ''));
   }
 
   function leaveAttDraft() {
