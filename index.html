@@ -12563,7 +12563,7 @@
   /* الطباعة (وحفظها PDF من نافذة الطباعة) */
   var pendingAtt = null;
 
-  // teacher: نسخة المعلم: الأسماء وأيام الشهر فقط، خاناتها فارغة للكتابة، بلا أعداد الحضور والغياب
+  // teacher: نسخة المعلم: الأسماء وأيام الشهر مع ✓ للحاضر وغـ للغائب، بلا أعداد الحضور والغياب
   function printAttRegister(teacher) {
     var month = registerMonth(), range = monthRange(month);
     return withAttRange(range, function (rows) {
@@ -12619,7 +12619,8 @@
       var body = roll.map(function (x, i) {
         var q = d.per[x.id] || { present: 0, absent: 0, days: {} };
         if (p.teacher) return '<tr class="tc"><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
-          return q.days[dd] === 'absent' ? '<td class="c ab">غـ</td>' : '<td class="c' + (fri(dd) ? ' fr' : '') + '"></td>';
+          var st = q.days[dd];
+          return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? ATT_MARK[st] : '') + '</td>';
         }).join('') + '</tr>';
         return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
           var st = q.days[dd];
@@ -12633,7 +12634,7 @@
         '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
           (p.teacher ? '' : '<th class="tot">حضور</th><th class="tot">غياب</th>') + '</tr></thead>' +
         '<tbody>' + body + (p.teacher ? '</tbody></table>' : '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>') +
-        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'الأعمدة المظلّلة: الجمعة والسبت والعطل' : 'المفتاح: ✓ حاضر · غـ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
+        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
