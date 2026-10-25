@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '25/10 — 3';
+  var APP_BUILD = '25/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8898,7 +8898,8 @@
     }).join('');
   }
   function buildStaffListSheet(q) {
-    var list = staffList().filter(function (t) { return (!q.cat || staffCat(t) === q.cat) && !(q.noMgr && isMgrJob(t)) && !(q.noSup && isSupJob(t)); }).sort(function (a, b) {
+    // من انتهى عقده (استقال أو غادر) لا يُطبع في كشف العاملين الحاليين؛ يبقى في شاشة بيانات العاملين بتاريخ انتهاء عقده
+    var list = saStaff('', todayISO()).filter(function (t) { return (!q.cat || staffCat(t) === q.cat) && !(q.noMgr && isMgrJob(t)) && !(q.noSup && isSupJob(t)); }).sort(function (a, b) {
       return STAFF_CATS.indexOf(staffCat(a)) - STAFF_CATS.indexOf(staffCat(b)) || a.name.localeCompare(b.name, 'ar');
     });
     var teach = q.kind === 'teach', n = teach ? 5 : 4;
