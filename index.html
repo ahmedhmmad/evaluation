@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 5';
+  var APP_BUILD = '26/10 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1552,6 +1552,7 @@
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
     var groups = navModel0();
+    if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد']); });
     if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي']] });
     return groups;
@@ -1583,6 +1584,7 @@
   function activeKey() {
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
+    if (h === '#/custody' && canView()) return 'custody';
     if (/^#\/affairs/.test(h) && canAttView()) return 'affairs';
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
@@ -8405,6 +8407,7 @@
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
+    if (h === '#/custody' && canView()) return renderCustody();
     if (/^#\/affairs/.test(h) && canAttView()) return renderAffairs();
     if (isRegistrar()) {
       if (/^#\/classes/.test(h)) return renderClasses();
@@ -8651,6 +8654,97 @@
       if (!u.loadedFrom || u.from < u.loadedFrom) { u.rows = null; return afLoad(u.from); }
       render();
     }
+  });
+
+  /* ---------- العهد ----------
+     الأصناف التي في عهدة الأكاديمية: الصنف والعدد والملاحظات. يعدّلها المدير العام ويراها المدير (supabase/custody.sql) */
+
+  function cuState() { return S.cu || (S.cu = { list: [], missing: false, loaded: false, loading: false, edit: '', q: '' }); }
+
+  async function loadCustody() {
+    var c = cuState();
+    if (c.loading) return;
+    c.loading = true;
+    var rows = await fetchAll(function () { return sb.from('custody_items').select('*').order('created_at').order('id'); });
+    c.loading = false; c.loaded = true; c.missing = !rows; c.list = rows || [];
+    render();
+  }
+
+  function renderCustody() {
+    var c = cuState();
+    if (!c.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadCustody(); return; }
+    if (c.missing) {
+      app.innerHTML = '<div class="card empty">العهد تحتاج جدولًا جديدًا.<br>' + (isAdmin() ? 'شغّل الملف <code dir="ltr">supabase/custody.sql</code> في محرر SQL، ثم حدّث الصفحة.' : 'يشغّل المدير العام الملف <code dir="ltr">supabase/custody.sql</code>.') + '</div>';
+      return;
+    }
+    var edit = isAdmin(), q = norm(c.q);
+    var list = c.list.filter(function (x) { return !q || norm(x.item + ' ' + x.notes).indexOf(q) > -1; });
+    var total = list.reduce(function (t, x) { return t + (Number(x.qty) || 0); }, 0);
+    var rows = list.map(function (x, i) {
+      if (edit && c.edit === x.id) {
+        return '<tr><td>' + (i + 1) + '</td><td><input type="text" id="cu-e-item" value="' + esc(x.item) + '" aria-label="الصنف"></td><td><input type="number" id="cu-e-qty" min="0" step="1" value="' + esc(x.qty) + '" aria-label="العدد" style="width:6em"></td>' +
+          '<td><input type="text" id="cu-e-notes" value="' + esc(x.notes) + '" aria-label="ملاحظات"></td><td style="white-space:nowrap"><button type="button" class="btn primary" data-cusave="' + x.id + '">حفظ</button> <button type="button" class="btn" data-cuedit="">إلغاء</button></td></tr>';
+      }
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.item) + '</b></td><td>' + esc(x.qty) + '</td><td>' + esc(x.notes) + '</td>' +
+        (edit ? '<td style="white-space:nowrap"><button type="button" class="btn" data-cuedit="' + x.id + '">تعديل</button> <button type="button" class="btn danger" data-cudel="' + x.id + '">حذف</button></td>' : '<td></td>') + '</tr>';
+    }).join('');
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">العهد</h1>' +
+      (edit ? '<form class="card" id="cu-form"><h2>إضافة صنف</h2><div class="toolbar" style="align-items:flex-end;margin:10px 0 0">' +
+        '<div style="flex:2;min-width:200px"><label class="field" for="cu-item">الصنف <span class="req">*</span></label><input type="text" id="cu-item" required autocomplete="off"></div>' +
+        '<div style="width:8em"><label class="field" for="cu-qty">العدد <span class="req">*</span></label><input type="number" id="cu-qty" min="0" step="1" required value="1"></div>' +
+        '<div style="flex:3;min-width:220px"><label class="field" for="cu-notes">ملاحظات</label><input type="text" id="cu-notes" autocomplete="off"></div>' +
+        '<button type="submit" class="btn primary">إضافة</button></div></form>' : '') +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">الأصناف (' + list.length + ') — مجموع العدد ' + total + '</h2>' +
+        '<input type="search" id="cu-q" placeholder="بحث في الأصناف والملاحظات" aria-label="بحث" style="max-width:260px" value="' + esc(c.q) + '"></div>' +
+      (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">' + (c.list.length ? 'لا أصناف مطابقة.' : 'لا توجد أصناف بعد' + (edit ? '؛ أضف صنفًا من الأعلى.' : '.')) + '</div>') + '</div>';
+  }
+
+  document.addEventListener('submit', async function (e) {
+    if (e.target.id !== 'cu-form' || !isAdmin()) return;
+    e.preventDefault();
+    var item = document.getElementById('cu-item').value.trim(), qty = parseInt(document.getElementById('cu-qty').value, 10), notes = document.getElementById('cu-notes').value.trim();
+    if (!item || !(qty >= 0)) return toast('اكتب الصنف وعددًا صحيحًا', true);
+    var r = await sb.from('custody_items').insert({ item: item, qty: qty, notes: notes, created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+    if (r.error) return fail(r.error);
+    cuState().list.push(r.data);
+    render();
+    toast('أُضيف «' + item + '»');
+    var f = document.getElementById('cu-item');
+    if (f) f.focus();
+  });
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/custody' || !isAdmin()) return;
+    var el, c = cuState();
+    if ((el = e.target.closest('[data-cuedit]'))) { c.edit = el.getAttribute('data-cuedit'); return render(); }
+    if ((el = e.target.closest('[data-cusave]'))) {
+      var id = el.getAttribute('data-cusave'), item = document.getElementById('cu-e-item').value.trim(), qty = parseInt(document.getElementById('cu-e-qty').value, 10);
+      if (!item || !(qty >= 0)) return toast('اكتب الصنف وعددًا صحيحًا', true);
+      var patch = { item: item, qty: qty, notes: document.getElementById('cu-e-notes').value.trim(), updated_at: new Date().toISOString() };
+      var r = await sb.from('custody_items').update(patch).eq('id', id);
+      if (r.error) return fail(r.error);
+      c.list.forEach(function (x) { if (x.id === id) Object.assign(x, patch); });
+      c.edit = '';
+      return render();
+    }
+    if ((el = e.target.closest('[data-cudel]'))) {
+      var did = el.getAttribute('data-cudel'), it = c.list.filter(function (x) { return x.id === did; })[0];
+      if (!it || !confirm('حذف «' + it.item + '» من العهد؟')) return;
+      var d = await sb.from('custody_items').delete().eq('id', did);
+      if (d.error) return fail(d.error);
+      c.list = c.list.filter(function (x) { return x.id !== did; });
+      render();
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'cu-q' || location.hash !== '#/custody') return;
+    var c = cuState(), pos = e.target.selectionStart;
+    c.q = e.target.value;
+    render();
+    var q = document.getElementById('cu-q');
+    if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} }
   });
 
   /* ---------- اللجان المدرسية ----------
