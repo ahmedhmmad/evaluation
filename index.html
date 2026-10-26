@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 9';
+  var APP_BUILD = '26/10 — 11';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1553,7 +1553,7 @@
   function navModel() {
     var groups = navModel0();
     if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد']); });
-    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب']); });
+    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي']] });
     return groups;
   }
@@ -1584,6 +1584,7 @@
   function activeKey() {
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
+    if (h === '#/discipline' && canDisc()) return 'discipline';
     if (h === '#/custody' && canView()) return 'custody';
     if (/^#\/affairs/.test(h) && canAttView()) return 'affairs';
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
@@ -8407,6 +8408,7 @@
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
+    if (h === '#/discipline' && canDisc()) return renderDiscipline();
     if (h === '#/custody' && canView()) return renderCustody();
     if (/^#\/affairs/.test(h) && canAttView()) return renderAffairs();
     if (isRegistrar()) {
@@ -8574,7 +8576,7 @@
      كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وتوقيع المدير وإقرار ولي الأمر بالاستلام.
      لا يُحفظ في البرنامج، يُكتب ويُطبع */
   var AF_ACTIONS = ['إحضار ولي الأمر', 'مراجعة مرشد/ة الأكاديمية', 'توقيع تعهد خطي', 'استدعاء ولي الأمر هاتفيًا'];
-  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0] }); }
+  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], log: true, saved: '' }); }
 
   function afWarnScreen(x) {
     var w = afWarn();
@@ -8583,7 +8585,19 @@
       '<div><label class="field" for="afw-action">الإجراء المطلوب</label><input type="text" id="afw-action" data-ro-ok list="afw-actions" autocomplete="off" value="' + esc(w.action) + '"><datalist id="afw-actions">' +
         AF_ACTIONS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist></div>' +
       '<div style="grid-column:1/-1"><label class="field" for="afw-notes">ملاحظات المخالفة</label><textarea id="afw-notes" data-ro-ok rows="5" placeholder="اكتب المخالفة وتفاصيلها">' + esc(w.notes) + '</textarea></div></div>' +
+      (canEditDisc() ? '<label class="check" style="margin-top:10px"><input type="checkbox" id="afw-log" data-ro-ok' + (w.log ? ' checked' : '') + '> تسجيل هذا الإنذار في سجل المخالفات عند الطباعة</label>' : '') +
       '<div class="actions"><button type="button" class="btn primary" data-afwprint="' + x.id + '" data-ro-ok>طباعة الإنذار / PDF</button></div></div>';
+  }
+
+  // يُسجَّل الإنذار في سجل المخالفات مرة واحدة لكل محتوى (طباعته مرة ثانية بلا تعديل لا تكرره)
+  async function afLogWarning(x, w) {
+    var key = [x.id, w.date, w.notes.trim(), w.action.trim()].join('|');
+    if (w.saved === key) return;
+    var r = await sb.from('discipline_records').insert({ student_id: x.id, day: w.date, kind: 'warning', violation: w.notes.trim(), action: w.action.trim(), created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+    if (r.error) return toast('طُبع الإنذار لكن تعذّر تسجيله في سجل المخالفات: ' + r.error.message, true);
+    w.saved = key;
+    if (dcState().loaded) dcState().list.unshift(r.data);
+    toast('سُجّل الإنذار في سجل المخالفات');
   }
 
   function buildWarningSheet(x) {
@@ -8660,7 +8674,14 @@
   document.addEventListener('click', function (e) {
     if (!/^#\/affairs/.test(location.hash) || !canAttView()) return;
     var el, x = afCurrent();
-    if ((el = e.target.closest('[data-afwprint]'))) { pendingWarn = findStudent(el.getAttribute('data-afwprint')); return printNow(); }
+    if ((el = e.target.closest('[data-afwprint]'))) {
+      var wx = findStudent(el.getAttribute('data-afwprint')), ww = afWarn();
+      if (!wx) return;
+      if (ww.log && canEditDisc() && ww.notes.trim()) afLogWarning(wx, ww);
+      else if (ww.log && canEditDisc()) toast('لم تُكتب ملاحظات المخالفة، فلن يُسجَّل الإنذار في سجل المخالفات', true);
+      pendingWarn = wx;
+      return printNow();
+    }
     if ((el = e.target.closest('[data-afprofile]'))) { pendingProfile = findStudent(el.getAttribute('data-afprofile')); return printNow(); }
     if ((el = e.target.closest('[data-afprint]')) && x) {
       var u = afUi();
@@ -8681,6 +8702,7 @@
   });
   // حقول الإنذار تُحفظ أثناء الكتابة دون إعادة رسم الصفحة
   document.addEventListener('input', function (e) {
+    if (e.target.id === 'afw-log') { afWarn().log = e.target.checked; return; }
     var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes' }[e.target.id];
     if (k && /\/warning$/.test(location.hash)) afWarn()[k] = e.target.value;
   });
@@ -8808,6 +8830,165 @@
     render();
     var q = document.getElementById('cu-q');
     if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} }
+  });
+
+  /* ---------- سجل المخالفات (سجل الضبط) ----------
+     كل مخالفة أو إنذار: الطالب، والتاريخ، والمخالفة، والإجراء. يُطبع بنموذج «سجل الضبط للطلبة»: صف لكل طالب،
+     وله حتى ثلاث مخالفات في الصف (تاريخ، مخالفة، إجراء)، وما زاد يُكمل في صف تالٍ، وتوقيع المدير. الإنذار المطبوع من شاشة الطالب يُسجَّل هنا.
+     يسجّل المدير العام والمسجِّل، ويراه المدير والمشرف (supabase/discipline.sql) */
+
+  var DC_KINDS = { violation: 'مخالفة', warning: 'إنذار' };
+  function canDisc() { return canAttView(); }
+  function canEditDisc() { return isAdmin() || isRegistrar(); }
+  function dcState() { return S.dc || (S.dc = { list: [], missing: false, loaded: false, loading: false, cls: '', q: '', kind: '', year: '' }); }
+
+  async function loadDiscipline() {
+    var c = dcState();
+    if (c.loading) return;
+    c.loading = true;
+    var rows = await fetchAll(function () { return sb.from('discipline_records').select('*').order('day', { ascending: false }).order('created_at', { ascending: false }).order('id'); });
+    c.loading = false; c.loaded = true; c.missing = !rows; c.list = rows || [];
+    render();
+  }
+
+  // السنة الدراسية: من أول أغسطس إلى آخر يوليو؛ تُعرف ببدايتها
+  function dcYearOf(day) { var y = Number(String(day).slice(0, 4)), m = Number(String(day).slice(5, 7)); return m >= 8 ? y : y - 1; }
+  function dcYearStart() { return Number(afYearStart().slice(0, 4)); }
+
+  function dcFiltered() {
+    var c = dcState(), q = norm(c.q), yr = c.year === '' ? dcYearStart() : Number(c.year);
+    return c.list.filter(function (r) {
+      var x = findStudent(r.student_id);
+      if (!x) return false;
+      if (dcYearOf(r.day) !== yr) return false;
+      if (c.cls && x.class_name !== c.cls) return false;
+      if (c.kind && r.kind !== c.kind) return false;
+      return !q || norm(x.full_name + ' ' + r.violation + ' ' + r.action).indexOf(q) > -1;
+    });
+  }
+
+  function renderDiscipline() {
+    var c = dcState();
+    if (!c.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadDiscipline(); return; }
+    if (c.missing) {
+      app.innerHTML = '<div class="card empty">سجل المخالفات يحتاج جدولًا جديدًا.<br>' + (isAdmin() ? 'شغّل الملف <code dir="ltr">supabase/discipline.sql</code> في محرر SQL، ثم حدّث الصفحة.' : 'يشغّل المدير العام الملف <code dir="ltr">supabase/discipline.sql</code>.') + '</div>';
+      return;
+    }
+    var edit = canEditDisc(), list = dcFiltered(), f = c.form || (c.form = { day: todayISO(), kind: 'violation', student: '', violation: '', action: '' });
+    var students = S.students.filter(enrolled).sort(function (a, b) { return classRank(a.class_name) - classRank(b.class_name) || a.full_name.localeCompare(b.full_name, 'ar'); });
+    var years = {};
+    c.list.forEach(function (r) { years[dcYearOf(r.day)] = 1; });
+    years[dcYearStart()] = 1;
+    var yr = c.year === '' ? dcYearStart() : Number(c.year);
+    var rows = list.map(function (r, i) {
+      var x = findStudent(r.student_id);
+      return '<tr><td>' + (i + 1) + '</td><td>' + dmy(r.day) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '') + '</td>' +
+        '<td><span class="badge ' + (r.kind === 'warning' ? 'unpaid' : 'part') + '">' + DC_KINDS[r.kind] + '</span></td><td style="white-space:pre-wrap">' + esc(r.violation) + '</td><td>' + esc(r.action) + '</td>' +
+        (edit ? '<td><button type="button" class="btn danger" data-dcdel="' + r.id + '">حذف</button></td>' : '') + '</tr>';
+    }).join('');
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">سجل المخالفات</h1>' +
+      (edit ? '<form class="card" id="dc-form"><h2>تسجيل مخالفة</h2><div class="grid2" style="margin-top:10px">' +
+        '<div><label class="field" for="dc-student">الطالب <span class="req">*</span></label><input type="text" id="dc-student" required list="dc-students" autocomplete="off" placeholder="اكتب الاسم واختره من القائمة" value="' + esc(f.student) + '"><datalist id="dc-students">' +
+          students.map(function (x) { return '<option value="' + esc(x.full_name + ' — ' + (x.class_name || '')) + '">'; }).join('') + '</datalist></div>' +
+        '<div><label class="field" for="dc-day">التاريخ</label><input type="date" id="dc-day" required value="' + esc(f.day) + '"></div>' +
+        '<div><label class="field" for="dc-kind">النوع</label><select id="dc-kind">' + Object.keys(DC_KINDS).map(function (k) { return '<option value="' + k + '"' + (f.kind === k ? ' selected' : '') + '>' + DC_KINDS[k] + '</option>'; }).join('') + '</select></div>' +
+        '<div><label class="field" for="dc-action">الإجراء</label><input type="text" id="dc-action" list="afw-actions" autocomplete="off" placeholder="مثال: إحضار ولي الأمر" value="' + esc(f.action) + '"><datalist id="afw-actions">' + AF_ACTIONS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist></div>' +
+        '<div style="grid-column:1/-1"><label class="field" for="dc-violation">المخالفة <span class="req">*</span></label><textarea id="dc-violation" required rows="3">' + esc(f.violation) + '</textarea></div></div>' +
+        '<div class="actions"><button type="submit" class="btn primary">تسجيل</button></div></form>' : '') +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px">' +
+        '<input type="search" id="dc-q" placeholder="ابحث باسم الطالب أو المخالفة" aria-label="بحث" style="flex:1;min-width:200px" value="' + esc(c.q) + '">' +
+        '<select id="dc-cls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === c.cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>' +
+        '<select id="dc-fkind" aria-label="النوع" style="width:auto"><option value="">مخالفات وإنذارات</option>' + Object.keys(DC_KINDS).map(function (k) { return '<option value="' + k + '"' + (c.kind === k ? ' selected' : '') + '>' + DC_KINDS[k] + '</option>'; }).join('') + '</select>' +
+        '<select id="dc-year" aria-label="العام الدراسي" style="width:auto">' + Object.keys(years).sort().reverse().map(function (y) { return '<option value="' + y + '"' + (Number(y) === yr ? ' selected' : '') + '>العام ' + y + '/' + (Number(y) + 1) + '</option>'; }).join('') + '</select>' +
+        '<button type="button" class="btn" data-dcprint data-ro-ok' + (list.length ? '' : ' disabled') + '>طباعة سجل الضبط / PDF</button></div>' +
+      (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>التاريخ</th><th>الطالب</th><th>الشعبة</th><th>النوع</th><th>المخالفة</th><th>الإجراء</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا توجد مخالفات مسجَّلة بهذه الشروط.</div>') + '</div>';
+  }
+
+  var pendingDc = false;
+  // نموذج «سجل الضبط للطلبة»: أفقي، صف لكل طالب بثلاث مخالفات (تاريخ، مخالفة، إجراء)، وما زاد في صف تالٍ
+  function buildDisciplineSheet() {
+    var c = dcState(), list = dcFiltered().slice().sort(function (a, b) { return a.day.localeCompare(b.day) || String(a.created_at).localeCompare(String(b.created_at)); }), by = {}, order = [];
+    list.forEach(function (r) { if (!by[r.student_id]) { by[r.student_id] = []; order.push(r.student_id); } by[r.student_id].push(r); });
+    order.sort(function (a, b) { var x = findStudent(a), y = findStudent(b); return classRank(x.class_name) - classRank(y.class_name) || x.full_name.localeCompare(y.full_name, 'ar'); });
+    var yr = c.year === '' ? dcYearStart() : Number(c.year), n = 12, rows = '', k = 0;
+    order.forEach(function (sid) {
+      var x = findStudent(sid), recs = by[sid];
+      for (var i = 0; i < recs.length; i += 3) {
+        k++;
+        var cells = '';
+        for (var j = 0; j < 3; j++) {
+          var r = recs[i + j];
+          cells += r ? '<td class="c" style="white-space:nowrap">' + dmy(r.day) + '</td><td style="font-size:.92em">' + (r.kind === 'warning' ? '<b>[إنذار]</b> ' : '') + esc(r.violation) + '</td><td style="font-size:.92em">' + esc(r.action) + '</td>' : '<td></td><td></td><td></td>';
+        }
+        rows += '<tr><td class="c">' + k + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b>' + (i ? ' <small>(تابع)</small>' : '') + '</td><td class="c" style="white-space:nowrap">' + esc(x.class_name || '') + '</td>' + cells + '</tr>';
+      }
+    });
+    var head = reportHead('سجل الضبط للطلبة للعام الدراسي ' + yr + '/' + (yr + 1), [['عدد الطلاب', order.length], ['عدد المخالفات', list.length]].concat(c.cls ? [['الشعبة', c.cls]] : [], c.kind ? [['النوع', DC_KINDS[c.kind]]] : [])).replace(/^<img class="wm"[^>]*>/, '');
+    printLandscape = true;
+    sheet.style.width = '267mm';
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    var th = '';
+    for (var t = 1; t <= 3; t++) th += '<th>تاريخ المخالفة ' + t + '</th><th>المخالفة</th><th>الإجراء</th>';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><colgroup><col style="width:3%"><col style="width:13%"><col style="width:6%">' + [1, 2, 3].map(function () { return '<col style="width:7.5%"><col style="width:10.5%"><col style="width:8%">'; }).join('') + '</colgroup>' +
+      '<thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>اسم الطالب</th><th>الصف</th>' + th + '</tr></thead><tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['توقيع المدير', principalName()]]);
+  }
+
+  document.addEventListener('submit', async function (e) {
+    if (e.target.id !== 'dc-form' || !canEditDisc()) return;
+    e.preventDefault();
+    var c = dcState(), f = c.form, label = document.getElementById('dc-student').value.trim();
+    var x = S.students.filter(function (s) { return enrolled(s) && (s.full_name + ' — ' + (s.class_name || '')) === label; })[0];
+    if (!x) return toast('اختر الطالب من القائمة المقترحة', true);
+    var rec = { student_id: x.id, day: f.day, kind: f.kind, violation: f.violation.trim(), action: f.action.trim(), created_by: (S.profile && S.profile.full_name) || displayName(S.email) };
+    if (!rec.violation) return toast('اكتب المخالفة', true);
+    var r = await sb.from('discipline_records').insert(rec).select().single();
+    if (r.error) return fail(r.error);
+    c.list.unshift(r.data);
+    c.form = { day: f.day, kind: f.kind, student: '', violation: '', action: '' };
+    render();
+    toast('سُجّلت على «' + x.full_name + '»');
+  });
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/discipline' || !canDisc()) return;
+    var el, c = dcState();
+    if (e.target.closest('[data-dcprint]')) { pendingDc = true; return printNow(); }
+    if ((el = e.target.closest('[data-dcdel]')) && canEditDisc()) {
+      var id = el.getAttribute('data-dcdel'), r = c.list.filter(function (x) { return x.id === id; })[0];
+      if (!r || !confirm('حذف هذا السجل من سجل المخالفات؟')) return;
+      var d = await sb.from('discipline_records').delete().eq('id', id);
+      if (d.error) return fail(d.error);
+      c.list = c.list.filter(function (x) { return x.id !== id; });
+      render();
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/discipline') return;
+    var c = dcState(), id = e.target.id, fk = { 'dc-student': 'student', 'dc-day': 'day', 'dc-violation': 'violation', 'dc-action': 'action' }[id];
+    if (fk && c.form) { c.form[fk] = e.target.value; return; }
+    if (id === 'dc-q') {
+      var pos = e.target.selectionStart;
+      c.q = e.target.value;
+      render();
+      var q = document.getElementById('dc-q');
+      if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} }
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/discipline') return;
+    var c = dcState(), id = e.target.id;
+    if (id === 'dc-kind' && c.form) c.form.kind = e.target.value;
+    else if (id === 'dc-cls') { c.cls = e.target.value; render(); }
+    else if (id === 'dc-fkind') { c.kind = e.target.value; render(); }
+    else if (id === 'dc-year') { c.year = e.target.value; render(); }
   });
 
   /* ---------- اللجان المدرسية ----------
@@ -15267,6 +15448,7 @@
     else if (pendingCm) buildCommitteeSheet(pendingCm);
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
+    else if (pendingDc) buildDisciplineSheet();
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -15295,6 +15477,7 @@
     pendingCm = null;
     pendingCu = false;
     pendingWarn = null;
+    pendingDc = false;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
