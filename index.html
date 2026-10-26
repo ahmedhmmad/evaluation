@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 6';
+  var APP_BUILD = '26/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8695,10 +8695,35 @@
         '<div style="flex:3;min-width:220px"><label class="field" for="cu-notes">ملاحظات</label><input type="text" id="cu-notes" autocomplete="off"></div>' +
         '<button type="submit" class="btn primary">إضافة</button></div></form>' : '') +
       '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">الأصناف (' + list.length + ') — مجموع العدد ' + total + '</h2>' +
+        '<button type="button" class="btn" data-cuprint data-ro-ok' + (list.length ? '' : ' disabled') + '>طباعة / PDF</button>' +
         '<input type="search" id="cu-q" placeholder="بحث في الأصناف والملاحظات" aria-label="بحث" style="max-width:260px" value="' + esc(c.q) + '"></div>' +
       (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="empty">' + (c.list.length ? 'لا أصناف مطابقة.' : 'لا توجد أصناف بعد' + (edit ? '؛ أضف صنفًا من الأعلى.' : '.')) + '</div>') + '</div>';
   }
+
+  var pendingCu = false;
+  // كشف العهد المطبوع: الأصناف المعروضة (بحسب البحث) بأعدادها وملاحظاتها
+  function buildCustodySheet() {
+    var c = cuState(), q = norm(c.q), n = 4;
+    var list = c.list.filter(function (x) { return !q || norm(x.item + ' ' + x.notes).indexOf(q) > -1; });
+    var total = list.reduce(function (t, x) { return t + (Number(x.qty) || 0); }, 0);
+    var head = reportHead('كشف العهد', [['عدد الأصناف', list.length], ['مجموع العدد', total]].concat(c.q.trim() ? [['بحث', c.q.trim()]] : [])).replace(/^<img class="wm"[^>]*>/, '');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th></tr></thead><tbody>' +
+      list.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.item) + '</b></td><td class="c">' + esc(x.qty) + '</td><td>' + esc(x.notes) + '</td></tr>'; }).join('') +
+      '<tr class="total"><td colspan="2">المجموع</td><td class="c"><b>' + total + '</b></td><td></td></tr></tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['أمين العهد', ''], ['مدير/ة الأكاديمية', principalName()]]);
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/custody' || !e.target.closest('[data-cuprint]')) return;
+    pendingCu = true;
+    printNow();
+  });
 
   document.addEventListener('submit', async function (e) {
     if (e.target.id !== 'cu-form' || !isAdmin()) return;
@@ -15202,6 +15227,7 @@
     if (pendingSign) buildSignSheet(pendingSign);
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
+    else if (pendingCu) buildCustodySheet();
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -15228,6 +15254,7 @@
     pendingSign = null;
     pendingStList = null;
     pendingCm = null;
+    pendingCu = false;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
