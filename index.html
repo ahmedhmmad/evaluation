@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 12';
+  var APP_BUILD = '26/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2060,9 +2060,11 @@
       (ed || ui.staffImp ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
         '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات المعلمين (المباحث والجوال والواتساب)</button>' +
         '<button type="button" class="btn" data-stlist="jobs" data-ro-ok>كشف الموظفين (الوظيفة ورقم الاتصال)</button>' +
+        '<button type="button" class="btn" data-stlist="blank" data-ro-ok title="أرقام فقط، يكتب العاملون أسماءهم بأنفسهم">كشف مرقم بلا أسماء</button>' +
+        '<input type="number" id="stl-n" min="1" max="200" data-ro-ok placeholder="عدد الصفوف" aria-label="عدد صفوف الكشف المرقم" style="width:8.5em" value="' + esc(ui.stlN || '') + '">' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-mgr" data-ro-ok' + (ui.stlNoMgr ? '' : ' checked') + '> مع المدير</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label></div>' +
-        '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p></div>') +
+        '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي. «كشف مرقم بلا أسماء»: عدد صفوفه عدد العاملين المعروضين، أو الرقم الذي تكتبه في «عدد الصفوف».</p></div>') +
       (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', S.teachers.length]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
@@ -9699,11 +9701,28 @@
         '</tbody></table></section>';
     }).join('');
   }
+  // كشف مرقم بلا أسماء: يكتب العاملون أسماءهم بأنفسهم (عدد الصفوف: ما كُتب، وإلا عدد العاملين في القائمة)
+  function buildStaffNumberedSheet(q, count) {
+    var rows = Math.max(1, Math.min(200, parseInt(q.rows, 10) || count || 1)), n = 2;
+    var head = reportHead('كشف العاملين', [['الفئة', q.cat || 'كل العاملين'], ['عدد الصفوف', rows]]).replace(/^<img class="wm"[^>]*>/, '');
+    var body = '';
+    // الارتفاع يتسع للصفحة الواحدة ما أمكن (180mm للصفوف بعد الترويسة)، ويقلّ عن 5.5mm فيمتد الكشف الطويل على صفحات
+    var rh = Math.max(5.5, Math.min(11, Math.floor(1800 / rows) / 10));
+    for (var i = 1; i <= rows; i++) body += '<tr style="height:' + rh + 'mm"><td class="c" style="width:12%">' + i + '</td><td></td></tr>';
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>الرقم</th><th>الاسم</th></tr></thead><tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
+  }
+
   function buildStaffListSheet(q) {
     // من انتهى عقده (استقال أو غادر) لا يُطبع في كشف العاملين الحاليين؛ يبقى في شاشة بيانات العاملين بتاريخ انتهاء عقده
     var list = saStaff('', todayISO()).filter(function (t) { return (!q.cat || staffCat(t) === q.cat) && !(q.noMgr && isMgrJob(t)) && !(q.noSup && isSupJob(t)); }).sort(function (a, b) {
       return STAFF_CATS.indexOf(staffCat(a)) - STAFF_CATS.indexOf(staffCat(b)) || a.name.localeCompare(b.name, 'ar');
     });
+    if (q.kind === 'blank') return buildStaffNumberedSheet(q, list.length);
     var teach = q.kind === 'teach', n = teach ? 5 : 4;
     var head = reportHead(teach ? 'بيانات المعلمين' : 'كشف الموظفين', [['الفئة', q.cat || 'كل العاملين'], ['العدد', list.length]]).replace(/^<img class="wm"[^>]*>/, '');
     var body = list.map(function (t, i) {
@@ -9734,7 +9753,8 @@
     }
     if (location.hash === '#/staff' && (canView() || isSup()) && (el = e.target.closest('[data-stlist]'))) {
       ui.stlNoMgr = !document.getElementById('stl-mgr').checked; ui.stlNoSup = !document.getElementById('stl-sup').checked;
-      pendingStList = { kind: el.getAttribute('data-stlist'), cat: ui.staffCat || '', noMgr: ui.stlNoMgr, noSup: ui.stlNoSup };
+      ui.stlN = (document.getElementById('stl-n') || {}).value || '';
+      pendingStList = { kind: el.getAttribute('data-stlist'), cat: ui.staffCat || '', noMgr: ui.stlNoMgr, noSup: ui.stlNoSup, rows: ui.stlN };
       return printNow();
     }
   });
