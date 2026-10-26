@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 16';
+  var APP_BUILD = '27/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2025,7 +2025,13 @@
 
     var catNow = ui.staffCat || '', counts = {};
     staffList().forEach(function (x) { counts[staffCat(x)] = (counts[staffCat(x)] || 0) + 1; });
-    var rows = S.teachers.filter(function (x) { return !catNow || staffCat(x) === catNow; }).map(function (x) {
+    var sq = norm(ui.staffQ || ''), sdig = latinDigits(ui.staffQ || '').replace(/D/g, '');
+    var rows = S.teachers.filter(function (x) {
+      if (catNow && staffCat(x) !== catNow) return false;
+      if (!sq) return true;
+      // بالاسم، أو برقم (هوية أو جوال أو واتساب) مما سُجّل في بيانات العامل
+      return norm(x.name).indexOf(sq) > -1 || (sdig.length >= 3 && latinDigits([x.phone, x.whatsapp, x.details, x.login].join(' ')).replace(/D+/g, ' ').replace(/s/g, '').indexOf(sdig) > -1);
+    }).map(function (x) {
       var teach = TEACHING_CATS.indexOf(staffCat(x)) > -1, today = todayISO();
       // مدة العمل: يبدأ لاحقًا، أو انتهى عقده، أو ينتهي في تاريخ
       var term = x.contract_end && x.contract_end < today ? '<span class="badge unpaid">انتهى عقده ' + dmy(x.contract_end) + '</span>'
@@ -2063,6 +2069,7 @@
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-mgr" data-ro-ok' + (ui.stlNoMgr ? '' : ' checked') + '> مع المدير</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label></div>' +
         '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p></div>') +
+      (ed || ui.staffImp ? '' : '<div class="toolbar" style="margin:0 0 10px"><input type="search" id="st-q" data-ro-ok placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث في العاملين" style="flex:1;min-width:240px" value="' + esc(ui.staffQ || '') + '"></div>') +
       (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', S.teachers.length]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
@@ -9688,6 +9695,15 @@
   function isMgrJob(t) { return /مدير/.test(norm(t.job_title || '')); }
   function isSupJob(t) { return /مشرف|اشراف/.test(norm(t.job_title || '')); }
   var pendingSign = null, pendingStList = null;
+  app.addEventListener('input', function (e) {
+    if (e.target.id !== 'st-q' || location.hash !== '#/staff') return;
+    var pos = e.target.selectionStart;
+    ui.staffQ = e.target.value;
+    render();
+    var q = document.getElementById('st-q');
+    if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} }
+  });
+
   function buildSignSheet(q) {
     sheet.className = 'ps sign-sheet';
     sheet.removeAttribute('data-fit');
