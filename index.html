@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 11';
+  var APP_BUILD = '26/10 — 12';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1491,7 +1491,7 @@
   var visitTimer = null, visitDirty = null;
 
   async function saveVisit(v) {
-    var r = await sb.from('visits').update({
+    var r = await sb.from('visits').update(Object.assign({
       visit_date: v.visit_date,
       subject: v.subject,
       class_section: v.class_section,
@@ -1503,8 +1503,9 @@
       recommendations: v.recommendations,
       supervisor_name: v.supervisor_name,
       principal_name: v.principal_name
-    }).eq('id', v.id);
+    }, v.approved_at ? { approved_by: '', approved_at: null } : {})).eq('id', v.id);
     if (r.error) { setSaveState('لم يتم الحفظ'); fail(r.error); return false; }
+    if (v.approved_at) { v.approved_by = ''; v.approved_at = null; var ab = document.getElementById('visit-approval'); if (ab) ab.innerHTML = visitApprovalHtml(v); }
     setSaveState('تم الحفظ');
     return true;
   }
@@ -14776,7 +14777,7 @@
       return '<button type="button" class="card visit-row" data-openv="' + v.id + '">' +
         '<span><span class="name">' + esc(t ? t.name : '—') + '</span><br>' +
         '<span class="meta">' + esc(v.lesson_title || 'بدون عنوان درس') + ' · ' + esc(v.subject || '—') + '</span></span>' +
-        '<span class="meta" style="text-align:end">' + fmtDate(v.visit_date + 'T00:00') + '<br>الزيارة رقم ' + v.visit_number + '</span></button>';
+        '<span class="meta" style="text-align:end">' + fmtDate(v.visit_date + 'T00:00') + '<br>الزيارة رقم ' + v.visit_number + '<br>' + (v.approved_at ? '<span class="badge paid">معتمد</span>' : '<span class="badge pending">بانتظار الاعتماد</span>') + '</span></button>';
     }).join('');
 
     app.innerHTML = tabs('visits') +
@@ -14785,6 +14786,15 @@
           '<button type="button" class="btn primary" data-newvisit>+ تقرير زيارة جديد</button></div>'
         : '') +
       (rows || '<div class="card empty">' + (S.teachers.length ? 'لا توجد تقارير زيارات بعد.' : 'أضف معلمًا أولًا من تبويب «المعلمون».') + '</div>');
+  }
+
+  // اعتماد المدير للتقرير: المشرف يطبع قبله فيظهر «بانتظار اعتماد المدير»، وبعده «معتمد»
+  function canApproveVisit() { return isAdmin() || (isManager() && !isReadOnly()); }
+  function visitApprovalHtml(v) {
+    var ok = !!v.approved_at;
+    return '<span class="badge ' + (ok ? 'paid' : 'pending') + '">' + (ok ? 'معتمد' : 'بانتظار اعتماد المدير') + '</span> ' +
+      (ok ? '<span class="hint" style="margin:0">' + esc(v.approved_by || 'المدير') + ' · ' + dmy(String(v.approved_at).slice(0, 10)) + '</span> ' : '') +
+      (canApproveVisit() ? '<button type="button" class="btn' + (ok ? '' : ' primary') + '" data-visapprove="' + (ok ? '0' : '1') + '" data-ro-ok>' + (ok ? 'إلغاء الاعتماد' : 'اعتماد التقرير') + '</button>' : '');
   }
 
   function renderVisit(v) {
@@ -14801,7 +14811,7 @@
       '<a class="btn link no-print" href="#/visits">→ العودة إلى الزيارات الإشرافية</a>' +
       '<div class="eval-head">' +
         '<div><h2>تقرير زيارة إشرافية صفية</h2><div class="sub">نموذج الإشراف الميداني المعتمد</div></div>' +
-        '<div class="no-print"><span class="save-state" id="save-state"></span> ' +
+        '<div class="no-print"><span id="visit-approval">' + visitApprovalHtml(v) + '</span> <span class="save-state" id="save-state"></span> ' +
         '<button type="button" class="btn primary" data-act="print">طباعة</button> ' +
         '<button type="button" class="btn danger" data-delvisit>حذف التقرير</button></div>' +
       '</div>' +
@@ -14997,6 +15007,9 @@
     sheet.className = 'ps';
     sheet.innerHTML =
       reportHead('تقرير زيارة إشرافية صفية', [['النموذج', 'نموذج الإشراف الميداني المعتمد'], ['المعلم', t ? t.name : '']]) +
+      (v.approved_at
+        ? '<div class="rbox" style="margin:.4em 0 .2em;text-align:center"><b>معتمد من المدير' + (v.approved_by ? ': ' + esc(v.approved_by) : '') + '</b> — ' + dmy(String(v.approved_at).slice(0, 10)) + '</div>'
+        : '<div class="rbox" style="margin:.4em 0 .2em;text-align:center;border:1.5pt dashed #B4493F;color:#B4493F"><b>بانتظار اعتماد المدير</b></div>') +
       '<div class="rsec">أولًا: البيانات الأساسية</div>' +
       '<table class="rk">' +
         kv(['اليوم / التاريخ', v.visit_date ? dayName(v.visit_date) + ' ' + dmy(v.visit_date) : ''], ['اسم المعلم', t ? t.name : '']) +
@@ -15665,6 +15678,19 @@
 
     var v = currentVisit();
     if (!v) return;
+
+    if ((el = e.target.closest('[data-visapprove]'))) {
+      if (!canApproveVisit()) return;
+      var okv = el.getAttribute('data-visapprove') === '1';
+      if (!okv && !confirm('إلغاء اعتماد هذا التقرير؟')) return;
+      var ar = await sb.rpc('set_visit_approval', { p_id: v.id, p_approve: okv });
+      if (ar.error) return /set_visit_approval|schema cache|function/i.test(ar.error.message || '') ? toast('الاعتماد يحتاج تشغيل الملف supabase/visit_approval.sql في محرر SQL', true) : fail(ar.error);
+      var fresh = await sb.from('visits').select('*').eq('id', v.id).maybeSingle();
+      if (fresh.data) Object.assign(v, fresh.data);
+      var abox = document.getElementById('visit-approval');
+      if (abox) abox.innerHTML = visitApprovalHtml(v);
+      return toast(okv ? 'اعتُمد التقرير' : 'أُلغي الاعتماد');
+    }
 
     if (e.target.closest('[data-delvisit]')) {
       if (!confirm('هل تريد حذف هذا التقرير نهائيًا؟')) return;
