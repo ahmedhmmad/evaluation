@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 2';
+  var APP_BUILD = '26/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1552,6 +1552,7 @@
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
     var groups = navModel0();
+    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي']] });
     return groups;
   }
@@ -1582,6 +1583,7 @@
   function activeKey() {
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
+    if (/^#\/affairs/.test(h) && canAttView()) return 'affairs';
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
     if (h === '#/attendance' && canAttView()) return 'attendance';
@@ -8402,6 +8404,7 @@
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
+    if (/^#\/affairs/.test(h) && canAttView()) return renderAffairs();
     if (isRegistrar()) {
       if (/^#\/classes/.test(h)) return renderClasses();
       if (h === '#/attendance') return renderAttendance();
@@ -8440,6 +8443,200 @@
     if (h === '#/teachers') return renderList();
     renderHome();
   }
+
+  /* ---------- إدارة شئون الطلاب ----------
+     بحث وقوائم فلترة للطلاب؛ المرور بالفأرة على اسم الطالب يعرض ملخص غيابه، والضغط عليه يفتح صفحته في الشاشة نفسها:
+     سجل حضوره وغيابه في الفترة المختارة (طباعة وExcel) وملفه. يراها من يرى الحضور (المدير العام والمدير والمسجِّل والمشرف) */
+
+  var AF_ABS = [['', 'كل الطلاب'], ['1', 'غابوا يومًا فأكثر'], ['3', 'غابوا 3 أيام فأكثر'], ['5', 'غابوا 5 أيام فأكثر'], ['10', 'غابوا 10 أيام فأكثر'], ['0', 'لم يغيبوا']];
+
+  function afUi() { return ui.af || (ui.af = { q: '', cls: '', reg: '', abs: '', ride: '', from: '', to: '', rows: null, loadedFrom: '', loading: false }); }
+  function afYearStart() { var m = /(\d{4})/.exec(academicYear()); return (m ? m[1] : String(new Date().getFullYear())) + '-08-01'; }
+  function afCurrent() { var m = location.hash.match(/^#\/affairs\/(.+)$/); return m ? findStudent(m[1]) : null; }
+
+  async function afLoad(from) {
+    var u = afUi();
+    if (u.loading) return;
+    u.loading = true;
+    var rows = await fetchAttRange(from, todayISO());
+    u.loading = false;
+    if (rows) { u.rows = rows; u.loadedFrom = from; u.attErr = false; } else u.attErr = true;
+    render();
+  }
+
+  // لكل طالب: أيام حضوره وغيابه وإذنه من السجلات المجلوبة، وأيام غيابه بملاحظاتها
+  function afAgg() {
+    var u = afUi(), per = {};
+    (u.rows || []).forEach(function (r) {
+      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, abs: [] });
+      p[r.status]++;
+      if (r.status === 'absent') p.abs.push({ day: r.day, note: r.note || '' });
+    });
+    return per;
+  }
+
+  function renderAffairs() {
+    var u = afUi();
+    if (!u.from) { u.from = afYearStart(); u.to = todayISO(); }
+    if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
+    var cur = afCurrent();
+    if (/^#\/affairs\/./.test(location.hash) && !cur) return go('#/affairs');
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? afStudentHtml(cur) : afListHtml());
+  }
+
+  function afFiltered(per) {
+    var u = afUi(), q = norm(u.q), digits = latinDigits(u.q).replace(/\D/g, ''), groupOf = u.ride ? transportGroupOf() : null;
+    return S.students.filter(function (x) {
+      var st = stStatus(x);
+      if (st !== 'final' && st !== 'reserve') return false;
+      if (u.cls && x.class_name !== u.cls) return false;
+      if (u.reg && st !== u.reg) return false;
+      if (u.ride === 'yes' && !groupOf[x.id]) return false;
+      if (u.ride === 'no' && groupOf[x.id]) return false;
+      if (u.abs !== '') {
+        var n = (per[x.id] || {}).absent || 0;
+        if (u.abs === '0' ? n > 0 : n < Number(u.abs)) return false;
+      }
+      if (!q) return true;
+      return norm(x.full_name).indexOf(q) > -1 || (digits && (String(x.national_id || '').indexOf(digits) > -1 || String(x.phone || '').indexOf(digits) > -1 || String(x.whatsapp || '').indexOf(digits) > -1));
+    }).sort(function (a, b) { return classRank(a.class_name) - classRank(b.class_name) || a.full_name.localeCompare(b.full_name, 'ar'); });
+  }
+
+  function afOpts(list, cur) { return list.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join(''); }
+
+  function afRowsHtml(list, per) {
+    var LIMIT = 150;
+    var body = list.slice(0, LIMIT).map(function (x, i) {
+      var p = per[x.id] || { present: 0, absent: 0, excused: 0 };
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><a href="#/affairs/' + x.id + '" data-afhover="' + x.id + '"><b>' + esc(x.full_name) + '</b></a>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '—') + '</td>' +
+        '<td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + attPct(p) + '</td>' +
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+    }).join('');
+    return (body ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>مأذون</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + body + '</tbody></table></div>'
+      : '<div class="empty">لا يوجد طلاب مطابقون.</div>') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ ضيّق البحث أو اختر شعبة.</p>' : '');
+  }
+
+  function afListHtml() {
+    var u = afUi(), per = afAgg(), list = afFiltered(per), rideOn = S.tMembers.length > 0;
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
+      '<input type="search" id="af-q" placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث" style="flex:1;min-width:220px" value="' + esc(u.q) + '">' +
+      '<select id="af-cls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === u.cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>' +
+      '<select id="af-reg" aria-label="حالة التسجيل" style="width:auto">' + afOpts([['', 'كل الحالات'], ['final', 'تسجيل نهائي'], ['reserve', 'احتياط']], u.reg) + '</select>' +
+      '<select id="af-abs" aria-label="الغياب" style="width:auto">' + afOpts(AF_ABS, u.abs) + '</select>' +
+      (rideOn ? '<select id="af-ride" aria-label="المواصلات" style="width:auto">' + afOpts([['', 'المواصلات: الكل'], ['yes', 'مشتركون'], ['no', 'غير مشتركين']], u.ride) + '</select>' : '') + '</div>' +
+      '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
+        ' مرّر الفأرة على اسم الطالب لترى ملخص غيابه، واضغط عليه لفتح صفحته. الطلاب: <b id="af-n">' + list.length + '</b></p></div>' +
+      '<div class="card" id="af-list">' + afRowsHtml(list, per) + '</div>';
+  }
+
+  function afStudentData(x) {
+    var u = afUi(), from = u.from, to = u.to;
+    var rows = (u.rows || []).filter(function (r) { return r.student_id === x.id && r.day >= from && r.day <= to; }).sort(function (p, q) { return p.day.localeCompare(q.day); });
+    var n = { present: 0, absent: 0, excused: 0 };
+    rows.forEach(function (r) { n[r.status]++; });
+    return { x: x, rows: rows, n: n, from: from, to: to };
+  }
+
+  function afFileHtml(x) {
+    var secs = [], cur = null;
+    ST_FIELDS.forEach(function (f) {
+      if (f.sec) { cur = { title: f.sec, items: [] }; secs.push(cur); }
+      if (!cur) return;
+      var v = stVal(x, f.k);
+      if (v === '' || v == null) return;
+      cur.items.push('<div><span class="meta" style="font-size:.85rem">' + esc(f.p || f.label) + '</span><br><b>' + esc(f.type === 'date' ? dmy(v) : v) + '</b></div>');
+    });
+    var ride = findGroup(transportGroupOf()[x.id]);
+    return secs.filter(function (s) { return s.items.length; }).map(function (s) {
+      return '<h3 style="margin:14px 0 6px">' + esc(s.title) + '</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 16px">' + s.items.join('') + '</div>';
+    }).join('') + (ride ? '<h3 style="margin:14px 0 6px">المواصلات</h3><div><b>' + esc(ride.assembly_point) + '</b>' + (ride.pickup_time ? ' — ' + esc(ride.pickup_time) : '') + '</div>' : '');
+  }
+
+  function afStudentHtml(x) {
+    var u = afUi(), D = afStudentData(x), reserve = isReserve(x);
+    var rows = D.rows.map(function (r, i) {
+      return '<tr><td>' + (i + 1) + '</td><td>' + dmy(r.day) + '</td><td>' + esc(dayName(r.day)) + '</td><td><span class="badge ' + ATT_BADGE[r.status] + '">' + ATT[r.status] + '</span></td><td>' + esc(r.note || '') + '</td></tr>';
+    }).join('');
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><a class="btn" href="#/affairs">→ قائمة الطلاب</a>' +
+        '<h2 style="margin:0;flex:1">' + esc(x.full_name) + rsvMark(x) + ' <span class="meta" style="font-weight:400;font-size:.95rem">— ' + esc(x.class_name || 'بدون شعبة') + (reserve ? ' · احتياط' : '') + '</span></h2>' +
+        '<button type="button" class="btn" data-afprofile="' + x.id + '" data-ro-ok>طباعة ملف الطالب</button></div></div>' +
+      '<div class="card"><h2>سجل الحضور والغياب</h2><div class="toolbar" style="align-items:center">' +
+        '<span class="monthpick"><label class="field" for="af-from">من</label><input type="date" id="af-from" data-ro-ok value="' + u.from + '"></span>' +
+        '<span class="monthpick"><label class="field" for="af-to">إلى</label><input type="date" id="af-to" data-ro-ok value="' + u.to + '"></span>' +
+        '<button type="button" class="btn" data-afprint="pdf" data-ro-ok>طباعة / PDF</button><button type="button" class="btn" data-afprint="xlsx" data-ro-ok>Excel</button></div>' +
+        (u.loading ? '<p class="hint">جارٍ جلب السجلات…</p>' : u.attErr ? '<p class="formhint">تعذّر جلب سجلات الحضور.</p>' :
+          '<div class="stats">' + [['حاضر', D.n.present], ['غائب', D.n.absent, D.n.absent ? 'var(--red)' : ''], ['مأذون', D.n.excused], ['نسبة الحضور', attPct(D.n)]].map(function (c) {
+            return '<div class="card stat"><span class="lbl">' + c[0] + '</span><span class="num"' + (c[2] ? ' style="color:' + c[2] + '"' : '') + '>' + c[1] + '</span></div>';
+          }).join('') + '</div>' +
+          (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>الحالة</th><th>ملاحظة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+            : '<div class="empty">لا يوجد حضور مسجَّل لهذا الطالب في الفترة.</div>')) + '</div>' +
+      '<div class="card"><h2>ملف الطالب</h2>' + afFileHtml(x) + '</div>';
+  }
+
+  // نافذة ملخص الغياب عند المرور على اسم الطالب
+  function afPop() {
+    var p = document.getElementById('af-pop');
+    if (!p) {
+      p = document.createElement('div');
+      p.id = 'af-pop';
+      p.style.cssText = 'position:fixed;z-index:60;display:none;max-width:290px;background:#fff;color:var(--body,#2B2B2B);border:1px solid var(--line,#d9d9d9);border-radius:12px;box-shadow:0 6px 24px rgba(19,48,107,.18);padding:10px 14px;font-size:.88rem;line-height:1.6;pointer-events:none';
+      document.body.appendChild(p);
+    }
+    return p;
+  }
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest && e.target.closest('[data-afhover]');
+    if (!el || !/^#\/affairs/.test(location.hash)) return;
+    var x = findStudent(el.getAttribute('data-afhover'));
+    if (!x) return;
+    var u = afUi(), p = (afAgg()[x.id]) || { present: 0, absent: 0, excused: 0, abs: [] }, pop = afPop();
+    var last = p.abs.slice(-5).reverse();
+    pop.innerHTML = '<b>' + esc(x.full_name) + '</b><br>' + (u.rows ? 'منذ ' + dmy(u.loadedFrom || u.from) + ': غائب <b style="color:var(--red)">' + p.absent + '</b> · مأذون ' + p.excused + ' · حاضر ' + p.present + ' · نسبة الحضور <b>' + attPct(p) + '</b>' +
+      (last.length ? '<br><span style="color:#5e6b80">آخر غياب:</span><br>' + last.map(function (a) { return dmy(a.day) + (a.note ? ' — ' + esc(a.note) : ''); }).join('<br>') : '<br>لا غياب مسجَّل.') : 'جارٍ جلب السجلات…') +
+      '<br><span style="color:#5e6b80;font-size:.8rem">اضغط لفتح الصفحة</span>';
+    pop.style.display = 'block';
+    var r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    pop.style.top = (r.bottom + h + 12 > window.innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+  });
+  document.addEventListener('mouseout', function (e) {
+    var el = e.target.closest && e.target.closest('[data-afhover]');
+    if (el) afPop().style.display = 'none';
+  });
+  window.addEventListener('hashchange', function () { var p = document.getElementById('af-pop'); if (p) p.style.display = 'none'; });
+
+  document.addEventListener('click', function (e) {
+    if (!/^#\/affairs/.test(location.hash) || !canAttView()) return;
+    var el, x = afCurrent();
+    if ((el = e.target.closest('[data-afprofile]'))) { pendingProfile = findStudent(el.getAttribute('data-afprofile')); return printNow(); }
+    if ((el = e.target.closest('[data-afprint]')) && x) {
+      var u = afUi();
+      if (!u.from || u.to < u.from) return toast('اختر فترة صحيحة', true);
+      return attStudentOut(afStudentData(x), el.getAttribute('data-afprint'));
+    }
+  });
+
+  function afRefreshList() {
+    var per = afAgg(), list = afFiltered(per);
+    document.getElementById('af-list').innerHTML = afRowsHtml(list, per);
+    document.getElementById('af-n').textContent = list.length;
+  }
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'af-q' || location.hash !== '#/affairs') return;
+    afUi().q = e.target.value;
+    afRefreshList();
+  });
+  document.addEventListener('change', function (e) {
+    if (!/^#\/affairs/.test(location.hash)) return;
+    var u = afUi(), id = e.target.id, map = { 'af-cls': 'cls', 'af-reg': 'reg', 'af-abs': 'abs', 'af-ride': 'ride' };
+    if (map[id]) { u[map[id]] = e.target.value; return afRefreshList(); }
+    if (id === 'af-from' || id === 'af-to') {
+      u[id === 'af-from' ? 'from' : 'to'] = e.target.value;
+      if (!u.from || !u.to || u.to < u.from) return render();
+      if (!u.loadedFrom || u.from < u.loadedFrom) { u.rows = null; return afLoad(u.from); }
+      render();
+    }
+  });
 
   /* ---------- اللجان المدرسية ----------
      لجنة بأعضاء من العاملين وطلاب، تُضاف كما يُضاف الباص: يُختار عامل أو أكثر ثم طالب أو أكثر.
@@ -12647,9 +12844,13 @@
     return { x: x, rows: rows, n: n, from: a.report.from, to: a.report.to };
   }
 
-  async function attStudentRecord(sid, fmt) {
+  function attStudentRecord(sid, fmt) {
     var D = attStudentData(sid);
     if (!D) return toast('اعرض تقرير الفترة أولًا', true);
+    return attStudentOut(D, fmt);
+  }
+
+  async function attStudentOut(D, fmt) {
     if (!D.rows.length) return toast('لا يوجد حضور مسجَّل لهذا الطالب في الفترة', true);
     if (fmt === 'pdf') { pendingAtt = { kind: 'student', D: D }; return printNow(); }
     try {
