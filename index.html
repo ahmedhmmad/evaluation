@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 4';
+  var APP_BUILD = '26/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4020,8 +4020,9 @@
     var ids = [];
     var atDesk = location.hash === '#/transport/receipt' ? ui.rcStudent : null;
     S.tMembers.forEach(function (m) {
-      // الطالب المفتوح في شاشة الإيصال يُحسب مع إخوته وإن لم يبدأ اشتراكه، ليُعرف مبلغه قبل الدفع
-      if (byId[m.student_id] && !parent[m.student_id] && (owesThisMonth(m) || (m.student_id === atDesk && subscribedIn(m, ui.tMonth)))) { parent[m.student_id] = m.student_id; ids.push(m.student_id); }
+      // من اختيرت له نقطة التجمع ولم يبدأ اشتراكه يُحسب مع إخوته أيضًا (بعدهم في الترتيب)، فيظهر مطلوبه في تقرير الباصات وملخص الشعب بتخفيض الإخوة
+      // والطالب المفتوح في شاشة الإيصال يُحسب مع إخوته، ليُعرف مبلغه قبل الدفع
+      if (byId[m.student_id] && !parent[m.student_id] && (owesThisMonth(m) || awaitingStart(m) || (m.student_id === atDesk && subscribedIn(m, ui.tMonth)))) { parent[m.student_id] = m.student_id; ids.push(m.student_id); }
     });
     var root = function (id) { while (parent[id] !== id) { parent[id] = parent[parent[id]]; id = parent[id]; } return id; };
     ids.forEach(function (id) {
