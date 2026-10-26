@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 1';
+  var APP_BUILD = '26/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -12559,10 +12559,10 @@
       var roll = classRoll(a.cls), days = Object.keys((d.byClass[a.cls] || {}).days || {}).length;
       var rows = roll.map(function (x, i) {
         var p = d.per[x.id] || { present: 0, absent: 0 };
-        return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + p.present + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td><b>' + attPct(p) + '</b></td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + p.present + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td><b>' + attPct(p) + '</b></td>' + '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-attstu="' + x.id + '|pdf">PDF</button> <button type="button" class="btn" data-attstu="' + x.id + '|xlsx">Excel</button></td>' + '</tr>';
       }).join('');
       return head + '<div class="card"><h2>' + esc(a.cls) + ' — من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + '</h2><p class="st-count">أيام سُجّل فيها حضور الشعبة: ' + days + '</p>' +
-        '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>أيام الحضور</th><th>أيام الغياب</th><th>نسبة الحضور</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>أيام الحضور</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>سجل الطالب</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
     }
     var all = { present: 0, absent: 0 };
     var crow = attClasses().map(function (cls) {
@@ -12578,9 +12578,9 @@
         '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>أيام التسجيل</th><th>الغياب (طالب×يوم)</th><th>نسبة الحضور</th><th>غابوا 3 أيام فأكثر</th></tr></thead><tbody>' + crow +
         '</tbody><tfoot><tr><td colspan="2">المدرسة</td><td>' + all.absent + '</td><td>' + attPct(all) + '</td><td>' + most.length + '</td></tr></tfoot></table></div></div>' +
       '<div class="card"><h2>الأكثر غيابًا (3 أيام فأكثر) — ' + most.length + '</h2>' + (most.length
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + most.map(function (x, i) {
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th><th>سجل الطالب</th></tr></thead><tbody>' + most.map(function (x, i) {
             return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
-              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td>' + '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-attstu="' + x.id + '|pdf">PDF</button> <button type="button" class="btn" data-attstu="' + x.id + '|xlsx">Excel</button></td>' + '</tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
   }
 
@@ -12635,6 +12635,48 @@
     } catch (err) {
       toast(err.message, true);
     }
+  }
+
+  /* ----- سجل حضور وغياب طالب واحد في فترة التقرير: كل يوم سُجّل له، بحالته وملاحظته ----- */
+  function attStudentData(sid) {
+    var a = attState(), x = findStudent(sid);
+    if (!a.report || !x) return null;
+    var rows = a.report.rows.filter(function (r) { return r.student_id === sid; }).sort(function (p, q) { return p.day.localeCompare(q.day); });
+    var n = { present: 0, absent: 0, excused: 0 };
+    rows.forEach(function (r) { n[r.status]++; });
+    return { x: x, rows: rows, n: n, from: a.report.from, to: a.report.to };
+  }
+
+  async function attStudentRecord(sid, fmt) {
+    var D = attStudentData(sid);
+    if (!D) return toast('اعرض تقرير الفترة أولًا', true);
+    if (!D.rows.length) return toast('لا يوجد حضور مسجَّل لهذا الطالب في الفترة', true);
+    if (fmt === 'pdf') { pendingAtt = { kind: 'student', D: D }; return printNow(); }
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      xlsxSheet(wb, used, 'سجل الطالب', [[schoolName()], ['سجل الحضور والغياب — ' + D.x.full_name + rsvText(D.x)], ['الشعبة: ' + (D.x.class_name || '—') + ' · من ' + dmy(D.from) + ' إلى ' + dmy(D.to)],
+        ['حاضر: ' + D.n.present + ' · غائب: ' + D.n.absent + (D.n.excused ? ' · مأذون: ' + D.n.excused : '') + ' · نسبة الحضور: ' + attPct(D.n)], [],
+        ['م', 'التاريخ', 'اليوم', 'الحالة', 'ملاحظة']].concat(D.rows.map(function (r, i) { return [i + 1, dmy(r.day), dayName(r.day), ATT[r.status], r.note || '']; })), [5, 13, 12, 10, 40]);
+      XLSX.writeFile(wb, ('سجل-حضور-' + D.x.full_name + '-' + D.from + '-' + D.to).replace(/s+/g, '-') + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  function buildAttStudentSheet(D) {
+    var head = reportHead('سجل الحضور والغياب', [['الفترة', 'من ' + dmy(D.from) + ' إلى ' + dmy(D.to)], ['الشعبة', D.x.class_name || ''],
+      ['حاضر', D.n.present], ['غائب', D.n.absent]].concat(D.n.excused ? [['مأذون', D.n.excused]] : [], [['نسبة الحضور', attPct(D.n)]]), { lead: D.x.full_name }).replace(/^<img class="wm"[^>]*>/, '');
+    var body = D.rows.map(function (r, i) {
+      return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(r.day) + '</td><td class="c">' + esc(dayName(r.day)) + '</td><td class="c">' + (r.status === 'absent' ? '<b>' + ATT[r.status] + '</b>' : ATT[r.status]) + '</td><td>' + esc(r.note || '') + '</td></tr>';
+    }).join('');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="5"></td></tr><tr><td class="ls-head" colspan="5">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>الحالة</th><th>ملاحظة</th></tr></thead><tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="5"></td></tr></tfoot></table>';
   }
 
   // الطباعة: أفقية، رأس الجدول يتكرر إن امتد الكشف إلى أكثر من صفحة
@@ -12843,6 +12885,7 @@
   function buildAttSheet(p) {
     if (p.kind === 'register') return buildAttRegisterSheet(p);
     if (p.kind === 'detail') return buildAttDetailSheet(p.D);
+    if (p.kind === 'student') return buildAttStudentSheet(p.D);
     var d = p.d, all = { present: 0, absent: 0, excused: 0 }, total = 0;
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
     var rows = attClasses().filter(function (cls) { return classRoll(cls).length; }).map(function (cls, i) {
@@ -13331,6 +13374,7 @@
     var el, a = attState();
     if (!canRecordAtt() && e.target.closest('[data-attset], [data-attall], [data-attsave]')) return;
     if ((el = e.target.closest('[data-attdetail]'))) return attDetail(el.getAttribute('data-attdetail'));
+    if ((el = e.target.closest('[data-attstu]'))) { var sp = el.getAttribute('data-attstu').split('|'); return attStudentRecord(sp[0], sp[1]); }
     if ((el = e.target.closest('[data-attset]'))) {
       var sid = el.getAttribute('data-attset'), cur = attOf(sid);
       a.draft[sid] = { status: el.getAttribute('data-attv'), note: cur.note };
