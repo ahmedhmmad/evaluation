@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 8';
+  var APP_BUILD = '26/10 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8454,10 +8454,11 @@
 
   var AF_ABS = [['', 'كل الطلاب'], ['1', 'غابوا يومًا فأكثر'], ['3', 'غابوا 3 أيام فأكثر'], ['5', 'غابوا 5 أيام فأكثر'], ['10', 'غابوا 10 أيام فأكثر'], ['0', 'لم يغيبوا']];
 
+  var pendingWarn = null;
   function afUi() { return ui.af || (ui.af = { q: '', cls: '', reg: '', abs: '', ride: '', from: '', to: '', rows: null, loadedFrom: '', loading: false }); }
   function afYearStart() { var m = /(\d{4})/.exec(academicYear()); return (m ? m[1] : String(new Date().getFullYear())) + '-08-01'; }
-  function afCurrent() { var m = location.hash.match(/^#\/affairs\/([^/]+)\/(absence|file)$/); return m ? findStudent(m[1]) : null; }
-  function afView() { return /\/file$/.test(location.hash) ? 'file' : 'absence'; }
+  function afCurrent() { var m = location.hash.match(/^#\/affairs\/([^/]+)\/(absence|file|warning)$/); return m ? findStudent(m[1]) : null; }
+  function afView() { var m = location.hash.match(/\/(absence|file|warning)$/); return m ? m[1] : 'absence'; }
 
   async function afLoad(from) {
     var u = afUi();
@@ -8486,7 +8487,7 @@
     if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
     var cur = afCurrent();
     if (location.hash !== '#/affairs' && !cur) return go('#/affairs');
-    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afView() === 'warning' ? afWarnScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
   }
 
   function afFiltered(per) {
@@ -8519,7 +8520,7 @@
     var LIMIT = 150;
     var body = list.slice(0, LIMIT).map(function (x, i) {
       var p = per[x.id] || { present: 0, absent: 0, excused: 0 };
-      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a> · <a href="#/affairs/' + x.id + '/warning">إنذار</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
         '<td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + attPct(p) + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
     }).join('');
@@ -8566,7 +8567,40 @@
   function afHead(x, title) {
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><a class="btn" href="#/affairs">→ إدارة شئون الطلاب</a>' +
       '<h2 style="margin:0;flex:1">' + esc(title) + ': ' + esc(x.full_name) + rsvMark(x) + ' <span class="meta" style="font-weight:400;font-size:.95rem">— ' + esc(x.class_name || 'بدون شعبة') + (isReserve(x) ? ' · احتياط' : '') + '</span></h2>' +
-      (afView() === 'file' ? '<a class="btn" href="#/affairs/' + x.id + '/absence">سجل الغياب</a>' : '<a class="btn" href="#/affairs/' + x.id + '/file">ملف الطالب</a>') + '</div></div>';
+      [['absence', 'سجل الغياب'], ['file', 'ملف الطالب'], ['warning', 'إنذار']].filter(function (v) { return v[0] !== afView(); }).map(function (v) { return '<a class="btn" href="#/affairs/' + x.id + '/' + v[0] + '">' + v[1] + '</a>'; }).join('') + '</div></div>';
+  }
+
+  /* ----- إنذار الطالب -----
+     كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وتوقيع المدير وإقرار ولي الأمر بالاستلام.
+     لا يُحفظ في البرنامج، يُكتب ويُطبع */
+  var AF_ACTIONS = ['إحضار ولي الأمر', 'مراجعة مرشد/ة الأكاديمية', 'توقيع تعهد خطي', 'استدعاء ولي الأمر هاتفيًا'];
+  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0] }); }
+
+  function afWarnScreen(x) {
+    var w = afWarn();
+    return afHead(x, 'إنذار') + '<div class="card"><h2>بيانات الإنذار</h2><div class="grid2" style="margin-top:10px">' +
+      '<div><label class="field" for="afw-date">تاريخ الإنذار</label><input type="date" id="afw-date" data-ro-ok value="' + esc(w.date) + '"></div>' +
+      '<div><label class="field" for="afw-action">الإجراء المطلوب</label><input type="text" id="afw-action" data-ro-ok list="afw-actions" autocomplete="off" value="' + esc(w.action) + '"><datalist id="afw-actions">' +
+        AF_ACTIONS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist></div>' +
+      '<div style="grid-column:1/-1"><label class="field" for="afw-notes">ملاحظات المخالفة</label><textarea id="afw-notes" data-ro-ok rows="5" placeholder="اكتب المخالفة وتفاصيلها">' + esc(w.notes) + '</textarea></div></div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-afwprint="' + x.id + '" data-ro-ok>طباعة الإنذار / PDF</button></div></div>';
+  }
+
+  function buildWarningSheet(x) {
+    var w = afWarn(), guardian = String(stVal(x, 'guardian_name') || '').trim(), dots = '..................................';
+    var row = function (a, b) { return '<tr><th style="width:24%">' + a + '</th><td>' + b + '</td></tr>'; };
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = reportHead('إنذار', [['التاريخ', dmy(w.date)]], { noIssueDate: true }) +
+      '<p style="margin:1.1em 0 .4em;font-size:1.1em"><b>السيد/ة ولي أمر الطالب/ة: ' + esc(x.full_name) + '</b>' + (guardian ? ' <span style="font-weight:400">(' + esc(guardian) + ')</span>' : '') + '</p>' +
+      '<p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
+      '<p style="margin:0 0 .8em;line-height:1.9">نفيدكم علمًا بأن ابنكم/ابنتكم المذكور/ة أعلاه من طلاب الشعبة (' + esc(x.class_name || dots) + ') قد صدرت منه/ا المخالفة الآتية، وعليه نوجّه إليكم هذا الإنذار:</p>' +
+      '<table class="rk">' + row('اسم الطالب/ة', esc(x.full_name)) + row('الشعبة', esc(x.class_name || '')) + row('تاريخ الإنذار', dmy(w.date)) + '</table>' +
+      '<div class="rsec">المخالفة</div><div class="rbox" style="min-height:42mm;white-space:pre-wrap;line-height:2">' + esc(w.notes) + '</div>' +
+      '<div class="rsec">الإجراء المطلوب</div><div class="rbox" style="min-height:14mm;line-height:2"><b>' + esc(w.action) + '</b></div>' +
+      '<p style="margin:1em 0 0;line-height:1.9">نأمل منكم التعاون معنا لما فيه مصلحة ابنكم/ابنتكم، ونشكر لكم حسن تعاونكم.</p>' +
+      reportSigns([['مدير/ة الأكاديمية', principalName()], ['ولي الأمر (إقرار بالاستلام)', guardian]]);
+    fitSheet();
   }
 
   function afFileScreen(x) {
@@ -8626,6 +8660,7 @@
   document.addEventListener('click', function (e) {
     if (!/^#\/affairs/.test(location.hash) || !canAttView()) return;
     var el, x = afCurrent();
+    if ((el = e.target.closest('[data-afwprint]'))) { pendingWarn = findStudent(el.getAttribute('data-afwprint')); return printNow(); }
     if ((el = e.target.closest('[data-afprofile]'))) { pendingProfile = findStudent(el.getAttribute('data-afprofile')); return printNow(); }
     if ((el = e.target.closest('[data-afprint]')) && x) {
       var u = afUi();
@@ -8643,6 +8678,11 @@
     if (e.target.id !== 'af-q' || location.hash !== '#/affairs') return;
     afUi().q = e.target.value;
     afRefreshList();
+  });
+  // حقول الإنذار تُحفظ أثناء الكتابة دون إعادة رسم الصفحة
+  document.addEventListener('input', function (e) {
+    var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes' }[e.target.id];
+    if (k && /\/warning$/.test(location.hash)) afWarn()[k] = e.target.value;
   });
   document.addEventListener('change', function (e) {
     if (!/^#\/affairs/.test(location.hash)) return;
@@ -15226,6 +15266,7 @@
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
     else if (pendingCu) buildCustodySheet();
+    else if (pendingWarn) buildWarningSheet(pendingWarn);
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -15253,6 +15294,7 @@
     pendingStList = null;
     pendingCm = null;
     pendingCu = false;
+    pendingWarn = null;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
