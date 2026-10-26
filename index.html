@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 3';
+  var APP_BUILD = '26/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8452,7 +8452,8 @@
 
   function afUi() { return ui.af || (ui.af = { q: '', cls: '', reg: '', abs: '', ride: '', from: '', to: '', rows: null, loadedFrom: '', loading: false }); }
   function afYearStart() { var m = /(\d{4})/.exec(academicYear()); return (m ? m[1] : String(new Date().getFullYear())) + '-08-01'; }
-  function afCurrent() { var m = location.hash.match(/^#\/affairs\/(.+)$/); return m ? findStudent(m[1]) : null; }
+  function afCurrent() { var m = location.hash.match(/^#\/affairs\/([^/]+)\/(absence|file)$/); return m ? findStudent(m[1]) : null; }
+  function afView() { return /\/file$/.test(location.hash) ? 'file' : 'absence'; }
 
   async function afLoad(from) {
     var u = afUi();
@@ -8480,8 +8481,8 @@
     if (!u.from) { u.from = afYearStart(); u.to = todayISO(); }
     if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
     var cur = afCurrent();
-    if (/^#\/affairs\/./.test(location.hash) && !cur) return go('#/affairs');
-    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? afStudentHtml(cur) : afListHtml());
+    if (location.hash !== '#/affairs' && !cur) return go('#/affairs');
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
   }
 
   function afFiltered(per) {
@@ -8504,11 +8505,17 @@
 
   function afOpts(list, cur) { return list.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join(''); }
 
+  function afResultsHtml(per) {
+    var u = afUi();
+    if (!u.cls && !u.q.trim()) return '<div class="empty">اختر الشعبة، أو اكتب اسم الطالب أو رقم هويته، لتظهر النتائج.</div>';
+    return afRowsHtml(afFiltered(per), per);
+  }
+
   function afRowsHtml(list, per) {
     var LIMIT = 150;
     var body = list.slice(0, LIMIT).map(function (x, i) {
       var p = per[x.id] || { present: 0, absent: 0, excused: 0 };
-      return '<tr><td>' + (i + 1) + '</td><td class="who"><a href="#/affairs/' + x.id + '" data-afhover="' + x.id + '"><b>' + esc(x.full_name) + '</b></a>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '—') + '</td>' +
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
         '<td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + attPct(p) + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
     }).join('');
@@ -8517,7 +8524,7 @@
   }
 
   function afListHtml() {
-    var u = afUi(), per = afAgg(), list = afFiltered(per), rideOn = S.tMembers.length > 0;
+    var u = afUi(), per = afAgg(), shown = !!(u.cls || u.q.trim()), list = shown ? afFiltered(per) : [], rideOn = S.tMembers.length > 0;
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
       '<input type="search" id="af-q" placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث" style="flex:1;min-width:220px" value="' + esc(u.q) + '">' +
       '<select id="af-cls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === u.cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>' +
@@ -8525,8 +8532,8 @@
       '<select id="af-abs" aria-label="الغياب" style="width:auto">' + afOpts(AF_ABS, u.abs) + '</select>' +
       (rideOn ? '<select id="af-ride" aria-label="المواصلات" style="width:auto">' + afOpts([['', 'المواصلات: الكل'], ['yes', 'مشتركون'], ['no', 'غير مشتركين']], u.ride) + '</select>' : '') + '</div>' +
       '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
-        ' مرّر الفأرة على اسم الطالب لترى ملخص غيابه، واضغط عليه لفتح صفحته. الطلاب: <b id="af-n">' + list.length + '</b></p></div>' +
-      '<div class="card" id="af-list">' + afRowsHtml(list, per) + '</div>';
+        ' مرّر الفأرة على «سجل الغياب» لترى ملخصه، واضغط عليه أو على «ملف الطالب» للانتقال إلى شاشته.' + (shown ? ' الطلاب: <b id="af-n">' + list.length + '</b>' : '<span id="af-n"></span>') + '</p></div>' +
+      '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>';
   }
 
   function afStudentData(x) {
@@ -8552,14 +8559,22 @@
     }).join('') + (ride ? '<h3 style="margin:14px 0 6px">المواصلات</h3><div><b>' + esc(ride.assembly_point) + '</b>' + (ride.pickup_time ? ' — ' + esc(ride.pickup_time) : '') + '</div>' : '');
   }
 
-  function afStudentHtml(x) {
-    var u = afUi(), D = afStudentData(x), reserve = isReserve(x);
+  function afHead(x, title) {
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><a class="btn" href="#/affairs">→ إدارة شئون الطلاب</a>' +
+      '<h2 style="margin:0;flex:1">' + esc(title) + ': ' + esc(x.full_name) + rsvMark(x) + ' <span class="meta" style="font-weight:400;font-size:.95rem">— ' + esc(x.class_name || 'بدون شعبة') + (isReserve(x) ? ' · احتياط' : '') + '</span></h2>' +
+      (afView() === 'file' ? '<a class="btn" href="#/affairs/' + x.id + '/absence">سجل الغياب</a>' : '<a class="btn" href="#/affairs/' + x.id + '/file">ملف الطالب</a>') + '</div></div>';
+  }
+
+  function afFileScreen(x) {
+    return afHead(x, 'ملف الطالب') + '<div class="card"><div class="toolbar" style="margin:0 0 4px"><button type="button" class="btn" data-afprofile="' + x.id + '" data-ro-ok>طباعة ملف الطالب</button></div>' + afFileHtml(x) + '</div>';
+  }
+
+  function afAbsenceScreen(x) {
+    var u = afUi(), D = afStudentData(x);
     var rows = D.rows.map(function (r, i) {
       return '<tr><td>' + (i + 1) + '</td><td>' + dmy(r.day) + '</td><td>' + esc(dayName(r.day)) + '</td><td><span class="badge ' + ATT_BADGE[r.status] + '">' + ATT[r.status] + '</span></td><td>' + esc(r.note || '') + '</td></tr>';
     }).join('');
-    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><a class="btn" href="#/affairs">→ قائمة الطلاب</a>' +
-        '<h2 style="margin:0;flex:1">' + esc(x.full_name) + rsvMark(x) + ' <span class="meta" style="font-weight:400;font-size:.95rem">— ' + esc(x.class_name || 'بدون شعبة') + (reserve ? ' · احتياط' : '') + '</span></h2>' +
-        '<button type="button" class="btn" data-afprofile="' + x.id + '" data-ro-ok>طباعة ملف الطالب</button></div></div>' +
+    return afHead(x, 'سجل الغياب') +
       '<div class="card"><h2>سجل الحضور والغياب</h2><div class="toolbar" style="align-items:center">' +
         '<span class="monthpick"><label class="field" for="af-from">من</label><input type="date" id="af-from" data-ro-ok value="' + u.from + '"></span>' +
         '<span class="monthpick"><label class="field" for="af-to">إلى</label><input type="date" id="af-to" data-ro-ok value="' + u.to + '"></span>' +
@@ -8569,8 +8584,7 @@
             return '<div class="card stat"><span class="lbl">' + c[0] + '</span><span class="num"' + (c[2] ? ' style="color:' + c[2] + '"' : '') + '>' + c[1] + '</span></div>';
           }).join('') + '</div>' +
           (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>الحالة</th><th>ملاحظة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-            : '<div class="empty">لا يوجد حضور مسجَّل لهذا الطالب في الفترة.</div>')) + '</div>' +
-      '<div class="card"><h2>ملف الطالب</h2>' + afFileHtml(x) + '</div>';
+            : '<div class="empty">لا يوجد حضور مسجَّل لهذا الطالب في الفترة.</div>')) + '</div>';
   }
 
   // نافذة ملخص الغياب عند المرور على اسم الطالب
@@ -8617,9 +8631,9 @@
   });
 
   function afRefreshList() {
-    var per = afAgg(), list = afFiltered(per);
-    document.getElementById('af-list').innerHTML = afRowsHtml(list, per);
-    document.getElementById('af-n').textContent = list.length;
+    var u = afUi(), per = afAgg();
+    document.getElementById('af-list').innerHTML = afResultsHtml(per);
+    document.getElementById('af-n').textContent = u.cls || u.q.trim() ? afFiltered(per).length : '';
   }
   document.addEventListener('input', function (e) {
     if (e.target.id !== 'af-q' || location.hash !== '#/affairs') return;
