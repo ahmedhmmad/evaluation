@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 7';
+  var APP_BUILD = '26/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8679,7 +8679,6 @@
     }
     var edit = isAdmin(), q = norm(c.q);
     var list = c.list.filter(function (x) { return !q || norm(x.item + ' ' + x.notes).indexOf(q) > -1; });
-    var total = list.reduce(function (t, x) { return t + (Number(x.qty) || 0); }, 0);
     var rows = list.map(function (x, i) {
       if (edit && c.edit === x.id) {
         return '<tr><td>' + (i + 1) + '</td><td><input type="text" id="cu-e-item" value="' + esc(x.item) + '" aria-label="الصنف"></td><td><input type="number" id="cu-e-qty" min="0" step="1" value="' + esc(x.qty) + '" aria-label="العدد" style="width:6em"></td>' +
@@ -8694,7 +8693,7 @@
         '<div style="width:8em"><label class="field" for="cu-qty">العدد <span class="req">*</span></label><input type="number" id="cu-qty" min="0" step="1" required value="1"></div>' +
         '<div style="flex:3;min-width:220px"><label class="field" for="cu-notes">ملاحظات</label><input type="text" id="cu-notes" autocomplete="off"></div>' +
         '<button type="submit" class="btn primary">إضافة</button></div></form>' : '') +
-      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">الأصناف (' + list.length + ') — مجموع العدد ' + total + '</h2>' +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">عدد الأصناف: ' + list.length + '</h2>' +
         '<button type="button" class="btn" data-cuprint data-ro-ok' + (list.length ? '' : ' disabled') + '>طباعة / PDF</button>' +
         '<input type="search" id="cu-q" placeholder="بحث في الأصناف والملاحظات" aria-label="بحث" style="max-width:260px" value="' + esc(c.q) + '"></div>' +
       (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -8706,8 +8705,7 @@
   function buildCustodySheet() {
     var c = cuState(), q = norm(c.q), n = 4;
     var list = c.list.filter(function (x) { return !q || norm(x.item + ' ' + x.notes).indexOf(q) > -1; });
-    var total = list.reduce(function (t, x) { return t + (Number(x.qty) || 0); }, 0);
-    var head = reportHead('كشف العهد', [['عدد الأصناف', list.length], ['مجموع العدد', total]].concat(c.q.trim() ? [['بحث', c.q.trim()]] : [])).replace(/^<img class="wm"[^>]*>/, '');
+    var head = reportHead('كشف العهد', [['عدد الأصناف', list.length]].concat(c.q.trim() ? [['بحث', c.q.trim()]] : [])).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
@@ -8715,7 +8713,7 @@
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th></tr></thead><tbody>' +
       list.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.item) + '</b></td><td class="c">' + esc(x.qty) + '</td><td>' + esc(x.notes) + '</td></tr>'; }).join('') +
-      '<tr class="total"><td colspan="2">المجموع</td><td class="c"><b>' + total + '</b></td><td></td></tr></tbody>' +
+      '<tr class="total"><td colspan="2">عدد الأصناف</td><td class="c"><b>' + list.length + '</b></td><td></td></tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['أمين العهد', ''], ['مدير/ة الأكاديمية', principalName()]]);
   }
 
