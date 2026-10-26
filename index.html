@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '26/10 — 14';
+  var APP_BUILD = '26/10 — 15';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2060,11 +2060,9 @@
       (ed || ui.staffImp ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
         '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات المعلمين (المباحث والجوال والواتساب)</button>' +
         '<button type="button" class="btn" data-stlist="jobs" data-ro-ok>كشف الموظفين (الوظيفة ورقم الاتصال)</button>' +
-        '<label class="check" style="margin:0" title="الخانات نفسها، فارغة ومرقمة، ليكتب العاملون بياناتهم بأنفسهم"><input type="checkbox" id="stl-blank" data-ro-ok' + (ui.stlBlank ? ' checked' : '') + '> بلا أسماء (للتعبئة بخط اليد)</label>' +
-        '<input type="number" id="stl-n" min="1" max="200" data-ro-ok placeholder="عدد الصفوف" aria-label="عدد صفوف الكشف المرقم" style="width:8.5em" value="' + esc(ui.stlN || '') + '">' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-mgr" data-ro-ok' + (ui.stlNoMgr ? '' : ' checked') + '> مع المدير</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label></div>' +
-        '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي. «بلا أسماء»: يُطبع أحد الكشفين بخاناته نفسها فارغة ومرقمة، عدد صفوفه عدد العاملين المعروضين أو الرقم الذي تكتبه في «عدد الصفوف».</p></div>') +
+        '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p></div>') +
       (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', S.teachers.length]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
@@ -9677,8 +9675,10 @@
           '<span class="monthpick"><label class="field" for="sg-to">إلى يوم</label><input type="date" id="sg-to" data-ro-ok value="' + (st.sgTo || st.sgFrom || st.day) + '"></span>' +
           '<label class="check" style="margin:0"><input type="checkbox" id="sg-nomgr" data-ro-ok' + (st.sgNoMgr ? ' checked' : '') + '> بدون المدير</label>' +
           '<label class="check" style="margin:0"><input type="checkbox" id="sg-nosup" data-ro-ok' + (st.sgNoSup ? ' checked' : '') + '> بدون المشرف التربوي</label>' +
+          '<label class="check" style="margin:0" title="الكشف نفسه مرقمًا وخانة الاسم فارغة ليكتب الموظفون أسماءهم"><input type="checkbox" id="sg-blank" data-ro-ok' + (st.sgBlank ? ' checked' : '') + '> بدون أسماء (مرقم)</label>' +
+          '<input type="number" id="sg-n" min="1" max="200" data-ro-ok placeholder="عدد الصفوف" aria-label="عدد صفوف الكشف المرقم" style="width:8.5em" value="' + esc(st.sgN || '') + '">' +
           '<button type="button" class="btn primary" data-sasign data-ro-ok>طباعة</button></div>' +
-        '<p class="hint" style="margin:6px 0 0">ورقة لكل يوم عمل في الفترة (تُتخطى الجمعة والسبت والعطل)، بترتيب الموظفين في هذه الصفحة: الرقم، الاسم، وقت الحضور والتوقيع، وقت الانصراف والتوقيع. بلا علامة مائية ولا توقيعات في آخرها.</p>' +
+        '<p class="hint" style="margin:6px 0 0">ورقة لكل يوم عمل في الفترة (تُتخطى الجمعة والسبت والعطل)، بترتيب الموظفين في هذه الصفحة: الرقم، الاسم، وقت الحضور والتوقيع، وقت الانصراف والتوقيع. «بدون أسماء (مرقم)»: الكشف نفسه وخانة الاسم فارغة، بعدد الموظفين أو بالعدد الذي تكتبه. بلا علامة مائية ولا توقيعات في آخرها.</p>' +
         '<p class="hint" style="margin:8px 0 0"><b>كشف الحضور</b> مثل كشف الطلاب: اسم كل موظف وعمود لكل يوم من الشهر؛ + حاضر، L إجازة، غ غائب، م مأمورية، وتظليل الجمعة والسبت والعطل والإجازات. ' +
           '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>';
   }
@@ -9693,39 +9693,22 @@
     sheet.removeAttribute('data-fit');
     sheet.innerHTML = q.days.map(function (day, i) {
       var list = saStaff('', day).filter(function (t) { return !(q.noMgr && isMgrJob(t)) && !(q.noSup && isSupJob(t)); });
-      var h = Math.max(6, Math.min(12, Math.floor(212 / (list.length + 1))));
+      var blankN = q.blank ? Math.max(1, Math.min(200, parseInt(q.rows, 10) || list.length || 1)) : 0;
+      var h = Math.max(6, Math.min(12, Math.floor(212 / ((q.blank ? blankN : list.length) + 1))));
       return '<section style="' + (i < q.days.length - 1 ? 'break-after:page;page-break-after:always;' : '') + (i ? 'padding-top:var(--pad-y, 12mm);' : '') + '">' + letterhead() +
         '<div class="rt"><h1>كشف حضور وانصراف الموظفين</h1><div class="rt-info"><span><b>اليوم:</b> ' + esc(dayName(day)) + '</span><span><b>التاريخ:</b> ' + dmy(day) + '</span></div></div>' +
         '<table class="rk sg-table"><thead><tr><th style="width:6%">الرقم</th><th style="width:36%">اسم الموظف</th><th style="width:12%">وقت الحضور</th><th style="width:17%">التوقيع</th><th style="width:12%">وقت الانصراف</th><th style="width:17%">التوقيع</th></tr></thead><tbody>' +
-        list.map(function (t, j) { return '<tr style="height:' + h + 'mm"><td class="c">' + (j + 1) + '</td><td style="white-space:nowrap"><b>' + esc(t.name) + '</b></td><td></td><td></td><td></td><td></td></tr>'; }).join('') +
+        (q.blank ? new Array(blankN).join(',').split(',').map(function (x, j) { return '<tr style="height:' + h + 'mm"><td class="c">' + (j + 1) + '</td><td></td><td></td><td></td><td></td><td></td></tr>'; })
+          : list.map(function (t, j) { return '<tr style="height:' + h + 'mm"><td class="c">' + (j + 1) + '</td><td style="white-space:nowrap"><b>' + esc(t.name) + '</b></td><td></td><td></td><td></td><td></td></tr>'; })).join('') +
         '</tbody></table></section>';
     }).join('');
   }
-  // كشف مرقم فارغ: خانات كشف المعلمين أو الموظفين نفسها بلا بيانات، ليكتب العاملون بأنفسهم (عدد الصفوف: ما كُتب، وإلا عدد العاملين في القائمة)
-  function buildStaffNumberedSheet(q, count, teach) {
-    var rows = Math.max(1, Math.min(200, parseInt(q.rows, 10) || count || 1)), n = teach ? 5 : 4;
-    var head = reportHead(teach ? 'بيانات المعلمين' : 'كشف الموظفين', [['الفئة', q.cat || 'كل العاملين'], ['عدد الصفوف', rows]]).replace(/^<img class="wm"[^>]*>/, '');
-    var cells = '';
-    for (var c = 1; c < n; c++) cells += '<td></td>';
-    // الارتفاع يتسع للصفحة الواحدة ما أمكن (180mm للصفوف بعد الترويسة)، ويقلّ عن 5.5mm فيمتد الكشف الطويل على صفحات
-    var rh = Math.max(5.5, Math.min(11, Math.floor(1800 / rows) / 10)), body = '';
-    for (var i = 1; i <= rows; i++) body += '<tr style="height:' + rh + 'mm"><td class="c">' + i + '</td>' + cells + '</tr>';
-    sheet.className = 'ls';
-    sheet.removeAttribute('data-fit');
-    sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<table class="rz" style="table-layout:fixed"><colgroup>' + (teach ? '<col style="width:7%"><col style="width:31%"><col style="width:24%"><col style="width:19%"><col style="width:19%">' : '<col style="width:7%"><col style="width:41%"><col style="width:28%"><col style="width:24%">') + '</colgroup><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th>الرقم</th><th>الاسم</th>' + (teach ? '<th>المبحث / المباحث</th><th>رقم الجوال</th><th>رقم الواتساب</th>' : '<th>الوظيفة</th><th>رقم الاتصال</th>') + '</tr></thead>' +
-      '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
-  }
-
   function buildStaffListSheet(q) {
     // من انتهى عقده (استقال أو غادر) لا يُطبع في كشف العاملين الحاليين؛ يبقى في شاشة بيانات العاملين بتاريخ انتهاء عقده
     var list = saStaff('', todayISO()).filter(function (t) { return (!q.cat || staffCat(t) === q.cat) && !(q.noMgr && isMgrJob(t)) && !(q.noSup && isSupJob(t)); }).sort(function (a, b) {
       return STAFF_CATS.indexOf(staffCat(a)) - STAFF_CATS.indexOf(staffCat(b)) || a.name.localeCompare(b.name, 'ar');
     });
     var teach = q.kind === 'teach', n = teach ? 5 : 4;
-    if (q.blank) return buildStaffNumberedSheet(q, list.length, teach);
     var head = reportHead(teach ? 'بيانات المعلمين' : 'كشف الموظفين', [['الفئة', q.cat || 'كل العاملين'], ['العدد', list.length]]).replace(/^<img class="wm"[^>]*>/, '');
     var body = list.map(function (t, i) {
       var subj = splitList(t.subject).join(' و');
@@ -9746,18 +9729,17 @@
     if (location.hash === '#/staffatt' && canView() && e.target.closest('[data-sasign]')) {
       var st = saState(), from = document.getElementById('sg-from').value, to = document.getElementById('sg-to').value || from;
       st.sgFrom = from; st.sgTo = to; st.sgNoMgr = document.getElementById('sg-nomgr').checked; st.sgNoSup = document.getElementById('sg-nosup').checked;
+      st.sgBlank = document.getElementById('sg-blank').checked; st.sgN = document.getElementById('sg-n').value;
       if (!from || to < from) return toast('اختر فترة صحيحة', true);
       var days = [];
       for (var d = from; d <= to && days.length < 62; d = addDays(d, 1)) if (!attOff(d)) days.push(d);
       if (!days.length) return toast('لا أيام عمل في هذه الفترة', true);
-      pendingSign = { days: days, noMgr: st.sgNoMgr, noSup: st.sgNoSup };
+      pendingSign = { days: days, noMgr: st.sgNoMgr, noSup: st.sgNoSup, blank: st.sgBlank, rows: st.sgN };
       return printNow();
     }
     if (location.hash === '#/staff' && (canView() || isSup()) && (el = e.target.closest('[data-stlist]'))) {
       ui.stlNoMgr = !document.getElementById('stl-mgr').checked; ui.stlNoSup = !document.getElementById('stl-sup').checked;
-      ui.stlN = (document.getElementById('stl-n') || {}).value || '';
-      ui.stlBlank = !!(document.getElementById('stl-blank') || {}).checked;
-      pendingStList = { kind: el.getAttribute('data-stlist'), cat: ui.staffCat || '', noMgr: ui.stlNoMgr, noSup: ui.stlNoSup, rows: ui.stlN, blank: ui.stlBlank };
+      pendingStList = { kind: el.getAttribute('data-stlist'), cat: ui.staffCat || '', noMgr: ui.stlNoMgr, noSup: ui.stlNoSup };
       return printNow();
     }
   });
