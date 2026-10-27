@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '27/10 — 2';
+  var APP_BUILD = '27/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1764,9 +1764,9 @@
       return '<a class="card stat" href="' + href + '"><span class="lbl">' + label + '</span><span class="num">' + num + '</span><span class="sub">' + sub + '</span></a>';
     };
     var stats =
-      stat('#/teachers', 'المعلمون', evalTeachers().length,
-        'تقييمات منشورة: ' + count(evalTeachers(), function (t) { return t.status === 'published'; }) +
-        ' · قيد العمل: ' + count(evalTeachers(), function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
+      stat('#/teachers', 'المعلمون', activeTeachers().length,
+        'تقييمات منشورة: ' + count(activeTeachers(), function (t) { return t.status === 'published'; }) +
+        ' · قيد العمل: ' + count(activeTeachers(), function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
       stat('#/visits', 'الزيارات الإشرافية', S.visits.length,
         'هذا الشهر: ' + count(S.visits, function (v) { return (v.visit_date || '').slice(0, 7) === month; }));
     if (isAdmin()) {
@@ -1866,6 +1866,8 @@
   // من ليس من العاملين (حساب تجريبي أو جهة مشرفة) لا يظهر في الدوام ولا التقييم ولا الجدول ولا الاحتياط ولا المواصلات
   function realStaff(t) { return !!t && !t.not_staff; }
   function staffList() { return S.teachers.filter(realStaff); }
+  // المعلمون على رأس عملهم اليوم (من انتهى عقده لا يدخل في الأعداد)
+  function activeTeachers() { return evalTeachers().filter(function (t) { return employedOn(t, todayISO()); }); }
   function evalTeachers() { return staffList().filter(function (t) { return TEACHING_CATS.indexOf(staffCat(t)) > -1; }); }
 
   // الفئة من نص حر في كشف مستورد
@@ -2025,7 +2027,9 @@
       '<button type="button" class="btn" data-tedit="">إلغاء</button></div></form>';
 
     var catNow = ui.staffCat || '', counts = {};
-    staffList().forEach(function (x) { counts[staffCat(x)] = (counts[staffCat(x)] || 0) + 1; });
+    // الأعداد لمن هم على رأس عملهم اليوم فقط: من انتهى عقده يبقى في القائمة (مظلَّلًا) ولا يُحسب
+    var activeN = 0;
+    staffList().forEach(function (x) { if (!employedOn(x, todayISO())) return; counts[staffCat(x)] = (counts[staffCat(x)] || 0) + 1; activeN++; });
     var sq = norm(ui.staffQ || ''), sdig = latinDigits(ui.staffQ || '').replace(/D/g, '');
     var rows = S.teachers.filter(function (x) {
       if (catNow && staffCat(x) !== catNow) return false;
@@ -2071,7 +2075,7 @@
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label></div>' +
         '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p></div>') +
       (ed || ui.staffImp ? '' : '<div class="toolbar" style="margin:0 0 10px"><input type="search" id="st-q" data-ro-ok placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث في العاملين" style="flex:1;min-width:240px" value="' + esc(ui.staffQ || '') + '"></div>') +
-      (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', S.teachers.length]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
+      (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', activeN]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
       '<div class="card">' + (rows
