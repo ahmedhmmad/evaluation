@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '27/10 — 4';
+  var APP_BUILD = '27/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1709,10 +1709,19 @@
           list.forEach(function (r) { t.all += r.amount; if (r.method === 'cash') t.cash += r.amount; });
           return t;
         };
-        var td = sum(d.recs.filter(function (r) { return r.day === d.day; })), mo = sum(d.recs);
+        var td = sum(d.recs.filter(function (r) { return r.day === d.day; }));
         var split = function (t) { return t.n + ' إيصالًا · نقدًا ' + money(t.cash) + ' · تحويلات ' + money(t.all - t.cash); };
-        cards += stat('#/transport/ledger', 'حصيلة المواصلات اليوم', money(td.all), split(td)) +
-          stat('#/transport/ledger', 'حصيلة ' + tLabel(d.month), money(mo.all), split(mo));
+        cards += stat('#/transport/ledger', 'حصيلة المواصلات اليوم', money(td.all), split(td));
+        // حصيلة الدورة: كل ما سُدّد عن الدورة (بإيصالاتها وإيصالات إكمالها) أيًّا كان يوم السداد، كما في تقرير الباصات وملخص الشعب
+        if (S.tPay[d.month]) {
+          var keepM = ui.tMonth;
+          ui.tMonth = d.month;
+          var mt = payTotals(payRows()), cnt = 0;
+          Object.keys(mt.byCount).forEach(function (k) { cnt += mt.byCount[k]; });
+          ui.tMonth = keepM;
+          cards += stat('#/transport/payments', 'حصيلة ' + tLabel(d.month), money(mt.paid),
+            cnt + ' إيصالًا · نقدًا ' + money(mt.by.cash) + ' · تحويلات ' + money(mt.paid - mt.by.cash));
+        }
       }
       // المتأخرون عن سداد اشتراك هذا الشهر بعد المهلة
       if (!S.transportMissing && !S.busMissing && S.tPay[d.month]) {
