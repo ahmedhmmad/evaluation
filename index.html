@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '27/10 — 3';
+  var APP_BUILD = '27/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1868,7 +1868,8 @@
   function staffList() { return S.teachers.filter(realStaff); }
   // المعلمون على رأس عملهم اليوم (من انتهى عقده لا يدخل في الأعداد)
   function activeTeachers() { return evalTeachers().filter(function (t) { return employedOn(t, todayISO()); }); }
-  function evalTeachers() { return staffList().filter(function (t) { return TEACHING_CATS.indexOf(staffCat(t)) > -1; }); }
+  // المعلمون = هيئة التدريس فقط؛ المحفظون وظيفة مختلفة فلا يدخلون في قائمة المعلمين وتقييمهم وأعدادهم
+  function evalTeachers() { return staffList().filter(function (t) { return staffCat(t) === 'هيئة تدريس'; }); }
 
   // الفئة من نص حر في كشف مستورد
   function parseStaffCat(v) {
@@ -9381,10 +9382,11 @@
       var o = t.subs[sub] || (t.subs[sub] = { cls: {}, n: 0 });
       o.cls[s.class_name] = 1; o.n++; t.n++;
     });
-    var rows = '', i = 0, total = 0;
+    var rows = '', i = 0, total = 0, quranN = 0;
     ttTeachers().forEach(function (t) {
       var d = by[t.id];
       if (!d) return;
+      if (ttIsQuranT(t)) quranN++;
       var subs = Object.keys(d.subs).sort(function (a, b) { return d.subs[b].n - d.subs[a].n || a.localeCompare(b, 'ar'); });
       i++; total += d.n;
       subs.forEach(function (sub, j) {
@@ -9394,7 +9396,7 @@
           (j ? '' : '<td class="c" rowspan="' + subs.length + '"><b>' + d.n + '</b></td>') + '</tr>';
       });
     });
-    var head = reportHead('تشكيل المعلمين', [['عدد المعلمين', i], ['مجموع الحصص الأسبوعية', total]]).replace(/^<img class="wm"[^>]*>/, '');
+    var head = reportHead('تشكيل المعلمين', [['عدد المعلمين', i - quranN]].concat(quranN ? [['عدد المحفظين', quranN]] : [], [['مجموع الحصص الأسبوعية', total]])).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
