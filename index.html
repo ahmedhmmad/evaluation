@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '27/10 — 1';
+  var APP_BUILD = '27/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1554,7 +1554,7 @@
   function navModel() {
     var groups = navModel0();
     if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد']); });
-    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات']); });
+    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي']] });
     return groups;
   }
@@ -1585,6 +1585,7 @@
   function activeKey() {
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
+    if (h === '#/exits' && canAttView()) return 'exits';
     if (h === '#/discipline' && canDisc()) return 'discipline';
     if (h === '#/custody' && canView()) return 'custody';
     if (/^#\/affairs/.test(h) && canAttView()) return 'affairs';
@@ -8416,6 +8417,7 @@
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
+    if (h === '#/exits' && canAttView()) return renderExits();
     if (h === '#/discipline' && canDisc()) return renderDiscipline();
     if (h === '#/custody' && canView()) return renderCustody();
     if (/^#\/affairs/.test(h) && canAttView()) return renderAffairs();
@@ -8997,6 +8999,158 @@
     else if (id === 'dc-cls') { c.cls = e.target.value; render(); }
     else if (id === 'dc-fkind') { c.kind = e.target.value; render(); }
     else if (id === 'dc-year') { c.year = e.target.value; render(); }
+  });
+
+  /* ---------- إذن خروج الطلاب ----------
+     يُسجَّل يوميًا خروج طالب أو أكثر أثناء الدوام: اليوم وساعة الخروج وسبب الخروج، ويُطبع تقرير يومي وتقرير شهري.
+     يسجّل المدير العام والمسجِّل، ويراه المدير والمشرف (supabase/student_exits.sql) */
+
+  var EX_REASONS = ['موعد طبي', 'ظرف عائلي', 'حضور ولي الأمر لاستلامه', 'مرض', 'استدعاء من ولي الأمر'];
+  function exState() { return S.ex || (S.ex = { list: [], missing: false, loaded: false, loading: false, day: todayISO(), month: todayISO().slice(0, 7), time: '', reason: '', q: '', cls: '', sel: {} }); }
+  var pendingEx = null;
+
+  async function loadExits() {
+    var c = exState();
+    if (c.loading) return;
+    c.loading = true;
+    var rows = await fetchAll(function () { return sb.from('student_exits').select('*').order('day', { ascending: false }).order('exit_time').order('id'); });
+    c.loading = false; c.loaded = true; c.missing = !rows; c.list = rows || [];
+    render();
+  }
+
+  function exNow() { var d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  function exHm(t) { return String(t || '').slice(0, 5); }
+  function exSorted(list) { return list.slice().sort(function (a, b) { return a.day.localeCompare(b.day) || exHm(a.exit_time).localeCompare(exHm(b.exit_time)); }); }
+
+  function exCands() {
+    var c = exState(), q = norm(c.q), LIMIT = 40;
+    var list = S.students.filter(function (x) {
+      if (!enrolled(x)) return false;
+      if (c.cls && x.class_name !== c.cls) return false;
+      return !q || norm(x.full_name).indexOf(q) > -1 || String(x.national_id || '').indexOf(latinDigits(c.q)) > -1;
+    }).sort(function (a, b) { return classRank(a.class_name) - classRank(b.class_name) || a.full_name.localeCompare(b.full_name, 'ar'); });
+    return list.slice(0, LIMIT).map(function (x) {
+      return '<label class="cand" style="cursor:pointer"><span><input type="checkbox" data-exsel="' + x.id + '"' + (c.sel[x.id] ? ' checked' : '') + '> <b>' + esc(x.full_name) + '</b>' + rsvMark(x) + ' <span class="meta">— ' + esc(x.class_name || 'بدون شعبة') + '</span></span></label>';
+    }).join('') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ اكتب في البحث أو اختر شعبة.</p>' : '') ||
+      '<div class="empty">لا يوجد طلاب مطابقون.</div>';
+  }
+  function exSelBtn() {
+    var n = Object.keys(exState().sel).filter(function (k) { return exState().sel[k]; }).length;
+    return '<button type="submit" class="btn primary"' + (n ? '' : ' disabled') + '>تسجيل الخروج' + (n ? ' (' + n + ')' : '') + '</button>';
+  }
+
+  function renderExits() {
+    var c = exState();
+    if (!c.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadExits(); return; }
+    if (c.missing) {
+      app.innerHTML = '<div class="card empty">إذن الخروج يحتاج جدولًا جديدًا.<br>' + (isAdmin() ? 'شغّل الملف <code dir="ltr">supabase/student_exits.sql</code> في محرر SQL، ثم حدّث الصفحة.' : 'يشغّل المدير العام الملف <code dir="ltr">supabase/student_exits.sql</code>.') + '</div>';
+      return;
+    }
+    var edit = canEditDisc();
+    if (!c.time) c.time = exNow();
+    var dayList = exSorted(c.list.filter(function (r) { return r.day === c.day; })), monthN = c.list.filter(function (r) { return r.day.slice(0, 7) === c.month; }).length;
+    var rows = dayList.map(function (r, i) {
+      var x = findStudent(r.student_id);
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x ? x.full_name : '(طالب محذوف)') + '</b></td><td>' + esc(x ? x.class_name || '' : '') + '</td><td>' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td>' +
+        (edit ? '<td><button type="button" class="btn danger" data-exdel="' + r.id + '">حذف</button></td>' : '') + '</tr>';
+    }).join('');
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إذن خروج الطلاب</h1>' +
+      (edit ? '<form class="card" id="ex-form"><h2>تسجيل خروج</h2><div class="toolbar" style="align-items:flex-end;margin:10px 0 0">' +
+        '<div><label class="field" for="ex-day">اليوم</label><input type="date" id="ex-day-new" value="' + esc(c.day) + '"></div>' +
+        '<div><label class="field" for="ex-time">ساعة الخروج</label><input type="time" id="ex-time" required value="' + esc(c.time) + '"></div>' +
+        '<div style="flex:1;min-width:220px"><label class="field" for="ex-reason">سبب الخروج <span class="req">*</span></label><input type="text" id="ex-reason" required list="ex-reasons" autocomplete="off" value="' + esc(c.reason) + '"><datalist id="ex-reasons">' +
+          EX_REASONS.map(function (r) { return '<option value="' + esc(r) + '">'; }).join('') + '</datalist></div></div>' +
+        '<h3 style="margin:14px 0 6px">اختر الطالب أو الطلاب</h3><div class="toolbar" style="align-items:center;margin:0 0 8px"><input type="search" id="ex-q" placeholder="ابحث بالاسم أو رقم الهوية" aria-label="بحث" style="flex:1;min-width:200px" value="' + esc(c.q) + '">' +
+        '<select id="ex-cls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === c.cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>' +
+        '<div id="ex-cands" style="max-height:280px;overflow:auto">' + exCands() + '</div><div class="actions" id="ex-submit">' + exSelBtn() + '</div></form>' : '') +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">خروج يوم ' + esc(dayName(c.day)) + ' ' + dmy(c.day) + ' (' + dayList.length + ')</h2>' +
+        '<input type="date" id="ex-day" aria-label="اليوم المعروض" data-ro-ok value="' + esc(c.day) + '">' +
+        '<button type="button" class="btn" data-exprint="day" data-ro-ok' + (dayList.length ? '' : ' disabled') + '>طباعة التقرير اليومي</button></div>' +
+        (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ساعة الخروج</th><th>السبب</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+          : '<div class="empty">لم يخرج أحد في هذا اليوم.</div>') + '</div>' +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">التقرير الشهري</h2>' +
+        '<input type="month" id="ex-month" aria-label="الشهر" data-ro-ok value="' + esc(c.month) + '"><span class="hint" style="margin:0">' + monthN + ' إذن خروج</span>' +
+        '<button type="button" class="btn" data-exprint="month" data-ro-ok' + (monthN ? '' : ' disabled') + '>طباعة التقرير الشهري</button></div></div>';
+  }
+
+  function buildExitSheet(q) {
+    var c = exState(), x, rows, head, n;
+    var info = function (r) { return findStudent(r.student_id) || { full_name: '(طالب محذوف)', class_name: '' }; };
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    if (q === 'day') {
+      rows = exSorted(c.list.filter(function (r) { return r.day === c.day; }));
+      n = 5;
+      head = reportHead('تقرير إذن خروج الطلاب اليومي', [['اليوم', dayName(c.day)], ['التاريخ', dmy(c.day)], ['عدد الخارجين', rows.length]]).replace(/^<img class="wm"[^>]*>/, '');
+      sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+        '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+        '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ساعة الخروج</th><th>السبب</th></tr></thead><tbody>' +
+        rows.map(function (r, i) { x = info(r); return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td></tr>'; }).join('') +
+        '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+      return;
+    }
+    rows = exSorted(c.list.filter(function (r) { return r.day.slice(0, 7) === c.month; }));
+    n = 6;
+    var per = {}, order = [];
+    rows.forEach(function (r) { if (!per[r.student_id]) { per[r.student_id] = 0; order.push(r.student_id); } per[r.student_id]++; });
+    order.sort(function (a, b) { return per[b] - per[a] || info({ student_id: a }).full_name.localeCompare(info({ student_id: b }).full_name, 'ar'); });
+    head = reportHead('تقرير إذن خروج الطلاب الشهري', [['الشهر', monthLabel(c.month)], ['عدد أذونات الخروج', rows.length], ['عدد الطلاب', order.length]]).replace(/^<img class="wm"[^>]*>/, '');
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>التاريخ</th><th>الطالب</th><th>الشعبة</th><th>ساعة الخروج</th><th>السبب</th></tr></thead><tbody>' +
+      rows.map(function (r, i) { x = info(r); return '<tr><td class="c">' + (i + 1) + '</td><td class="c" style="white-space:nowrap">' + dmy(r.day) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td></tr>'; }).join('') +
+      '<tr><td class="bf-sec" colspan="' + n + '">ملخص الطلاب (عدد مرات الخروج)</td></tr>' +
+      order.map(function (sid, i) { x = info({ student_id: sid }); return '<tr><td class="c">' + (i + 1) + '</td><td colspan="2" style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c"><b>' + per[sid] + (per[sid] === 1 ? ' مرة' : ' مرات') + '</b></td><td></td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+  }
+
+  document.addEventListener('submit', async function (e) {
+    if (e.target.id !== 'ex-form' || !canEditDisc()) return;
+    e.preventDefault();
+    var c = exState(), ids = Object.keys(c.sel).filter(function (k) { return c.sel[k]; });
+    if (!ids.length) return toast('اختر طالبًا واحدًا على الأقل', true);
+    var day = document.getElementById('ex-day-new').value, time = document.getElementById('ex-time').value, reason = document.getElementById('ex-reason').value.trim();
+    if (!day || !time || !reason) return toast('اكتب اليوم والساعة والسبب', true);
+    var who = (S.profile && S.profile.full_name) || displayName(S.email);
+    var r = await sb.from('student_exits').insert(ids.map(function (id) { return { student_id: id, day: day, exit_time: time, reason: reason, created_by: who }; })).select();
+    if (r.error) return fail(r.error);
+    c.list = (r.data || []).concat(c.list);
+    c.sel = {}; c.day = day; c.month = day.slice(0, 7); c.reason = reason; c.time = exNow();
+    render();
+    toast('سُجّل خروج ' + ids.length + (ids.length === 1 ? ' طالب' : ' طلاب'));
+  });
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/exits' || !canAttView()) return;
+    var el, c = exState();
+    if ((el = e.target.closest('[data-exprint]'))) { pendingEx = el.getAttribute('data-exprint'); return printNow(); }
+    if ((el = e.target.closest('[data-exdel]')) && canEditDisc()) {
+      var id = el.getAttribute('data-exdel');
+      if (!confirm('حذف إذن الخروج هذا؟')) return;
+      var d = await sb.from('student_exits').delete().eq('id', id);
+      if (d.error) return fail(d.error);
+      c.list = c.list.filter(function (x) { return x.id !== id; });
+      render();
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/exits') return;
+    var c = exState(), id = e.target.id;
+    if (id === 'ex-time') c.time = e.target.value;
+    else if (id === 'ex-reason') c.reason = e.target.value;
+    else if (id === 'ex-q') { c.q = e.target.value; document.getElementById('ex-cands').innerHTML = exCands(); }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/exits') return;
+    var c = exState(), el = e.target, id = el.id;
+    if (el.hasAttribute && el.hasAttribute('data-exsel')) { c.sel[el.getAttribute('data-exsel')] = el.checked; document.getElementById('ex-submit').innerHTML = exSelBtn(); }
+    else if (id === 'ex-cls') { c.cls = el.value; document.getElementById('ex-cands').innerHTML = exCands(); }
+    else if (id === 'ex-day' && el.value) { c.day = el.value; c.month = el.value.slice(0, 7); render(); }
+    else if (id === 'ex-month' && el.value) { c.month = el.value; render(); }
+    else if (id === 'ex-day-new') c.day = el.value || c.day;
   });
 
   /* ---------- اللجان المدرسية ----------
@@ -15483,6 +15637,7 @@
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
     else if (pendingDc) buildDisciplineSheet();
+    else if (pendingEx) buildExitSheet(pendingEx);
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -15512,6 +15667,7 @@
     pendingCu = false;
     pendingWarn = null;
     pendingDc = false;
+    pendingEx = null;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
