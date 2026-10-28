@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 6';
+  var APP_BUILD = '28/10 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8695,7 +8695,8 @@
   function afConsentForm(x, c, full) {
     var year = academicYear(), dots = '..................................';
     var row = function (k, v) { return '<div style="display:flex;gap:.5em;margin:.45em 0;align-items:baseline"><span>' + k + '</span><span style="flex:1;border-bottom:1px dotted #555;min-height:1.2em">' + (v == null ? '' : v) + '</span></div>'; };
-    return '<div class="afc-form" style="height:' + (full ? '255mm' : '124mm') + ';box-sizing:border-box;padding:2mm 4mm;overflow:hidden">' +
+    return '<div class="afc-form" style="position:relative;height:' + (full ? '255mm' : '124mm') + ';box-sizing:border-box;padding:2mm 4mm;overflow:hidden">' +
+      '<img class="wm" src="' + REPORT.logo + '" alt="" style="position:absolute;width:' + (full ? '120mm' : '80mm') + '">' +
       (full ? letterhead() : '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.25em;margin-bottom:.5em"><b style="font-size:1.1em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(year) + '</span></div>') +
       '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:' + (full ? '1.6em' : '1.3em') + ';color:var(--navy);margin:.2em 0 .4em">موافقة ولي الأمر</div>' +
       row('السيد ولي أمر الطالب / الطالبة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>') +
