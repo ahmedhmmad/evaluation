@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 3';
+  var APP_BUILD = '28/10 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9338,6 +9338,94 @@
     else if (id === 'ex-day-new') c.day = el.value || c.day;
   });
 
+  /* ----- كتاب لفت نظر بسبب التأخير -----
+     في «دوام الموظفين»: يُعرض المتأخرون في الشهر المختار بأيام تأخرهم ومجموعه، ويُختار أحدهم فيُكتب له كتاب لفت نظر يذكر أيام التأخير
+     ومجموع ساعاته ورسالة بضرورة الالتزام، ويُطبع بتوقيع المدير وإقرار الموظف بالاستلام. يُحسب التأخير عن دوام مجموعة الموظف (saLate) */
+  var LT_MSG = 'نؤكد على ضرورة الالتزام بمواعيد الدوام الرسمي حرصًا على انتظام العملية التعليمية وحسن سير العمل، ونأمل ألا يتكرر ذلك مستقبلًا، وإلا اضطررنا إلى اتخاذ الإجراءات اللازمة وفق نظام العمل المعتمد.';
+  var pendingLt = null;
+  function ltUi() { return ui.lt || (ui.lt = { month: '', data: null, loading: false, sid: '', date: todayISO(), msg: LT_MSG, days: true }); }
+  function ltHours(mins) {
+    mins = Math.round(mins);
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return (h ? h + (h === 1 ? ' ساعة' : ' ساعات') : '') + (h && m ? ' و' : '') + (m || !h ? m + ' دقيقة' : '');
+  }
+  // أيام تأخر الموظف في الشهر: [{ day, in, official, mins }]
+  function ltLateDays(s) {
+    var T = shiftOf(s.t);
+    return Object.keys(s.days).sort().map(function (k) { var r = s.days[k], l = saLate(r, T); return l ? { day: k, in: r.time_in, official: T.time_in, mins: l } : null; }).filter(Boolean);
+  }
+  async function ltLoad(month) {
+    var u = ltUi();
+    u.loading = true; u.month = month; u.data = null;
+    render();
+    var D = await saMonthData(month);
+    u.loading = false;
+    u.data = D;
+    if (!D) toast('تعذر جلب دوام الشهر', true);
+    render();
+  }
+  function ltCardHtml() {
+    var u = ltUi(), month = saState().month, D = u.data && u.month === month ? u.data : null;
+    var head = '<div class="card"><h2>كتب لفت النظر (التأخير)</h2><div class="toolbar" style="align-items:center;margin:8px 0 0">' +
+      '<span class="hint" style="margin:0">الشهر: <b>' + esc(monthLabel(month)) + '</b> (يُغيَّر من «الشهر» في الكشف الشهري أعلاه)</span>' +
+      '<button type="button" class="btn primary" data-ltload data-ro-ok' + (u.loading ? ' disabled' : '') + '>' + (u.loading ? 'جارٍ الجلب…' : 'عرض المتأخرين') + '</button></div>';
+    if (!D) return head + '<p class="hint" style="margin:8px 0 0">اضغط «عرض المتأخرين» لتظهر قائمة من تأخروا عن دوامهم في هذا الشهر.</p></div>';
+    var late = D.staff.filter(function (s) { return s.lateDays > 0; }).sort(function (a, b) { return b.late - a.late; });
+    var rows = late.map(function (s, i) {
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(s.t.name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(s.t.job_title || staffCat(s.t)) + '</span></td><td>' + s.lateDays + '</td><td><b>' + esc(ltHours(s.late)) + '</b> <span class="meta">(' + s.late + ' د)</span></td>' +
+        '<td><button type="button" class="btn' + (u.sid === s.t.id ? ' primary' : '') + '" data-ltpick="' + s.t.id + '" data-ro-ok>كتاب لفت نظر</button></td></tr>';
+    }).join('');
+    var form = '';
+    var cur = late.filter(function (s) { return s.t.id === u.sid; })[0];
+    if (cur) {
+      var days = ltLateDays(cur);
+      form = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><h3 style="margin:0 0 8px">كتاب لفت نظر: ' + esc(cur.t.name) + '</h3>' +
+        '<p class="hint" style="margin:0 0 8px">أيام التأخر: <b>' + days.length + '</b> · مجموع التأخير: <b>' + esc(ltHours(cur.late)) + '</b>. يُدرج في الكتاب جدول بأيام التأخر وساعاتها.</p>' +
+        '<div class="grid2"><div><label class="field" for="lt-date">تاريخ الكتاب</label><input type="date" id="lt-date" data-ro-ok value="' + esc(u.date) + '"></div>' +
+        '<div style="align-self:end"><label class="check"><input type="checkbox" id="lt-days" data-ro-ok' + (u.days ? ' checked' : '') + '> إدراج جدول أيام التأخر في الكتاب</label></div>' +
+        '<div style="grid-column:1/-1"><label class="field" for="lt-msg">رسالة الالتزام</label><textarea id="lt-msg" data-ro-ok rows="4">' + esc(u.msg) + '</textarea></div></div>' +
+        '<div class="actions"><button type="button" class="btn primary" data-ltprint="' + cur.t.id + '" data-ro-ok>طباعة كتاب لفت النظر / PDF</button></div></div>';
+    }
+    return head + (rows ? '<div class="table-wrap"><table class="grid" style="margin-top:8px"><thead><tr><th>م</th><th>الموظف</th><th>أيام التأخر</th><th>مجموع التأخير</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div class="empty" style="margin-top:8px">لا متأخرون في هذا الشهر.</div>') + form + '</div>';
+  }
+
+  function buildLateLetterSheet(sid) {
+    var u = ltUi(), D = u.data, s = D && D.staff.filter(function (x) { return x.t.id === sid; })[0];
+    if (!s) { sheet.className = 'ps'; sheet.innerHTML = '<p>لا بيانات.</p>'; return; }
+    var days = ltLateDays(s), t = s.t, T = shiftOf(t);
+    var dotted = '..............................';
+    var table = u.days && days.length ? '<table class="rz" style="margin:.6em 0"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>وقت الحضور الرسمي</th><th>وقت الحضور الفعلي</th><th>مدة التأخير</th></tr></thead><tbody>' +
+      days.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d.day) + '</td><td class="c">' + esc(dayName(d.day)) + '</td><td class="c">' + esc(d.official) + '</td><td class="c">' + esc(d.in) + '</td><td class="c">' + esc(ltHours(d.mins)) + '</td></tr>'; }).join('') +
+      '<tr class="total"><td colspan="5">المجموع</td><td class="c"><b>' + esc(ltHours(s.late)) + '</b></td></tr></tbody></table>' : '';
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = reportHead('كتاب لفت نظر', [['التاريخ', dmy(u.date)], ['الموضوع', 'التأخر المتكرر عن الدوام']], { noIssueDate: true }) +
+      '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ' + esc(t.name) + '</b>' + (t.job_title ? ' — ' + esc(t.job_title) : '') + '</p>' +
+      '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
+      '<p style="margin:0 0 .6em;line-height:1.9">بالإشارة إلى سجلات الدوام عن شهر <b>' + esc(monthLabel(D.month)) + '</b>، تبيّن تأخركم عن الحضور في الموعد الرسمي (<b>' + esc(T.time_in) + '</b>) خلال <b>' + (days.length === 1 ? 'يوم واحد' : days.length === 2 ? 'يومين' : days.length + (days.length <= 10 ? ' أيام' : ' يومًا')) + '</b>، وبلغ مجموع التأخير <b>' + esc(ltHours(s.late)) + '</b>.</p>' +
+      table +
+      '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
+      '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
+      reportSigns([['مدير/ة الأكاديمية', principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
+    fitSheet();
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staffatt' || !canView()) return;
+    var el, u = ltUi();
+    if (e.target.closest('[data-ltload]')) return ltLoad(saState().month);
+    if ((el = e.target.closest('[data-ltpick]'))) { u.sid = el.getAttribute('data-ltpick'); return render(); }
+    if ((el = e.target.closest('[data-ltprint]'))) { pendingLt = el.getAttribute('data-ltprint'); return printNow(); }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/staffatt') return;
+    var u = ltUi();
+    if (e.target.id === 'lt-msg') u.msg = e.target.value;
+    else if (e.target.id === 'lt-date' && e.target.value) u.date = e.target.value;
+    else if (e.target.id === 'lt-days') u.days = e.target.checked;
+  });
+
   /* ---------- اللجان المدرسية ----------
      لجنة بأعضاء من العاملين وطلاب، تُضاف كما يُضاف الباص: يُختار عامل أو أكثر ثم طالب أو أكثر.
      يعدّلها المدير العام، ويراها المدير والمشرف التربوي. الجدولان committees و committee_members من supabase/committees.sql */
@@ -10027,7 +10115,7 @@
           '<button type="button" class="btn primary" data-sasign data-ro-ok>طباعة</button></div>' +
         '<p class="hint" style="margin:6px 0 0">ورقة لكل يوم عمل في الفترة (تُتخطى الجمعة والسبت والعطل)، بترتيب الموظفين في هذه الصفحة: الرقم، الاسم، وقت الحضور والتوقيع، وقت الانصراف والتوقيع. «بدون أسماء (مرقم)»: الكشف نفسه وخانة الاسم فارغة، بعدد الموظفين أو بالعدد الذي تكتبه. بلا علامة مائية ولا توقيعات في آخرها.</p>' +
         '<p class="hint" style="margin:8px 0 0"><b>كشف الحضور</b> مثل كشف الطلاب: اسم كل موظف وعمود لكل يوم من الشهر؛ + حاضر، L إجازة، غ غائب، م مأمورية، وتظليل الجمعة والسبت والعطل والإجازات. ' +
-          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>';
+          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>' + ltCardHtml();
   }
 
   /* ----- كشف التوقيع اليومي، وكشفا العاملين -----
@@ -15826,6 +15914,7 @@
     else if (pendingDc) buildDisciplineSheet();
     else if (pendingEx) buildExitSheet(pendingEx);
     else if (pendingAfList) buildAffairsListSheet();
+    else if (pendingLt) buildLateLetterSheet(pendingLt);
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -15857,6 +15946,7 @@
     pendingDc = false;
     pendingEx = null;
     pendingAfList = false;
+    pendingLt = null;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
