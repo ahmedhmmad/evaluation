@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 4';
+  var APP_BUILD = '28/10 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -5310,12 +5310,123 @@
     printNow();
   });
 
+  /* ----- المسددون وغير المسددين (مع الباص والعنوان) -----
+     تقرير إضافي في المواصلات للدورة المعروضة: المشتركون في الباصات مقسَّمين إلى مسددين، وغير مسددين (ومنهم من سدّد جزءًا أو لم يبدأ اشتراكه)، ومعفين،
+     لكلٍّ باصه وعنوانه وهاتف ولي أمره والمطلوب والمدفوع والمتبقي؛ يُصفّى بالباص والشعبة والحالة، ويُطبع ويُصدَّر Excel */
+  function tsUi() { return ui.ts || (ui.ts = { view: '', bus: '', cls: '' }); }
+  var pendingTs = false;
+
+  function tsRows() {
+    var rows = payRows().map(function (r) {
+      return { x: r.x, g: r.g, share: r.share, paid: r.paid, left: r.left, st: r.status === 'paid' ? 'paid' : r.status === 'exempt' ? 'exempt' : 'unpaid', part: r.status === 'part', notStarted: false };
+    }), seen = {};
+    rows.forEach(function (r) { seen[r.x.id] = 1; });
+    // في الباص ولم يدفع أي اشتراك بعد: غير مسدِّد
+    S.tMembers.forEach(function (m) {
+      var x = findStudent(m.student_id), g = findGroup(m.group_id);
+      if (!x || !g || seen[x.id] || !subscribedIn(m, ui.tMonth)) return;
+      var sh = shareOf(m);
+      rows.push({ x: x, g: g, share: sh, paid: 0, left: sh, st: 'unpaid', part: false, notStarted: true });
+    });
+    var u = tsUi();
+    return rows.filter(function (r) { return (!u.bus || r.g.id === u.bus) && (!u.cls || r.x.class_name === u.cls); }).sort(function (a, b) {
+      return (a.g.bus_no == null ? 1e9 : a.g.bus_no) - (b.g.bus_no == null ? 1e9 : b.g.bus_no) || String(a.g.assembly_point).localeCompare(String(b.g.assembly_point), 'ar', { numeric: true }) ||
+        classRank(a.x.class_name) - classRank(b.x.class_name) || a.x.full_name.localeCompare(b.x.full_name, 'ar');
+    });
+  }
+  function tsSections() {
+    var u = tsUi(), rows = tsRows(), pick = function (k) { return rows.filter(function (r) { return r.st === k; }); };
+    var out = [];
+    if (u.view !== 'unpaid') out.push({ key: 'paid', title: 'المسددون', list: pick('paid') });
+    if (u.view !== 'paid') out.push({ key: 'unpaid', title: 'غير المسددين', list: pick('unpaid') });
+    if (!u.view) out.push({ key: 'exempt', title: 'المعفون', list: pick('exempt') });
+    return out.filter(function (sec) { return sec.list.length || sec.key !== 'exempt'; });
+  }
+  function tsCols(r) {
+    return [r.x.full_name + rsvText(r.x), r.x.class_name || '', r.g.assembly_point, addressWithNeighborhood(r.x) || '', plainPhone(r.x.whatsapp || r.x.phone) || '', r.share, r.paid, r.left];
+  }
+  function tsStatusText(r) { return r.notStarted ? 'لم يدفع بعد' : r.part ? 'سدّد جزءًا' : ''; }
+
+  function tsHtml() {
+    var u = tsUi(), secs = tsSections(), tot = function (l, k) { return l.reduce(function (t, r) { return t + (r.exempt ? 0 : r[k]); }, 0); };
+    var busOpts = S.tGroups.slice().sort(function (a, b) { return String(a.assembly_point).localeCompare(String(b.assembly_point), 'ar', { numeric: true }); });
+    var head = '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">المسددون وغير المسددين — ' + tLabel(ui.tMonth) + '</h2>' +
+      '<select id="ts-view" aria-label="الحالة" style="width:auto">' + afOpts([['', 'الكل'], ['paid', 'المسددون فقط'], ['unpaid', 'غير المسددين فقط']], u.view) + '</select>' +
+      '<select id="ts-bus" aria-label="الباص" style="width:auto;max-width:240px"><option value="">كل الباصات</option>' + busOpts.map(function (g) { return '<option value="' + g.id + '"' + (u.bus === g.id ? ' selected' : '') + '>' + esc(g.assembly_point) + '</option>'; }).join('') + '</select>' +
+      '<select id="ts-cls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === u.cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>' +
+      '<button type="button" class="btn" data-tsprint data-ro-ok>طباعة / PDF</button><button type="button" class="btn" data-tsxlsx data-ro-ok>تصدير Excel</button></div></div>';
+    return head + secs.map(function (sec) {
+      var l = sec.list;
+      return '<div class="card"><h2>' + sec.title + ' (' + l.length + ')' + (sec.key === 'exempt' ? '' : ' <span class="meta" style="font-weight:400;font-size:.9rem">— المدفوع ' + plainNum(tot(l, 'paid')) + ' · المتبقي ' + plainNum(tot(l, 'left')) + ' ج.م</span>') + '</h2>' +
+        (l.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>الباص</th><th>العنوان</th><th>واتساب ولي الأمر</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>' +
+          l.map(function (r, i) {
+            var c = tsCols(r), note = tsStatusText(r);
+            return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(r.x.full_name) + '</b>' + rsvMark(r.x) + (note ? '<br><span class="meta" style="font-size:.85rem">' + note + '</span>' : '') + '</td><td>' + esc(c[1]) + '</td><td>' + esc(c[2]) + '</td><td>' + esc(c[3]) + '</td>' +
+              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(c[4] || '—') + '</td><td>' + plainNum(c[5]) + '</td><td>' + plainNum(c[6]) + '</td><td>' + (c[7] ? '<b style="color:var(--red)">' + plainNum(c[7]) + '</b>' : 0) + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
+    }).join('');
+  }
+
+  function buildTransportStatusSheet() {
+    var secs = tsSections(), u = tsUi(), n = 9, g = u.bus ? findGroup(u.bus) : null, all = secs.reduce(function (t, sec) { return t + sec.list.length; }, 0);
+    var info = [['الدورة', tLabel(ui.tMonth)], ['عدد الطلاب', all]].concat(g ? [['الباص', g.assembly_point]] : [], u.cls ? [['الشعبة', u.cls]] : [], u.view ? [['الحالة', u.view === 'paid' ? 'المسددون فقط' : 'غير المسددين فقط']] : []);
+    var head = reportHead('المسددون وغير المسددين في المواصلات', info).replace(/^<img class="wm"[^>]*>/, '');
+    var body = secs.map(function (sec) {
+      return '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="' + n + '">' + sec.title + ' (' + sec.list.length + ')</td></tr>' + (sec.list.length ? sec.list.map(function (r, i) {
+        var c = tsCols(r), note = tsStatusText(r);
+        return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(r.x.full_name) + '</b>' + rsvMark(r.x) + (note ? ' <small>(' + note + ')</small>' : '') + '</td><td class="c">' + esc(c[1]) + '</td><td>' + esc(c[2]) + '</td><td style="font-size:.9em">' + esc(c[3]) + '</td>' +
+          '<td class="c" dir="ltr">' + esc(c[4]) + '</td><td class="c">' + plainNum(c[5]) + '</td><td class="c">' + plainNum(c[6]) + '</td><td class="c">' + (c[7] ? '<b>' + plainNum(c[7]) + '</b>' : 0) + '</td></tr>';
+      }).join('') : '<tr><td colspan="' + n + '" class="c">—</td></tr>');
+    }).join('');
+    printLandscape = true;
+    sheet.style.width = '267mm';
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>الباص</th><th>العنوان</th><th>الهاتف</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>' + body + '</tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
+  }
+
+  async function tsXlsx() {
+    var secs = tsSections();
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      secs.forEach(function (sec) {
+        xlsxSheet(wb, used, sec.title, [[schoolName()], [sec.title + ' — المواصلات — ' + tLabel(ui.tMonth)], ['العدد: ' + sec.list.length], [],
+          ['م', 'الطالب', 'الشعبة', 'الباص', 'العنوان', 'هاتف ولي الأمر', 'المطلوب', 'المدفوع', 'المتبقي', 'ملاحظة']].concat(sec.list.map(function (r, i) {
+          var c = tsCols(r);
+          return [i + 1].concat(c, [tsStatusText(r)]);
+        })), [5, 30, 12, 26, 36, 15, 10, 10, 10, 14]);
+      });
+      XLSX.writeFile(wb, 'المسددون-وغير-المسددين-' + ui.tMonth + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/transport/status' || !canTransport()) return;
+    if (e.target.closest('[data-tsxlsx]')) return tsXlsx();
+    if (e.target.closest('[data-tsprint]')) { pendingTs = true; return printNow(); }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/transport/status') return;
+    var k = { 'ts-view': 'view', 'ts-bus': 'bus', 'ts-cls': 'cls' }[e.target.id];
+    if (!k) return;
+    tsUi()[k] = e.target.value;
+    render();
+  });
+
   function transportNav(view) {
     var item = function (key, hash, label) {
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + '</button>';
     };
     return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + item('groups', '#/transport', 'الباصات') + item('late', '#/transport/late', 'المتأخرون والتعليق') +
-      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('ledger', '#/transport/ledger', 'سجل الدفعات') + item('busrep', '#/transport/buses', 'تقرير الباصات') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('refunds', '#/transport/refunds', 'المستردات') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
+      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('ledger', '#/transport/ledger', 'سجل الدفعات') + item('busrep', '#/transport/buses', 'تقرير الباصات') + item('status', '#/transport/status', 'المسددون وغير المسددين') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('refunds', '#/transport/refunds', 'المستردات') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
   }
 
   function payStatsHtml(t, firstSub) {
@@ -5922,7 +6033,7 @@
       return;
     }
 
-    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : hash === '#/transport/buses' ? 'busrep' : 'groups';
+    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : hash === '#/transport/buses' ? 'busrep' : hash === '#/transport/status' ? 'status' : 'groups';
     var all = payRows();
     var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
       '<span style="flex:1"></span>' + monthPick + '</div>';
@@ -5939,6 +6050,11 @@
 
     if (view === 'busrep') {
       app.innerHTML = head + busReportHtml();
+      return;
+    }
+
+    if (view === 'status') {
+      app.innerHTML = head + tsHtml();
       return;
     }
 
@@ -9285,7 +9401,7 @@
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>التاريخ</th><th>الطالب</th><th>الشعبة</th><th>ساعة الخروج</th><th>السبب</th></tr></thead><tbody>' +
       rows.map(function (r, i) { x = info(r); return '<tr><td class="c">' + (i + 1) + '</td><td class="c" style="white-space:nowrap">' + dmy(r.day) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td></tr>'; }).join('') +
-      '<tr><td class="bf-sec" colspan="' + n + '">ملخص الطلاب (عدد مرات الخروج)</td></tr>' +
+      '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="' + n + '">ملخص الطلاب (عدد مرات الخروج)</td></tr>' +
       order.map(function (sid, i) { x = info({ student_id: sid }); return '<tr><td class="c">' + (i + 1) + '</td><td colspan="2" style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c"><b>' + per[sid] + (per[sid] === 1 ? ' مرة' : ' مرات') + '</b></td><td></td></tr>'; }).join('') +
       '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
   }
@@ -9562,7 +9678,7 @@
     var studs = cmMembers(id, 'student').map(function (m) { return findStudent(m.student_id); }).filter(Boolean)
       .sort(function (a, b) { return classRank(a.class_name) - classRank(b.class_name) || a.full_name.localeCompare(b.full_name, 'ar'); });
     var head = reportHead(com.name, [['عدد العاملين', staff.length], ['عدد الطلاب', studs.length]]).replace(/^<img class="wm"[^>]*>/, '');
-    var sec = function (t) { return '<tr><td class="bf-sec" colspan="3">' + t + '</td></tr>'; };
+    var sec = function (t) { return '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="3">' + t + '</td></tr>'; };
     var body = sec('أعضاء اللجنة من العاملين (' + staff.length + ')') + (staff.length ? staff.map(function (t, i) {
         return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(t.name) + '</b></td><td>' + esc(t.job_title || staffCat(t)) + '</td></tr>';
       }).join('') : '<tr><td colspan="3" class="c">—</td></tr>') +
@@ -15806,7 +15922,7 @@
       held = null;
     };
     ST_FIELDS.forEach(function (f) {
-      if (f.sec) { flush(); if (f.sec !== 'مُدخل البيانات') rows += '<tr><td class="bf-sec" colspan="4">' + f.sec + '</td></tr>'; }
+      if (f.sec) { flush(); if (f.sec !== 'مُدخل البيانات') rows += '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="4">' + f.sec + '</td></tr>'; }
       if (skip[f.k]) return;
       // الحقول الطويلة ومربعات الخيارات الكثيرة تأخذ الصف كله؛ البقية حقلان في الصف
       if (f.wide || (boxes(f) && f.options.join(' ').length > 22)) {
@@ -15820,7 +15936,7 @@
       }
     });
     flush();
-    rows += '<tr><td class="bf-sec" colspan="4">المواصلات</td></tr>' +
+    rows += '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="4">المواصلات</td></tr>' +
       '<tr><th>يحتاج الطالب مواصلات؟</th><td><span class="bf-o">☐ نعم</span><span class="bf-o">☐ لا</span></td><th>توقيع ولي الأمر</th><td></td></tr>';
 
     sheet.className = 'bfp';
@@ -15915,6 +16031,7 @@
     else if (pendingEx) buildExitSheet(pendingEx);
     else if (pendingAfList) buildAffairsListSheet();
     else if (pendingLt) buildLateLetterSheet(pendingLt);
+    else if (pendingTs) buildTransportStatusSheet();
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -15947,6 +16064,7 @@
     pendingEx = null;
     pendingAfList = false;
     pendingLt = null;
+    pendingTs = false;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
