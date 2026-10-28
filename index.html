@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 12';
+  var APP_BUILD = '28/10 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -5230,12 +5230,26 @@
       .map(function (g) { return by[g.id] || { g: g, n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 }; });
     var t = { n: 0, paid: 0, unpaid: 0, part: 0, notStarted: 0, exempt: 0, sum: 0, due: 0, left: 0 };
     rows.forEach(function (b) { Object.keys(t).forEach(function (k) { t[k] += b[k]; }); });
+    // الموظفون (معلمون وغيرهم) المعفون من اشتراك الدورة: يُعدّون منفصلين عن الطلاب ويُميَّزون في التقرير
+    t.exemptStaff = 0;
+    rows.forEach(function (b) {
+      b.exemptStaffNames = S.staffTMissing ? [] : staffRiders(b.g).filter(function (m) { return staffExempt(m.staff_id); }).map(function (m) { return find(m.staff_id).name; });
+      t.exemptStaff += b.exemptStaffNames.length;
+    });
     return { rows: rows, t: t };
   }
 
   // رقم الباص (المحفوظ، وإلا ترتيبه في التقرير)، والمنطقة، وخط السير مع اسم الباص، والمشرف
   function busNo(b, i) { return b.g.bus_no != null ? b.g.bus_no : i + 1; }
   function busRouteText(g) { return [g.assembly_point, g.route].filter(Boolean).join(' — '); }
+
+  // خانة «المعفون»: الطلاب أولًا، ثم الموظفون المعفون بلون وتسمية مختلفين
+  function busExemptCell(b, print) {
+    var st = b.exempt ? (print ? '<b>' + b.exempt + '</b>' : '<b style="color:#6d28d9">' + b.exempt + '</b>') : 0;
+    var staff = b.exemptStaffNames && b.exemptStaffNames.length
+      ? '<div style="' + (print ? 'font-size:.78em;' : 'font-size:.8rem;color:#6d28d9;') + 'margin-top:2px"><b>موظفون: ' + b.exemptStaffNames.length + '</b> (' + b.exemptStaffNames.map(esc).join('، ') + ')</div>' : '';
+    return st + staff;
+  }
 
   function busReportHtml() {
     var D = busReportData(), c = function (v, b) { return '<td class="c">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
@@ -5246,7 +5260,7 @@
         c(b.n) + c(b.paid) +
         '<td class="c">' + (b.unpaid ? '<b style="color:var(--red)">' + b.unpaid + '</b>' : 0) +
           (b.part ? '<div class="hint" style="margin:0">منهم سدّد جزءًا ' + b.part + '</div>' : '') + (b.notStarted ? '<div class="hint" style="margin:0">منهم لم يدفع أي اشتراك بعد ' + b.notStarted + '</div>' : '') + '</td>' +
-        c(b.exempt ? '<b style="color:#6d28d9">' + b.exempt + '</b>' : 0) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
+        c(busExemptCell(b)) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
     };
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">تقرير الباصات — ' + tLabel(ui.tMonth) + '</h2>' +
         '<button type="button" class="btn" data-busrep="xlsx" data-ro-ok>تصدير Excel</button><button type="button" class="btn" data-busrep="pdf" data-ro-ok>طباعة / PDF</button></div>' +
@@ -5254,8 +5268,8 @@
       (D.rows.length
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم الباص</th><th>خط السير</th><th>المشرف</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
             D.rows.map(line).join('') +
-            '<tr class="total"><td colspan="3"><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt, true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
-          '<p class="hint" style="margin:8px 0 0">عدد الطلاب: كل المشتركين في الباص في هذه الدورة (عدا من أُوقف اشتراكه). المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا، ومنهم من لم يدفع أي اشتراك بعد. المعفون: معفون من اشتراك هذه الدورة، لا يُطالَبون. ' +
+            '<tr class="total"><td colspan="3"><b>المجموع</b></td>' + c(D.t.n, true) + c(D.t.paid, true) + c(D.t.unpaid, true) + c(D.t.exempt + (D.t.exemptStaff ? '<div style="font-size:.8rem;color:#6d28d9">+ ' + D.t.exemptStaff + ' موظف</div>' : ''), true) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left), true) + '</tr></tbody></table></div>' +
+          '<p class="hint" style="margin:8px 0 0">عدد الطلاب: كل المشتركين في الباص في هذه الدورة (عدا من أُوقف اشتراكه). المسددون: من سدّد اشتراكه كاملًا. غير المسددين: من لم يسدد أو سدّد جزءًا، ومنهم من لم يدفع أي اشتراك بعد. المعفون: معفون من اشتراك هذه الدورة، لا يُطالَبون، ويظهر تحت عددهم من الموظفين (المعلمين وغيرهم) المعفين في الباص بلون وتسمية مختلفين. ' +
             'خط السير والمشرف من «تعديل» كل باص في صفحة الباصات.</p>'
         : '<div class="empty">لا توجد باصات بعد.</div>') + '</div>';
   }
@@ -5267,9 +5281,9 @@
       var wb = XLSX.utils.book_new(), used = {};
       wb.Workbook = { Views: [{ RTL: true }] };
       xlsxSheet(wb, used, 'تقرير الباصات', [[schoolName()], ['تقرير الباصات — ' + tLabel(ui.tMonth)], [],
-        ['رقم الباص', 'اسم الباص', 'خط السير', 'المشرف', 'هاتف المشرف', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
-        D.rows.map(function (b, i) { return [busNo(b, i), b.g.assembly_point, b.g.route || '', b.g.supervisor_name || '', b.g.supervisor_phone || '', b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.sum, b.left]; }),
-        [['', 'المجموع', '', '', '', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.sum, D.t.left]]), [9, 28, 50, 24, 15, 11, 11, 13, 14, 15, 10, 18, 14]);
+        ['رقم الباص', 'اسم الباص', 'خط السير', 'المشرف', 'هاتف المشرف', 'عدد الطلاب', 'المسددون', 'غير المسددين', 'منهم سدّد جزءًا', 'منهم لم يدفع بعد', 'المعفون (طلاب)', 'المعفون (موظفون)', 'أسماء الموظفين المعفين', 'إجمالي السداد (ج.م)', 'المتبقي (ج.م)']].concat(
+        D.rows.map(function (b, i) { return [busNo(b, i), b.g.assembly_point, b.g.route || '', b.g.supervisor_name || '', b.g.supervisor_phone || '', b.n, b.paid, b.unpaid, b.part, b.notStarted, b.exempt, b.exemptStaffNames.length, b.exemptStaffNames.join('، '), b.sum, b.left]; }),
+        [['', 'المجموع', '', '', '', D.t.n, D.t.paid, D.t.unpaid, D.t.part, D.t.notStarted, D.t.exempt, D.t.exemptStaff, '', D.t.sum, D.t.left]]), [9, 28, 50, 24, 15, 11, 11, 13, 14, 15, 14, 14, 36, 18, 14]);
       XLSX.writeFile(wb, 'تقرير-الباصات-' + ui.tMonth + '.xlsx');
     } catch (err) {
       toast(err.message, true);
@@ -5294,9 +5308,9 @@
           '<td><b>' + esc(b.g.assembly_point) + '</b>' + (b.g.route ? '<br><span style="font-size:.85em">' + esc(b.g.route) + '</span>' : '') + '</td>' +
           '<td>' + esc(b.g.supervisor_name || '') + (b.g.supervisor_phone ? '<br><span style="font-size:.85em" dir="ltr">' + esc(b.g.supervisor_phone) + '</span>' : '') + '</td>' +
           c(b.n) + c(b.paid) + c(b.unpaid + (b.part ? ' <small>(جزئي ' + b.part + ')</small>' : '') + (b.notStarted ? ' <small>(لم يدفع بعد ' + b.notStarted + ')</small>' : '')) +
-          c(b.exempt) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
+          c(busExemptCell(b, true)) + c(plainNum(b.sum), true) + c(b.left ? plainNum(b.left) : '') + '</tr>';
       }).join('') +
-      '<tr class="total"><td colspan="3">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody>' +
+      '<tr class="total"><td colspan="3">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt + (D.t.exemptStaff ? ' <small>(+ ' + D.t.exemptStaff + ' موظف)</small>' : '')) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
   }
