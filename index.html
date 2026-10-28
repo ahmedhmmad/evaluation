@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 11';
+  var APP_BUILD = '28/10 — 12';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6460,6 +6460,84 @@
     return parts;
   }
 
+  /* ----- ملخص الدفع حسب الرقم المحوَّل إليه -----
+     من سجل الدفعات بفترته وتصفيته: لكل وسيلة دفع ورقم محوَّل إليه («رقم الدفع» في الإيصال) عدد الدفعات ومجموعها، والنقد في سطر واحد،
+     ثم المبلغ الإجمالي للمواصلات. يُطبع PDF ويُصدَّر Excel */
+  function ledRefSummary(list) {
+    var by = {}, order = Object.keys(PAY_METHODS);
+    list.forEach(function (r) {
+      var ref = r.method === 'cash' ? '' : String(r.ref || '').trim(), k = r.method + '|' + latinDigits(ref);
+      var g = by[k] || (by[k] = { method: r.method, ref: ref, n: 0, sum: 0, students: {} });
+      g.n++; g.sum += r.amount; g.students[r.p.student_id] = 1;
+    });
+    var rows = Object.keys(by).map(function (k) { var g = by[k]; g.students = Object.keys(g.students).length; return g; })
+      .sort(function (a, b) { return order.indexOf(a.method) - order.indexOf(b.method) || b.sum - a.sum || String(a.ref).localeCompare(String(b.ref)); });
+    var perMethod = {};
+    rows.forEach(function (g) { var m = perMethod[g.method] || (perMethod[g.method] = { n: 0, sum: 0 }); m.n += g.n; m.sum += g.sum; });
+    return { rows: rows, perMethod: perMethod, n: list.length, sum: list.reduce(function (t, r) { return t + r.amount; }, 0) };
+  }
+  function ledRefLabel(g) { return g.method === 'cash' ? 'نقدًا (بلا رقم)' : (g.ref || 'بلا رقم مسجَّل'); }
+
+  function ledRefCardHtml(list) {
+    var R = ledRefSummary(list);
+    if (!R.rows.length) return '';
+    var order = Object.keys(PAY_METHODS), body = '';
+    order.filter(function (m) { return R.perMethod[m]; }).forEach(function (m) {
+      body += '<tr style="background:var(--ivory,#faf7f0)"><td colspan="2"><b>' + PAY_METHODS[m] + '</b></td><td><b>' + R.perMethod[m].n + '</b></td><td><b>' + plainNum(R.perMethod[m].sum) + '</b></td><td></td></tr>' +
+        R.rows.filter(function (g) { return g.method === m; }).map(function (g) {
+          return '<tr><td></td><td dir="ltr" style="text-align:right">' + esc(ledRefLabel(g)) + '</td><td>' + g.n + '</td><td>' + plainNum(g.sum) + '</td><td>' + g.students + '</td></tr>';
+        }).join('');
+    });
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">ملخص الدفع حسب الرقم المحوَّل إليه</h2>' +
+      '<button type="button" class="btn" data-ledrefpdf data-ro-ok>طباعة الملخص / PDF</button><button type="button" class="btn" data-ledrefxlsx data-ro-ok>تصدير Excel</button></div>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>وسيلة الدفع</th><th>الرقم المحوَّل إليه</th><th>عدد الدفعات</th><th>المبلغ (ج.م)</th><th>عدد الطلاب</th></tr></thead><tbody>' + body + '</tbody>' +
+      '<tfoot><tr><td colspan="2">المبلغ الإجمالي للمواصلات</td><td>' + R.n + '</td><td>' + plainNum(R.sum) + '</td><td></td></tr></tfoot></table></div></div>';
+  }
+
+  var pendingLedRef = false;
+  function buildLedRefSheet() {
+    var l = ledState(), list = ledFiltered(), R = ledRefSummary(list), n = 5;
+    var head = reportHead('ملخص دفعات المواصلات حسب الرقم المحوَّل إليه', ledDesc().concat([['عدد الدفعات', R.n], ['الإجمالي', money(R.sum)]])).replace(/^<img class="wm"[^>]*>/, '');
+    var body = '';
+    Object.keys(PAY_METHODS).filter(function (m) { return R.perMethod[m]; }).forEach(function (m) {
+      body += '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="' + n + '">' + PAY_METHODS[m] + ' — ' + R.perMethod[m].n + ' دفعة — ' + plainNum(R.perMethod[m].sum) + ' ج.م</td></tr>' +
+        R.rows.filter(function (g) { return g.method === m; }).map(function (g, i) {
+          return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + PAY_METHODS[m] + '</td><td class="c" dir="ltr"><b>' + esc(ledRefLabel(g)) + '</b></td><td class="c">' + g.n + '</td><td class="c"><b>' + plainNum(g.sum) + '</b></td></tr>';
+        }).join('');
+    });
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>وسيلة الدفع</th><th>الرقم المحوَّل إليه</th><th>عدد الدفعات</th><th>المبلغ (ج.م)</th></tr></thead><tbody>' + (body || '<tr><td colspan="' + n + '" class="c">—</td></tr>') +
+      '<tr class="total"><td colspan="3">المبلغ الإجمالي للمواصلات</td><td class="c"><b>' + R.n + '</b></td><td class="c"><b>' + plainNum(R.sum) + '</b></td></tr></tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
+  }
+
+  async function exportLedRefXlsx() {
+    var R = ledRefSummary(ledFiltered());
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new(), used = {};
+      wb.Workbook = { Views: [{ RTL: true }] };
+      xlsxSheet(wb, used, 'ملخص الدفع', [[schoolName()], ['ملخص دفعات المواصلات حسب الرقم المحوَّل إليه']].concat(ledDesc().map(function (p) { return [p[0] + ': ' + p[1]]; }), [[],
+        ['وسيلة الدفع', 'الرقم المحوَّل إليه', 'عدد الدفعات', 'المبلغ (ج.م)', 'عدد الطلاب']],
+        R.rows.map(function (g) { return [PAY_METHODS[g.method], g.method === 'cash' ? '' : g.ref, g.n, g.sum, g.students]; }),
+        [[], ['مجموع حسب الوسيلة']], Object.keys(PAY_METHODS).filter(function (m) { return R.perMethod[m]; }).map(function (m) { return [PAY_METHODS[m], '', R.perMethod[m].n, R.perMethod[m].sum]; }),
+        [['المبلغ الإجمالي للمواصلات', '', R.n, R.sum]]), [22, 26, 14, 16, 14]);
+      XLSX.writeFile(wb, 'ملخص-الدفع-حسب-الرقم-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/transport/ledger' || !canTransport()) return;
+    if (e.target.closest('[data-ledrefxlsx]')) return exportLedRefXlsx();
+    if (e.target.closest('[data-ledrefpdf]')) { pendingLedRef = true; return printNow(); }
+  });
+
   function ledgerHtml() {
     var l = ledState();
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
@@ -6497,7 +6575,7 @@
         var v = t.days[d];
         return '<tr><td style="white-space:nowrap">' + dayName(d) + ' ' + dmy(d) + '</td><td>' + v.n + '</td>' + Object.keys(PAY_METHODS).map(function (k) { return '<td>' + (v.by[k] ? plainNum(v.by[k]) : '—') + '</td>'; }).join('') + '<td><b>' + plainNum(v.sum) + '</b></td></tr>';
       }).join('') + '</tbody></table></div></details>' : '';
-    return head + filters + stats +
+    return head + filters + stats + ledRefCardHtml(list) +
       '<div class="card"><h2 style="margin-top:0">الدفعات (' + list.length + ')</h2>' + (rows
         ? '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>رقم الإيصال</th><th>تاريخ السداد</th><th>الطالب</th><th>عن شهر</th><th>المبلغ (ج.م)</th><th>وسيلة الدفع</th><th>رقم الدفع</th><th>المسجِّل والوقت</th></tr></thead><tbody>' + rows +
           '</tbody><tfoot><tr><td colspan="5">المجموع</td><td>' + plainNum(t.sum) + '</td><td colspan="3"></td></tr></tfoot></table></div>'
@@ -16166,6 +16244,7 @@
     else if (pendingAfList) buildAffairsListSheet();
     else if (pendingLt) buildLateLetterSheet(pendingLt);
     else if (pendingTs) buildTransportStatusSheet();
+    else if (pendingLedRef) buildLedRefSheet();
     else if (pendingConsent) buildConsentSheet(pendingConsent);
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
@@ -16200,6 +16279,7 @@
     pendingAfList = false;
     pendingLt = null;
     pendingTs = false;
+    pendingLedRef = false;
     pendingConsent = null;
     pendingSubs = null;
     pendingSa = null;
