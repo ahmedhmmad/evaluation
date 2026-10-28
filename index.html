@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 2';
+  var APP_BUILD = '28/10 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1391,6 +1391,8 @@
     S.busMissing = !!m && res[8];
     S.exemptMissing = !!m && res[9];
     S.dueMissing = !!m && res[10];
+    // التخفيض وسببه على الإيصال: عمودان من supabase/transport_discount.sql
+    S.discountMissing = !!m && (await colMissing('transport_payments', 'discount, discount_reason'));
     S.routeMissing = !!m && res[11];
     S.tVoided = null;
   }
@@ -1414,7 +1416,7 @@
     var rec = (S.tPay[month] || {})[sid], tops = topupsOf(sid, month);
     if (!rec || !(rec.amount > 0)) return [];
     return [{ kind: 'main', receipt_no: rec.receipt_no, amount: tops.length ? tops[0].paid_before : rec.amount, paid_before: 0,
-      method: PAY_METHODS[rec.method] ? rec.method : 'cash', method_note: rec.method_note || '', paid_on: rec.paid_on, issued_by: rec.issued_by, issued_at: rec.issued_at }]
+      method: PAY_METHODS[rec.method] ? rec.method : 'cash', method_note: rec.method_note || '', paid_on: rec.paid_on, issued_by: rec.issued_by, issued_at: rec.issued_at, discount: Number(rec.discount) || 0, discount_reason: rec.discount_reason || '' }]
       .concat(tops.map(function (t) { return Object.assign({ kind: 'topup' }, t, { method: PAY_METHODS[t.method] ? t.method : 'cash' }); }));
   }
   // المحصَّل عن الشهر موزّعًا على الإيصالات (لتفصيل وسائل الدفع): المكمِّلة بمبالغها، والأول بالباقي من المجموع
@@ -5502,6 +5504,7 @@
         '<div class="card stat"><span class="lbl">المتبقي</span><span class="num"' + (left ? ' style="color:var(--red)"' : '') + '>' + plainNum(left) + ' <small>ج.م</small></span><span class="sub">' + (left ? 'يُسدَّد بتسجيل المبلغ كاملًا' : 'مسدَّد') + '</span></div>' +
       '</div>' +
       '<div class="grid2">' +
+      (paid && Number(rec.discount) > 0 ? '<p class="formhint" style="margin:0 0 10px;border-color:#c4b5fd;background:#f5f3ff;color:#5b21b6">إيصال بتخفيض ' + money(rec.discount) + ' — السبب: ' + esc(rec.discount_reason || '—') + '</p>' : '') +
       (paid ? '<p class="formhint" style="margin:0 0 10px">صدر لهذا الشهر ' + payReceipts(x.id).map(function (p) { return 'الإيصال رقم ' + (p.receipt_no != null ? p.receipt_no : '—') + ' بمبلغ ' + money(p.amount) + ' (' + esc(PAY_METHODS[p.method]) + ')'; }).join('، و') + '. ' +
           'الإيصال المسجَّل لا يُعدَّل: للتخفيض «استرداد مبلغ»، وللتصحيح «حذف» الإيصال (يُحفظ في الأرشيف) ثم إصدار إيصال جديد.' + (left ? ' ويمكن تسجيل دفعة مكمِّلة بالمبلغ المتبقي.' : '') + '</p>' : '') +
       (paid && !left ? '' :
@@ -5518,7 +5521,11 @@
               }).join('') + '</select></div>' +
               (method === 'cash' ? '' : '<div style="grid-column:1/-1"><label class="field" for="rc-note">' + (ref ? 'رقم الدفع (' + PAY_METHODS[method] + ')' : 'حدّد طريقة الدفع') + '</label>' +
                 '<input type="text" id="rc-note"' + (ref ? ' dir="ltr" inputmode="numeric" style="text-align:right"' : '') + ' value=""></div>'))
-          : '<div><label class="field" for="rc-amount">المبلغ المدفوع عن الشهر (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + share + '"></div>' +
+          : '<div><label class="field" for="rc-amount">المبلغ المدفوع عن الشهر (ج.م)</label><input type="number" id="rc-amount" min="0" step="any" value="' + share + '" data-share="' + share + '"></div>' +
+            (S.discountMissing || S.dueMissing ? '' :
+              '<div><label class="field" for="rc-disc">تخفيض (ج.م) — اختياري</label><input type="number" id="rc-disc" min="0" step="any" placeholder="0" value="">' +
+                '<div class="day">يُخصم من اشتراك ' + plainNum(share) + ' ج.م، ويُحسب الإيصال دفعة كاملة لا جزئية.</div></div>' +
+              '<div><label class="field" for="rc-disc-why">سبب التخفيض</label><input type="text" id="rc-disc-why" autocomplete="off" placeholder="مطلوب عند كتابة تخفيض"></div>') +
             '<div><label class="field" for="rc-method">طريقة الدفع</label><select id="rc-method">' + Object.keys(PAY_METHODS).map(function (k) {
               return '<option value="' + k + '"' + (k === method ? ' selected' : '') + '>' + PAY_METHODS[k] + '</option>';
             }).join('') + '</select></div>' +
@@ -5595,7 +5602,15 @@
       await setPayment(x.id, { amount: amount });
     } else {
       var method = document.getElementById('rc-method').value, note = document.getElementById('rc-note');
-      await setPayment(x.id, { amount: amount, method: method, method_note: note ? note.value.trim() : '' });
+      var patch = { amount: amount, method: method, method_note: note ? note.value.trim() : '' };
+      var dEl = document.getElementById('rc-disc'), disc = dEl ? Number(dEl.value) || 0 : 0;
+      if (disc > 0) {
+        var why = (document.getElementById('rc-disc-why').value || '').trim(), full = shareOf(memberOf(x.id));
+        if (!why) return toast('اكتب سبب التخفيض.', true);
+        if (disc >= full) return toast('التخفيض يجب أن يكون أقل من اشتراك الشهر (' + plainNum(full) + ' ج.م).', true);
+        patch.discount = disc; patch.discount_reason = why;
+      }
+      await setPayment(x.id, patch);
     }
     var rec = (S.tPay[ui.tMonth] || {})[x.id];
     if (!rec || rec.amount !== amount) return; // لم يُحفظ: ظهرت رسالة الخطأ
@@ -6485,8 +6500,9 @@
     // إيصال جديد: يُحفظ معه المطلوب وقت إصداره، فلا يتغير بعد ذلك. الدفعة المكمِّلة تُبقي مطلوبه الأول
     if (!S.dueMissing) {
       if (old.amount > 0) { if (old.due != null) row.due = old.due; }
-      else if (row.amount > 0) { var mm = memberOf(studentId); if (mm) row.due = shareOf(mm); }
+      else if (row.amount > 0) { var mm = memberOf(studentId); if (mm) row.due = Math.max(0, shareOf(mm) - (Number(patch.discount) || 0)); }
     }
+    if (!(Number(patch.discount) > 0)) { delete row.discount; delete row.discount_reason; }
     // الملاحظة تخص طريقة الدفع التي كُتبت لها: تُمسح عند تغيير الطريقة، ولا ملاحظة للنقد
     if (row.method === 'cash' || ('method' in patch && !('method_note' in patch) && patch.method !== (old.method || 'cash'))) row.method_note = '';
     if ('amount' in patch) row.paid_on = todayISO();
@@ -6499,6 +6515,7 @@
     var r = await sb.from('transport_payments').upsert(row, { onConflict: 'student_id,month' }).select().single();
     if (r.error) return fail(r.error);
     row.receipt_no = r.data ? r.data.receipt_no : old.receipt_no;
+    if (r.data && r.data.discount != null) { row.discount = r.data.discount; row.discount_reason = r.data.discount_reason; }
     S.tPay[ui.tMonth][studentId] = row;
     await refreshFirstPaid(studentId);
     if (currentGroup()) render(); else refreshPay();
@@ -6711,6 +6728,11 @@
   });
 
   app.addEventListener('input', function (e) {
+    if (e.target.id === 'rc-disc') {
+      var amt = document.getElementById('rc-amount');
+      if (amt && amt.getAttribute('data-share')) amt.value = Math.max(0, Number(amt.getAttribute('data-share')) - (Number(e.target.value) || 0));
+      return;
+    }
     var g = currentGroup();
     if (e.target.id === 'tp-search' && canTransport()) {
       ui.tpSearch = e.target.value;
@@ -15456,7 +15478,7 @@
     // الإيصال المطلوب: برقمه، وإلا الأول. كلٌّ بمبلغه هو، والمتبقي بعده كما كان يوم صدوره
     var rec = (q.no != null && q.no !== '' ? recs.filter(function (p) { return String(p.receipt_no) === String(q.no); })[0] : null) || recs[0];
     var share = rec.kind === 'topup' && rec.due != null ? Number(rec.due) : shareOf(mem, g), before = rec.paid_before || 0;
-    var left = Math.max(0, share - before - rec.amount), method = rec.method || 'cash';
+    var left = Math.max(0, share - before - rec.amount), method = rec.method || 'cash', disc = rec.kind === 'topup' ? 0 : Number(rec.discount) || 0;
     var no = rec.receipt_no != null ? ('00000' + rec.receipt_no).slice(-Math.max(6, String(rec.receipt_no).length)) : '—';
     // الإيصالات التي سبقت هذا الإيصال عن الشهر نفسه (للإشارة إليها عند استيفاء الاشتراك)
     var earlier = recs.slice(0, recs.indexOf(rec)).map(function (p) { return p.receipt_no != null ? p.receipt_no : '—'; });
@@ -15483,9 +15505,10 @@
           '<div class="rv-line"><span class="k">طريقة الدفع</span><span class="rv-ms">' + methods + '</span><span class="e">Payment</span></div>' +
           (hasPayRef(method) ? line('رقم الدفع (' + PAY_METHODS[method] + ')', 'Ref. No.', rec.method_note, 'ref') : '') +
           // الباقي بعد هذا الإيصال، أو استيفاء الاشتراك كاملًا
-          line('ملاحظة', 'Note', left > 0 ? 'الباقي من اشتراك الشهر: ' + money(left) : 'استيفاء كامل اشتراك الشهر' + (rec.kind === 'topup' ? ' (مع ' + (earlier.length > 1 ? 'الإيصالات ' : 'الإيصال رقم ') + earlier.join(' و') + ')' : ''), left > 0 ? '' : 'full') +
+          line('ملاحظة', 'Note', (disc > 0 ? 'تخفيض ' + money(disc) + ' — السبب: ' + (rec.discount_reason || '') + ' · ' : '') + (left > 0 ? 'الباقي من اشتراك الشهر: ' + money(left) : 'استيفاء كامل اشتراك الشهر' + (rec.kind === 'topup' ? ' (مع ' + (earlier.length > 1 ? 'الإيصالات ' : 'الإيصال رقم ') + earlier.join(' و') + ')' : '')), left > 0 ? '' : 'full') +
         '</div>' +
-        '<div class="rv-end"><div class="rv-sum"><div><span>اشتراك الشهر</span><b>' + money(share) + '</b></div>' +
+        '<div class="rv-end"><div class="rv-sum"' + (disc > 0 ? ' style="grid-template-columns:repeat(4,1fr)"' : '') + '><div><span>اشتراك الشهر</span><b>' + money(share + disc) + '</b></div>' +
+          (disc > 0 ? '<div><span>التخفيض</span><b>' + money(disc) + '</b></div>' : '') +
           (rec.kind === 'topup' ? '<div><span>المدفوع سابقًا</span><b>' + money(before) + '</b></div>' : '<div><span>المدفوع</span><b>' + money(rec.amount) + '</b></div>') +
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + money(left) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
