@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 9';
+  var APP_BUILD = '28/10 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8677,7 +8677,7 @@
     return '<div class="grid2" style="margin-top:10px">' +
       '<div style="grid-column:1/-1"><label class="field" for="afc-topic">موضوع الموافقة (يُكتب بعد «سيتم»)</label><input type="text" id="afc-topic" data-ro-ok autocomplete="off" placeholder="مثال: تطعيم الحصبة الألمانية (التطعيم الثاني)" value="' + esc(c.topic) + '"></div>' +
       '<div style="grid-column:1/-1"><label class="field" for="afc-note">التنبيه أسفل الموضوع</label><textarea id="afc-note" data-ro-ok rows="2">' + esc(c.note) + '</textarea></div>' +
-      '<div><label class="field" for="afc-per">النماذج في الصفحة</label><select id="afc-per" data-ro-ok><option value="2"' + (c.per === '2' ? ' selected' : '') + '>نموذجان (بخط قصّ بينهما)</option><option value="1"' + (c.per === '1' ? ' selected' : '') + '>نموذج واحد بترويسة كاملة</option></select></div></div>';
+      '<div><label class="field" for="afc-per">النماذج في الصفحة</label><select id="afc-per" data-ro-ok><option value="2"' + (c.per === '2' ? ' selected' : '') + '>نموذجان (بخط قصّ بينهما)</option><option value="3"' + (c.per === '3' ? ' selected' : '') + '>3 نماذج</option><option value="4"' + (c.per === '4' ? ' selected' : '') + '>4 نماذج</option><option value="1"' + (c.per === '1' ? ' selected' : '') + '>نموذج واحد بترويسة كاملة</option></select></div></div>';
   }
 
   function afConsentCardHtml(count) {
@@ -8692,28 +8692,35 @@
       '<div class="actions"><button type="button" class="btn primary" data-afcprint="' + x.id + '" data-ro-ok>طباعة موافقة ولي الأمر / PDF</button></div></div>';
   }
 
-  function afConsentForm(x, c, full) {
-    var year = academicYear(), dots = '..................................';
-    var row = function (k, v) { return '<div style="display:flex;gap:.5em;margin:.45em 0;align-items:baseline"><span>' + k + '</span><span style="flex:1;border-bottom:1px dotted #555;min-height:1.2em">' + (v == null ? '' : v) + '</span></div>'; };
-    return '<div class="afc-form" style="position:relative;height:' + (full ? '255mm' : '124mm') + ';box-sizing:border-box;padding:2mm 4mm;overflow:hidden">' +
-      '<img class="wm" src="' + REPORT.logo + '" alt="" style="position:absolute;width:' + (full ? '120mm' : '80mm') + '">' +
-      (full ? letterhead() : '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.25em;margin-bottom:.5em"><b style="font-size:1.1em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(year) + '</span></div>') +
-      '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:' + (full ? '1.6em' : '1.3em') + ';color:var(--navy);margin:.2em 0 .4em">موافقة ولي الأمر</div>' +
-      row('السيد ولي أمر الطالب / الطالبة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>') +
-      row('الصف الدراسي:', '<b>' + esc(x.class_name || '') + '</b>') +
-      '<p style="margin:.5em 0;line-height:1.9">نحيط علم سيادتكم بأنه سيتم <b>' + (c.topic ? esc(c.topic) : dots) + '</b> لطلبة / وطالبات الصف (<b>' + esc(x.class_name || dots) + '</b>) بالأكاديمية للعام الدراسي <b>' + esc(year) + '</b>.</p>' +
-      '<p style="margin:.4em 0;line-height:1.9">' + esc(c.note) + '</p>' +
-      '<div style="display:flex;gap:3em;margin:.5em 0;font-weight:700"><span>☐ أوافق</span><span>☐ لا أوافق</span></div>' +
-      row('اسم ولي الأمر:', '') + row('رقم الموبايل:', '') + row('توقيع ولي الأمر:', '') +
+  // نموذج الموافقة: per نماذج في الصفحة (1 بترويسة كاملة، 2، 3، 4)؛ من 3 فما فوق يُضغط التخطيط وتصغر الخطوط لتتسع في الصفحة
+  var AF_CONSENT_SIZE = { 1: { h: 255, wm: 120, font: 11 }, 2: { h: 124, wm: 80, font: 11 }, 3: { h: 83, wm: 55, font: 10 }, 4: { h: 61, wm: 42, font: 8.4 } };
+  function afConsentForm(x, c, per) {
+    var year = academicYear(), dots = '..................................', Z = AF_CONSENT_SIZE[per] || AF_CONSENT_SIZE[2], dense = per >= 3, full = per === 1;
+    var m = dense ? '.28em' : '.45em';
+    var line = function (v) { return '<span style="flex:1;border-bottom:1px dotted #555;min-height:1.2em">' + (v == null ? '' : v) + '</span>'; };
+    var row = function (k, v) { return '<div style="display:flex;gap:.5em;margin:' + m + ' 0;align-items:baseline"><span>' + k + '</span>' + line(v) + '</div>'; };
+    var pair = function (k1, v1, k2, v2) { return '<div style="display:flex;gap:1.2em;margin:' + m + ' 0;align-items:baseline"><span style="flex:1;display:flex;gap:.4em;align-items:baseline"><span>' + k1 + '</span>' + line(v1) + '</span><span style="flex:1;display:flex;gap:.4em;align-items:baseline"><span>' + k2 + '</span>' + line(v2) + '</span></div>'; };
+    var topic = '<b>' + (c.topic ? esc(c.topic) : dots) + '</b>', cls = '<b>' + esc(x.class_name || dots) + '</b>';
+    return '<div class="afc-form" style="position:relative;height:' + Z.h + 'mm;font-size:' + Z.font + 'pt;line-height:1.5;box-sizing:border-box;padding:' + (dense ? '1mm 3mm' : '2mm 4mm') + ';overflow:hidden">' +
+      '<img class="wm" src="' + REPORT.logo + '" alt="" style="position:absolute;width:' + Z.wm + 'mm">' +
+      (full ? letterhead() : '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.15em;margin-bottom:.3em"><b style="font-size:1.1em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(year) + '</span></div>') +
+      '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:' + (full ? '1.5em' : dense ? '1.15em' : '1.25em') + ';color:var(--navy);margin:.1em 0 ' + (dense ? '.15em' : '.35em') + '">موافقة ولي الأمر</div>' +
+      (dense ? pair('السيد ولي أمر الطالب/ة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>', 'الصف الدراسي:', '<b>' + esc(x.class_name || '') + '</b>')
+        : row('السيد ولي أمر الطالب / الطالبة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>') + row('الصف الدراسي:', '<b>' + esc(x.class_name || '') + '</b>')) +
+      '<p style="margin:' + m + ' 0;line-height:' + (dense ? '1.6' : '1.9') + '">نحيط علم سيادتكم بأنه سيتم ' + topic + ' لطلبة / وطالبات الصف (' + cls + ') بالأكاديمية للعام الدراسي <b>' + esc(year) + '</b>.</p>' +
+      '<p style="margin:' + m + ' 0;line-height:' + (dense ? '1.6' : '1.9') + '">' + esc(c.note) + '</p>' +
+      (dense
+        ? '<div style="display:flex;gap:2em;margin:' + m + ' 0;font-weight:700;align-items:baseline"><span>☐ أوافق</span><span>☐ لا أوافق</span></div>' + pair('اسم ولي الأمر:', '', 'رقم الموبايل:', '') + row('توقيع ولي الأمر:', '')
+        : '<div style="display:flex;gap:3em;margin:.5em 0;font-weight:700"><span>☐ أوافق</span><span>☐ لا أوافق</span></div>' + row('اسم ولي الأمر:', '') + row('رقم الموبايل:', '') + row('توقيع ولي الأمر:', '')) +
       '</div>';
   }
 
   function buildConsentSheet(list) {
-    var c = afConsent(), per = c.per === '1' ? 1 : 2, pages = '';
+    var c = afConsent(), per = Math.max(1, Math.min(4, Number(c.per) || 2)), pages = '';
     for (var i = 0; i < list.length; i += per) {
       var chunk = list.slice(i, i + per), last = i + per >= list.length;
       pages += '<section style="' + (last ? '' : 'break-after:page;page-break-after:always;') + '">' +
-        chunk.map(function (x, j) { return (j ? '<div class="rc-cut">✂</div>' : '') + afConsentForm(x, c, per === 1); }).join('') + '</section>';
+        chunk.map(function (x, k) { return (k ? '<div class="rc-cut">✂</div>' : '') + afConsentForm(x, c, per); }).join('') + '</section>';
     }
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
