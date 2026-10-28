@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 1';
+  var APP_BUILD = '28/10 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8577,6 +8577,59 @@
     return info;
   }
 
+  // إحصاء القائمة المعروضة: الإجمالي، والذكور والإناث، وحسب العمر، وحسب الشعبة
+  function afStats(list) {
+    var st = { n: list.length, m: 0, f: 0, byAge: {}, byCls: {}, noAge: 0 };
+    list.forEach(function (x) {
+      var g = String(stVal(x, 'gender') || ''), a = afAge(x), c = x.class_name || 'بدون شعبة';
+      var isM = g === 'ذكر', isF = g === 'أنثى';
+      if (isM) st.m++; else if (isF) st.f++;
+      var ca = st.byCls[c] || (st.byCls[c] = { n: 0, m: 0, f: 0 });
+      ca.n++; if (isM) ca.m++; if (isF) ca.f++;
+      if (a == null) { st.noAge++; return; }
+      var ba = st.byAge[a] || (st.byAge[a] = { n: 0, m: 0, f: 0 });
+      ba.n++; if (isM) ba.m++; if (isF) ba.f++;
+    });
+    return st;
+  }
+
+  // نص نطاق العمر: «من سن 5 إلى سن 10 سنوات»
+  function afAgeRangeText() {
+    var u = afUi();
+    if (afHas(u.ageFrom) && afHas(u.ageTo)) return 'من سن ' + u.ageFrom + ' إلى سن ' + u.ageTo + ' سنوات';
+    if (afHas(u.ageFrom)) return 'من سن ' + u.ageFrom + ' سنوات فأكثر';
+    if (afHas(u.ageTo)) return 'حتى سن ' + u.ageTo + ' سنوات';
+    return '';
+  }
+
+  // صفحة الغلاف: بيان بعدد الأطفال بحسب البحث، وتوزيعهم حسب العمر والشعبة، وتشغل صفحة كاملة
+  function afCoverHtml(list) {
+    var st = afStats(list), range = afAgeRangeText(), info = afFilterInfo().filter(function (p) { return p[0] !== 'العمر'; });
+    var hasG = st.m + st.f > 0;
+    var th = function (a) { return a.map(function (t) { return '<th>' + t + '</th>'; }).join(''); };
+    var tr = function (k, o) { return '<tr><td class="c"><b>' + k + '</b></td><td class="c"><b>' + o.n + '</b></td>' + (hasG ? '<td class="c">' + o.m + '</td><td class="c">' + o.f + '</td>' : '') + '</tr>'; };
+    var ages = Object.keys(st.byAge).map(Number).sort(function (a, b) { return a - b; });
+    var clsNames = Object.keys(st.byCls).sort(function (a, b) { return classRank(a) - classRank(b) || a.localeCompare(b, 'ar'); });
+    var statement = range
+      ? 'عدد الأطفال ' + range
+      : 'عدد الأطفال بحسب شروط البحث';
+    var cond = info.map(function (p) { return p[0] + ': ' + p[1]; }).join(' · ');
+    return '<div class="af-cover" style="min-height:262mm;break-after:page;page-break-after:always;padding-top:12mm">' +
+      letterhead() +
+      '<div class="rt" style="margin-top:14mm"><h1>بيان بأعداد الأطفال</h1><div class="rt-info"><span><b>تاريخ الإصدار:</b> ' + dmy(todayISO()) + '</span></div></div>' +
+      '<div class="rbox" style="margin:10mm 0;text-align:center;padding:8mm 6mm">' +
+        '<div style="font-size:1.25em;margin-bottom:4mm">' + esc(statement) + '</div>' +
+        '<div style="font-family:var(--font-head);font-size:3.2em;font-weight:800;color:var(--navy-dark);line-height:1.2">' + st.n + ' <span style="font-size:.4em;font-weight:700">' + (st.n === 1 ? 'طفل' : 'طفلًا') + '</span></div>' +
+        (hasG ? '<div style="margin-top:3mm">ذكور: <b>' + st.m + '</b> · إناث: <b>' + st.f + '</b></div>' : '') +
+        (cond ? '<div style="margin-top:3mm;color:#5e6b80">' + esc(cond) + '</div>' : '') +
+      '</div>' +
+      (ages.length ? '<div class="rsec">التوزيع حسب العمر</div><table class="rz"><thead><tr>' + th(['العمر (سنة)', 'العدد'].concat(hasG ? ['ذكور', 'إناث'] : [])) + '</tr></thead><tbody>' +
+        ages.map(function (a) { return tr(a, st.byAge[a]); }).join('') + (st.noAge ? '<tr><td class="c">بلا تاريخ ميلاد</td><td class="c"><b>' + st.noAge + '</b></td>' + (hasG ? '<td></td><td></td>' : '') + '</tr>' : '') + '</tbody></table>' : '') +
+      '<div class="rsec">التوزيع حسب الشعبة</div><table class="rz"><thead><tr>' + th(['الشعبة', 'العدد'].concat(hasG ? ['ذكور', 'إناث'] : [])) + '</tr></thead><tbody>' +
+        clsNames.map(function (c) { return tr(esc(c), st.byCls[c]); }).join('') + '</tbody></table>' +
+      '</div>';
+  }
+
   var pendingAfList = false;
   function buildAffairsListSheet() {
     var list = afFiltered(afAgg()), n = 7;
@@ -8584,7 +8637,7 @@
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + afCoverHtml(list) +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>تاريخ الميلاد</th><th>العمر</th><th>ولي الأمر</th><th>الجوال / الواتساب</th></tr></thead><tbody>' +
       list.map(function (x, i) {
@@ -8600,6 +8653,13 @@
       await loadXlsx();
       var wb = XLSX.utils.book_new(), used = {};
       wb.Workbook = { Views: [{ RTL: true }] };
+      var st = afStats(list), range = afAgeRangeText(), hasG = st.m + st.f > 0;
+      var ages = Object.keys(st.byAge).map(Number).sort(function (a, b) { return a - b; });
+      var clsNames = Object.keys(st.byCls).sort(function (a, b) { return classRank(a) - classRank(b) || a.localeCompare(b, 'ar'); });
+      var row = function (k, o) { return hasG ? [k, o.n, o.m, o.f] : [k, o.n]; };
+      xlsxSheet(wb, used, 'بيان', [[schoolName()], ['بيان بأعداد الأطفال'], [range ? 'عدد الأطفال ' + range : 'عدد الأطفال بحسب شروط البحث', st.n], hasG ? ['ذكور', st.m, 'إناث', st.f] : [], [],
+        ['العمر (سنة)', 'العدد'].concat(hasG ? ['ذكور', 'إناث'] : [])].concat(ages.map(function (a) { return row(a, st.byAge[a]); }), st.noAge ? [['بلا تاريخ ميلاد', st.noAge]] : [], [[], ['الشعبة', 'العدد'].concat(hasG ? ['ذكور', 'إناث'] : [])],
+        clsNames.map(function (c) { return row(c, st.byCls[c]); })), [24, 12, 10, 10]);
       xlsxSheet(wb, used, 'الطلاب', [[schoolName()], ['قائمة الطلاب' + (info.length ? ' — ' + info.map(function (p) { return p[0] + ': ' + p[1]; }).join(' · ') : '')], ['عدد الطلاب: ' + list.length], [],
         ['م', 'الطالب', 'الشعبة', 'تاريخ الميلاد', 'العمر', 'ولي الأمر', 'الجوال', 'الواتساب']].concat(list.map(function (x, i) {
         var b = stVal(x, 'birth_date');
