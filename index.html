@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 5';
+  var APP_BUILD = '28/10 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8631,8 +8631,8 @@
   var pendingWarn = null;
   function afUi() { return ui.af || (ui.af = { q: '', cls: '', reg: '', abs: '', ride: '', from: '', to: '', rows: null, loadedFrom: '', loading: false }); }
   function afYearStart() { var m = /(\d{4})/.exec(academicYear()); return (m ? m[1] : String(new Date().getFullYear())) + '-08-01'; }
-  function afCurrent() { var m = location.hash.match(/^#\/affairs\/([^/]+)\/(absence|file|warning)$/); return m ? findStudent(m[1]) : null; }
-  function afView() { var m = location.hash.match(/\/(absence|file|warning)$/); return m ? m[1] : 'absence'; }
+  function afCurrent() { var m = location.hash.match(/^#\/affairs\/([^/]+)\/(absence|file|warning|consent)$/); return m ? findStudent(m[1]) : null; }
+  function afView() { var m = location.hash.match(/\/(absence|file|warning|consent)$/); return m ? m[1] : 'absence'; }
 
   async function afLoad(from) {
     var u = afUi();
@@ -8661,8 +8661,79 @@
     if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
     var cur = afCurrent();
     if (location.hash !== '#/affairs' && !cur) return go('#/affairs');
-    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afView() === 'warning' ? afWarnScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afView() === 'warning' ? afWarnScreen(cur) : afView() === 'consent' ? afConsentScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
   }
+
+  /* ----- موافقة ولي الأمر -----
+     نموذج موافقة يُكتب موضوعه (مثل «تطعيم الحصبة الألمانية») ويُطبع لطالب واحد، أو لكل الطلاب الظاهرين في البحث في ملف PDF واحد.
+     في النموذج اسم الطالب وصفه، والموضوع، وتنبيه بأن عدم الرد رفض، وخانتا «أوافق / لا أوافق» واسم ولي الأمر ورقم جواله وتوقيعه.
+     يُطبع نموذجان في الصفحة (بخط قصّ بينهما) أو نموذج واحد، بحسب الاختيار */
+  var AF_CONSENT_NOTE = 'علمًا بأنه في حالة عدم الرد أو وضع علامة بدون توقيع يُعتبر ذلك رفضًا منكم وعلى مسؤوليتكم الشخصية، وفي حالة الرفض نرجو إحضار ما يثبت ذلك.';
+  var pendingConsent = null;
+  function afConsent() { var u = afUi(); return u.consent || (u.consent = { topic: '', note: AF_CONSENT_NOTE, per: '2' }); }
+
+  function afConsentFields() {
+    var c = afConsent();
+    return '<div class="grid2" style="margin-top:10px">' +
+      '<div style="grid-column:1/-1"><label class="field" for="afc-topic">موضوع الموافقة (يُكتب بعد «سيتم»)</label><input type="text" id="afc-topic" data-ro-ok autocomplete="off" placeholder="مثال: تطعيم الحصبة الألمانية (التطعيم الثاني)" value="' + esc(c.topic) + '"></div>' +
+      '<div style="grid-column:1/-1"><label class="field" for="afc-note">التنبيه أسفل الموضوع</label><textarea id="afc-note" data-ro-ok rows="2">' + esc(c.note) + '</textarea></div>' +
+      '<div><label class="field" for="afc-per">النماذج في الصفحة</label><select id="afc-per" data-ro-ok><option value="2"' + (c.per === '2' ? ' selected' : '') + '>نموذجان (بخط قصّ بينهما)</option><option value="1"' + (c.per === '1' ? ' selected' : '') + '>نموذج واحد بترويسة كاملة</option></select></div></div>';
+  }
+
+  function afConsentCardHtml(count) {
+    return '<div class="card"><h2>موافقة ولي الأمر</h2><p class="hint" style="margin:0">اكتب موضوع الموافقة ثم اطبعها لكل الطلاب الظاهرين في النتائج بملف PDF واحد، أو لطالب بعينه من «موافقة ولي الأمر» تحت اسمه.</p>' +
+      afConsentFields() + '<div class="actions" id="afc-batch">' + afConsentBatchBtn(count) + '</div></div>';
+  }
+  function afConsentBatchBtn(count) {
+    return '<button type="button" class="btn primary" data-afcbatch data-ro-ok' + (count ? '' : ' disabled') + '>طباعة موافقة ولي الأمر لكل المعروضين' + (count ? ' (' + count + ' طالبًا) ' : '') + '/ PDF</button>' + (count ? '' : '<span class="hint" style="margin:0">اختر شعبة أو ابحث ليظهر الطلاب.</span>');
+  }
+  function afConsentScreen(x) {
+    return afHead(x, 'موافقة ولي الأمر') + '<div class="card"><p class="hint" style="margin:0">تُطبع الموافقة لهذا الطالب وحده بالبيانات الآتية.</p>' + afConsentFields() +
+      '<div class="actions"><button type="button" class="btn primary" data-afcprint="' + x.id + '" data-ro-ok>طباعة موافقة ولي الأمر / PDF</button></div></div>';
+  }
+
+  function afConsentForm(x, c, full) {
+    var year = academicYear(), dots = '..................................';
+    var row = function (k, v) { return '<div style="display:flex;gap:.5em;margin:.45em 0;align-items:baseline"><span>' + k + '</span><span style="flex:1;border-bottom:1px dotted #555;min-height:1.2em">' + (v == null ? '' : v) + '</span></div>'; };
+    return '<div class="afc-form" style="height:' + (full ? '255mm' : '124mm') + ';box-sizing:border-box;padding:2mm 4mm;overflow:hidden">' +
+      (full ? letterhead() : '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.25em;margin-bottom:.5em"><b style="font-size:1.1em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(year) + '</span></div>') +
+      '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:' + (full ? '1.6em' : '1.3em') + ';color:var(--navy);margin:.2em 0 .4em">موافقة ولي الأمر</div>' +
+      row('السيد ولي أمر الطالب / الطالبة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>') +
+      row('الصف الدراسي:', '<b>' + esc(x.class_name || '') + '</b>') +
+      '<p style="margin:.5em 0;line-height:1.9">نحيط علم سيادتكم بأنه سيتم <b>' + (c.topic ? esc(c.topic) : dots) + '</b> لطلبة / وطالبات الصف (<b>' + esc(x.class_name || dots) + '</b>) بالأكاديمية للعام الدراسي <b>' + esc(year) + '</b>.</p>' +
+      '<p style="margin:.4em 0;line-height:1.9">' + esc(c.note) + '</p>' +
+      '<div style="display:flex;gap:3em;margin:.5em 0;font-weight:700"><span>☐ أوافق</span><span>☐ لا أوافق</span></div>' +
+      row('اسم ولي الأمر:', '') + row('رقم الموبايل:', '') + row('توقيع ولي الأمر:', '') +
+      '</div>';
+  }
+
+  function buildConsentSheet(list) {
+    var c = afConsent(), per = c.per === '1' ? 1 : 2, pages = '';
+    for (var i = 0; i < list.length; i += per) {
+      var chunk = list.slice(i, i + per), last = i + per >= list.length;
+      pages += '<section style="' + (last ? '' : 'break-after:page;page-break-after:always;') + '">' +
+        chunk.map(function (x, j) { return (j ? '<div class="rc-cut">✂</div>' : '') + afConsentForm(x, c, per === 1); }).join('') + '</section>';
+    }
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = pages || '<p>لا طلاب.</p>';
+  }
+
+  document.addEventListener('input', function (e) {
+    if (!/^#\/affairs/.test(location.hash)) return;
+    var k = { 'afc-topic': 'topic', 'afc-note': 'note' }[e.target.id];
+    if (k) afConsent()[k] = e.target.value;
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id === 'afc-per' && /^#\/affairs/.test(location.hash)) afConsent().per = e.target.value;
+  });
+  document.addEventListener('click', function (e) {
+    if (!/^#\/affairs/.test(location.hash) || !canAttView()) return;
+    var el;
+    if (e.target.closest('[data-afcbatch]')) { var list = afFiltered(afAgg()); if (!list.length) return; pendingConsent = list; return printNow(); }
+    if ((el = e.target.closest('[data-afcprint]'))) { var x = findStudent(el.getAttribute('data-afcprint')); if (x) { pendingConsent = [x]; return printNow(); } }
+  });
 
   // العمر بالسنوات الكاملة اليوم من تاريخ الميلاد (null إن لم يُسجَّل)
   function afAge(x) {
@@ -8819,7 +8890,7 @@
     var LIMIT = 150;
     var body = list.slice(0, LIMIT).map(function (x, i) {
       var p = per[x.id] || { present: 0, absent: 0, excused: 0 };
-      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a> · <a href="#/affairs/' + x.id + '/warning">إنذار</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a> · <a href="#/affairs/' + x.id + '/warning">إنذار</a> · <a href="#/affairs/' + x.id + '/consent">موافقة ولي الأمر</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
         '<td>' + afAgeText(x) + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + attPct(p) + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
     }).join('');
@@ -8841,7 +8912,7 @@
         '<span style="flex:1"></span><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
       '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
         ' مرّر الفأرة على «سجل الغياب» لترى ملخصه، واضغط عليه أو على «ملف الطالب» للانتقال إلى شاشته.' + (shown ? ' الطلاب: <b id="af-n">' + list.length + '</b>' : '<span id="af-n"></span>') + '</p></div>' +
-      '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>';
+      '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>' + afConsentCardHtml(list.length);
   }
 
   function afStudentData(x) {
@@ -8870,7 +8941,7 @@
   function afHead(x, title) {
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><a class="btn" href="#/affairs">→ إدارة شئون الطلاب</a>' +
       '<h2 style="margin:0;flex:1">' + esc(title) + ': ' + esc(x.full_name) + rsvMark(x) + ' <span class="meta" style="font-weight:400;font-size:.95rem">— ' + esc(x.class_name || 'بدون شعبة') + (isReserve(x) ? ' · احتياط' : '') + '</span></h2>' +
-      [['absence', 'سجل الغياب'], ['file', 'ملف الطالب'], ['warning', 'إنذار']].filter(function (v) { return v[0] !== afView(); }).map(function (v) { return '<a class="btn" href="#/affairs/' + x.id + '/' + v[0] + '">' + v[1] + '</a>'; }).join('') + '</div></div>';
+      [['absence', 'سجل الغياب'], ['file', 'ملف الطالب'], ['warning', 'إنذار'], ['consent', 'موافقة ولي الأمر']].filter(function (v) { return v[0] !== afView(); }).map(function (v) { return '<a class="btn" href="#/affairs/' + x.id + '/' + v[0] + '">' + v[1] + '</a>'; }).join('') + '</div></div>';
   }
 
   /* ----- إنذار الطالب -----
@@ -9003,6 +9074,8 @@
     document.getElementById('af-n').textContent = cnt;
     var ex = document.getElementById('af-exp');
     if (ex) ex.innerHTML = afExportBtns(shown && cnt);
+    var cb = document.getElementById('afc-batch');
+    if (cb) cb.innerHTML = afConsentBatchBtn(shown ? cnt : 0);
   }
   document.addEventListener('input', function (e) {
     if (location.hash !== '#/affairs') return;
@@ -16032,6 +16105,7 @@
     else if (pendingAfList) buildAffairsListSheet();
     else if (pendingLt) buildLateLetterSheet(pendingLt);
     else if (pendingTs) buildTransportStatusSheet();
+    else if (pendingConsent) buildConsentSheet(pendingConsent);
     else if (pendingPay) { if (pendingPay.kind === 'reg') buildPayRegSheet(pendingPay.P); else buildPaySlipSheet(pendingPay); }
     else if (pendingBusRep) buildBusRepSheet();
     else if (pendingSa) { if (pendingSa.reg) buildSaRegisterSheet(pendingSa); else buildSaSheet(pendingSa); }
@@ -16065,6 +16139,7 @@
     pendingAfList = false;
     pendingLt = null;
     pendingTs = false;
+    pendingConsent = null;
     pendingSubs = null;
     pendingSa = null;
     pendingBusRep = false;
