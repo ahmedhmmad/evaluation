@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 7';
+  var APP_BUILD = '28/10 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10387,7 +10387,9 @@
   var PR_RULES = [
     ['late_days', 'أيام التأخير المسموح بها في الشهر', 'يوم', 1],
     ['late_hours', 'ساعات التأخير المسموح بها في الشهر', 'ساعة', 0.25],
-    ['leave_days', 'أيام الإجازات المسموح بها في الفترة', 'يوم', 1]
+    ['leave_days', 'أيام الإجازات المسموح بها في الفترة', 'يوم', 1],
+    ['abs_days', 'أيام الغياب المسموح بها في العام (من الإجازة السنوية)', 'يوم', 1],
+    ['abs_month', 'أقصى غياب يُغطّى من الإجازة السنوية في الشهر', 'يوم', 1]
   ];
   var PR_LATE_MODES = { minutes: 'بالدقيقة: ما زاد عن الساعات المسموحة يُخصم بأجر الدقيقة', days: 'باليوم: كل يوم تأخير زائد عن الأيام المسموحة يُخصم منه جزء من أجر اليوم' };
 
@@ -10414,7 +10416,7 @@
   }
   function prRules(month, noDraft) {
     var b = prBase(month), sy = prSchoolYear(month);
-    return Object.assign({ late_days: '', late_hours: '', leave_days: '', leave_from: sy.from, leave_to: sy.to, work_days: 22, late_mode: 'minutes', late_fraction: 0.25, quran_in: '', quran_out: '10:00',
+    return Object.assign({ late_days: '', late_hours: '', leave_days: '', abs_days: 6, abs_month: 2, leave_from: sy.from, leave_to: sy.to, work_days: 22, late_mode: 'minutes', late_fraction: 0.25, quran_in: '', quran_out: '10:00',
       signer_title: 'المشرف العام', signer_name: prDefaultSigner() },
       b ? b.rules || {} : {}, noDraft ? {} : prState().rules);
   }
@@ -10534,6 +10536,8 @@
       '<h3 style="margin:16px 0 6px">التوقيع على السليبات وكشف الرواتب</h3>' +
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">الصفة <input type="text" data-prrule="signer_title" value="' + esc(R.signer_title) + '" style="width:160px"' + dis + '>' +
         ' الاسم <input type="text" data-prrule="signer_name" value="' + esc(R.signer_name) + '" placeholder="اسم المشرف العام" style="width:220px"' + dis + '></span>' +
+      '<p class="hint" style="margin:10px 0 0"><b>الغياب:</b> يُسمح بالغياب ' + esc(R.abs_days === '' || R.abs_days == null ? '—' : R.abs_days) + ' أيام في العام الدراسي (من فترة الإجازات أعلاه)، وما يُغطّى منها في الشهر الواحد لا يزيد عن ' + esc(R.abs_month === '' || R.abs_month == null ? '—' : R.abs_month) +
+        ' يومين؛ فما غابه الموظف في الشهر حتى هذا الحد يُحسب من إجازته السنوية بلا خصم، وما زاد عنه يُخصم من راتبه يومًا بيوم. وإذا استُنفد رصيد العام فكل غياب بعده يُخصم. اترك «أيام الغياب المسموح بها» فارغة لخصم كل يوم غياب.</p>' +
       '<p class="hint" style="margin:10px 0 0">الخانة الفارغة تعني بلا حد (لا خصم). أيام الإجازات تُحسب لكل موظف داخل الفترة المحددة كلها، لا كل شهر. لا يُحسب الانصراف المبكر.</p></div>' +
       (edit ? '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn primary" data-prsave data-ro-mgr' + ((dirty || (!own && b)) && !st.busy ? '' : ' disabled') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ إعدادات ' + esc(monthLabel(st.month)) + (dirty ? ' (' + dirty + ')' : '')) + '</button>' +
@@ -10742,6 +10746,8 @@
     var allowLeave = R.leave_days === '' || R.leave_days == null ? null : Number(R.leave_days);
     var allowMins = R.late_hours === '' || R.late_hours == null ? null : Number(R.late_hours) * 60;
     var allowDays = R.late_days === '' || R.late_days == null ? null : Number(R.late_days);
+    var absPool = R.abs_days === '' || R.abs_days == null ? null : Number(R.abs_days);
+    var absCap = R.abs_month === '' || R.abs_month == null ? Infinity : Number(R.abs_month);
     var out = [];
     prStaff(month).forEach(function (t) {
       var eff = prEff(month, t.id), sal = eff.salary, salNote = '';
@@ -10771,6 +10777,16 @@
           if (a != null && bb != null && a > bb) { x.lateDays++; x.lateMins += a - bb; }
         }
       });
+      // الغياب: ما يُغطّى من الإجازة السنوية (حتى سقف الشهر وما بقي من رصيد العام) لا يُخصم، وما زاد يُخصم
+      x.absCovered = 0; x.absLeft = null;
+      if (absPool != null) {
+        var byM = {}, usedAbs = 0;
+        Object.keys(rec).forEach(function (dd) { if (dd < first && rec[dd].status === 'absent' && inPeriod(dd) && !attOff(dd) && employedOn(t, dd)) byM[dd.slice(0, 7)] = (byM[dd.slice(0, 7)] || 0) + 1; });
+        Object.keys(byM).sort().forEach(function (mk) { usedAbs += Math.min(byM[mk], absCap, Math.max(0, absPool - usedAbs)); });
+        x.absCovered = Math.min(x.absent, absCap, Math.max(0, absPool - usedAbs));
+        x.absLeft = Math.max(0, absPool - usedAbs - x.absCovered);
+      }
+      x.absExtra = x.absent - x.absCovered;
       x.leaveExtra = allowLeave == null ? 0 : Math.max(0, x.leaveBefore + leaveIn - allowLeave) - Math.max(0, x.leaveBefore - allowLeave);
       x.leaveLeft = allowLeave == null ? null : Math.max(0, allowLeave - x.leaveBefore - leaveIn);
       if (R.late_mode === 'days') {
@@ -10784,7 +10800,7 @@
       }
       var r2 = function (v) { return Math.round(v * 100) / 100; };
       x.dLate = r2(x.dLate);
-      x.dAbsent = r2(x.absent * dayVal);
+      x.dAbsent = r2(x.absExtra * dayVal);
       x.dLeave = r2(x.leaveExtra * dayVal);
       x.dNotEmp = r2(x.notEmp * dayVal);
       var a = adj[t.id] || {};
@@ -10800,7 +10816,7 @@
     return C.rows.map(function (x) {
       return { id: x.t.id, name: x.t.name, cat: staffCat(x.t), job: x.t.job_title || '', salary: x.salary, salNote: x.salNote || '', dayVal: Math.round(x.dayVal * 100) / 100,
         present: x.present, absent: x.absent, leave: x.leave, mission: x.mission, none: x.none.length, notEmp: x.notEmp, lateDays: x.lateDays, lateMins: x.lateMins,
-        leaveExtra: x.leaveExtra, leaveLeft: x.leaveLeft, lateExtra: x.lateExtra, lateNote: x.lateNote,
+        leaveExtra: x.leaveExtra, leaveLeft: x.leaveLeft, absCovered: x.absCovered, absExtra: x.absExtra, absLeft: x.absLeft, lateExtra: x.lateExtra, lateNote: x.lateNote,
         dAbsent: Math.round(x.dAbsent * 100) / 100, dLeave: Math.round(x.dLeave * 100) / 100, dLate: Math.round(x.dLate * 100) / 100, dNotEmp: Math.round(x.dNotEmp * 100) / 100,
         add: x.add, addNote: x.addNote, ded: x.ded, dedNote: x.dedNote, net: x.net };
     });
@@ -10837,7 +10853,7 @@
     var body = rows.map(function (x, i) {
       var a = st.adj[x.id] || {}, val = function (k) { return esc(k in a ? a[k] : x[k] || ''); };
       return '<tr' + (st.adj[x.id] ? ' style="background:#fffbeb"' : '') + '><td>' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(x.name) + '</b><div class="hint" style="margin:0">' + esc(x.cat) + '</div></td>' +
-        m(x.salary) + c(x.present) + '<td class="c">' + (x.absent || '') + (x.dAbsent ? '<div class="hint" style="margin:0;color:var(--red)">−' + prMoney(x.dAbsent) + '</div>' : '') + '</td>' +
+        m(x.salary) + c(x.present) + '<td class="c">' + (x.absent || '') + (x.absCovered ? '<div class="hint" style="margin:0">' + x.absCovered + ' من الإجازة السنوية</div>' : '') + (x.dAbsent ? '<div class="hint" style="margin:0;color:var(--red)">' + (x.absExtra || x.absent) + ' يُخصم: −' + prMoney(x.dAbsent) + '</div>' : '') + '</td>' +
         '<td class="c">' + (x.leave || '') + (x.dLeave ? '<div class="hint" style="margin:0;color:var(--red)">زائد ' + x.leaveExtra + ': −' + prMoney(x.dLeave) + '</div>' : '') + (x.leaveLeft != null ? '<div class="hint" style="margin:0">الرصيد ' + x.leaveLeft + '</div>' : '') + '</td>' +
         c(x.mission) + '<td class="c">' + (x.lateDays ? x.lateDays + ' يوم / ' + x.lateMins + ' د' : '') + (x.dLate ? '<div class="hint" style="margin:0;color:var(--red)">' + esc(x.lateNote) + ': −' + prMoney(x.dLate) + '</div>' : '') + '</td>' +
         '<td class="c">' + (x.none ? '<b style="color:#b54708">' + x.none + '</b>' : '') + (x.notEmp ? '<div class="hint" style="margin:0">خارج مدة العمل ' + x.notEmp + ': −' + prMoney(x.dNotEmp) + '</div>' : '') + '</td>' +
@@ -10852,7 +10868,7 @@
     app.innerHTML = head + bar +
       '<div class="stats">' + card('مجموع الرواتب', prMoney(sum.salary), rows.length + ' موظفًا') + card('الخصومات', prMoney(sum.ded), 'غياب وإجازات وتأخير ويدوي', sum.ded ? 'var(--red)' : '') +
         card('الإضافات', prMoney(sum.add), 'مكافآت وبدلات') + card('صافي الرواتب', prMoney(sum.net), 'بالجنيه المصري', 'var(--navy-dark)') + '</div>' +
-      '<p class="hint">أجر اليوم = الراتب ÷ ' + (R.work_days || 22) + '. ' + esc(lateRule) + '. الإجازات: ' + (R.leave_days === '' || R.leave_days == null ? 'بلا حد' : R.leave_days + ' يومًا من ' + dmy(R.leave_from) + ' إلى ' + dmy(R.leave_to)) + '. المأمورية بلا خصم.</p>' +
+      '<p class="hint">أجر اليوم = الراتب ÷ ' + (R.work_days || 22) + '. ' + esc(lateRule) + '. الإجازات: ' + (R.leave_days === '' || R.leave_days == null ? 'بلا حد' : R.leave_days + ' يومًا من ' + dmy(R.leave_from) + ' إلى ' + dmy(R.leave_to)) + '. ' + (R.abs_days === '' || R.abs_days == null ? 'الغياب: كل يوم يُخصم' : 'الغياب: يُسمح بـ ' + R.abs_days + ' أيام في العام، يُغطّى منها حتى ' + (R.abs_month === '' || R.abs_month == null ? 'بلا حد' : R.abs_month + ' يومين') + ' في الشهر من الإجازة السنوية، وما زاد يُخصم') + '. المأمورية بلا خصم.</p>' +
       (!P.approved && noneN ? '<p class="formhint">أيام عمل غير مسجَّلة في الدوام: ' + noneN + '، عند ' + noneStaff + ' من الموظفين (العمود «غير مسجَّل»). لا تُخصم، لكن سجّلها في «دوام الموظفين» قبل الاعتماد.</p>' : '') +
       (!P.approved && P.calc.noSalary.length ? '<p class="hint">بلا راتب في الإعدادات (لا يظهرون في الكشف): ' + P.calc.noSalary.map(function (t) { return esc(t.name); }).join('، ') + '</p>' : '') +
       '<div class="toolbar" style="align-items:center">' +
@@ -10950,7 +10966,7 @@
   }
   function prSlipHtml(x, P, withHead) {
     var tr = function (a, b, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + a + '</th><td>' + b + '</td></tr>'; };
-    var ded = [['الغياب', x.absent ? x.absent + ' يوم' : '', x.dAbsent], ['الإجازات الزائدة عن الرصيد', x.leaveExtra ? x.leaveExtra + ' يوم' : '', x.dLeave],
+    var ded = [['الغياب', x.absent ? (x.absCovered ? (x.absExtra || 0) + ' يوم يُخصم من ' + x.absent : x.absent + ' يوم') : '', x.dAbsent], ['الإجازات الزائدة عن الرصيد', x.leaveExtra ? x.leaveExtra + ' يوم' : '', x.dLeave],
       ['التأخير', x.lateNote || '', x.dLate], ['أيام خارج مدة العمل', x.notEmp ? x.notEmp + ' يوم' : '', x.dNotEmp], ['خصومات أخرى', x.dedNote || '', x.ded]].filter(function (d) { return d[2]; });
     var dsum = ded.reduce(function (s, d) { return s + d[2]; }, 0);
     return (withHead ? reportHead('قسيمة راتب', [['الشهر', monthLabel(P.month)]], { lead: x.name }) : '') +
@@ -10958,7 +10974,7 @@
         '<tr><th>الاسم</th><td>' + esc(x.name) + '</td><th>الشهر</th><td>' + esc(monthLabel(P.month)) + '</td></tr>' +
         '<tr><th>الفئة</th><td>' + esc(x.cat) + '</td><th>المسمى الوظيفي</th><td>' + esc(x.job || '—') + '</td></tr></table>' +
       '<div class="rsec">الدوام</div><table class="rk">' +
-        '<tr><th>أيام الحضور</th><td>' + x.present + '</td><th>أيام الغياب</th><td>' + x.absent + '</td></tr>' +
+        '<tr><th>أيام الحضور</th><td>' + x.present + '</td><th>أيام الغياب</th><td>' + x.absent + (x.absCovered ? ' <span style="font-size:.85em">(' + x.absCovered + ' من الإجازة السنوية' + (x.absLeft != null ? '، المتبقي من رصيد الغياب ' + x.absLeft : '') + ')</span>' : '') + '</td></tr>' +
         '<tr><th>الإجازات</th><td>' + x.leave + (x.leaveLeft != null ? ' (المتبقي من الرصيد: ' + x.leaveLeft + ')' : '') + '</td><th>المأموريات</th><td>' + x.mission + '</td></tr>' +
         '<tr><th>أيام التأخير</th><td>' + x.lateDays + '</td><th>دقائق التأخير</th><td>' + x.lateMins + '</td></tr></table>' +
       '<div class="rsec">الراتب</div><table class="rk">' +
@@ -11126,7 +11142,7 @@
     }).join('');
     var x = D.slip, slip;
     if (x) {
-      var ded = [['الغياب', x.absent ? x.absent + ' يوم' : '', x.dAbsent], ['الإجازات الزائدة عن الرصيد', x.leaveExtra ? x.leaveExtra + ' يوم' : '', x.dLeave], ['التأخير', x.lateNote || '', x.dLate],
+      var ded = [['الغياب', x.absent ? (x.absCovered ? (x.absExtra || 0) + ' يوم يُخصم من ' + x.absent : x.absent + ' يوم') : '', x.dAbsent], ['الإجازات الزائدة عن الرصيد', x.leaveExtra ? x.leaveExtra + ' يوم' : '', x.dLeave], ['التأخير', x.lateNote || '', x.dLate],
         ['أيام خارج مدة العمل', x.notEmp ? x.notEmp + ' يوم' : '', x.dNotEmp], ['خصومات أخرى', x.dedNote || '', x.ded]].filter(function (q) { return q[2]; });
       slip = '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">راتب ' + esc(monthLabel(st.month)) + '</h2>' +
           '<button type="button" class="btn primary" data-mineslip data-ro-ok>طباعة السليب</button></div>' +
