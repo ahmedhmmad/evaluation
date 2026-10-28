@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 7';
+  var APP_BUILD = '28/10 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10387,7 +10387,8 @@
   var PR_RULES = [
     ['late_days', 'أيام التأخير المسموح بها في الشهر', 'يوم', 1],
     ['late_hours', 'ساعات التأخير المسموح بها في الشهر', 'ساعة', 0.25],
-    ['leave_days', 'أيام الإجازات المسموح بها في الفترة', 'يوم', 1]
+    ['leave_days', 'أيام الإجازات المسموح بها في العام الدراسي', 'يوم', 1],
+    ['leave_month', 'أيام الإجازات المسموح بها في الشهر', 'يوم', 1]
   ];
   var PR_LATE_MODES = { minutes: 'بالدقيقة: ما زاد عن الساعات المسموحة يُخصم بأجر الدقيقة', days: 'باليوم: كل يوم تأخير زائد عن الأيام المسموحة يُخصم منه جزء من أجر اليوم' };
 
@@ -10414,7 +10415,7 @@
   }
   function prRules(month, noDraft) {
     var b = prBase(month), sy = prSchoolYear(month);
-    return Object.assign({ late_days: '', late_hours: '', leave_days: '', leave_from: sy.from, leave_to: sy.to, work_days: 22, late_mode: 'minutes', late_fraction: 0.25, quran_in: '', quran_out: '10:00',
+    return Object.assign({ late_days: '', late_hours: '', leave_days: 6, leave_month: 2, leave_from: sy.from, leave_to: sy.to, work_days: 22, late_mode: 'minutes', late_fraction: 0.25, quran_in: '', quran_out: '10:00',
       signer_title: 'المشرف العام', signer_name: prDefaultSigner() },
       b ? b.rules || {} : {}, noDraft ? {} : prState().rules);
   }
@@ -10534,7 +10535,7 @@
       '<h3 style="margin:16px 0 6px">التوقيع على السليبات وكشف الرواتب</h3>' +
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">الصفة <input type="text" data-prrule="signer_title" value="' + esc(R.signer_title) + '" style="width:160px"' + dis + '>' +
         ' الاسم <input type="text" data-prrule="signer_name" value="' + esc(R.signer_name) + '" placeholder="اسم المشرف العام" style="width:220px"' + dis + '></span>' +
-      '<p class="hint" style="margin:10px 0 0">الخانة الفارغة تعني بلا حد (لا خصم). أيام الإجازات تُحسب لكل موظف داخل الفترة المحددة كلها، لا كل شهر. لا يُحسب الانصراف المبكر.</p></div>' +
+      '<p class="hint" style="margin:10px 0 0">الخانة الفارغة تعني بلا حد (لا خصم). الإجازات تراكمية عبر أشهر العام الدراسي (الفترة المحددة أعلاه)، فيُسمح بعدد أيام في العام وبحد أقصى في الشهر الواحد، وما زاد عن حد الشهر أو عن رصيد العام يُخصم من الراتب في شهره. أما أيام الغياب فتُخصم كل شهر. لا يُحسب الانصراف المبكر.</p></div>' +
       (edit ? '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn primary" data-prsave data-ro-mgr' + ((dirty || (!own && b)) && !st.busy ? '' : ' disabled') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ إعدادات ' + esc(monthLabel(st.month)) + (dirty ? ' (' + dirty + ')' : '')) + '</button>' +
         (dirty ? '<button type="button" class="btn link" data-prcancel data-ro-mgr>تراجع عن غير المحفوظ</button>' : '') +
@@ -10740,6 +10741,7 @@
     }
     var lf = R.leave_from || '', lt = R.leave_to || '', inPeriod = function (x) { return (!lf || x >= lf) && (!lt || x <= lt); };
     var allowLeave = R.leave_days === '' || R.leave_days == null ? null : Number(R.leave_days);
+    var capLeave = R.leave_month === '' || R.leave_month == null ? Infinity : Number(R.leave_month);
     var allowMins = R.late_hours === '' || R.late_hours == null ? null : Number(R.late_hours) * 60;
     var allowDays = R.late_days === '' || R.late_days == null ? null : Number(R.late_days);
     var out = [];
@@ -10758,7 +10760,10 @@
       var hours = Math.max(0.5, ((minsOf(tout) || 0) - (minsOf(tin) || 0)) / 60), dayVal = sal / W, minVal = dayVal / (hours * 60);
       var rec = (S.prAtt.rows[t.id]) || {}, x = { t: t, salary: sal, salNote: salNote, dayVal: dayVal, hours: hours, present: 0, absent: 0, leave: 0, mission: 0, none: [], notEmp: 0, lateDays: 0, lateMins: 0, leaveBefore: 0 };
       // الإجازات المأخوذة في الفترة قبل هذا الشهر
-      Object.keys(rec).forEach(function (dd) { if (dd < first && rec[dd].status === 'leave' && inPeriod(dd) && !attOff(dd)) x.leaveBefore++; });
+      // إجازات الأشهر السابقة في العام الدراسي: ما غُطّي منها (حتى سقف كل شهر وما بقي من رصيد العام) يستهلك الرصيد، وما زاد خُصم في شهره
+      var leaveByM = {}, usedLeave = 0, poolLeave = allowLeave == null ? Infinity : allowLeave;
+      Object.keys(rec).forEach(function (dd) { if (dd < first && rec[dd].status === 'leave' && inPeriod(dd) && !attOff(dd)) { x.leaveBefore++; leaveByM[dd.slice(0, 7)] = (leaveByM[dd.slice(0, 7)] || 0) + 1; } });
+      Object.keys(leaveByM).sort().forEach(function (mk) { usedLeave += Math.min(leaveByM[mk], capLeave, Math.max(0, poolLeave - usedLeave)); });
       var leaveIn = 0;
       days.forEach(function (dd) {
         if (!employedOn(t, dd)) { x.notEmp++; return; }
@@ -10771,8 +10776,9 @@
           if (a != null && bb != null && a > bb) { x.lateDays++; x.lateMins += a - bb; }
         }
       });
-      x.leaveExtra = allowLeave == null ? 0 : Math.max(0, x.leaveBefore + leaveIn - allowLeave) - Math.max(0, x.leaveBefore - allowLeave);
-      x.leaveLeft = allowLeave == null ? null : Math.max(0, allowLeave - x.leaveBefore - leaveIn);
+      var leaveCovered = Math.min(leaveIn, capLeave, Math.max(0, poolLeave - usedLeave));
+      x.leaveExtra = leaveIn - leaveCovered;
+      x.leaveLeft = allowLeave == null ? null : Math.max(0, allowLeave - usedLeave - leaveCovered);
       if (R.late_mode === 'days') {
         x.lateExtra = allowDays == null ? 0 : Math.max(0, x.lateDays - allowDays);
         x.dLate = x.lateExtra * (Number(R.late_fraction) || 0.25) * dayVal;
@@ -10852,7 +10858,7 @@
     app.innerHTML = head + bar +
       '<div class="stats">' + card('مجموع الرواتب', prMoney(sum.salary), rows.length + ' موظفًا') + card('الخصومات', prMoney(sum.ded), 'غياب وإجازات وتأخير ويدوي', sum.ded ? 'var(--red)' : '') +
         card('الإضافات', prMoney(sum.add), 'مكافآت وبدلات') + card('صافي الرواتب', prMoney(sum.net), 'بالجنيه المصري', 'var(--navy-dark)') + '</div>' +
-      '<p class="hint">أجر اليوم = الراتب ÷ ' + (R.work_days || 22) + '. ' + esc(lateRule) + '. الإجازات: ' + (R.leave_days === '' || R.leave_days == null ? 'بلا حد' : R.leave_days + ' يومًا من ' + dmy(R.leave_from) + ' إلى ' + dmy(R.leave_to)) + '. المأمورية بلا خصم.</p>' +
+      '<p class="hint">أجر اليوم = الراتب ÷ ' + (R.work_days || 22) + '. ' + esc(lateRule) + '. الإجازات: ' + (R.leave_days === '' || R.leave_days == null ? 'بلا حد في العام' : R.leave_days + ' أيام في العام الدراسي (' + dmy(R.leave_from) + ' – ' + dmy(R.leave_to) + '، تراكمية عبر الأشهر)') + (R.leave_month === '' || R.leave_month == null ? '' : '، بحد أقصى ' + R.leave_month + ' في الشهر') + ' وما زاد يُخصم. الغياب يُخصم كل شهر. المأمورية بلا خصم.</p>' +
       (!P.approved && noneN ? '<p class="formhint">أيام عمل غير مسجَّلة في الدوام: ' + noneN + '، عند ' + noneStaff + ' من الموظفين (العمود «غير مسجَّل»). لا تُخصم، لكن سجّلها في «دوام الموظفين» قبل الاعتماد.</p>' : '') +
       (!P.approved && P.calc.noSalary.length ? '<p class="hint">بلا راتب في الإعدادات (لا يظهرون في الكشف): ' + P.calc.noSalary.map(function (t) { return esc(t.name); }).join('، ') + '</p>' : '') +
       '<div class="toolbar" style="align-items:center">' +
