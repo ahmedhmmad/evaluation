@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '28/10 — 13';
+  var APP_BUILD = '29/10 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6624,6 +6624,26 @@
 
   var pendingLed = false;
 
+  // صفحة غلاف سجل الدفعات: إحصائية المحصَّل حسب وسيلة الدفع، وحسب الرقم المحوَّل إليه لغير النقد، وتشغل صفحة كاملة
+  function ledCoverHtml(list, t) {
+    var R = ledRefSummary(list), pct = function (v) { return t.sum ? Math.round(v / t.sum * 1000) / 10 + '%' : '—'; };
+    var th = function (a) { return '<tr>' + a.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr>'; };
+    var methods = Object.keys(PAY_METHODS).filter(function (k) { return t.cnt[k]; });
+    var refs = R.rows.filter(function (g) { return g.method !== 'cash'; });
+    return '<div class="led-cover" style="min-height:262mm;break-after:page;page-break-after:always;padding-top:12mm">' + letterhead() +
+      '<div class="rt" style="margin-top:12mm"><h1>إحصائية دفعات المواصلات</h1><div class="rt-info">' +
+        ledDesc().concat([['تاريخ الإصدار', dmy(todayISO())]]).map(function (p) { return '<span><b>' + p[0] + ':</b> ' + esc(p[1]) + '</span>'; }).join('') + '</div></div>' +
+      '<div class="rbox" style="margin:8mm 0;text-align:center;padding:7mm 6mm"><div style="font-size:1.2em;margin-bottom:3mm">إجمالي المحصَّل</div>' +
+        '<div style="font-family:var(--font-head);font-size:3em;font-weight:800;color:var(--navy-dark);line-height:1.2">' + plainNum(t.sum) + ' <span style="font-size:.4em">ج.م</span></div>' +
+        '<div style="margin-top:3mm">' + t.n + ' إيصالًا</div></div>' +
+      '<div class="rsec">حسب وسيلة الدفع</div><table class="rz"><thead>' + th(['وسيلة الدفع', 'عدد الإيصالات', 'المبلغ (ج.م)', 'النسبة']) + '</thead><tbody>' +
+        methods.map(function (k) { return '<tr><td class="c"><b>' + PAY_METHODS[k] + '</b></td><td class="c">' + t.cnt[k] + '</td><td class="c"><b>' + plainNum(t.by[k]) + '</b></td><td class="c">' + pct(t.by[k]) + '</td></tr>'; }).join('') +
+        '<tr class="total"><td class="c">المجموع</td><td class="c">' + t.n + '</td><td class="c">' + plainNum(t.sum) + '</td><td class="c">100%</td></tr></tbody></table>' +
+      (refs.length ? '<div class="rsec">حسب الرقم المحوَّل إليه</div><table class="rz"><thead>' + th(['وسيلة الدفع', 'الرقم المحوَّل إليه', 'عدد الدفعات', 'المبلغ (ج.م)', 'النسبة']) + '</thead><tbody>' +
+        refs.map(function (g) { return '<tr><td class="c">' + PAY_METHODS[g.method] + '</td><td class="c" dir="ltr"><b>' + esc(ledRefLabel(g)) + '</b></td><td class="c">' + g.n + '</td><td class="c"><b>' + plainNum(g.sum) + '</b></td><td class="c">' + pct(g.sum) + '</td></tr>'; }).join('') + '</tbody></table>' : '') +
+      '</div>';
+  }
+
   function buildLedSheet() {
     var list = ledFiltered(), t = ledTotals(list), n = 10;
     var head = reportHead('سجل دفعات المواصلات', ledDesc().concat([['عدد الإيصالات', t.n], ['المحصَّل', plainNum(t.sum) + ' ج.م']]).concat(Object.keys(PAY_METHODS).filter(function (k) { return t.cnt[k]; }).map(function (k) {
@@ -6632,7 +6652,7 @@
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + ledCoverHtml(list, t) +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>رقم الإيصال</th><th>التاريخ</th><th>اسم الطالب</th><th>الشعبة</th><th>عن شهر</th><th>المبلغ</th><th>الوسيلة</th><th>رقم الدفع</th><th>المسجِّل</th></tr></thead><tbody>' +
       list.map(function (r, i) {
