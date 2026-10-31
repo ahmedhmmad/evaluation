@@ -9784,10 +9784,11 @@
 
   /* ----- كتاب الاستغناء عن خدمات موظف -----
      تحت «كتب لفت النظر (التأخير)» ويعتمد على دوام الشهر نفسه (ltUi().data): يُعرض المتأخرون والغائبون، ويُختار أحدهم وسبب أو أكثر للاستغناء.
-     إن كان التأخير المتكرر أو الغياب المتكرر من الأسباب كُتب في الكتاب مجموع التأخير ومجموع الغياب (مع جدول أيامهما اختياريًّا) */
+     إن كان التأخير المتكرر أو الغياب المتكرر أو كثرة الإجازات من الأسباب كُتب في الكتاب مجموع كلٍّ منها (مع جدول أيامها اختياريًّا) */
   var DM_REASONS = [
     ['late', 'التأخير المتكرر عن الدوام الرسمي'],
     ['absent', 'الغياب المتكرر عن العمل'],
+    ['leave', 'كثرة الإجازات'],
     ['perf', 'ضعف الأداء الوظيفي'],
     ['rules', 'مخالفة الأنظمة والتعليمات المعمول بها'],
     ['admin', 'عدم الالتزام بتوجيهات الإدارة'],
@@ -9796,7 +9797,7 @@
   var DM_MSG = 'وعليه، تقرر الاستغناء عن خدماتكم اعتبارًا من التاريخ المذكور أعلاه، على أن تُسلَّم جميع العهد والمستندات التي بحوزتكم، وتُسوّى مستحقاتكم وفق نظام العمل المعتمد. شاكرين لكم ما قدمتموه خلال فترة عملكم، ومتمنين لكم التوفيق.';
   var pendingDm = null;
   function dmUi() { return ui.dm || (ui.dm = { sid: '', date: todayISO(), from: todayISO(), r: { late: true }, other: '', msg: DM_MSG, days: true }); }
-  function dmAbsDays(s) { return Object.keys(s.days).sort().filter(function (k) { return s.days[k].status === 'absent'; }); }
+  function dmAbsDays(s, st) { return Object.keys(s.days).sort().filter(function (k) { return s.days[k].status === (st || 'absent'); }); }
   function dmDaysTxt(n) { return n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n + (n <= 10 ? ' أيام' : ' يومًا'); }
   function dmReasons() {
     var u = dmUi(), list = DM_REASONS.filter(function (r) { return u.r[r[0]]; }).map(function (r) { return r[1]; });
@@ -9808,11 +9809,11 @@
     var head = '<div class="card"><h2>كتب الاستغناء عن خدمات موظف</h2>';
     if (!D) return head + '<div class="toolbar" style="align-items:center;margin:8px 0 0"><span class="hint" style="margin:0">الشهر: <b>' + esc(monthLabel(month)) + '</b></span>' +
       '<button type="button" class="btn primary" data-ltload data-ro-ok' + (lu.loading ? ' disabled' : '') + '>' + (lu.loading ? 'جارٍ الجلب…' : 'عرض المتأخرين') + '</button></div>' +
-      '<p class="hint" style="margin:8px 0 0">اضغط «عرض المتأخرين» لتظهر قائمة المتأخرين والغائبين في هذا الشهر، ثم اختر الموظف وأسباب الاستغناء.</p></div>';
-    var list = D.staff.filter(function (s) { return s.lateDays > 0 || s.absent > 0; }).sort(function (a, b) { return b.late - a.late || b.absent - a.absent; });
+      '<p class="hint" style="margin:8px 0 0">اضغط «عرض المتأخرين» لتظهر قائمة المتأخرين والغائبين والمجازين في هذا الشهر، ثم اختر الموظف وأسباب الاستغناء.</p></div>';
+    var list = D.staff.filter(function (s) { return s.lateDays > 0 || s.absent > 0 || s.leave > 0; }).sort(function (a, b) { return b.late - a.late || b.absent - a.absent || b.leave - a.leave; });
     var rows = list.map(function (s, i) {
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(s.t.name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(s.t.job_title || staffCat(s.t)) + '</span></td><td>' + s.lateDays + '</td>' +
-        '<td>' + (s.late ? '<b>' + esc(ltHours(s.late)) + '</b> <span class="meta">(' + s.late + ' د)</span>' : '—') + '</td><td>' + (s.absent || '—') + '</td>' +
+        '<td>' + (s.late ? '<b>' + esc(ltHours(s.late)) + '</b> <span class="meta">(' + s.late + ' د)</span>' : '—') + '</td><td>' + (s.absent || '—') + '</td><td>' + (s.leave || '—') + '</td>' +
         '<td><button type="button" class="btn' + (u.sid === s.t.id ? ' primary' : '') + '" data-dmpick="' + s.t.id + '" data-ro-ok>كتاب استغناء</button></td></tr>';
     }).join('');
     var form = '', cur = list.filter(function (s) { return s.t.id === u.sid; })[0];
@@ -9821,6 +9822,7 @@
       var sums = [];
       if (u.r.late) sums.push('مجموع التأخير: <b>' + esc(ltHours(cur.late)) + '</b> في ' + cur.lateDays + ' يوم');
       if (u.r.absent) sums.push('مجموع الغياب: <b>' + dmDaysTxt(cur.absent) + '</b>');
+      if (u.r.leave) sums.push('مجموع الإجازات: <b>' + dmDaysTxt(cur.leave) + '</b>');
       form = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><h3 style="margin:0 0 8px">كتاب استغناء عن خدمات: ' + esc(cur.t.name) + '</h3>' +
         '<label class="field">أسباب الاستغناء (اختر سببًا أو أكثر)</label><div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin:4px 0 8px">' +
         DM_REASONS.map(function (r) { return chk(r[0], r[1]); }).join('') + chk('other', 'سبب آخر') + '</div>' +
@@ -9828,27 +9830,31 @@
         (sums.length ? '<p class="hint" style="margin:0 0 8px">' + sums.join(' · ') + ' (عن شهر ' + esc(monthLabel(D.month)) + ')</p>' : '') +
         '<div class="grid2"><div><label class="field" for="dm-date">تاريخ الكتاب</label><input type="date" id="dm-date" data-ro-ok value="' + esc(u.date) + '"></div>' +
         '<div><label class="field" for="dm-from">الاستغناء اعتبارًا من</label><input type="date" id="dm-from" data-ro-ok value="' + esc(u.from) + '"></div>' +
-        (u.r.late || u.r.absent ? '<div style="grid-column:1/-1"><label class="check"><input type="checkbox" id="dm-days" data-ro-ok' + (u.days ? ' checked' : '') + '> إدراج جدول أيام التأخر والغياب في الكتاب</label></div>' : '') +
+        (u.r.late || u.r.absent || u.r.leave ? '<div style="grid-column:1/-1"><label class="check"><input type="checkbox" id="dm-days" data-ro-ok' + (u.days ? ' checked' : '') + '> إدراج جدول أيام التأخر والغياب والإجازات في الكتاب</label></div>' : '') +
         '<div style="grid-column:1/-1"><label class="field" for="dm-msg">نص القرار</label><textarea id="dm-msg" data-ro-ok rows="4">' + esc(u.msg) + '</textarea></div></div>' +
         '<div class="actions"><button type="button" class="btn primary" data-dmprint="' + cur.t.id + '" data-ro-ok>طباعة كتاب الاستغناء / PDF</button></div></div>';
     }
-    return head + '<p class="hint" style="margin:0">الشهر: <b>' + esc(monthLabel(month)) + '</b> — المتأخرون والغائبون فيه.</p>' +
-      (rows ? '<div class="table-wrap"><table class="grid" style="margin-top:8px"><thead><tr><th>م</th><th>الموظف</th><th>أيام التأخر</th><th>مجموع التأخير</th><th>أيام الغياب</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-        : '<div class="empty" style="margin-top:8px">لا متأخرون ولا غائبون في هذا الشهر.</div>') + form + '</div>';
+    return head + '<p class="hint" style="margin:0">الشهر: <b>' + esc(monthLabel(month)) + '</b> — المتأخرون والغائبون والمجازون فيه.</p>' +
+      (rows ? '<div class="table-wrap"><table class="grid" style="margin-top:8px"><thead><tr><th>م</th><th>الموظف</th><th>أيام التأخر</th><th>مجموع التأخير</th><th>أيام الغياب</th><th>أيام الإجازة</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty" style="margin-top:8px">لا متأخرون ولا غائبون ولا مجازون في هذا الشهر.</div>') + form + '</div>';
   }
 
   function buildDismissSheet(sid) {
     var lu = ltUi(), u = dmUi(), D = lu.data, s = D && D.staff.filter(function (x) { return x.t.id === sid; })[0];
     if (!s) { sheet.className = 'ps'; sheet.innerHTML = '<p>لا بيانات.</p>'; return; }
-    var t = s.t, T = shiftOf(t), reasons = dmReasons(), late = ltLateDays(s), abs = dmAbsDays(s), facts = [], tables = '';
+    var t = s.t, T = shiftOf(t), reasons = dmReasons(), late = ltLateDays(s), abs = dmAbsDays(s), lv = dmAbsDays(s, 'leave'), facts = [], tables = '';
     if (u.r.late && late.length) facts.push('تأخركم عن الحضور في الموعد الرسمي (<b>' + esc(T.time_in) + '</b>) خلال <b>' + dmDaysTxt(late.length) + '</b>، وبلغ مجموع التأخير <b>' + esc(ltHours(s.late)) + '</b>');
     if (u.r.absent && abs.length) facts.push('غيابكم عن العمل، وبلغ مجموع الغياب <b>' + dmDaysTxt(abs.length) + '</b>');
+    if (u.r.leave && lv.length) facts.push('كثرة إجازاتكم، وبلغ مجموع الإجازات <b>' + dmDaysTxt(lv.length) + '</b>');
     if (u.days && u.r.late && late.length) tables += '<p style="margin:.6em 0 .2em"><b>أيام التأخر:</b></p><table class="rz" style="margin:0 0 .6em"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>وقت الحضور الرسمي</th><th>وقت الحضور الفعلي</th><th>مدة التأخير</th></tr></thead><tbody>' +
       late.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d.day) + '</td><td class="c">' + esc(dayName(d.day)) + '</td><td class="c">' + esc(d.official) + '</td><td class="c">' + esc(d.in) + '</td><td class="c">' + esc(ltHours(d.mins)) + '</td></tr>'; }).join('') +
       '<tr class="total"><td colspan="5">مجموع التأخير</td><td class="c"><b>' + esc(ltHours(s.late)) + '</b></td></tr></tbody></table>';
     if (u.days && u.r.absent && abs.length) tables += '<p style="margin:.6em 0 .2em"><b>أيام الغياب:</b></p><table class="rz" style="margin:0 0 .6em"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th></tr></thead><tbody>' +
       abs.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d) + '</td><td class="c">' + esc(dayName(d)) + '</td></tr>'; }).join('') +
       '<tr class="total"><td colspan="2">مجموع الغياب</td><td class="c"><b>' + dmDaysTxt(abs.length) + '</b></td></tr></tbody></table>';
+    if (u.days && u.r.leave && lv.length) tables += '<p style="margin:.6em 0 .2em"><b>أيام الإجازات:</b></p><table class="rz" style="margin:0 0 .6em"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th></tr></thead><tbody>' +
+      lv.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d) + '</td><td class="c">' + esc(dayName(d)) + '</td></tr>'; }).join('') +
+      '<tr class="total"><td colspan="2">مجموع الإجازات</td><td class="c"><b>' + dmDaysTxt(lv.length) + '</b></td></tr></tbody></table>';
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
     sheet.innerHTML = reportHead('كتاب استغناء عن خدمات', [['التاريخ', dmy(u.date)], ['الموضوع', 'الاستغناء عن الخدمات']], { noIssueDate: true }) +
