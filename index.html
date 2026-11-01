@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '29/10 — 1';
+  var APP_BUILD = '01/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11222,7 +11222,8 @@
       return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(x.name) + '</b></td>' + c(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) + c(x.mission) +
         c(x.lateDays ? x.lateDays + '/' + x.lateMins + 'د' : '') + c(ded ? prMoney(ded) : '') + c(x.add ? prMoney(x.add) : '') + c(prMoney(x.net), true) + '<td style="min-width:5em"></td></tr>';
     }).join('');
-    var head = reportHead('كشف الرواتب', [['الشهر', monthLabel(P.month)], ['الحالة', P.approved ? 'معتمد' : 'غير معتمد'], ['عدد الموظفين', P.rows.length]]).replace(/^<img class="wm"[^>]*>/, '');
+    // كشف الرواتب وحده بترويسة الأكاديمية والمؤسسة الشريكة، وتوقيعات مدير الأكاديمية ومدير المؤسسة المانحة ومدير المؤسسة الشريكة
+    var head = reportHead('كشف الرواتب', [['الشهر', monthLabel(P.month)], ['الحالة', P.approved ? 'معتمد' : 'غير معتمد'], ['عدد الموظفين', P.rows.length]], { banner: 'banner-payroll.png' }).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
@@ -11231,7 +11232,7 @@
       '<tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>تأخير<br>يوم/دقيقة</th><th>الخصومات</th><th>الإضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>' +
       '<tbody>' + body + '<tr><td></td><td><b>المجموع</b></td>' + c(prMoney(tot.salary), true) + '<td colspan="5"></td>' + c(prMoney(tot.ded), true) + c(prMoney(tot.add), true) + c(prMoney(tot.net), true) + '<td></td></tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
-      prSigns(P);
+      reportSigns([['مدير الأكاديمية', principalName()], ['مدير المؤسسة المانحة', ''], ['مدير المؤسسة الشريكة', '']]);
   }
   function prSlipHtml(x, P, withHead) {
     var tr = function (a, b, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + a + '</th><td>' + b + '</td></tr>'; };
@@ -15816,9 +15817,9 @@
   }
 
   // الترويسة: الصورة العريضة أعلى الصفحة، وتحتها سطر صغير (اسم الأكاديمية والمرحلة يمينًا، العام الدراسي يسارًا) وخط ذهبي
-  function letterhead() {
+  function letterhead(banner) {
     var cfg = S.settings || {};
-    return '<div class="rh"><img class="rh-banner" src="' + REPORT.banner + '" alt="' + REPORT.nameEn + '">' +
+    return '<div class="rh"><img class="rh-banner" src="' + (banner || REPORT.banner) + '" alt="' + REPORT.nameEn + '">' +
       '<div class="rh-line"><span><b>' + esc(schoolName()) + '</b>' + (cfg.report_subtitle ? ' · ' + esc(cfg.report_subtitle) : '') + '</span>' +
       '<span>العام الدراسي ' + esc(academicYear()) + '</span></div></div>';
   }
@@ -15829,7 +15830,7 @@
     opts = opts || {};
     var rows = (info || []).filter(function (p) { return p && p[1] !== '' && p[1] != null; });
     if (!opts.noIssueDate) rows.push(['تاريخ الإصدار', dmy(todayISO())]);
-    return '<img class="wm" src="' + REPORT.logo + '" alt="">' + letterhead() +
+    return '<img class="wm" src="' + REPORT.logo + '" alt="">' + letterhead(opts.banner) +
       '<div class="rt"><h1>' + esc(title) + '</h1>' + (opts.lead ? '<div class="rt-lead">' + esc(opts.lead) + '</div>' : '') + '<div class="rt-info">' +
       rows.map(function (p) { return '<span><b>' + p[0] + ':</b> ' + esc(p[1]) + '</span>'; }).join('') + '</div></div>';
   }
@@ -16517,9 +16518,9 @@
 
   async function printNow() {
     await reportFontsReady(document);
-    var payWm = !!pendingPay, faded = await fadedLogo(payWm);
+    // العلامة المائية في كل التقارير (ومنها كشف الرواتب والسليبات) هي الشعار الباهت نفسه، لا الشعار الرمادي الأغمق
+    var faded = await fadedLogo(false);
     if (!buildCurrentSheet()) return window.print();
-    if (faded && payWm) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.classList.add('wm-pay'); });
     if (faded) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.src = faded; im.classList.add('wm-baked'); });
     var css = pageCss() + 'html,body{margin:0;background:#fff}';
     var rules = document.getElementById('app-css').sheet.cssRules;
