@@ -417,6 +417,13 @@
   #print-sheet.att-detail .rh-banner { width: 100%; height: 22mm; object-fit: contain; margin: 0; }
   /* تقرير الباصات: ترويسة وشريط معلومات أصغر لتتسع الصفحة الأفقية للجدول */
   #print-sheet.bus-rep .rh-banner { width: 100%; height: 18mm; object-fit: contain; margin: 0; }
+  /* كشف الرواتب: ترويسة أقل ارتفاعًا ليبقى للأسماء مكان بخط أكبر في صفحة واحدة */
+  #print-sheet.pay-reg .rh-banner { width: 100%; height: 27mm; object-fit: contain; margin: 0; }
+  #print-sheet.pay-reg .rh { margin-bottom: .35em; }
+  #print-sheet.pay-reg .rt h1 { font-size: 1.35em; margin: .1em 0 .15em; }
+  #print-sheet.pay-reg .rt { margin-bottom: .4em; }
+  #print-sheet.pay-reg .rt-info { font-size: .85em; padding: .2em .5em; }
+  #print-sheet.pay-reg .rs { margin-top: .8em; }
   #print-sheet.bus-rep .rt h1 { font-size: 1.25em; margin: .15em 0; }
   #print-sheet.bus-rep .rt-info { font-size: .85em; padding: .2em .5em; }
   /* جدول الحصص المطبوع: كل صفحة تُضبط وحدها، والصفحات بعد الأولى تبدأ بهامش الورقة نفسه */
@@ -1243,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '01/11 — 4';
+  var APP_BUILD = '01/11 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11228,7 +11235,7 @@
     }).join('');
     // كشف الرواتب وحده بترويسة الأكاديمية والمؤسسة الشريكة، وتوقيعات مدير الأكاديمية ومدير المؤسسة المانحة ومدير المؤسسة الشريكة
     var head = reportHead('كشف الرواتب', [['الشهر', monthLabel(P.month)], ['الحالة', P.approved ? 'معتمد' : 'غير معتمد'], ['عدد الموظفين', P.rows.length]], { banner: 'banner-payroll.png' }).replace(/^<img class="wm"[^>]*>/, '');
-    sheet.className = 'ls';
+    sheet.className = 'ls pay-reg';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
@@ -15918,6 +15925,14 @@
     var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - 22) * 96 / 25.4;
     var r = fitLevels(el, maxPx), fits = r.h && r.w;
     if (!fits) fitLevels(el, null);
+    // كشف الرواتب يبقى في صفحة واحدة دائمًا: إن لم يتسع حتى بأصغر خط يُصغَّر كله بالتكبير/التصغير (zoom)
+    if (!fits && el.classList.contains('pay-reg')) {
+      el.style.zoom = ''; el.style.width = '';
+      el.style.fontSize = REPORT.minSize + 'pt';
+      var h = el.offsetHeight, kz = Math.max(0.6, Math.min(1, maxPx / h * 0.97));
+      if (kz < 1) { el.style.zoom = kz; el.style.width = (180 / kz) + 'mm'; }
+      fits = true;
+    }
     // اتسع في صفحة: لا يبدأ جدول بعده صفحة جديدة (الإحصائية والكشف معًا في الورقة نفسها)
     el.classList.toggle('one-page', fits);
   }
