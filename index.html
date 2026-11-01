@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '01/11 — 3';
+  var APP_BUILD = '01/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11217,11 +11217,13 @@
   }
   function buildPayRegSheet(P) {
     var n = 12, tot = { salary: 0, ded: 0, add: 0, net: 0 };
+    // الأسماء بخط أكبر ما دام الكشف يتسع في صفحة واحدة: يقلّ تكبيرها كلما زاد عدد الموظفين
+    var nameEm = P.rows.length <= 14 ? 1.35 : P.rows.length <= 22 ? 1.25 : P.rows.length <= 30 ? 1.15 : P.rows.length <= 40 ? 1.08 : 1;
     var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v ? v : '') + '</td>'; };
     var body = P.rows.map(function (x, i) {
       var ded = x.dAbsent + x.dLeave + x.dLate + x.dNotEmp + x.ded;
       tot.salary += x.salary; tot.ded += ded; tot.add += x.add; tot.net += x.net;
-      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap;font-size:1.3em"><b>' + esc(x.name) + '</b></td>' + c(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) + c(x.mission) +
+      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap;font-size:' + nameEm + 'em"><b>' + esc(x.name) + '</b></td>' + c(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) + c(x.mission) +
         c(x.lateDays ? x.lateDays + '/' + x.lateMins + 'د' : '') + c(ded ? prMoney(ded) : '') + c(x.add ? prMoney(x.add) : '') + c(prMoney(x.net), true) + '<td style="min-width:5em"></td></tr>';
     }).join('');
     // كشف الرواتب وحده بترويسة الأكاديمية والمؤسسة الشريكة، وتوقيعات مدير الأكاديمية ومدير المؤسسة المانحة ومدير المؤسسة الشريكة
