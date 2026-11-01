@@ -1243,7 +1243,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '01/11 — 2';
+  var APP_BUILD = '01/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10733,6 +10733,8 @@
     var first = month + '-01', last = prMonthEnd(month), b = prBase(month);
     return saStaff('').filter(function (t) {
       var from = String(t.hire_date || '').slice(0, 10), to = String(t.contract_end || '').slice(0, 10);
+      // من انتهى عقده قبل هذا الشهر لا يظهر فيه ولو بقي راتبه في إعدادات شهر سابق
+      if (to && to < first) return false;
       return ((!from || from <= last) && (!to || to >= first)) || (b && ((b.salaries && b.salaries[t.id] != null) || (b.changes && b.changes[t.id])));
     });
   }
@@ -11219,7 +11221,7 @@
     var body = P.rows.map(function (x, i) {
       var ded = x.dAbsent + x.dLeave + x.dLate + x.dNotEmp + x.ded;
       tot.salary += x.salary; tot.ded += ded; tot.add += x.add; tot.net += x.net;
-      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(x.name) + '</b></td>' + c(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) + c(x.mission) +
+      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap;font-size:1.3em"><b>' + esc(x.name) + '</b></td>' + c(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) + c(x.mission) +
         c(x.lateDays ? x.lateDays + '/' + x.lateMins + 'د' : '') + c(ded ? prMoney(ded) : '') + c(x.add ? prMoney(x.add) : '') + c(prMoney(x.net), true) + '<td style="min-width:5em"></td></tr>';
     }).join('');
     // كشف الرواتب وحده بترويسة الأكاديمية والمؤسسة الشريكة، وتوقيعات مدير الأكاديمية ومدير المؤسسة المانحة ومدير المؤسسة الشريكة
@@ -11232,7 +11234,7 @@
       '<tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>تأخير<br>يوم/دقيقة</th><th>الخصومات</th><th>الإضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>' +
       '<tbody>' + body + '<tr><td></td><td><b>المجموع</b></td>' + c(prMoney(tot.salary), true) + '<td colspan="5"></td>' + c(prMoney(tot.ded), true) + c(prMoney(tot.add), true) + c(prMoney(tot.net), true) + '<td></td></tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
-      reportSigns([['مدير الأكاديمية', principalName()], ['مدير المؤسسة المانحة', ''], ['مدير المؤسسة الشريكة', '']]);
+      reportSigns([['مدير الأكاديمية', principalName()], ['مدير المؤسسة المانحة', ''], ['مدير المؤسسة الشريكة', '']], true);
   }
   function prSlipHtml(x, P, withHead) {
     var tr = function (a, b, cls) { return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + a + '</th><td>' + b + '</td></tr>'; };
@@ -15836,11 +15838,11 @@
   }
 
   // منطقة التوقيعات: خانات من اليمين بالترتيب المعطى، ثم خانة الختم. list: [[الصفة، الاسم]، …]
-  function reportSigns(list) {
+  function reportSigns(list, noStamp) {
     var dots = '........................';
     return '<div class="rs">' + list.map(function (p) {
       return '<div><b>' + p[0] + '</b><span>الاسم: ' + esc(p[1] || dots) + '</span><span>التوقيع: ' + dots + '</span></div>';
-    }).join('') + '<div class="stamp">الختم</div></div>';
+    }).join('') + (noStamp ? '' : '<div class="stamp">الختم</div>') + '</div>';
   }
 
   // إعداد الصفحة: هامش الصفحة صفر حتى لا يطبع المتصفح سطوره (العنوان والتاريخ أعلى الصفحة، والرابط ورقم الصفحة أسفلها)؛
