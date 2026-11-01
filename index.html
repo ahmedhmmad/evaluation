@@ -1248,7 +1248,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '01/11 — 8';
+  var APP_BUILD = '01/11 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11224,8 +11224,16 @@
     var n = 12, tot = { salary: 0, ded: 0, add: 0, net: 0 };
     // الكشف على صفحة أو أكثر: الترويسة ورأس الجدول في رأس الجدول فتتكرر في كل صفحة، وآخر صفحة فيها المجموع والتوقيعات.
     // ارتفاع الصف وخطه من عدد الصفوف في الصفحة (حتى 20 صفًّا تقريبًا)، فتبقى الأرقام والأسماء كبيرة وواضحة
-    var total = P.rows.length, pages = Math.max(1, Math.ceil(total / 20)), rpp = Math.max(1, Math.ceil(total / pages));
-    var rowMm = Math.max(6.5, Math.min(11, 118 / rpp)), fontPt = rowMm >= 9 ? 11.5 : rowMm >= 7.5 ? 10.5 : 9.5, nameEm = 1.2;
+    // الصفحة تُملأ بما يتسع فيها من الصفوف ثم يُنتقل إلى التالية؛ وآخر صفحة تتسع لصفوفها مع المجموع والتوقيعات
+    // (مقاسات بالمليمتر: صفحة 275 صالحة للطباعة، ترويسة وعنوان نحو 94، سطر رقم الصفحة 8، المجموع 12، التوقيعات 46)
+    var total = P.rows.length, avail = 275 - 94 - 8, lastRoom = avail - 12 - 46;
+    var rowMm = total * 8.4 <= lastRoom ? Math.min(12, lastRoom / total) : 8.4, fontPt = 10.5, nameEm = 1.2;
+    var cap = Math.max(1, Math.floor(avail / rowMm)), lastCap = Math.max(1, Math.floor(lastRoom / rowMm)), sizes = [], left = total;
+    while (left > lastCap) { var take = Math.min(cap, left); sizes.push(take); left -= take; }
+    sizes.push(left);
+    // آخر صفحة لا تبقى بلا صفوف (مجموع وتوقيعات فقط): تأخذ بضعة صفوف من التي قبلها
+    if (sizes.length > 1 && sizes[sizes.length - 1] < 4) { var need = 4 - sizes[sizes.length - 1]; sizes[sizes.length - 2] -= need; sizes[sizes.length - 1] += need; }
+    var pages = sizes.length;
     var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v ? v : '') + '</td>'; };
     var body = P.rows.map(function (x, i) {
       var ded = x.dAbsent + x.dLeave + x.dLate + x.dNotEmp + x.ded;
@@ -11240,7 +11248,7 @@
     var totalRow = '<tr><td></td><td><b>المجموع</b></td>' + c(prMoney(tot.salary), true) + '<td colspan="5"></td>' + c(prMoney(tot.ded), true) + c(prMoney(tot.add), true) + c(prMoney(tot.net), true) + '<td></td></tr>';
     var parts = '';
     for (var pg = 0; pg < pages; pg++) {
-      var last = pg === pages - 1, chunk = body.slice(pg * rpp, (pg + 1) * rpp).join('');
+      var last = pg === pages - 1, from = sizes.slice(0, pg).reduce(function (a, b) { return a + b; }, 0), chunk = body.slice(from, from + sizes[pg]).join('');
       parts += '<section class="pr-page" style="' + (last ? '' : 'break-after:page;page-break-after:always;') + '">' + head +
         '<table class="rz">' + colHead + '<tbody>' + chunk + (last ? totalRow : '') + '</tbody></table>' +
         (last ? reportSigns([['مدير الأكاديمية', principalName()], ['مدير المؤسسة المانحة', ''], ['مدير المؤسسة الشريكة', '']], true) : '') +
