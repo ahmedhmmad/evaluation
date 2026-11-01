@@ -417,8 +417,10 @@
   #print-sheet.att-detail .rh-banner { width: 100%; height: 22mm; object-fit: contain; margin: 0; }
   /* تقرير الباصات: ترويسة وشريط معلومات أصغر لتتسع الصفحة الأفقية للجدول */
   #print-sheet.bus-rep .rh-banner { width: 100%; height: 18mm; object-fit: contain; margin: 0; }
-  /* كشف الرواتب: ترويسة أقل ارتفاعًا ليبقى للأسماء مكان بخط أكبر في صفحة واحدة */
-  #print-sheet.pay-reg .rh-banner { width: 100%; height: 27mm; object-fit: contain; margin: 0; }
+  /* كشف الرواتب: الترويسة كاملة، وهوامش أضيق، وصفوف متقاربة بخط أسود واضح؛ والصفوف تمتد لتملأ الصفحة */
+  #print-sheet.pay-reg { padding: 0 8mm 6mm !important; }
+  #print-sheet.pay-reg td.pg-space { height: 6mm !important; }
+  #print-sheet.pay-reg table.rz tbody td { padding-top: .1em; padding-bottom: .1em; line-height: 1.25; color: #000; font-weight: 600; }
   #print-sheet.pay-reg .rh { margin-bottom: .35em; }
   #print-sheet.pay-reg .rt h1 { font-size: 1.35em; margin: .1em 0 .15em; }
   #print-sheet.pay-reg .rt { margin-bottom: .4em; }
@@ -1250,7 +1252,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '01/11 — 5';
+  var APP_BUILD = '01/11 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11238,8 +11240,8 @@
     sheet.className = 'ls pay-reg';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+    sheet.style.width = '194mm';
+    sheet.innerHTML = '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>تأخير<br>يوم/دقيقة</th><th>الخصومات</th><th>الإضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>' +
       '<tbody>' + body + '<tr><td></td><td><b>المجموع</b></td>' + c(prMoney(tot.salary), true) + '<td colspan="5"></td>' + c(prMoney(tot.ded), true) + c(prMoney(tot.add), true) + c(prMoney(tot.net), true) + '<td></td></tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
@@ -15922,16 +15924,23 @@
   // تُطبع بأكبر خط يتسع فيه العرض على صفحات متتالية تتكرر فيها عناوين الأعمدة، بدل خط لا يُقرأ يفيض رغم ذلك.
   // هامش أمان 22mm: حافة الطابعة غير القابلة للطباعة تقصّر الصفحة الفعلية
   function fitPages(el) {
-    var p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - 22) * 96 / 25.4;
+    var payReg = el.classList.contains('pay-reg'), p = REPORT.page, maxPx = ((printLandscape ? p.width : p.height) - (payReg ? 12 : 22)) * 96 / 25.4;
     var r = fitLevels(el, maxPx), fits = r.h && r.w;
     if (!fits) fitLevels(el, null);
     // كشف الرواتب يبقى في صفحة واحدة دائمًا: إن لم يتسع حتى بأصغر خط يُصغَّر كله بالتكبير/التصغير (zoom)
     if (!fits && el.classList.contains('pay-reg')) {
-      el.style.zoom = ''; el.style.width = '';
+      el.style.zoom = ''; el.style.width = '194mm';
       el.style.fontSize = REPORT.minSize + 'pt';
       var h = el.offsetHeight, kz = Math.max(0.6, Math.min(1, maxPx / h * 0.97));
-      if (kz < 1) { el.style.zoom = kz; el.style.width = (180 / kz) + 'mm'; }
+      if (kz < 1) { el.style.zoom = kz; el.style.width = (194 / kz) + 'mm'; }
       fits = true;
+    } else if (fits && payReg) {
+      // ما بقي من الصفحة يوزَّع على صفوف الجدول
+      var trs = el.querySelectorAll('table.rz tbody tr'), spare = maxPx - el.offsetHeight;
+      if (trs.length && spare > 0) {
+        var rowH = Math.min(46, trs[0].offsetHeight + spare / trs.length);
+        Array.prototype.forEach.call(trs, function (tr) { tr.style.height = rowH + 'px'; });
+      }
     }
     // اتسع في صفحة: لا يبدأ جدول بعده صفحة جديدة (الإحصائية والكشف معًا في الورقة نفسها)
     el.classList.toggle('one-page', fits);
