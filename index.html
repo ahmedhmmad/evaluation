@@ -1249,7 +1249,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '03/11 — 1';
+  var APP_BUILD = '03/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -14275,10 +14275,11 @@
           '</tbody><tfoot><tr><td colspan="3">المدرسة</td><td>' + all.present + '</td><td>' + all.absent + '</td><td>' + attPct(all) + '</td><td></td></tr></tfoot></table></div>'
           : '<div class="empty">لا توجد شعب فيها مسجَّلون نهائيًا.</div>') + '</div>' +
       '<div class="card"><h2>الغائبون اليوم (' + absentees.length + ')</h2>' +
-        (absentees.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ملاحظة</th><th>ولي الأمر</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' +
+        (absentees.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ملاحظة</th><th>ولي الأمر</th><th>واتساب ولي الأمر</th>' + (canRecordAtt() && a.day === todayISO() ? '<th class="no-print">إشعار</th>' : '') + '</tr></thead><tbody>' +
           absentees.map(function (p, i) {
             return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(p.x.full_name) + '</b></td><td>' + esc(p.x.class_name) + '</td>' +
-              '<td>' + esc(p.r.note || '') + '</td><td>' + esc(p.x.guardian_name || '') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(p.x.whatsapp || p.x.phone) || '—') + '</td></tr>';
+              '<td>' + esc(p.r.note || '') + '</td><td>' + esc(p.x.guardian_name || '') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(p.x.whatsapp || p.x.phone) || '—') + '</td>' +
+              (canRecordAtt() && a.day === todayISO() ? '<td class="no-print"><button type="button" class="btn" data-attnotify1="' + p.x.id + '"' + (plainPhone(p.x.whatsapp || p.x.phone) ? '' : ' disabled title="لا رقم لولي الأمر"') + '>إرسال</button></td>' : '') + '</tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا غائبين مسجَّلين لهذا اليوم.</div>') + '</div>';
   }
 
@@ -15163,6 +15164,16 @@
       window.scrollTo(0, 0);
     } else if (e.target.closest('[data-attrun]')) {
       loadAttReport();
+    } else if (e.target.closest('[data-attnotify1]')) {
+      var one = e.target.closest('[data-attnotify1]'), sx = findStudent(one.getAttribute('data-attnotify1'));
+      if (!sx || !confirm('إرسال رسالة غياب واتساب إلى ولي أمر الطالب «' + sx.full_name + '»؟\nلا تُرسل له مرة ثانية اليوم.')) return;
+      one.disabled = true;
+      sb.functions.invoke('send-absence-whatsapp', { body: { student_id: sx.id } }).then(function (r) {
+        one.disabled = false;
+        if (r.error) return toast('تعذّر الإرسال: ' + r.error.message, true);
+        var d = r.data || {};
+        toast(d.queued ? 'أُضيفت رسالة ' + sx.full_name + ' إلى قائمة الإرسال' : d.alreadySent ? 'سبق إرسال رسالة لهذا الطالب اليوم' : 'لا رقم صحيح لولي الأمر', !d.queued);
+      });
     } else if (e.target.closest('[data-attnotify]')) {
       var notifyBtn = e.target.closest('[data-attnotify]');
       if (!confirm('إرسال رسالة واتساب إلى أولياء أمور ' + notifyBtn.dataset.attnotify + ' طالبًا غائبًا اليوم؟\nمن أُرسل له اليوم لن تصله الرسالة مرة أخرى.')) return;
