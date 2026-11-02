@@ -1248,7 +1248,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '02/11 — 3';
+  var APP_BUILD = '02/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -13732,6 +13732,10 @@
       if (stale.length) return alert('تغيّر الجدول منذ إعداد هذا الاقتراح (' + stale.length + ' من حصصه لم تعد في مكانها). ارفضه وأعد البحث عن تحسين.');
       if (ttConflicts(ttWithChanges(p.changes)).groups.length > ttConflicts().groups.length) return alert('تطبيق هذا الاقتراح الآن يصنع تعارضًا. ارفضه وأعد البحث عن تحسين.');
       if (ttEvalAll(ttWithChanges(p.changes)).hard > ttEvalAll().hard) return alert('تطبيق هذا الاقتراح يزيد مخالفة قاعدة ملزمة (ربما تغيّرت القواعد بعد إعداده). ارفضه وأعد البحث عن تحسين.');
+      // حصة قرآن واحدة للصف في اليوم: اقتراح (قديم مثلًا) يجمع حصتين في يوم واحد لا يُعتمد
+      var dupQ = {}, dupHit = '';
+      ttWithChanges(p.changes).forEach(function (x) { if (qzIsQuran(x.subject)) { var k = x.class_name + '|' + x.day; if (dupQ[k]) dupHit = x.class_name + ' — ' + (ttCfg().days[x.day] || ''); dupQ[k] = 1; } });
+      if (dupHit) return alert('هذا الاقتراح يضع حصتَي قرآن لصف في يوم واحد (' + dupHit + ') وهذا غير جائز. ارفضه وأعد توزيع القرآن من جديد.');
       if (!confirm('اعتماد الاقتراح ونقل ' + p.changes.length + ' حصة؟')) return;
       var done = [], created = [];
       var undoAll = async function () {
