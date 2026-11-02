@@ -1249,7 +1249,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '03/11 — 2';
+  var APP_BUILD = '03/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -14335,16 +14335,38 @@
       return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>' + Object.keys(c.days).length + '</td><td>' + c.n.absent + '</td><td><b>' + attPct(c.n) + '</b></td>' +
         '<td>' + classRoll(cls).filter(function (x) { return (d.per[x.id] || {}).absent >= 3; }).length + '</td></tr>';
     }).join('');
-    var most = S.students.filter(function (x) { return (d.per[x.id] || {}).absent >= 3; })
+    var repMin = Math.max(2, Number(a.repMin) || 3);
+    var most = S.students.filter(function (x) { return (d.per[x.id] || {}).absent >= repMin; })
       .sort(function (p, q) { return d.per[q.id].absent - d.per[p.id].absent || p.full_name.localeCompare(q.full_name, 'ar'); });
     return head + '<div class="card"><h2>الشعب — من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + '</h2>' +
         '<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>أيام التسجيل</th><th>الغياب (طالب×يوم)</th><th>نسبة الحضور</th><th>غابوا 3 أيام فأكثر</th></tr></thead><tbody>' + crow +
         '</tbody><tfoot><tr><td colspan="2">المدرسة</td><td>' + all.absent + '</td><td>' + attPct(all) + '</td><td>' + most.length + '</td></tr></tfoot></table></div></div>' +
-      '<div class="card"><h2>الأكثر غيابًا (3 أيام فأكثر) — ' + most.length + '</h2>' + (most.length
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th><th>سجل الطالب</th></tr></thead><tbody>' + most.map(function (x, i) {
+      '<div class="card"><h2>الأكثر غيابًا (' + repMin + ' أيام فأكثر) — ' + most.length + '</h2>' +
+        '<div class="toolbar no-print" style="align-items:center;margin:0 0 8px"><label class="field" for="att-repmin" style="margin:0">حد التكرار (أيام الغياب في الفترة)</label>' +
+          '<input type="number" id="att-repmin" min="2" max="31" step="1" style="width:5.5em" value="' + repMin + '">' +
+          (canRecordAtt() ? '<button type="button" class="btn primary" data-attrep="' + most.length + '"' + (most.length ? '' : ' disabled') + ' title="رسالة واحدة لكل طالب في هذه الفترة، ولا تتكرر">إرسال تنبيه واتساب للجميع (' + most.length + ')</button>' : '') +
+          '<span class="hint" style="margin:0">الفترة: من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + ' (غيّرها من التواريخ أعلاه)</span></div>' + (most.length
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th><th>سجل الطالب</th>' + (canRecordAtt() ? '<th class="no-print">تنبيه</th>' : '') + '</tr></thead><tbody>' + most.map(function (x, i) {
             return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
-              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td>' + '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-attstu="' + x.id + '|pdf">PDF</button> <button type="button" class="btn" data-attstu="' + x.id + '|xlsx">Excel</button></td>' + '</tr>';
+              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td>' + '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-attstu="' + x.id + '|pdf">PDF</button> <button type="button" class="btn" data-attstu="' + x.id + '|xlsx">Excel</button></td>' +
+              (canRecordAtt() ? '<td class="no-print"><button type="button" class="btn" data-attrep1="' + x.id + '"' + (plainPhone(x.whatsapp || x.phone) ? '' : ' disabled title="لا رقم لولي الأمر"') + '>إرسال</button></td>' : '') + '</tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
+  }
+
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'att-repmin' || location.hash !== '#/attendance') return;
+    attState().repMin = Math.max(2, Number(e.target.value) || 3);
+    render();
+  });
+
+  // تنبيه تكرار الغياب بواتساب: الحدّ والفترة من التقرير المعروض؛ تُحسب الأعداد في السيرفر من جدول الحضور
+  function attRepeatSend(body) {
+    var a = attState();
+    sb.functions.invoke('send-absence-whatsapp', { body: Object.assign({ repeat: { from: a.report.from, to: a.report.to, min: Math.max(2, Number(a.repMin) || 3) } }, body) }).then(function (r) {
+      if (r.error) return toast('تعذّر الإرسال: ' + r.error.message, true);
+      var d = r.data || {}, skipped = (d.noPhone || []).length + (d.rejected || 0);
+      toast('أُضيف ' + (d.queued || 0) + ' إلى قائمة الإرسال' + (d.alreadySent ? '، و' + d.alreadySent + ' سبق إرسالهم لهذه الفترة' : '') + (skipped ? '، و' + skipped + ' بلا رقم صحيح' : ''), skipped > 0 && !d.queued);
+    });
   }
 
   /* ----- كشف الغياب المفصّل -----
@@ -15164,6 +15186,14 @@
       window.scrollTo(0, 0);
     } else if (e.target.closest('[data-attrun]')) {
       loadAttReport();
+    } else if (e.target.closest('[data-attrep]')) {
+      var rb = e.target.closest('[data-attrep]');
+      if (!confirm('إرسال تنبيه تكرار الغياب إلى أولياء أمور ' + rb.getAttribute('data-attrep') + ' طالبًا؟\nرسالة واحدة لكل طالب في هذه الفترة، ولا تُكرَّر.')) return;
+      attRepeatSend({});
+    } else if ((el = e.target.closest('[data-attrep1]'))) {
+      var rx = findStudent(el.getAttribute('data-attrep1'));
+      if (!rx || !confirm('إرسال تنبيه تكرار الغياب إلى ولي أمر «' + rx.full_name + '»؟')) return;
+      attRepeatSend({ student_id: rx.id });
     } else if (e.target.closest('[data-attnotify1]')) {
       var one = e.target.closest('[data-attnotify1]'), sx = findStudent(one.getAttribute('data-attnotify1'));
       if (!sx || !confirm('إرسال رسالة غياب واتساب إلى ولي أمر الطالب «' + sx.full_name + '»؟\nلا تُرسل له مرة ثانية اليوم.')) return;

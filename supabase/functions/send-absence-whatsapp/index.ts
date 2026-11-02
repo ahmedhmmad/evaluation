@@ -24,6 +24,9 @@ const dmy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice
 const notice = (name: string, day: string) =>
   `السلام عليكم ورحمة الله وبركاته،\nنحيطكم علمًا بغياب الطالب/ـة ${name} عن المدرسة اليوم ${dmy(day)}.\nإدارة المدرسة`;
 
+const repeatNotice = (name: string, n: number, from: string, to: string) =>
+  `السلام عليكم ورحمة الله وبركاته،\nنحيطكم علمًا بتكرر غياب الطالب/ـة ${name}، إذ غاب ${n} أيام خلال الفترة من ${dmy(from)} إلى ${dmy(to)}.\nنأمل متابعة انتظامه/ـا في الدوام والتواصل مع إدارة المدرسة عند وجود ظرف.\nإدارة المدرسة`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -39,6 +42,44 @@ Deno.serve(async (req) => {
   if (roleError || (role !== "superadmin" && role !== "registrar")) return json({ error: "forbidden" }, 403);
   const { data: readOnly } = await supabase.rpc("my_read_only");
   if (readOnly === true) return json({ error: "forbidden" }, 403);
+
+  // Repeated-absence notices: { repeat: { from, to, min }, student_id? }. The counts are taken here from the attendance table,
+  // never from the page, and each student gets one notice per period (batch id = the period).
+  const body0 = await req.clone().json().catch(() => ({}));
+  const rep = body0?.repeat;
+  if (rep) {
+    const from = String(rep.from ?? ""), to = String(rep.to ?? ""), min = Number(rep.min);
+    const okDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    if (!okDay(from) || !okDay(to) || from > to || !(min >= 2) || (Date.parse(to) - Date.parse(from)) / 864e5 > 40) return json({ error: "bad period" }, 400);
+    let rq = supabase.from("attendance").select("student_id, students(full_name, whatsapp, phone)").eq("status", "absent").gte("day", from).lte("day", to);
+    if (typeof body0?.student_id === "string" && body0.student_id) rq = rq.eq("student_id", body0.student_id);
+    const { data: ar, error: re } = await rq;
+    if (re) return json({ error: re.message }, 502);
+    const cnt = new Map<string, { n: number; s: { full_name: string; whatsapp: string; phone: string } | null }>();
+    for (const r of ar ?? []) {
+      const e = cnt.get(r.student_id) ?? { n: 0, s: r.students as unknown as { full_name: string; whatsapp: string; phone: string } | null };
+      e.n++; cnt.set(r.student_id, e);
+    }
+    const msgs: { externalId: string; phone: string; text: string }[] = [];
+    const np: string[] = [];
+    for (const [id, e] of cnt) {
+      if (e.n < min) continue;
+      const ph = (e.s?.whatsapp || e.s?.phone || "").trim();
+      if (ph) msgs.push({ externalId: id, phone: ph, text: repeatNotice(e.s!.full_name, e.n, from, to) });
+      else np.push(e.s?.full_name ?? id);
+    }
+    let q2 = 0, al = 0, rj = 0;
+    for (let i = 0; i < msgs.length; i += MAX_PER_REQUEST) {
+      const res = await fetch(`${url.replace(/\/+$/, "")}/api/v1/external/messages`, {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Api-Key": key },
+        body: JSON.stringify({ batchId: `repeat-${from}-${to}`, messages: msgs.slice(i, i + MAX_PER_REQUEST) }),
+      });
+      const o = await res.json().catch(() => null);
+      if (!res.ok) return json({ error: o?.error?.message ?? `SendWhats answered ${res.status}`, queued: q2 }, 502);
+      q2 += o.queued; al += o.alreadyKnown; rj += o.rejected.length;
+    }
+    return json({ from, to, queued: q2, alreadySent: al, rejected: rj, noPhone: np });
+  }
 
   // Always today: a late notice about an old day would read as a new absence.
   const day = cairoToday();
