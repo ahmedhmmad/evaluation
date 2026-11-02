@@ -1248,7 +1248,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '02/11 — 2';
+  var APP_BUILD = '02/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -13207,7 +13207,7 @@
     Object.keys(load).forEach(function (t) { if (load[t] > days * 2) bad.push(ttTName(t) + ': ' + load[t] + ' حصة، والمتاح ' + (days * 2) + ' (أول حصتين في ' + days + ' أيام)'); });
     var perCls = {};
     ok.forEach(function (r) { perCls[r.cls] = (perCls[r.cls] || 0) + Number(r.count); });
-    Object.keys(perCls).forEach(function (c) { if (perCls[c] > days * 2) bad.push('الصف ' + c + ': ' + perCls[c] + ' حصة قرآن، والمتاح ' + (days * 2)); });
+    Object.keys(perCls).forEach(function (c) { if (perCls[c] > days) bad.push('الصف ' + c + ': ' + perCls[c] + ' حصص قرآن في الأسبوع، والمسموح حصة واحدة في اليوم فقط (' + days + ' حصص كحد أقصى)'); });
     if (bad.length) return { failed: bad };
     var placed = [], moves = [], qdayCount = {}, nodes = 0, LIMIT = 300000;
     var teacherFree = function (t, sl) { return !t || !(teach[t] && teach[t][sl]); };
@@ -13237,6 +13237,7 @@
         var occ = cls[L.cls][sl];
         if (occ && qzIsQuran(occ.subject) && occ.__new) continue;
         var dayHas = qdayCount[L.cls + '|' + d] || 0;
+        if (dayHas > 0) continue; // حصة قرآن واحدة للصف في اليوم، ولا تتكرر أبدًا
         cands.push({ d: d, p: p, sl: sl, occ: occ && !occ.__new ? occ : null, score: dayHas * 20 + (occ ? 6 : 0) + p });
       }
       cands.sort(function (a, b) { return a.score - b.score; });
