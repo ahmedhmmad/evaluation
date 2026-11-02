@@ -1248,7 +1248,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '01/11 — 9';
+  var APP_BUILD = '02/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -13163,8 +13163,212 @@
         '</tbody><tfoot><tr><td colspan="2"><b>المجموع</b></td><td><b>' + sumNeed + '</b></td><td><b>' + sumGot + '</b></td><td colspan="2"></td></tr></tfoot></table></div>' +
         (edit ? '<button type="button" class="btn" data-tqadd style="margin-top:8px">+ مادة لهذه الشعبة</button>' : '') + '</div>' +
       (tRows ? '<div class="card"><h2>نصاب المعلمين</h2><div class="table-wrap"><table class="grid"><thead><tr><th>المعلم</th><th>في النصاب</th><th>في الجدول</th><th>الحالة</th></tr></thead><tbody>' + tRows + '</tbody></table></div></div>' : '') +
-      ttRulesHtml();
+      qzHtml() + ttRulesHtml();
   }
+
+  /* ----- توزيع حصص القرآن الكريم تلقائيًا -----
+     تُدخل: المعلم والصف وعدد الحصص الأسبوعية. يضع البرنامج الحصص في «أول حصتين» من اليوم فقط، بلا تعارض لمعلم ولا لصف،
+     وإن كانت الخانة مشغولة بمادة أخرى فيُنقل درسها إلى خانة فارغة من الصف نفسه يكون معلمه فيها متفرغًا.
+     لا يُحفظ شيء قبل المعاينة والاعتماد. تُستبدل كل حصص القرآن للصفوف المُدخلة، فيجب أن تكون كل حصصها في الإدخال */
+  function qzUi() { return ui.qz || (ui.qz = { rows: null, plan: null, busy: false }); }
+  function qzIsQuran(subject) { return norm(ttFixSubject(subject)) === norm('قرآن'); }
+  function qzRows() {
+    var u = qzUi();
+    if (u.rows) return u.rows;
+    var by = {};
+    ttQuota().forEach(function (r) { if (qzIsQuran(r.subject) && r.teacher_id) { var k = r.teacher_id + '|' + r.class_name; by[k] = (by[k] || 0) + Number(r.count || 0); } });
+    if (!Object.keys(by).length) ttLive().forEach(function (x) { if (qzIsQuran(x.subject) && x.teacher_id) { var k = x.teacher_id + '|' + x.class_name; by[k] = (by[k] || 0) + 1; } });
+    u.rows = Object.keys(by).map(function (k) { var p = k.split('|'); return { tid: p[0], cls: p[1], count: by[k] }; });
+    return u.rows;
+  }
+  function qzLastPeriod(cls) { var st = ttStageOf(cls); return st ? ttPTimes(st).length : ttPeriods(); }
+
+  // يبني الخطة: { placements, moves, failed, note }
+  function qzSolve(rows) {
+    var days = ttCfg().days.length, classes = {}, ok = rows.filter(function (r) { return r.tid && r.cls && Number(r.count) > 0; });
+    ok.forEach(function (r) { classes[r.cls] = 1; });
+    var kept = ttLive().filter(function (x) { return !(classes[x.class_name] && qzIsQuran(x.subject)); });
+    var oldQ = ttLive().filter(function (x) { return classes[x.class_name] && qzIsQuran(x.subject); });
+    var slot = function (d, p) { return d * 100 + p; };
+    var cls = {}, teach = {};     // الصف: { slot: حصة }، المعلم: { slot: true }
+    kept.forEach(function (x) {
+      (cls[x.class_name] || (cls[x.class_name] = {}))[slot(x.day, x.period)] = x;
+      if (x.teacher_id) (teach[x.teacher_id] || (teach[x.teacher_id] = {}))[slot(x.day, x.period)] = true;
+    });
+    Object.keys(classes).forEach(function (c) { cls[c] = cls[c] || {}; });
+    // حصص القرآن المطلوبة، الأشد ازدحامًا أولًا (معلم له صفوف كثيرة)
+    var load = {};
+    ok.forEach(function (r) { load[r.tid] = (load[r.tid] || 0) + Number(r.count); });
+    var lessons = [];
+    ok.forEach(function (r) { for (var i = 0; i < Number(r.count); i++) lessons.push({ cls: r.cls, tid: r.tid }); });
+    lessons.sort(function (a, b) { return load[b.tid] - load[a.tid] || (a.tid < b.tid ? -1 : 1); });
+    // تحقق مسبق: لا يتسع لمعلم أكثر من (الأيام × 2) ولا لصف
+    var bad = [];
+    Object.keys(load).forEach(function (t) { if (load[t] > days * 2) bad.push(ttTName(t) + ': ' + load[t] + ' حصة، والمتاح ' + (days * 2) + ' (أول حصتين في ' + days + ' أيام)'); });
+    var perCls = {};
+    ok.forEach(function (r) { perCls[r.cls] = (perCls[r.cls] || 0) + Number(r.count); });
+    Object.keys(perCls).forEach(function (c) { if (perCls[c] > days * 2) bad.push('الصف ' + c + ': ' + perCls[c] + ' حصة قرآن، والمتاح ' + (days * 2)); });
+    if (bad.length) return { failed: bad };
+    var placed = [], moves = [], qdayCount = {}, nodes = 0, LIMIT = 300000;
+    var teacherFree = function (t, sl) { return !t || !(teach[t] && teach[t][sl]); };
+    // نقل درس شاغل إلى خانة فارغة في صفه (بأي حصة)، يفضَّل ألا تتكرر مادته في اليوم نفسه
+    function relocate(x, from) {
+      var maxP = qzLastPeriod(x.class_name), best = null, bestScore = 1e9;
+      for (var d = 0; d < days; d++) for (var p = 1; p <= maxP; p++) {
+        var sl = slot(d, p);
+        if (sl === from || cls[x.class_name][sl]) continue;
+        if (!teacherFree(x.teacher_id, sl)) continue;
+        if (p <= 2 && d !== undefined && qzWanted[x.class_name + '|' + sl]) continue;
+        var same = 0;
+        for (var q = 1; q <= maxP; q++) { var o = cls[x.class_name][slot(d, q)]; if (o && ttSubjKey(o.subject) === ttSubjKey(x.subject)) same++; }
+        var score = same * 10 + (p <= 2 ? 5 : 0) + Math.abs(p - x.period) + Math.abs(d - x.day) * .1;
+        if (score < bestScore) { bestScore = score; best = sl; }
+      }
+      return best;
+    }
+    var qzWanted = {};
+    function dfs(i) {
+      if (i === lessons.length) return true;
+      if (++nodes > LIMIT) return false;
+      var L = lessons[i], cands = [];
+      for (var d = 0; d < days; d++) for (var p = 1; p <= 2; p++) {
+        var sl = slot(d, p);
+        if (!teacherFree(L.tid, sl)) continue;
+        var occ = cls[L.cls][sl];
+        if (occ && qzIsQuran(occ.subject) && occ.__new) continue;
+        var dayHas = qdayCount[L.cls + '|' + d] || 0;
+        cands.push({ d: d, p: p, sl: sl, occ: occ && !occ.__new ? occ : null, score: dayHas * 20 + (occ ? 6 : 0) + p });
+      }
+      cands.sort(function (a, b) { return a.score - b.score; });
+      for (var c = 0; c < cands.length; c++) {
+        var cd = cands[c], moved = null, to = null;
+        if (cd.occ) {
+          qzWanted[L.cls + '|' + cd.sl] = 1;
+          to = relocate(cd.occ, cd.sl);
+          if (to == null) { delete qzWanted[L.cls + '|' + cd.sl]; continue; }
+          moved = cd.occ;
+          delete cls[L.cls][cd.sl];
+          if (moved.teacher_id && teach[moved.teacher_id]) delete teach[moved.teacher_id][cd.sl];
+          cls[L.cls][to] = Object.assign({}, moved, { __moved: true });
+          if (moved.teacher_id) (teach[moved.teacher_id] || (teach[moved.teacher_id] = {}))[to] = true;
+        } else qzWanted[L.cls + '|' + cd.sl] = 1;
+        var q = { id: 'new', class_name: L.cls, subject: 'قرآن', teacher_id: L.tid, day: cd.d, period: cd.p, __new: true };
+        cls[L.cls][cd.sl] = q;
+        (teach[L.tid] || (teach[L.tid] = {}))[cd.sl] = true;
+        qdayCount[L.cls + '|' + cd.d] = (qdayCount[L.cls + '|' + cd.d] || 0) + 1;
+        placed.push({ cls: L.cls, tid: L.tid, day: cd.d, period: cd.p });
+        if (moved) moves.push({ s: moved, to: to });
+        if (dfs(i + 1)) return true;
+        if (moved) moves.pop();
+        placed.pop();
+        qdayCount[L.cls + '|' + cd.d]--;
+        delete teach[L.tid][cd.sl];
+        delete cls[L.cls][cd.sl];
+        delete qzWanted[L.cls + '|' + cd.sl];
+        if (moved) {
+          delete cls[L.cls][to];
+          if (moved.teacher_id) delete teach[moved.teacher_id][to];
+          cls[L.cls][cd.sl] = moved;
+          if (moved.teacher_id) teach[moved.teacher_id][cd.sl] = true;
+        }
+      }
+      return false;
+    }
+    var solved = dfs(0);
+    if (!solved) return { failed: ['تعذّر إيجاد توزيع بلا تعارض ضمن أول حصتين' + (nodes > LIMIT ? ' (بعد بحث طويل)' : '') + '. قلّل حصص أحد المعلمين أو وزّع صفوفهم على معلمين آخرين.'] };
+    return { placements: placed.slice(), moves: moves.map(function (m) { return { s: m.s, to: m.to }; }), old: oldQ, classes: Object.keys(classes) };
+  }
+
+  function qzSlotText(sl) { var d = Math.floor(sl / 100), p = sl % 100; return ttCfg().days[d] + ' · الحصة ' + (TT_ORD[p - 1] || p); }
+
+  function qzHtml() {
+    if (S.ttPlanMissing && S.ttMissing) return '';
+    var u = qzUi(), edit = canEditTT(), rows = qzRows(), cl = ttClasses();
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (String(v) === String(cur || '') ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var teachers = ttTeacherChoices('').filter(function (t) { return ttIsQuranT(t) || t.category === 'محفظون'; });
+    var all = ttTeacherChoices('');
+    var body = rows.map(function (r, i) {
+      return '<tr><td>' + (edit ? '<select data-qz="' + i + '" data-f="tid">' + opt('', '— المعلم —', r.tid) + (teachers.length ? teachers : all).concat(all.filter(function (t) { return teachers.indexOf(t) < 0 && t.id === r.tid; })).map(function (t) { return opt(t.id, ttName(t), r.tid); }).join('') + '</select>' : esc(ttTName(r.tid))) + '</td>' +
+        '<td>' + (edit ? '<select data-qz="' + i + '" data-f="cls">' + opt('', '— الصف —', r.cls) + cl.map(function (c) { return opt(c, c, r.cls); }).join('') + '</select>' : esc(r.cls)) + '</td>' +
+        '<td>' + (edit ? '<input type="number" min="1" max="10" step="1" data-qz="' + i + '" data-f="count" value="' + esc(r.count) + '" style="width:5em">' : esc(r.count)) + '</td>' +
+        (edit ? '<td><button type="button" class="btn danger" data-qzdel="' + i + '">×</button></td>' : '') + '</tr>';
+    }).join('');
+    var plan = u.plan, out = '';
+    if (plan && plan.failed) out = '<div class="formhint" style="margin-top:10px"><b>لا يمكن التوزيع:</b><br>' + plan.failed.map(esc).join('<br>') + '</div>';
+    else if (plan) {
+      var byCls = {};
+      plan.placements.forEach(function (p) { (byCls[p.cls] || (byCls[p.cls] = [])).push(p); });
+      out = '<div style="margin-top:12px"><h3 style="margin:0 0 6px">المعاينة: ' + plan.placements.length + ' حصة قرآن' + (plan.moves.length ? '، وتُنقل ' + plan.moves.length + ' حصة من مواد أخرى' : '') + '</h3>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>الصف</th><th>حصص القرآن (اليوم · الحصة · المعلم)</th></tr></thead><tbody>' +
+        Object.keys(byCls).sort(function (a, b) { return cl.indexOf(a) - cl.indexOf(b); }).map(function (c) {
+          return '<tr><td><b>' + esc(c) + '</b></td><td>' + byCls[c].sort(function (a, b) { return a.day - b.day || a.period - b.period; }).map(function (p) { return esc(ttCfg().days[p.day] + ' ' + (TT_ORD[p.period - 1] || p.period) + ' — ' + ttTName(p.tid)); }).join('<br>') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        (plan.moves.length ? '<h3 style="margin:12px 0 6px">دروس تُنقل من مكانها</h3><div class="table-wrap"><table class="grid"><thead><tr><th>الصف</th><th>المادة · المعلم</th><th>من</th><th>إلى</th></tr></thead><tbody>' +
+          plan.moves.map(function (m) { return '<tr><td>' + esc(m.s.class_name) + '</td><td>' + esc(m.s.subject) + ' · ' + esc(ttTName(m.s.teacher_id)) + '</td><td>' + esc(qzSlotText(m.s.day * 100 + m.s.period)) + '</td><td>' + esc(qzSlotText(m.to)) + '</td></tr>'; }).join('') +
+          '</tbody></table></div>' : '') +
+        (edit ? '<div class="actions"><button type="button" class="btn primary" data-qzapply' + (u.busy ? ' disabled' : '') + '>' + (u.busy ? 'جارٍ التطبيق…' : 'اعتماد التوزيع وتطبيقه على الجدول') + '</button></div>' : '') + '</div>';
+    }
+    return '<div class="card"><h2>توزيع حصص القرآن الكريم</h2><p class="hint">أدخل لكل معلم الصفوف التي يدرّسها وعدد حصصه الأسبوعية، فيضع البرنامج حصص القرآن في <b>أول حصتين</b> فقط من اليوم بلا تعارض. ' +
+      'ما شغل خانةً من مادة أخرى يُنقل درسه إلى خانة فارغة في الصف نفسه. تُستبدل كل حصص القرآن للصفوف المُدخلة، فأدخل كل معلميها. لا يتغير الجدول قبل «اعتماد التوزيع».</p>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>المعلم</th><th>الصف</th><th>حصص الأسبوع</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' + (body || '<tr><td colspan="4" class="hint">لا توجد صفوف بعد.</td></tr>') + '</tbody></table></div>' +
+      (edit ? '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn" data-qzadd>+ سطر (معلم وصف)</button><button type="button" class="btn primary" data-qzsolve>معاينة التوزيع</button></div>' : '') + out + '</div>';
+  }
+
+  async function qzApply() {
+    var u = qzUi(), plan = u.plan;
+    if (!plan || plan.failed || !canEditTT() || u.busy) return;
+    if (!confirm('تطبيق توزيع القرآن على الجدول؟\nستُعدَّل حصص القرآن في الصفوف المُدخلة، وتُنقل ' + plan.moves.length + ' حصة من مواد أخرى.')) return;
+    u.busy = true; render();
+    var who = ttWho(), now = new Date().toISOString(), err = null;
+    var stamp = { updated_by: who, updated_at: now };
+    // حصص القرآن القائمة تُعاد استعمالها لكل (صف، معلم)، وما زاد يُحذف (يبقى «محذوفة» تُستعاد)، والناقص يُضاف
+    var pool = {};
+    plan.old.forEach(function (x) { (pool[x.class_name + '|' + x.teacher_id] || (pool[x.class_name + '|' + x.teacher_id] = [])).push(x); });
+    var inserts = [], updates = [];
+    plan.placements.forEach(function (p) {
+      var list = pool[p.cls + '|' + p.tid], ex = list && list.shift();
+      if (ex) updates.push({ id: ex.id, data: Object.assign({ day: p.day, period: p.period, status: 'ok' }, stamp) });
+      else inserts.push(Object.assign({ day: p.day, period: p.period, class_name: p.cls, teacher_id: p.tid, subject: 'قرآن', status: 'ok', note: '' }, stamp));
+    });
+    Object.keys(pool).forEach(function (k) { pool[k].forEach(function (x) { updates.push({ id: x.id, data: Object.assign({ status: 'removed' }, stamp) }); }); });
+    plan.moves.forEach(function (m) { updates.push({ id: m.s.id, data: Object.assign({ day: Math.floor(m.to / 100), period: m.to % 100 }, stamp) }); });
+    // تُنقل الدروس المزاحة أولًا ثم تُوضع حصص القرآن
+    for (var i = 0; i < updates.length && !err; i++) {
+      var r = await sb.from('timetable_sessions').update(updates[i].data).eq('id', updates[i].id).select().maybeSingle();
+      if (r.error) err = r.error; else ttPut(updates[i].id, r.data || updates[i].data);
+    }
+    if (!err && inserts.length) {
+      var ins = await sb.from('timetable_sessions').insert(inserts).select();
+      if (ins.error) err = ins.error; else (ins.data || inserts).forEach(function (x) { S.ttSessions.push(x); });
+    }
+    u.busy = false;
+    if (err) { render(); return fail(err); }
+    u.plan = null; u.rows = null;
+    render();
+    toast('طُبّق توزيع القرآن: ' + plan.placements.length + ' حصة' + (plan.moves.length ? '، ونُقلت ' + plan.moves.length + ' حصة' : ''));
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/timetable/quota' || !canEditTT()) return;
+    var u = qzUi(), el;
+    if (e.target.closest('[data-qzadd]')) { qzRows().push({ tid: '', cls: '', count: 5 }); u.plan = null; return render(); }
+    if ((el = e.target.closest('[data-qzdel]'))) { qzRows().splice(+el.getAttribute('data-qzdel'), 1); u.plan = null; return render(); }
+    if (e.target.closest('[data-qzsolve]')) {
+      var rows = qzRows();
+      if (!rows.some(function (r) { return r.tid && r.cls && Number(r.count) > 0; })) return toast('أدخل معلمًا وصفًا وعدد حصص', true);
+      u.plan = qzSolve(rows);
+      return render();
+    }
+    if (e.target.closest('[data-qzapply]')) return qzApply();
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/timetable/quota' || !e.target.hasAttribute || !e.target.hasAttribute('data-qz')) return;
+    var r = qzRows()[+e.target.getAttribute('data-qz')], f = e.target.getAttribute('data-f');
+    if (!r) return;
+    r[f] = f === 'count' ? Number(e.target.value) || 0 : e.target.value;
+    qzUi().plan = null;
+    render();
+  });
 
   // مسودة القواعد أثناء التعديل: { b: القواعد الأساسية، c: قواعدي }؛ لا يتغير شيء قبل «حفظ القواعد»
   function ttRuleDraft() {
