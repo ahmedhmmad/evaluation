@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 3';
+  var APP_BUILD = '04/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2190,6 +2190,211 @@
     if ((el = e.target.closest('[data-sfbkind]'))) { R[+el.getAttribute('data-sfbkind')].kind = el.value; }
   });
 
+  /* ----- بطاقة المؤهلات: قراءة ملفات الموظف (دالة read-staff-cv) ومراجعتها -----
+     صفحات PDF تُرسم صورًا هنا، وملفات Word يُستخرج نصها هنا، ثم تُرسل كلها مرة واحدة؛ والنتيجة تُعرض للمراجعة ثم تُحفظ في staff_profiles */
+
+  var SP_FIELDS = [['full_name', 'الاسم في الوثائق'], ['degree', 'أعلى مؤهل'], ['major', 'التخصص'], ['university', 'الجامعة'], ['grad_year', 'سنة التخرج'], ['grade', 'التقدير'],
+    ['experience_years', 'سنوات الخبرة'], ['birth_date', 'تاريخ الميلاد'], ['phone', 'الجوال'], ['email', 'البريد'], ['address', 'العنوان']];
+  var SP_LISTS = [['other_degrees', 'مؤهلات أخرى', ['degree', 'major', 'university', 'year']], ['experience', 'الخبرات', ['place', 'role', 'from', 'to']],
+    ['courses', 'الدورات'], ['languages', 'اللغات'], ['skills', 'المهارات']];
+  var SP_HAS = [['cv', 'سيرة ذاتية'], ['degree_certificate', 'شهادة جامعية'], ['transcript', 'كشف درجات'], ['experience_letter', 'شهادة خبرة'], ['id', 'هوية']];
+
+  async function loadStaffProfiles() {
+    var r = await sb.from('staff_profiles').select('*');
+    S.spMissing = !!r.error;
+    S.spRows = {};
+    (r.data || []).forEach(function (p) { S.spRows[p.staff_id] = p; });
+    render();
+  }
+  function loadMammoth() {
+    if (window.mammoth) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+      sc.onload = resolve;
+      sc.onerror = function () { reject(new Error('تعذر تحميل مكتبة قراءة Word')); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  // أجزاء الإرسال من ملفات الموظف: صورة لكل صفحة (بدقة أقل من الاستمارات لكثرة الصفحات)، ونص لملفات Word. الحد 30 صفحة
+  async function spParts(files, step) {
+    var parts = [], skipped = [], keep = SCAN_MAX_SIDE;
+    SCAN_MAX_SIDE = 1600;
+    try {
+      for (var i = 0; i < files.length && parts.length < 30; i++) {
+        var f = files[i];
+        step('تجهيز «' + f.name + '» (' + (i + 1) + ' من ' + files.length + ')…');
+        var r = await sb.functions.invoke('staff-files', { body: { action: 'open', id: f.id } });
+        if (r.error || !r.data) { skipped.push(f.name); continue; }
+        var blob = await (await fetch(r.data.url)).blob(), file = new File([blob], f.name, { type: f.mime || blob.type });
+        try {
+          if (/\.docx$/i.test(f.name)) {
+            await loadMammoth();
+            var t = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+            parts.push({ file: f.name, text: t.value });
+          } else if (/\.pdf$/i.test(f.name) || /^image\//.test(file.type)) {
+            (await scanFilePages(file)).forEach(function (p, n) { if (parts.length < 30) parts.push({ file: f.name, page: n + 1, media_type: p.media_type, data: p.data }); });
+          } else skipped.push(f.name);
+        } catch (err) { skipped.push(f.name); }
+      }
+    } finally { SCAN_MAX_SIDE = keep; }
+    return { parts: parts, skipped: skipped };
+  }
+
+  async function spRead(t, quiet) {
+    var files = (S.sfFiles && S.sfFiles.id === t.id ? S.sfFiles.rows : (await sb.from('staff_files').select('*').eq('staff_id', t.id)).data) || [];
+    if (!files.length) { if (!quiet) toast('لا ملفات لهذا الموظف', true); return false; }
+    var step = function (m) { ui.spBusy = (ui.spPrefix || '') + m; render(); };
+    try {
+      var P = await spParts(files, step);
+      if (!P.parts.length) throw new Error('تعذرت قراءة الملفات' + (P.skipped.length ? ': ' + P.skipped.join('، ') : ''));
+      step('قراءة ' + P.parts.length + ' صفحة بالذكاء الاصطناعي…');
+      var r = await sb.functions.invoke('read-staff-cv', { body: { name: t.name, parts: P.parts } });
+      if (r.error || !r.data || !r.data.card) throw new Error((r.error && r.error.message) || (r.data && r.data.error) || 'لم تُرجع القراءة نتيجة');
+      var row = { staff_id: t.id, data: r.data.card, files: (r.data.card.pages || []), model: r.data.model, read_at: new Date().toISOString(), reviewed: false,
+        updated_at: new Date().toISOString(), updated_by: S.email || '' };
+      var w = await sb.from('staff_profiles').upsert(row, { onConflict: 'staff_id' });
+      if (w.error) throw w.error;
+      (S.spRows || (S.spRows = {}))[t.id] = row;
+      ui.spBusy = null; render();
+      if (!quiet) toast('قُرئت الملفات — راجع بطاقة المؤهلات وصحّحها ثم اضغط «حفظ واعتماد»' + (P.skipped.length ? '. لم يُقرأ: ' + P.skipped.join('، ') : ''));
+      return true;
+    } catch (err) {
+      ui.spBusy = null; render();
+      toast('قراءة ملفات ' + t.name + ': ' + (err.message || err), true);
+      return false;
+    }
+  }
+
+  function spListText(k, v) {
+    var L = SP_LISTS.filter(function (x) { return x[0] === k; })[0];
+    return (Array.isArray(v) ? v : []).map(function (it) { return L[2] ? L[2].map(function (f) { return (it && it[f]) || ''; }).join(' | ') : String(it || ''); }).filter(function (x) { return x.replace(/[\s|]/g, ''); }).join('\n');
+  }
+  function spListParse(k, text) {
+    var L = SP_LISTS.filter(function (x) { return x[0] === k; })[0];
+    return text.split('\n').map(function (x) { return x.trim(); }).filter(Boolean).map(function (line) {
+      if (!L[2]) return line;
+      var p = line.split('|').map(function (x) { return x.trim(); }), o = {};
+      L[2].forEach(function (f, i) { o[f] = p[i] || ''; });
+      return o;
+    });
+  }
+
+  function staffProfileHtml(t) {
+    if (S.spRows == null) { if (!ui.spLoading) { ui.spLoading = true; loadStaffProfiles().then(function () { ui.spLoading = false; }); } return ''; }
+    if (S.spMissing) return '<div class="card empty">بطاقة المؤهلات تحتاج إلى جدول جديد: شغّل الملف <code dir="ltr">supabase/staff_profiles.sql</code> وانشر الدالة <code dir="ltr">read-staff-cv</code>.</div>';
+    var p = S.spRows[t.id], d = (p && p.data) || {}, uns = Array.isArray(d.unsure) ? d.unsure : [], busy = ui.spBusy;
+    var head = '<div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">بطاقة المؤهلات</h2>' +
+      (p ? '<span class="badge ' + (p.reviewed ? 'paid' : 'part') + '">' + (p.reviewed ? 'مراجَعة' : 'قراءة آلية — تحتاج مراجعة') + '</span>' : '') +
+      '<button type="button" class="btn' + (p ? '' : ' primary') + '" data-spread' + (busy ? ' disabled' : '') + '>' + (busy ? esc(busy) : p ? 'إعادة قراءة الملفات' : 'قراءة الملفات واستخراج المؤهلات') + '</button></div>';
+    if (!p) return '<div class="card">' + head + '<p class="hint">يقرأ البرنامج كل ملفات الموظف (السيرة والشهادات، بأي شكل) ويستخرج منها بطاقة موحّدة تراجعها قبل اعتمادها.</p></div>';
+    var mark = function (k) { return uns.indexOf(k) > -1 ? ' style="border-color:#d97706;background:#fffbeb" title="غير مؤكد: راجعه في الملف"' : ''; };
+    return '<div class="card" id="staff-profile">' + head +
+      (d.summary ? '<p style="margin:0 0 8px"><textarea data-spf="summary" rows="2" style="width:100%">' + esc(d.summary) + '</textarea></p>' : '<input type="hidden" data-spf="summary" value="">') +
+      '<div class="grid2">' + SP_FIELDS.map(function (f) {
+        return '<div><label class="field">' + f[1] + (uns.indexOf(f[0]) > -1 ? ' <span class="badge part">غير مؤكد</span>' : '') + '</label><input data-spf="' + f[0] + '" value="' + esc(d[f[0]] || '') + '"' + mark(f[0]) + '></div>';
+      }).join('') + '</div>' +
+      SP_LISTS.map(function (L) {
+        return '<label class="field">' + L[1] + (L[2] ? ' <span class="hint" style="margin:0">(سطر لكل بند: ' + (L[0] === 'experience' ? 'المكان | الوظيفة | من | إلى' : 'المؤهل | التخصص | الجامعة | السنة') + ')</span>' : ' <span class="hint" style="margin:0">(سطر لكل بند)</span>') + '</label>' +
+          '<textarea data-spl="' + L[0] + '" rows="' + Math.min(8, Math.max(2, (d[L[0]] || []).length + 1)) + '" style="width:100%">' + esc(spListText(L[0], d[L[0]])) + '</textarea>';
+      }).join('') +
+      '<div class="toolbar" style="margin:8px 0">' + SP_HAS.map(function (h) { return '<label class="check"><input type="checkbox" data-sph="' + h[0] + '"' + (d.has && d.has[h[0]] ? ' checked' : '') + '> ' + h[1] + '</label>'; }).join('') + '</div>' +
+      (Array.isArray(d.pages) && d.pages.length ? '<details><summary class="hint" style="cursor:pointer">محتوى الملفات صفحة صفحة (' + d.pages.length + ')</summary><ul style="margin:4px 0">' +
+        d.pages.map(function (g) { return '<li>' + esc(g.file || '') + (g.page ? ' — ص ' + esc(g.page) : '') + ': ' + esc(g.what || '') + '</li>'; }).join('') + '</ul></details>' : '') +
+      '<div class="actions"><button type="button" class="btn primary" data-spsave>حفظ واعتماد البطاقة</button></div>' +
+      '<p class="hint">قُرئت ' + dmy(String(p.read_at || '').slice(0, 10)) + (p.updated_by ? ' · آخر حفظ: ' + esc(displayName(p.updated_by)) : '') + '. الحقول الملوّنة لم يتأكد منها القارئ.</p></div>';
+  }
+
+  async function spSave(t) {
+    var box = document.getElementById('staff-profile'), p = S.spRows[t.id], d = Object.assign({}, p.data);
+    box.querySelectorAll('[data-spf]').forEach(function (el) { d[el.getAttribute('data-spf')] = el.value.trim(); });
+    box.querySelectorAll('[data-spl]').forEach(function (el) { d[el.getAttribute('data-spl')] = spListParse(el.getAttribute('data-spl'), el.value); });
+    d.has = {}; box.querySelectorAll('[data-sph]').forEach(function (el) { d.has[el.getAttribute('data-sph')] = el.checked; });
+    d.unsure = [];
+    var row = { staff_id: t.id, data: d, reviewed: true, updated_at: new Date().toISOString(), updated_by: S.email || '' };
+    var r = await sb.from('staff_profiles').update(row).eq('staff_id', t.id);
+    if (r.error) return fail(r.error);
+    Object.assign(p, row);
+    render();
+    toast('حُفظت بطاقة المؤهلات');
+  }
+
+  // تقرير مؤهلات العاملين: جدول، وقراءة دفعة لمن لم تُقرأ ملفاته، وExcel
+  function spReportHtml() {
+    if (S.spRows == null) { loadStaffProfiles(); return '<div class="card empty">جارٍ التحميل…</div>'; }
+    if (S.spMissing) return '<div class="card empty">شغّل الملف <code dir="ltr">supabase/staff_profiles.sql</code> ثم حدّث الصفحة.</div>';
+    var list = S.teachers.filter(function (x) { return !x.not_staff; }).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    var q = norm(ui.spQ || '');
+    var shown = list.filter(function (x) { var d = (S.spRows[x.id] || {}).data || {}; return !q || norm(x.name + ' ' + (d.degree || '') + ' ' + (d.major || '') + ' ' + (d.university || '')).indexOf(q) > -1; });
+    var unread = list.filter(function (x) { return !S.spRows[x.id]; }).length;
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">مؤهلات العاملين</h2>' +
+        '<input type="search" id="sp-q" placeholder="الاسم أو المؤهل أو التخصص" value="' + esc(ui.spQ || '') + '" style="max-width:240px">' +
+        '<button type="button" class="btn primary" data-spall' + (ui.spBusy || !unread ? ' disabled' : '') + ' title="يقرأ ملفات من لهم ملفات ولم تُقرأ بعد">' + (ui.spBusy ? esc(ui.spBusy) : 'قراءة ملفات من لم تُقرأ ملفاته (' + unread + ')') + '</button>' +
+        '<button type="button" class="btn" data-spxlsx>تصدير Excel</button><button type="button" class="btn" data-spclose>رجوع</button></div>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>الموظف</th><th>أعلى مؤهل</th><th>التخصص</th><th>الجامعة</th><th>التخرج</th><th>الخبرة</th><th>الوثائق</th><th>الحالة</th></tr></thead><tbody>' +
+      shown.map(function (x) {
+        var p = S.spRows[x.id], d = (p && p.data) || {}, has = d.has || {};
+        return '<tr><td><button type="button" class="btn link" style="padding:0" data-tedit="' + x.id + '">' + esc(x.name) + '</button></td><td>' + esc(d.degree || '') + '</td><td>' + esc(d.major || '') + '</td><td>' + esc(d.university || '') + '</td>' +
+          '<td>' + esc(d.grad_year || '') + '</td><td>' + esc(d.experience_years ? d.experience_years + ' سنة' : '') + '</td>' +
+          '<td>' + (p ? SP_HAS.filter(function (h) { return has[h[0]]; }).map(function (h) { return h[1]; }).join('، ') || '—' : '') + '</td>' +
+          '<td>' + (!p ? '<span class="badge pending">لم تُقرأ</span>' : p.reviewed ? '<span class="badge paid">مراجَعة</span>' : '<span class="badge part">تحتاج مراجعة</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
+
+  async function spReadAll() {
+    var have = await sb.from('staff_files').select('staff_id');
+    var withFiles = {};
+    (have.data || []).forEach(function (f) { withFiles[f.staff_id] = 1; });
+    var todo = S.teachers.filter(function (x) { return withFiles[x.id] && !S.spRows[x.id]; });
+    if (!todo.length) return toast('لا موظف له ملفات لم تُقرأ');
+    if (!confirm('قراءة ملفات ' + todo.length + ' موظف؟ تستغرق دقيقة تقريبًا لكل موظف، فأبقِ الصفحة مفتوحة.')) return;
+    var ok = 0;
+    for (var i = 0; i < todo.length; i++) { ui.spPrefix = (i + 1) + '/' + todo.length + ' ' + todo[i].name + ': '; if (await spRead(todo[i], true)) ok++; }
+    ui.spPrefix = '';
+    toast('قُرئت ملفات ' + ok + ' من ' + todo.length + ' موظف. راجع كل بطاقة واعتمدها.');
+  }
+
+  async function spExport() {
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var rows = S.teachers.filter(function (x) { return !x.not_staff; }).slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); }).map(function (x, i) {
+        var p = S.spRows[x.id], d = (p && p.data) || {}, has = d.has || {};
+        return [i + 1, x.name, d.degree || '', d.major || '', d.university || '', d.grad_year || '', d.grade || '', d.experience_years || '', spListText('experience', d.experience).replace(/\n/g, '؛ '),
+          spListText('other_degrees', d.other_degrees).replace(/\n/g, '؛ '), (d.courses || []).join('؛ '), (d.languages || []).join('، '),
+          SP_HAS.filter(function (h) { return has[h[0]]; }).map(function (h) { return h[1]; }).join('، '), !p ? 'لم تُقرأ' : p.reviewed ? 'مراجَعة' : 'تحتاج مراجعة'];
+      });
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['مؤهلات العاملين — ' + dmy(todayISO())], [],
+        ['م', 'الموظف', 'أعلى مؤهل', 'التخصص', 'الجامعة', 'سنة التخرج', 'التقدير', 'سنوات الخبرة', 'الخبرات', 'مؤهلات أخرى', 'الدورات', 'اللغات', 'الوثائق', 'الحالة']].concat(rows));
+      ws['!cols'] = [5, 28, 14, 20, 24, 10, 10, 10, 50, 40, 40, 16, 30, 12].map(function (w) { return { wch: w }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'المؤهلات');
+      XLSX.writeFile(wb, 'مؤهلات-العاملين-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staff' || !canView()) return;
+    var t = ui.editTeacher && ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
+    if (e.target.closest('[data-spreport]')) { ui.spReport = true; S.spRows = null; return render(); }
+    if (e.target.closest('[data-spclose]')) { ui.spReport = false; return render(); }
+    if (e.target.closest('[data-spall]')) return spReadAll();
+    if (e.target.closest('[data-spxlsx]')) return spExport();
+    if (t && e.target.closest('[data-spread]')) return spRead(t);
+    if (t && e.target.closest('[data-spsave]')) return spSave(t);
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/staff' || e.target.id !== 'sp-q') return;
+    ui.spQ = e.target.value;
+    var pos = e.target.selectionStart;
+    render();
+    var q = document.getElementById('sp-q');
+    if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+  });
+
   function renderStaff() {
     if (S.accountsMissing) {
       app.innerHTML = tabs('staff') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لبيانات المعلمين وحساباتهم بعد.<br>' +
@@ -2279,8 +2484,8 @@
         'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
         '<button type="submit" class="btn">حفظ</button></div></form>' : '') +
       (S.staffMissing ? '<p class="formhint">لتسجيل فئة العامل ومسماه الوظيفي ورقم الواتساب شغّل الملف <code dir="ltr">supabase/staff.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' : '') +
-      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) : '') : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
-        (S.staffMissing ? '' : (canView() ? '<button type="button" class="btn" data-sfbulk>رفع مجلد ملفات العاملين</button><input type="file" id="sf-dir" webkitdirectory multiple hidden>' : '') + '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
+      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) + staffProfileHtml(t) : '') : ui.spReport && canView() ? spReportHtml() : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
+        (S.staffMissing ? '' : (canView() ? '<button type="button" class="btn" data-spreport>مؤهلات العاملين</button>' : '') + (canView() ? '<button type="button" class="btn" data-sfbulk>رفع مجلد ملفات العاملين</button><input type="file" id="sf-dir" webkitdirectory multiple hidden>' : '') + '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
           '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>') + '</div>') +
       (ed || ui.staffImp ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
         '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات العاملين (المباحث والجوال والواتساب)</button>' +
