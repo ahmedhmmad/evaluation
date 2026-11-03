@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '03/11 — 6';
+  var APP_BUILD = '04/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2716,7 +2716,8 @@
         (final
           ? '<button type="submit" class="btn primary" data-mode="edit" formnovalidate>حفظ التعديلات</button>' +
             '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
-          : '<button type="submit" class="btn primary" data-mode="final">حفظ واعتماد التسجيل النهائي</button>' +
+          : (canRecordAtt() ? '<label style="display:flex;gap:6px;align-items:center;flex-basis:100%"><input type="checkbox" id="sf-welcome" checked> إرسال رسالة ترحيب لولي الأمر على واتساب عند اعتماد التسجيل النهائي</label>' : '') +
+            '<button type="submit" class="btn primary" data-mode="final">حفظ واعتماد التسجيل النهائي</button>' +
             '<button type="submit" class="btn" data-mode="save" formnovalidate>' + (st && stStatus(st) === 'reserve' ? 'حفظ (يبقى احتياطًا)' : 'حفظ دون اعتماد') + '</button>' +
             (st && stStatus(st) === 'reserve'
               ? '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
@@ -3426,6 +3427,7 @@
 
     if (!data.full_name) return toast('اكتب اسم الطالب.', true);
     var wasFinal = st && stStatus(st) === 'final';
+    var welcomeEl = document.getElementById('sf-welcome'), sendWelcome = mode === 'final' && !wasFinal && !!(welcomeEl && welcomeEl.checked);
     // شعبة ممتلئة أو لجنس آخر: تنبيه، والمتابعة ممكنة
     var classChanged = !st || String(st.class_name || '') !== String(data.class_name || '');
     if ((mode === 'final' && (!wasFinal || classChanged) || mode === 'edit' && classChanged) && data.class_name && !confirmClass(data.class_name, st, data.gender)) return;
@@ -3463,7 +3465,6 @@
       });
       data = diff;
     }
-    var wasNew = !st;
     var r = st
       ? (changed ? await sb.from('students').update(data).eq('id', st.id) : { error: null })
       : await sb.from('students').insert(data).select().single();
@@ -3497,7 +3498,7 @@
     var synced = await syncSiblingCount(st);
     ui.editStudent = null;
     render();
-    if (wasNew) setTimeout(function () { waOfferWelcome(st); }, 300);
+    if (sendWelcome) waSendWelcome(st);
     toast((data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : st && mode !== 'final' ? (changed ? 'حُفظت التعديلات (' + changed + ')' : 'لا تعديلات للحفظ') : 'تم الحفظ') + (synced ? ' — حُدِّث «عدد الأبناء في المركز» في سجلات إخوته (' + synced + ')' : ''));
   }
 
@@ -15281,12 +15282,13 @@
     }
   }
 
-  // رسالة الترحيب بعد تسجيل طالب جديد: سؤال واحد، والإرسال من قالب «welcome» كما هو
-  async function waOfferWelcome(x) {
-    if (!canRecordAtt() || !x || !(x.whatsapp || x.phone)) return;
+  // رسالة الترحيب عند اعتماد التسجيل النهائي (خيار في صفحة تسجيل الطالب)، من قالب «welcome»، ومرة واحدة لكل طالب
+  async function waSendWelcome(x) {
+    if (!canRecordAtt() || !x) return;
+    if (!(x.whatsapp || x.phone)) return toast('لم تُرسل رسالة الترحيب: لا رقم واتساب ولا جوال لولي الأمر', true);
     if (S.waTpl == null) await loadWaTemplates();
     var t = waTpl('welcome');
-    if (!t || !confirm('إرسال رسالة الترحيب لولي أمر «' + x.full_name + '» على واتساب؟\n\n' + waPreview(t.body, x))) return;
+    if (!t) return toast('لم تُرسل رسالة الترحيب: لا يوجد قالب «ترحيب بطالب جديد» في شاشة رسائل واتساب', true);
     var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'welcome-' + x.id, kind: 'welcome', title: t.title, text: t.body, student_ids: [x.id], per: 'student', school: schoolName() } });
     if (r.error) return toast('تعذّر إرسال الترحيب: ' + r.error.message, true);
     S.waMsgs = null;
