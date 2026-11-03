@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 5';
+  var APP_BUILD = '04/11 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2327,6 +2327,36 @@
     render();
     if (done) toast(done);
   }
+  // زر السيرة الذاتية في قائمة العاملين وتقرير المؤهلات: فتح ونسخ، أو إنشاء الرابط إن كانت البطاقة معتمدة
+  function cvCell(id) {
+    var p = S.spRows && S.spRows[id];
+    if (!p || !p.reviewed || !('cv_public' in p)) return '';
+    if (p.cv_public && p.cv_token) return '<span style="white-space:nowrap"><a class="btn" target="_blank" rel="noopener" href="' + esc(cvLink(p.cv_token)) + '">السيرة</a> <button type="button" class="btn" data-cvcopy2="' + id + '" title="نسخ الرابط">نسخ</button></span>';
+    return '<button type="button" class="btn" data-cvmake="' + id + '">إنشاء رابط</button>';
+  }
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/staff' || !canView()) return;
+    var el, p;
+    if ((el = e.target.closest('[data-cvcopy2]'))) { p = S.spRows[el.getAttribute('data-cvcopy2')]; return copyText(cvLink(p.cv_token), 'نُسخ رابط السيرة الذاتية'); }
+    if (e.target.closest('[data-cvmakeall]')) {
+      var ids = Object.keys(S.spRows).filter(function (k) { var q = S.spRows[k]; return q.reviewed && 'cv_public' in q && !q.cv_token; });
+      for (var i = 0; i < ids.length; i++) {
+        var pt = { cv_public: true, cv_token: cvToken() }, w = await sb.from('staff_profiles').update(pt).eq('staff_id', ids[i]);
+        if (w.error) return fail(w.error);
+        Object.assign(S.spRows[ids[i]], pt);
+      }
+      render();
+      return toast('أُنشئت ' + ids.length + ' روابط');
+    }
+    if ((el = e.target.closest('[data-cvmake]'))) {
+      var id = el.getAttribute('data-cvmake'), patch = { cv_public: true, cv_token: S.spRows[id].cv_token || cvToken() };
+      var r = await sb.from('staff_profiles').update(patch).eq('staff_id', id);
+      if (r.error) return fail(r.error);
+      Object.assign(S.spRows[id], patch);
+      render();
+      toast('أُنشئ رابط السيرة الذاتية');
+    }
+  });
   function cvToken() { var a = new Uint8Array(20); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
   document.addEventListener('click', function (e) {
     if (location.hash !== '#/staff' || !canView()) return;
@@ -2350,11 +2380,13 @@
     d.has = {}; box.querySelectorAll('[data-sph]').forEach(function (el) { d.has[el.getAttribute('data-sph')] = el.checked; });
     d.unsure = [];
     var row = { staff_id: t.id, data: d, reviewed: true, updated_at: new Date().toISOString(), updated_by: S.email || '' };
+    // اعتماد البطاقة يُنشئ رابط السيرة الذاتية ويفعّله مباشرة (إلا إن أوقفه أحد عمدًا)
+    if ('cv_public' in p && !(p.cv_token && !p.cv_public)) { row.cv_token = p.cv_token || cvToken(); row.cv_public = true; }
     var r = await sb.from('staff_profiles').update(row).eq('staff_id', t.id);
     if (r.error) return fail(r.error);
     Object.assign(p, row);
     render();
-    toast('حُفظت بطاقة المؤهلات');
+    toast(row.cv_public ? 'حُفظت بطاقة المؤهلات، والسيرة الذاتية جاهزة برابط' : 'حُفظت بطاقة المؤهلات');
   }
 
   // تقرير مؤهلات العاملين: جدول، وقراءة دفعة لمن لم تُقرأ ملفاته، وExcel
@@ -2368,14 +2400,14 @@
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">مؤهلات العاملين</h2>' +
         '<input type="search" id="sp-q" placeholder="الاسم أو المؤهل أو التخصص" value="' + esc(ui.spQ || '') + '" style="max-width:240px">' +
         '<button type="button" class="btn primary" data-spall' + (ui.spBusy || !unread ? ' disabled' : '') + ' title="يقرأ ملفات من لهم ملفات ولم تُقرأ بعد">' + (ui.spBusy ? esc(ui.spBusy) : 'قراءة ملفات من لم تُقرأ ملفاته (' + unread + ')') + '</button>' +
-        '<button type="button" class="btn" data-spxlsx>تصدير Excel</button><button type="button" class="btn" data-spclose>رجوع</button></div>' +
-      '<div class="table-wrap"><table class="grid"><thead><tr><th>الموظف</th><th>أعلى مؤهل</th><th>التخصص</th><th>الجامعة</th><th>التخرج</th><th>الخبرة</th><th>الوثائق</th><th>الحالة</th></tr></thead><tbody>' +
+        (function () { var n = Object.keys(S.spRows).filter(function (k) { var p = S.spRows[k]; return p.reviewed && 'cv_public' in p && !p.cv_token; }).length; return n ? '<button type="button" class="btn" data-cvmakeall>إنشاء روابط السيرة لكل البطاقات المعتمدة (' + n + ')</button>' : ''; })() + '<button type="button" class="btn" data-spxlsx>تصدير Excel</button><button type="button" class="btn" data-spclose>رجوع</button></div>' +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>الموظف</th><th>أعلى مؤهل</th><th>التخصص</th><th>الجامعة</th><th>التخرج</th><th>الخبرة</th><th>الوثائق</th><th>الحالة</th><th>السيرة الذاتية</th></tr></thead><tbody>' +
       shown.map(function (x) {
         var p = S.spRows[x.id], d = (p && p.data) || {}, has = d.has || {};
         return '<tr><td><button type="button" class="btn link" style="padding:0" data-tedit="' + x.id + '">' + esc(x.name) + '</button></td><td>' + esc(d.degree || '') + '</td><td>' + esc(d.major || '') + '</td><td>' + esc(d.university || '') + '</td>' +
           '<td>' + esc(d.grad_year || '') + '</td><td>' + esc(d.experience_years ? d.experience_years + ' سنة' : '') + '</td>' +
           '<td>' + (p ? SP_HAS.filter(function (h) { return has[h[0]]; }).map(function (h) { return h[1]; }).join('، ') || '—' : '') + '</td>' +
-          '<td>' + (!p ? '<span class="badge pending">لم تُقرأ</span>' : p.reviewed ? '<span class="badge paid">مراجَعة</span>' : '<span class="badge part">تحتاج مراجعة</span>') + '</td></tr>';
+          '<td>' + (!p ? '<span class="badge pending">لم تُقرأ</span>' : p.reviewed ? '<span class="badge paid">مراجَعة</span>' : '<span class="badge part">تحتاج مراجعة</span>') + '</td><td>' + cvCell(x.id) + '</td></tr>';
       }).join('') + '</tbody></table></div></div>';
   }
 
@@ -2433,6 +2465,7 @@
   });
 
   function renderStaff() {
+    if (canView() && S.spRows == null && !ui.spLoading) { ui.spLoading = true; loadStaffProfiles().then(function () { ui.spLoading = false; }); }
     if (S.accountsMissing) {
       app.innerHTML = tabs('staff') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لبيانات المعلمين وحساباتهم بعد.<br>' +
         'شغّل الملف <code dir="ltr">supabase/teacher_accounts.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
@@ -2499,7 +2532,7 @@
         : x.hire_date && x.hire_date > today ? '<span class="badge part">يبدأ ' + dmy(x.hire_date) + '</span>'
         : x.contract_end ? '<span class="badge part">ينتهي عقده ' + dmy(x.contract_end) + '</span>' : '';
       if (x.not_staff) term = '<span class="badge pending">ليس من العاملين</span>';
-      return '<tr' + (x.not_staff || (x.contract_end && x.contract_end < today) ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
+      return '<tr' + (x.not_staff || (x.contract_end && x.contract_end < today) ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (canView() && S.spRows && S.spRows[x.id] && S.spRows[x.id].cv_public ? ' ' + cvCell(x.id) : '') + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
         '<td>' + esc(x.job_title || x.subject || '—') + (teach && x.classes ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.classes) + '</span>' : '') + '</td>' +
         // الجوال، والواتساب تحته إن اختلف عنه (عمود واحد يوفّر عرض الجدول)
         '<td><span dir="ltr" style="white-space:nowrap">' + esc(x.phone || '—') + '</span>' +
