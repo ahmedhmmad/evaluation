@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 2';
+  var APP_BUILD = '04/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2088,6 +2088,108 @@
     if (t && e.target.files.length) sfUpload(t, Array.prototype.slice.call(e.target.files));
   });
 
+  /* ----- رفع مجلد ملفات العاملين دفعة واحدة -----
+     يُختار المجلد من الجهاز: كل مجلد فرعي باسم موظف، أو ملف مفرد باسمه. يُقترح الموظف ونوع الملف، وتُراجَع القائمة قبل الرفع،
+     ويُتخطّى ما سبق رفعه (نفس الاسم والحجم للموظف نفسه) */
+
+  function sfTokens(x) { return norm(x).replace(/[_\-.()]+/g, ' ').split(/\s+/).filter(function (w) { return w.length > 1 && ['عبد', 'ابو', 'أبو', 'بن', 'ال'].indexOf(w) < 0; }); }
+  function sfMatchStaff(label) {
+    var lt = sfTokens(label), best = null, bestScore = 0;
+    if (!lt.length) return '';
+    S.teachers.forEach(function (t) {
+      var tt = sfTokens(t.name), hit = lt.filter(function (w) { return tt.indexOf(w) > -1; }).length;
+      // الاسم الأول يجب أن يطابق، ثم كلمة أخرى على الأقل (أو الاسم كله إن كان من كلمة واحدة)
+      if (!hit || tt[0] !== lt[0] && lt.indexOf(tt[0]) < 0) return;
+      var score = hit / lt.length + hit / tt.length;
+      if ((hit >= 2 || lt.length === 1) && score > bestScore) { bestScore = score; best = t.id; }
+    });
+    return best || '';
+  }
+  function sfGuessKind(name, loose) {
+    var n = norm(name);
+    if (/سير|cv|resume|ذاتي/i.test(n)) return 'cv';
+    if (/كشف درجات|جامع|بكالوريوس|ماجستير|دبلوم|ثانوي|شهادة الجامعة/.test(n)) return 'degree';
+    if (/خبر/.test(n)) return 'experience';
+    if (/دور/.test(n)) return 'course';
+    if (/شهاد/.test(n)) return 'degree';
+    return loose ? 'cv_all' : 'other';
+  }
+
+  async function sfBulkPick(files) {
+    var all = await sb.from('staff_files').select('staff_id, name, size');
+    if (all.error) return toast('شغّل الملف supabase/staff_files.sql أولًا', true);
+    var have = {};
+    (all.data || []).forEach(function (f) { have[f.staff_id + '|' + f.name + '|' + f.size] = 1; });
+    var rows = Array.prototype.slice.call(files).filter(function (f) { return f.size > 0 && !/^\.|thumbs\.db$|desktop\.ini$/i.test(f.name); }).map(function (f) {
+      var parts = (f.webkitRelativePath || f.name).split('/'), loose = parts.length <= 2, label = loose ? f.name.replace(/\.[^.]+$/, '') : parts[parts.length - 2];
+      var sid = sfMatchStaff(label);
+      return { file: f, label: label, path: parts.slice(1).join('/'), staff: sid, kind: sfGuessKind(f.name, loose), on: !!sid, dup: false };
+    });
+    rows.forEach(function (r) { r.dup = !!have[r.staff + '|' + r.file.name + '|' + r.file.size]; if (r.dup) r.on = false; });
+    rows.sort(function (a, b) { return a.label.localeCompare(b.label, 'ar') || a.path.localeCompare(b.path); });
+    ui.sfBulk = { rows: rows, busy: null };
+    render();
+  }
+
+  function sfBulkHtml() {
+    var B = ui.sfBulk, on = B.rows.filter(function (r) { return r.on && r.staff; }), size = on.reduce(function (t, r) { return t + r.file.size; }, 0);
+    var staffOpts = function (cur) {
+      return '<option value="">— لم يُطابَق —</option>' + S.teachers.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); })
+        .map(function (t) { return '<option value="' + t.id + '"' + (t.id === cur ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('');
+    };
+    var kindOpts = function (cur) { return Object.keys(SF_KINDS).map(function (k) { return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + SF_KINDS[k] + '</option>'; }).join(''); };
+    var unmatched = B.rows.filter(function (r) { return !r.staff; }).length;
+    return '<div class="card"><h2 style="margin-top:0">رفع مجلد ملفات العاملين — ' + B.rows.length + ' ملف</h2>' +
+      '<p class="hint">راجع الموظف ونوع كل ملف، وأزل علامة ما لا تريد رفعه. ' + (unmatched ? '<b>' + unmatched + ' ملف لم يُطابَق بموظف</b>: اختره من القائمة أو اتركه. ' : '') +
+        'الملفات المرفوعة سابقًا (الاسم والحجم نفسهما) متروكة.</p>' +
+      '<div class="table-wrap" style="max-height:65vh;overflow:auto"><table class="grid"><thead><tr><th></th><th>المجلد / الاسم</th><th>الملف</th><th>الحجم</th><th>الموظف</th><th>النوع</th></tr></thead><tbody>' +
+      B.rows.map(function (r, i) {
+        return '<tr' + (r.dup ? ' style="color:var(--muted)"' : '') + '><td><input type="checkbox" data-sfbon="' + i + '"' + (r.on ? ' checked' : '') + '></td><td><b>' + esc(r.label) + '</b></td>' +
+          '<td>' + esc(r.path) + (r.dup ? ' <span class="badge paid">مرفوع سابقًا</span>' : '') + '</td><td style="white-space:nowrap">' + sfSize(r.file.size) + '</td>' +
+          '<td><select data-sfbstaff="' + i + '" style="' + (r.staff ? '' : 'border-color:var(--danger,#b91c1c)') + '">' + staffOpts(r.staff) + '</select></td>' +
+          '<td><select data-sfbkind="' + i + '">' + kindOpts(r.kind) + '</select></td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-sfbgo' + (on.length && !B.busy ? '' : ' disabled') + '>' + (B.busy ? esc(B.busy) : 'رفع ' + on.length + ' ملف (' + sfSize(size) + ')') + '</button>' +
+        '<button type="button" class="btn" data-sfbcancel' + (B.busy ? ' disabled' : '') + '>إلغاء</button></div></div>';
+  }
+
+  async function sfBulkGo() {
+    var B = ui.sfBulk, list = B.rows.filter(function (r) { return r.on && r.staff; }), done = 0, failed = [];
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      B.busy = 'جارٍ رفع ' + (i + 1) + ' من ' + list.length + '…'; render();
+      var r = await sb.functions.invoke('staff-files', { body: { action: 'upload', staff_id: x.staff, name: x.file.name, size: x.file.size, mime: x.file.type, kind: x.kind, note: x.label } });
+      var ok = false;
+      if (!r.error && r.data && r.data.url) {
+        try { ok = (await fetch(r.data.url, { method: 'PUT', body: x.file })).ok; } catch (err) { ok = false; }
+        if (!ok) await sb.functions.invoke('staff-files', { body: { action: 'delete', id: r.data.id } });
+      }
+      if (ok) { done++; x.on = false; x.dup = true; } else failed.push(x.file.name);
+    }
+    B.busy = null;
+    if (!failed.length) ui.sfBulk = null;
+    S.sfFiles = null;
+    render();
+    toast('رُفع ' + done + ' ملف' + (failed.length ? '، وتعذّر ' + failed.length + ': ' + failed.slice(0, 3).join('، ') : ''), failed.length > 0);
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staff' || !canView()) return;
+    if (e.target.closest('[data-sfbulk]')) return document.getElementById('sf-dir').click();
+    if (!ui.sfBulk) return;
+    if (e.target.closest('[data-sfbgo]')) return sfBulkGo();
+    if (e.target.closest('[data-sfbcancel]')) { ui.sfBulk = null; return render(); }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/staff') return;
+    if (e.target.id === 'sf-dir') { if (e.target.files.length) sfBulkPick(e.target.files); return; }
+    if (!ui.sfBulk) return;
+    var el, R = ui.sfBulk.rows;
+    if ((el = e.target.closest('[data-sfbon]'))) { R[+el.getAttribute('data-sfbon')].on = el.checked; return render(); }
+    if ((el = e.target.closest('[data-sfbstaff]'))) { var r = R[+el.getAttribute('data-sfbstaff')]; r.staff = el.value; r.on = !!el.value; return render(); }
+    if ((el = e.target.closest('[data-sfbkind]'))) { R[+el.getAttribute('data-sfbkind')].kind = el.value; }
+  });
+
   function renderStaff() {
     if (S.accountsMissing) {
       app.innerHTML = tabs('staff') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لبيانات المعلمين وحساباتهم بعد.<br>' +
@@ -2177,8 +2279,8 @@
         'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
         '<button type="submit" class="btn">حفظ</button></div></form>' : '') +
       (S.staffMissing ? '<p class="formhint">لتسجيل فئة العامل ومسماه الوظيفي ورقم الواتساب شغّل الملف <code dir="ltr">supabase/staff.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' : '') +
-      (ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) : '') : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
-        (S.staffMissing ? '' : '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
+      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) : '') : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
+        (S.staffMissing ? '' : (canView() ? '<button type="button" class="btn" data-sfbulk>رفع مجلد ملفات العاملين</button><input type="file" id="sf-dir" webkitdirectory multiple hidden>' : '') + '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
           '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>') + '</div>') +
       (ed || ui.staffImp ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
         '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات العاملين (المباحث والجوال والواتساب)</button>' +
