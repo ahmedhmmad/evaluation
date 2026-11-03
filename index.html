@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 1';
+  var APP_BUILD = '04/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2007,6 +2007,87 @@
   }
 
 
+  /* ---------- ملفات العاملين ----------
+     السير الذاتية والشهادات وغيرها في Cloudflare R2 عبر دالة staff-files (روابط مؤقتة)، وجدول staff_files سجل لكل ملف.
+     تظهر في بطاقة العامل عند تعديله، للمدير العام والمدير */
+
+  var SF_KINDS = { cv: 'سيرة ذاتية', cv_all: 'سيرة ذاتية وملحقات', degree: 'شهادة جامعية', experience: 'شهادة خبرة', course: 'دورة تدريبية', id: 'هوية', contract: 'عقد', other: 'أخرى' };
+
+  async function loadStaffFiles(id) {
+    var r = await sb.from('staff_files').select('*').eq('staff_id', id).order('uploaded_at', { ascending: false });
+    S.sfMissing = !!r.error;
+    S.sfFiles = { id: id, rows: r.data || [] };
+    render();
+  }
+  function sfSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' م.ب' : Math.max(1, Math.round(n / 1024)) + ' ك.ب'; }
+
+  function staffFilesHtml(t) {
+    if (!S.sfFiles || S.sfFiles.id !== t.id) { if (!ui.sfLoading) { ui.sfLoading = true; loadStaffFiles(t.id).then(function () { ui.sfLoading = false; }); } return '<div class="card empty">جارٍ تحميل الملفات…</div>'; }
+    if (S.sfMissing) return '<div class="card empty">ملفات العاملين تحتاج إلى جدول جديد: شغّل الملف <code dir="ltr">supabase/staff_files.sql</code> في محرر SQL، وانشر الدالة <code dir="ltr">staff-files</code>.</div>';
+    var rows = S.sfFiles.rows, busy = ui.sfBusy;
+    return '<div class="card" id="staff-files"><h2 style="margin-top:0">ملفات ' + esc(t.name) + ' (' + rows.length + ')</h2>' +
+      (rows.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>النوع</th><th>الملف</th><th>ملاحظة</th><th>الحجم</th><th>الرفع</th><th></th></tr></thead><tbody>' +
+        rows.map(function (f) {
+          return '<tr><td><span class="badge part">' + esc(SF_KINDS[f.kind] || f.kind) + '</span></td><td><b>' + esc(f.name) + '</b></td><td>' + esc(f.note || '') + '</td>' +
+            '<td style="white-space:nowrap">' + (f.size ? sfSize(f.size) : '') + '</td><td style="white-space:nowrap">' + dmy(String(f.uploaded_at).slice(0, 10)) + '</td>' +
+            '<td><div class="acts"><button type="button" class="btn" data-sfopen="' + f.id + '">فتح</button><button type="button" class="btn" data-sfdown="' + f.id + '">تنزيل</button>' +
+            (isAdmin() || isManager() ? '<button type="button" class="btn danger" data-sfdel="' + f.id + '">حذف</button>' : '') + '</div></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">لا ملفات بعد.</div>') +
+      '<div class="toolbar" style="align-items:center;margin-top:10px">' +
+        '<select id="sf-kind" style="width:auto">' + Object.keys(SF_KINDS).map(function (k) { return '<option value="' + k + '">' + SF_KINDS[k] + '</option>'; }).join('') + '</select>' +
+        '<input id="sf-note" placeholder="ملاحظة (اختياري)" style="max-width:240px">' +
+        '<button type="button" class="btn primary" data-sfpick' + (busy ? ' disabled' : '') + '>' + (busy ? esc(busy) : 'رفع ملفات…') + '</button>' +
+        '<input type="file" id="sf-input" multiple hidden accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic"></div>' +
+      '<p class="hint">PDF أو Word أو صور، حتى 50 ميجابايت للملف. تُحفظ في مخزن الأكاديمية على Cloudflare R2، ولا يفتحها إلا المدير العام والمدير.</p></div>';
+  }
+
+  async function sfUpload(t, files) {
+    var kind = (document.getElementById('sf-kind') || {}).value || 'other', note = ((document.getElementById('sf-note') || {}).value || '').trim(), done = 0;
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      ui.sfBusy = 'جارٍ رفع ' + (i + 1) + ' من ' + files.length + '…'; render();
+      var r = await sb.functions.invoke('staff-files', { body: { action: 'upload', staff_id: t.id, name: file.name, size: file.size, mime: file.type, kind: kind, note: note } });
+      if (r.error || !r.data || !r.data.url) { toast('تعذّر رفع «' + file.name + '»: ' + ((r.error && r.error.message) || 'خطأ'), true); continue; }
+      var ok = false;
+      try { ok = (await fetch(r.data.url, { method: 'PUT', body: file })).ok; } catch (err) { ok = false; }
+      if (!ok) { await sb.functions.invoke('staff-files', { body: { action: 'delete', id: r.data.id } }); toast('تعذّر رفع «' + file.name + '» إلى المخزن', true); continue; }
+      done++;
+    }
+    ui.sfBusy = null;
+    await loadStaffFiles(t.id);
+    if (done) toast('رُفع ' + done + ' ملف');
+  }
+
+  async function sfOpen(id, download) {
+    // نافذة تُفتح فورًا عند الضغط (لا يحجبها المتصفح)، ثم يوضع فيها الرابط المؤقت
+    var w = download ? null : window.open('', '_blank');
+    var r = await sb.functions.invoke('staff-files', { body: { action: 'open', id: id, download: !!download } });
+    if (r.error || !r.data) { if (w) w.close(); return toast('تعذّر فتح الملف: ' + (r.error ? r.error.message : ''), true); }
+    if (w) w.location = r.data.url; else location.href = r.data.url;
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/staff' || !canView()) return;
+    var el, t = ui.editTeacher && ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
+    if (!t) return;
+    if (e.target.closest('[data-sfpick]')) return document.getElementById('sf-input').click();
+    if ((el = e.target.closest('[data-sfopen]'))) return sfOpen(el.getAttribute('data-sfopen'));
+    if ((el = e.target.closest('[data-sfdown]'))) return sfOpen(el.getAttribute('data-sfdown'), true);
+    if ((el = e.target.closest('[data-sfdel]'))) {
+      var f = S.sfFiles.rows.filter(function (x) { return x.id === el.getAttribute('data-sfdel'); })[0];
+      if (!f || !confirm('حذف الملف «' + f.name + '» نهائيًا من المخزن؟')) return;
+      var r = await sb.functions.invoke('staff-files', { body: { action: 'delete', id: f.id } });
+      if (r.error) return toast('تعذّر الحذف: ' + r.error.message, true);
+      await loadStaffFiles(t.id);
+      toast('حُذف الملف');
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'sf-input' || location.hash !== '#/staff') return;
+    var t = ui.editTeacher && ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
+    if (t && e.target.files.length) sfUpload(t, Array.prototype.slice.call(e.target.files));
+  });
+
   function renderStaff() {
     if (S.accountsMissing) {
       app.innerHTML = tabs('staff') + '<div class="card empty">لم تُجهَّز قاعدة البيانات لبيانات المعلمين وحساباتهم بعد.<br>' +
@@ -2096,7 +2177,7 @@
         'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
         '<button type="submit" class="btn">حفظ</button></div></form>' : '') +
       (S.staffMissing ? '<p class="formhint">لتسجيل فئة العامل ومسماه الوظيفي ورقم الواتساب شغّل الملف <code dir="ltr">supabase/staff.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' : '') +
-      (ui.staffImp ? staffImportHtml() : ed ? form : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
+      (ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) : '') : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
         (S.staffMissing ? '' : '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
           '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>') + '</div>') +
       (ed || ui.staffImp ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
