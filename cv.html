@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>السيرة الذاتية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
+<style>
+  /* سيرة ذاتية بهوية الأكاديمية: كحلي #13306B وذهبي #C8A45D على عاجي، وتُطبع على صفحة A4 */
+  :root { --navy: #13306B; --navy-dark: #0C2152; --gold: #C8A45D; --gold-dark: #9C7C3C; --gold-soft: #F6EFDF; --ivory: #FAF7F0; --line: #ECE6D8; --ink: #3F4656; --muted: #7E8494; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "IBM Plex Sans Arabic", system-ui, "Segoe UI", Tahoma, sans-serif; background: var(--ivory); color: var(--ink); font-size: 16px; line-height: 1.7; }
+  .page { max-width: 900px; margin: 28px auto; background: #fff; border-radius: 18px; overflow: hidden; box-shadow: 0 1px 2px rgba(19,48,107,.05), 0 12px 36px rgba(19,48,107,.10); display: grid; grid-template-columns: 290px 1fr; }
+  aside { background: var(--navy); color: #fff; padding: 30px 24px; position: relative; }
+  aside::before { content: ""; position: absolute; inset: 0; opacity: .07; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M30 0l30 30-30 30L0 30z' fill='none' stroke='%23fff'/%3E%3C/svg%3E"); pointer-events: none; }
+  .avatar { width: 112px; height: 112px; border-radius: 50%; margin: 0 auto 16px; display: grid; place-items: center; background: var(--gold); color: var(--navy-dark); font-size: 2.6rem; font-weight: 700; border: 4px solid rgba(255,255,255,.18); }
+  aside h1 { margin: 0; text-align: center; font-size: 1.45rem; line-height: 1.4; }
+  aside .role { text-align: center; color: #E9DDBF; margin-top: 4px; font-size: .98rem; }
+  aside h3 { color: var(--gold); font-size: .95rem; letter-spacing: .02em; margin: 26px 0 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(200,164,93,.35); }
+  aside ul { list-style: none; padding: 0; margin: 0; }
+  aside li { padding: 3px 0; font-size: .95rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); border-radius: 99px; padding: 2px 12px; font-size: .88rem; }
+  .contact li { direction: ltr; text-align: right; word-break: break-all; }
+  .school { display: flex; align-items: center; gap: 10px; margin-top: 30px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.15); font-size: .88rem; color: #E9DDBF; }
+  .school .logo { width: 40px; height: 40px; flex: none; border-radius: 10px; background: #fff url(banner.jpg) no-repeat 11.8% 43% / 615% auto; }
+  main { padding: 32px 34px; }
+  section { margin-bottom: 26px; }
+  section h2 { display: flex; align-items: center; gap: 10px; color: var(--navy); font-size: 1.15rem; margin: 0 0 12px; }
+  section h2::before { content: ""; width: 8px; height: 22px; border-radius: 4px; background: var(--gold); }
+  .summary { background: var(--gold-soft); border-radius: 12px; padding: 14px 16px; margin: 0; color: var(--navy-dark); }
+  .tl { border-inline-start: 2px solid var(--line); padding-inline-start: 18px; }
+  .tl .it { position: relative; padding-bottom: 14px; }
+  .tl .it::before { content: ""; position: absolute; inset-inline-start: -25px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid var(--gold); }
+  .tl b { color: var(--navy); font-size: 1.02rem; }
+  .tl .meta { color: var(--muted); font-size: .9rem; }
+  .tl .when { float: left; color: var(--gold-dark); font-weight: 700; font-size: .9rem; }
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+  .fact { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; text-align: center; }
+  .fact .n { color: var(--navy); font-weight: 700; font-size: 1.15rem; }
+  .fact .l { color: var(--muted); font-size: .82rem; }
+  .msg { text-align: center; color: var(--muted); padding: 80px 16px; }
+  .bar { max-width: 900px; margin: 16px auto -12px; text-align: left; padding: 0 16px; }
+  .bar button { font: inherit; font-weight: 700; padding: 8px 18px; border-radius: 99px; border: 1px solid var(--navy); background: #fff; color: var(--navy); cursor: pointer; }
+  @media (max-width: 760px) {
+    .page { grid-template-columns: 1fr; margin: 12px; border-radius: 14px; }
+    main { padding: 24px 18px; }
+    .facts { grid-template-columns: 1fr 1fr; }
+  }
+  @media print {
+    @page { size: A4; margin: 0; }
+    body { background: #fff; font-size: 13px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .bar { display: none; }
+    .page { margin: 0; max-width: none; min-height: 297mm; border-radius: 0; box-shadow: none; grid-template-columns: 70mm 1fr; }
+    section, .tl .it { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="bar" id="bar" hidden><button type="button" onclick="print()">طباعة / حفظ PDF</button></div>
+<div id="root"><div class="msg">جارٍ التحميل…</div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"><\/script>');</script>
+<script>
+(function () {
+  'use strict';
+  var root = document.getElementById('root'), token = new URLSearchParams(location.search).get('t') || '';
+  var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function arr(v) { return Array.isArray(v) ? v.filter(function (x) { return x && (typeof x === 'string' ? x.trim() : Object.keys(x).some(function (k) { return String(x[k] || '').trim(); })); }) : []; }
+  function show(html) { root.innerHTML = html; }
+
+  function render(r) {
+    var d = r.data || {}, name = d.full_name && d.full_name.length > (r.name || '').length ? d.full_name : r.name;
+    var role = [r.job_title, r.subject].filter(Boolean).join(' — ') || (d.major ? 'معلم/ة ' + d.major : '');
+    var initials = String(name || '؟').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0]; }).join(' ');
+    var langs = arr(d.languages), skills = arr(d.skills), courses = arr(d.courses), exp = arr(d.experience), other = arr(d.other_degrees);
+    var contact = [d.phone, d.email, d.address].filter(Boolean);
+    var side = '<aside><div class="avatar">' + esc(initials) + '</div><h1>' + esc(name) + '</h1>' + (role ? '<div class="role">' + esc(role) + '</div>' : '') +
+      (contact.length ? '<h3>التواصل</h3><ul class="contact">' + contact.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '') +
+      (langs.length ? '<h3>اللغات</h3><ul>' + langs.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' : '') +
+      (skills.length ? '<h3>المهارات</h3><div class="chips">' + skills.map(function (s) { return '<span>' + esc(s) + '</span>'; }).join('') + '</div>' : '') +
+      '<div class="school"><span class="logo" role="img" aria-label="شعار الأكاديمية"></span><span>عضو هيئة العاملين في<br><b style="color:#fff">' + esc(r.school) + '</b></span></div></aside>';
+    var facts = [[d.degree, 'المؤهل'], [d.experience_years ? d.experience_years + ' سنة' : '', 'الخبرة'], [d.grad_year, 'سنة التخرج']].filter(function (f) { return f[0]; });
+    var edu = (d.degree || d.major || d.university ? [{ degree: d.degree, major: d.major, university: d.university, year: d.grad_year, grade: d.grade }] : []).concat(other);
+    var main = '<main>' +
+      (facts.length ? '<div class="facts">' + facts.map(function (f) { return '<div class="fact"><div class="n">' + esc(f[0]) + '</div><div class="l">' + f[1] + '</div></div>'; }).join('') + '</div>' : '') +
+      (d.summary ? '<section><h2>نبذة</h2><p class="summary">' + esc(d.summary) + '</p></section>' : '') +
+      (exp.length ? '<section><h2>الخبرات العملية</h2><div class="tl">' + exp.map(function (e) {
+        var when = [e.from, e.to].filter(Boolean).join(' – ');
+        return '<div class="it">' + (when ? '<span class="when">' + esc(when) + '</span>' : '') + '<b>' + esc(e.role || e.place) + '</b>' + (e.role && e.place ? '<div class="meta">' + esc(e.place) + '</div>' : '') + '</div>';
+      }).join('') + '</div></section>' : '') +
+      (edu.length ? '<section><h2>المؤهلات العلمية</h2><div class="tl">' + edu.map(function (e) {
+        return '<div class="it">' + (e.year ? '<span class="when">' + esc(e.year) + '</span>' : '') + '<b>' + esc([e.degree, e.major].filter(Boolean).join(' في ')) + '</b>' +
+          (e.university || e.grade ? '<div class="meta">' + esc([e.university, e.grade ? 'التقدير: ' + e.grade : ''].filter(Boolean).join(' · ')) + '</div>' : '') + '</div>';
+      }).join('') + '</div></section>' : '') +
+      (courses.length ? '<section><h2>الدورات التدريبية</h2><div class="tl">' + courses.map(function (c) { return '<div class="it"><b style="font-weight:500">' + esc(c) + '</b></div>'; }).join('') + '</div></section>' : '') +
+      '</main>';
+    document.title = 'السيرة الذاتية — ' + name;
+    document.getElementById('bar').hidden = false;
+    show('<div class="page">' + side + main + '</div>');
+  }
+
+  if (!sb) return show('<div class="msg">تعذّر الاتصال.</div>');
+  if (!token) return show('<div class="msg">الرابط غير مكتمل.</div>');
+  sb.rpc('staff_cv', { p_token: token }).then(function (r) {
+    if (r.error) return show('<div class="msg">تعذّر تحميل السيرة الذاتية.</div>');
+    if (!r.data) return show('<div class="msg">هذا الرابط غير متاح أو أُوقف.</div>');
+    render(r.data);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 4';
+  var APP_BUILD = '04/11 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2256,7 +2256,7 @@
         updated_at: new Date().toISOString(), updated_by: S.email || '' };
       var w = await sb.from('staff_profiles').upsert(row, { onConflict: 'staff_id' });
       if (w.error) throw w.error;
-      (S.spRows || (S.spRows = {}))[t.id] = row;
+      (S.spRows || (S.spRows = {}))[t.id] = Object.assign({}, (S.spRows || {})[t.id], row);
       ui.spBusy = null; render();
       if (!quiet) toast('قُرئت الملفات — راجع بطاقة المؤهلات وصحّحها ثم اضغط «حفظ واعتماد»' + (P.skipped.length ? '. لم يُقرأ: ' + P.skipped.join('، ') : ''));
       return true;
@@ -2302,9 +2302,46 @@
       '<div class="toolbar" style="margin:8px 0">' + SP_HAS.map(function (h) { return '<label class="check"><input type="checkbox" data-sph="' + h[0] + '"' + (d.has && d.has[h[0]] ? ' checked' : '') + '> ' + h[1] + '</label>'; }).join('') + '</div>' +
       (Array.isArray(d.pages) && d.pages.length ? '<details><summary class="hint" style="cursor:pointer">محتوى الملفات صفحة صفحة (' + d.pages.length + ')</summary><ul style="margin:4px 0">' +
         d.pages.map(function (g) { return '<li>' + esc(g.file || '') + (g.page ? ' — ص ' + esc(g.page) : '') + ': ' + esc(g.what || '') + '</li>'; }).join('') + '</ul></details>' : '') +
-      '<div class="actions"><button type="button" class="btn primary" data-spsave>حفظ واعتماد البطاقة</button></div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-spsave>حفظ واعتماد البطاقة</button></div>' + spCvHtml(p) +
       '<p class="hint">قُرئت ' + dmy(String(p.read_at || '').slice(0, 10)) + (p.updated_by ? ' · آخر حفظ: ' + esc(displayName(p.updated_by)) : '') + '. الحقول الملوّنة لم يتأكد منها القارئ.</p></div>';
   }
+
+  // رابط السيرة الذاتية المنسّقة (cv.html): بعد اعتماد البطاقة، مغلق حتى يُفعَّل، ووسائل التواصل باختيار
+  function cvLink(token) { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'cv.html?t=' + token; }
+  function spCvHtml(p) {
+    if (!p.reviewed) return '<p class="hint" style="margin-top:10px">بعد «حفظ واعتماد البطاقة» يمكن إنشاء رابط سيرة ذاتية منسّقة لهذا الموظف.</p>';
+    if (!('cv_public' in p)) return '<p class="hint" style="margin-top:10px">لرابط السيرة الذاتية شغّل الملف <code dir="ltr">supabase/staff_cv.sql</code> ثم حدّث الصفحة.</p>';
+    var on = p.cv_public && p.cv_token;
+    return '<div style="border-top:1px solid var(--line,#e5e7eb);margin-top:12px;padding-top:10px"><div class="toolbar" style="align-items:center;margin:0">' +
+      '<b style="flex:1">السيرة الذاتية برابط</b>' + (on ? '<span class="badge paid">الرابط مفعّل</span>' : '<span class="badge pending">لا رابط</span>') +
+      '<label class="check"><input type="checkbox" data-cvcontact' + (p.cv_contact ? ' checked' : '') + '> إظهار الجوال والبريد والعنوان</label>' +
+      (on ? '<a class="btn" target="_blank" rel="noopener" href="' + esc(cvLink(p.cv_token)) + '">فتح</a><button type="button" class="btn" data-cvcopy>نسخ الرابط</button>' +
+        '<button type="button" class="btn" data-cvoff>إيقاف</button><button type="button" class="btn danger" data-cvnew title="يتوقف الرابط القديم">رابط جديد</button>'
+        : '<button type="button" class="btn primary" data-cvon>' + (p.cv_token ? 'تفعيل الرابط' : 'إنشاء رابط') + '</button>') + '</div>' +
+      '<p class="hint" style="margin:4px 0 0">صفحة بتصميم الأكاديمية تُطبع PDF أيضًا. لا تظهر فيها إلا البطاقة المعتمدة، ولا يُعرض الجوال والبريد والعنوان وتاريخ الميلاد إلا إن اخترتها.</p></div>';
+  }
+  async function cvUpdate(t, patch, done) {
+    var r = await sb.from('staff_profiles').update(patch).eq('staff_id', t.id);
+    if (r.error) return fail(r.error);
+    Object.assign(S.spRows[t.id], patch);
+    render();
+    if (done) toast(done);
+  }
+  function cvToken() { var a = new Uint8Array(20); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staff' || !canView()) return;
+    var t = ui.editTeacher && ui.editTeacher !== 'new' ? find(ui.editTeacher) : null, p = t && S.spRows && S.spRows[t.id];
+    if (!p) return;
+    if (e.target.closest('[data-cvon]')) return cvUpdate(t, { cv_public: true, cv_token: p.cv_token || cvToken() }, 'فُعّل رابط السيرة الذاتية');
+    if (e.target.closest('[data-cvoff]')) return cvUpdate(t, { cv_public: false }, 'أُوقف الرابط');
+    if (e.target.closest('[data-cvnew]')) { if (confirm('إلغاء الرابط الحالي وإنشاء غيره؟ الرابط القديم يتوقف فورًا.')) cvUpdate(t, { cv_public: true, cv_token: cvToken() }, 'أُنشئ رابط جديد'); return; }
+    if (e.target.closest('[data-cvcopy]')) return copyText(cvLink(p.cv_token), 'نُسخ رابط السيرة الذاتية');
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/staff' || !e.target.closest('[data-cvcontact]')) return;
+    var t = ui.editTeacher && ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
+    if (t && S.spRows && S.spRows[t.id]) cvUpdate(t, { cv_contact: e.target.checked });
+  });
 
   async function spSave(t) {
     var box = document.getElementById('staff-profile'), p = S.spRows[t.id], d = Object.assign({}, p.data);
