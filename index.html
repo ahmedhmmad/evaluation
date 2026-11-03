@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '03/11 — 4';
+  var APP_BUILD = '03/11 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11240,17 +11240,22 @@
     var rowsMm = sizes.map(function (n, i) { return i === sizes.length - 1 ? Math.min(rowMm, lastRoom / n) : rowMm; });
     var pages = sizes.length;
     var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v ? v : '') + '</td>'; };
+    // الأرقام المالية بخط أصغر قليلًا ليتسع أكبر مبلغ (مثل 10,714.29) داخل خليته دون تداخل؛ ويصغر أكثر إن زاد عن 9 خانات
+    var m = function (v, b) {
+      var t = String(v || ''), sz = t.length >= 11 ? .66 : t.length >= 10 ? .72 : .8;
+      return '<td class="c" style="white-space:nowrap;overflow:hidden;font-size:' + sz + 'em">' + (b && t ? '<b>' + t + '</b>' : t) + '</td>';
+    };
     var body = P.rows.map(function (x, i) {
       var ded = x.dAbsent + x.dLeave + x.dLate + x.dNotEmp + x.ded;
       tot.salary += x.salary; tot.ded += ded; tot.add += x.add; tot.net += x.net;
-      return '<tr style="height:' + 'ROWMM' + 'mm">' + c(i + 1) + '<td style="font-size:' + nameEm + 'em;white-space:nowrap"><b>' + esc(x.name) + '</b></td>' + c(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) +
-        c(x.lateDays ? x.lateDays + '/' + x.lateMins + 'د' : '') + c(ded ? prMoney(ded) : '') + c(x.add ? prMoney(x.add) : '') + c(prMoney(x.net), true) + '<td></td></tr>';
+      return '<tr style="height:' + 'ROWMM' + 'mm">' + c(i + 1) + '<td style="font-size:' + (x.name.length > 26 ? .74 : x.name.length > 20 ? .84 : nameEm) + 'em;line-height:1.15"><b>' + esc(x.name) + '</b></td>' + m(prMoney(x.salary)) + c(x.present) + c(x.absent) + c(x.leave) +
+        c(x.lateDays ? x.lateDays + '/' + x.lateMins + 'د' : '') + m(ded ? prMoney(ded) : '') + m(x.add ? prMoney(x.add) : '') + m(prMoney(x.net), true) + '<td></td></tr>';
     });
     // كشف الرواتب وحده بترويسة الأكاديمية والمؤسسة الشريكة، وتوقيعات مدير الأكاديمية ومدير المؤسسة المانحة ومدير المؤسسة الشريكة
     var head = reportHead('كشف الرواتب', [['الشهر', monthLabel(P.month)], ['الحالة', P.approved ? 'معتمد' : 'غير معتمد'], ['عدد الموظفين', P.rows.length]], { banner: 'banner-payroll.png' }).replace(/^<img class="wm"[^>]*>/, '');
     // كل صفحة قسم قائم بذاته: الترويسة وعنوان الكشف ورأس الجدول، فتظهر كلها في كل صفحة (الترويسة الطويلة لا يكرّرها رأس الجدول وحده)
-    var colHead = '<colgroup><col style="width:3.5%"><col style="width:29%"><col style="width:7.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:6%"><col style="width:7.5%"><col style="width:7.5%"><col style="width:8%"><col style="width:14.5%"></colgroup><thead><tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>تأخير<br>يوم/دقيقة</th><th>خصومات</th><th>إضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>';
-    var totalRow = '<tr><td></td><td><b>المجموع</b></td>' + c(prMoney(tot.salary), true) + '<td colspan="4"></td>' + c(prMoney(tot.ded), true) + c(prMoney(tot.add), true) + c(prMoney(tot.net), true) + '<td></td></tr>';
+    var colHead = '<colgroup><col style="width:3.5%"><col style="width:22.5%"><col style="width:10.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12.5%"></colgroup><thead><tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>تأخير<br>يوم/دقيقة</th><th>خصومات</th><th>إضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>';
+    var totalRow = '<tr><td></td><td><b>المجموع</b></td>' + m(prMoney(tot.salary), true) + '<td colspan="4"></td>' + m(prMoney(tot.ded), true) + m(prMoney(tot.add), true) + m(prMoney(tot.net), true) + '<td></td></tr>';
     var parts = '';
     for (var pg = 0; pg < pages; pg++) {
       var last = pg === pages - 1, from = sizes.slice(0, pg).reduce(function (a, b) { return a + b; }, 0), chunk = body.slice(from, from + sizes[pg]).join('').split('ROWMM').join(String(Math.round(rowsMm[pg] * 100) / 100));
