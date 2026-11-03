@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '03/11 — 5';
+  var APP_BUILD = '03/11 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1548,6 +1548,7 @@
     reports: 'M5 3h10l4 4v14H5zM14 3v5h5M8 17v-3M12 17v-6M16 17v-4',
     timetable: 'M4 5h16v15H4zM4 10h16M9 5v15M14 5v15M8 3v4M16 3v4',
     // روابط أولياء الأمور: حلقتا سلسلة
+    messages: 'M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z',
     parents: 'M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1.5 1.5M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1.5-1.5',
     // سجل التعديلات: ساعة بسهم رجوع
     audit: 'M3 12a9 9 0 103-6.7M3 4v4h4M12 7v5l3 2',
@@ -1578,7 +1579,7 @@
     return groups;
   }
   function navModel0() {
-    if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']] }];
+    if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات'], ['#/messages', 'messages', 'رسائل واتساب']] }];
     if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']].concat(isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
     var groups = [
       { items: [['#/', 'home', 'الرئيسية']] },
@@ -1592,7 +1593,7 @@
     if (canView()) {
       groups[1].items.push(['#/staff', 'staff', 'بيانات العاملين'], ['#/staffatt', 'staffatt', 'دوام الموظفين']);
       groups.push(
-        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']].concat(isAdmin() ? [['#/parents', 'parents', 'روابط أولياء الأمور']] : []) },
+        { title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات']].concat(isAdmin() ? [['#/parents', 'parents', 'روابط أولياء الأمور'], ['#/messages', 'messages', 'رسائل واتساب']] : []) },
         { title: 'الإدارة', items: [['#/rooms', 'rooms', 'إعداد الفصول'], ['#/admin', 'admin', 'الإعدادات والمستخدمون']].concat(isAdmin() ? [['#/audit', 'audit', 'سجل التعديلات']] : []) }
       );
     }
@@ -1604,6 +1605,7 @@
   function activeKey() {
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
+    if (h === '#/messages' && canRecordAtt()) return 'messages';
     if (h === '#/exits' && canAttView()) return 'exits';
     if (h === '#/discipline' && canDisc()) return 'discipline';
     if (h === '#/custody' && canView()) return 'custody';
@@ -3461,6 +3463,7 @@
       });
       data = diff;
     }
+    var wasNew = !st;
     var r = st
       ? (changed ? await sb.from('students').update(data).eq('id', st.id) : { error: null })
       : await sb.from('students').insert(data).select().single();
@@ -3494,6 +3497,7 @@
     var synced = await syncSiblingCount(st);
     ui.editStudent = null;
     render();
+    if (wasNew) setTimeout(function () { waOfferWelcome(st); }, 300);
     toast((data.status === 'final' ? 'تم اعتماد التسجيل النهائي' : st && mode !== 'final' ? (changed ? 'حُفظت التعديلات (' + changed + ')' : 'لا تعديلات للحفظ') : 'تم الحفظ') + (synced ? ' — حُدِّث «عدد الأبناء في المركز» في سجلات إخوته (' + synced + ')' : ''));
   }
 
@@ -8745,6 +8749,7 @@
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
+    if (h === '#/messages' && canRecordAtt()) return renderMessages();
     if (h === '#/exits' && canAttView()) return renderExits();
     if (h === '#/discipline' && canDisc()) return renderDiscipline();
     if (h === '#/custody' && canView()) return renderCustody();
@@ -14371,7 +14376,7 @@
   // تنبيه تكرار الغياب بواتساب: الحدّ والفترة من التقرير المعروض؛ تُحسب الأعداد في السيرفر من جدول الحضور
   function attRepeatSend(body) {
     var a = attState();
-    sb.functions.invoke('send-absence-whatsapp', { body: Object.assign({ repeat: { from: a.report.from, to: a.report.to, min: Math.max(2, Number(a.repMin) || 3) } }, body) }).then(function (r) {
+    sb.functions.invoke('send-absence-whatsapp', { body: Object.assign({ school: schoolName(), repeat: { from: a.report.from, to: a.report.to, min: Math.max(2, Number(a.repMin) || 3) } }, body) }).then(function (r) {
       if (r.error) return toast('تعذّر الإرسال: ' + r.error.message, true);
       var d = r.data || {}, skipped = (d.noPhone || []).length + (d.rejected || 0);
       toast('أُضيف ' + (d.queued || 0) + ' إلى قائمة الإرسال' + (d.alreadySent ? '، و' + d.alreadySent + ' سبق إرسالهم لهذه الفترة' : '') + (skipped ? '، و' + skipped + ' بلا رقم صحيح' : ''), skipped > 0 && !d.queued);
@@ -15044,6 +15049,335 @@
     if (q) { q.focus(); q.setSelectionRange(pos, pos); }
   });
 
+  /* ---------- رسائل واتساب ----------
+     إرسال لأولياء الأمور عبر SendWhats (دالة send-whatsapp): اختيار الطلاب، والقوالب تُعدَّل وتُحفظ هنا (ومنها قالبا رسائل الغياب)،
+     والأرشيف بكل رسالة أُرسلت وحالتها. يراها المدير العام والمسجِّل. الأرقام تُقرأ في السيرفر، والصفحة ترسل المعرّفات والنص فقط */
+
+  var WA_VARS = [['{الاسم}', 'اسم الطالب (أو أسماء الإخوة)'], ['{الاسم_الأول}', 'الاسم الأول'], ['{ولي_الأمر}', 'اسم ولي الأمر'], ['{الشعبة}', 'الشعبة'], ['{التاريخ}', 'تاريخ اليوم'], ['{الأكاديمية}', 'اسم الأكاديمية']];
+  var WA_STATUS = { queued: ['pending', 'في الانتظار'], sending: ['part', 'يُرسَل'], sent: ['published', 'أُرسلت'], delivered: ['paid', 'وصلت'], read: ['paid', 'قُرئت'],
+    failed: ['unpaid', 'فشلت'], cancelled: ['unpaid', 'أُلغيت'], rejected: ['unpaid', 'رقم غير صالح'], nophone: ['unpaid', 'بلا رقم'] };
+
+  function waUi() {
+    return ui.wa || (ui.wa = { tab: 'send', tpl: '', title: '', text: '', sel: {}, q: '', cls: '', bus: '', fresh: '', per: 'family', batch: null, busy: false,
+      aq: '', akind: '', astatus: '', afrom: '', ato: '' });
+  }
+  function waBatchId() { return 'm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7); }
+
+  async function loadWaTemplates() {
+    var r = await sb.from('wa_templates').select('*').order('sort').order('title');
+    S.waMissing = !!r.error;
+    S.waTpl = r.data || [];
+    return S.waTpl;
+  }
+  async function loadWaArchive() {
+    var r = await sb.from('wa_messages').select('*').order('created_at', { ascending: false }).limit(2000);
+    S.waMissing = !!r.error;
+    S.waMsgs = r.data || [];
+    render();
+  }
+  function waTpl(key) { return (S.waTpl || []).filter(function (t) { return t.key === key; })[0]; }
+
+  // معاينة الرسالة لأول طالب مختار (أو أول طالب في القائمة)
+  function waPreview(text, x) {
+    if (!x) return text;
+    var vars = { 'الاسم': x.full_name, 'الاسم_الأول': x.full_name.split(/\s+/)[0], 'ولي_الأمر': x.guardian_name || 'ولي الأمر', 'الشعبة': x.class_name || '',
+      'التاريخ': dmy(todayISO()), 'الأكاديمية': schoolName(), 'العدد': 3, 'من': dmy(todayISO()), 'إلى': dmy(todayISO()) };
+    return text.replace(/\{([^{}\s]+)\}/g, function (all, k) { return k in vars ? vars[k] : all; });
+  }
+
+  function waShown() {
+    var w = waUi(), q = norm(w.q), digits = latinDigits(w.q).replace(/\D/g, ''), g = transportGroupOf();
+    var since = w.fresh ? new Date(Date.now() - Number(w.fresh) * 864e5).toISOString().slice(0, 10) : '';
+    return S.students.filter(function (x) {
+      if (!enrolled(x)) return false;
+      if (w.cls && (x.class_name || '') !== w.cls) return false;
+      if (w.bus && (w.bus === 'none' ? g[x.id] : g[x.id] !== w.bus)) return false;
+      if (since && String(x.created_at || '').slice(0, 10) < since) return false;
+      if (!q) return true;
+      return norm(x.full_name + ' ' + (x.guardian_name || '')).indexOf(q) > -1 || (digits && waNumber(x.whatsapp || x.phone).indexOf(digits) > -1);
+    });
+  }
+
+  function renderMessages() {
+    var w = waUi();
+    if (S.waTpl == null) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadWaTemplates().then(render); return; }
+    var tabs = [['send', 'إرسال رسالة'], ['archive', 'الأرشيف والتقرير'], ['templates', 'القوالب']];
+    var head = '<div class="page-head"><div><h1>رسائل واتساب</h1><p>رسائل لأولياء الأمور من رقم الأكاديمية عبر SendWhats: ترحيب، وتنويهات، ودعوات، ورسائل الغياب. وكل ما يُرسل محفوظ في الأرشيف بحالته.</p></div></div>' +
+      '<div class="toolbar">' + tabs.map(function (t) { return '<button type="button" class="btn' + (w.tab === t[0] ? ' primary' : '') + '" data-watab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+    if (S.waMissing) {
+      app.innerHTML = head + '<div class="card empty">شاشة الرسائل تحتاج إلى جدولين جديدين في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/whatsapp_messages.sql</code> في محرر SQL، ثم انشر الدالتين ' +
+        '<code dir="ltr">send-whatsapp</code> و <code dir="ltr">send-absence-whatsapp</code>، وحدّث الصفحة.</div>';
+      return;
+    }
+    if (w.tab === 'archive') { if (S.waMsgs == null) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadWaArchive(); return; } app.innerHTML = head + waArchiveHtml(); return; }
+    if (w.tab === 'templates') { app.innerHTML = head + waTemplatesHtml(); return; }
+    app.innerHTML = head + waSendHtml();
+  }
+
+  function waSendHtml() {
+    var w = waUi(), list = waShown(), g = transportGroupOf();
+    var selIds = Object.keys(w.sel).filter(function (id) { return w.sel[id] && findStudent(id); });
+    var selSt = selIds.map(findStudent), noPh = selSt.filter(function (x) { return !(x.whatsapp || x.phone); }).length;
+    var fams = {};
+    selSt.forEach(function (x) { var p = x.whatsapp || x.phone; if (p) fams[waNumber(p)] = 1; });
+    var nMsg = w.per === 'family' ? Object.keys(fams).length : selSt.length - noPh;
+    var allOn = list.length && list.every(function (x) { return w.sel[x.id]; });
+    var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    var tplOpts = opt('', '— رسالة حرة —', w.tpl) + (S.waTpl || []).filter(function (t) { return t.key !== 'absence' && t.key !== 'repeat'; }).map(function (t) { return opt(t.key, t.title, w.tpl); }).join('');
+    var compose = '<div class="card"><h2 style="margin-top:0">الرسالة</h2>' +
+      '<div class="toolbar" style="align-items:center"><label class="field" for="wa-tpl" style="margin:0">القالب</label><select id="wa-tpl" style="width:auto">' + tplOpts + '</select>' +
+        (w.tpl ? '<button type="button" class="btn" data-wasavetpl title="يُحفظ هذا النص في القالب ليُستعمل في المرات القادمة">حفظ النص في القالب</button>' : '<button type="button" class="btn" data-wanewtpl' + (w.text.trim() ? '' : ' disabled') + '>حفظه قالبًا جديدًا</button>') + '</div>' +
+      '<label class="field" for="wa-title">عنوان الرسالة في الأرشيف</label><input id="wa-title" value="' + esc(w.title) + '" placeholder="مثلًا: تنويه تغيير موعد الدوام">' +
+      '<label class="field" for="wa-text">نص الرسالة</label><textarea id="wa-text" rows="7" style="width:100%">' + esc(w.text) + '</textarea>' +
+      '<div class="toolbar" style="margin:6px 0">' + WA_VARS.map(function (v) { return '<button type="button" class="btn" data-wavar="' + esc(v[0]) + '" title="' + esc(v[1]) + '">' + esc(v[0]) + '</button>'; }).join('') + '</div>' +
+      '<p class="hint">اضغط متغيرًا ليُضاف في موضع المؤشر، ويُستبدل عند الإرسال ببيانات كل طالب.</p>' +
+      '<div class="hint" style="white-space:pre-wrap;background:var(--ivory,#faf7f0);border:1px solid var(--line,#e5e7eb);border-radius:8px;padding:10px;margin:0"><b>معاينة' + (selSt[0] || list[0] ? ' (' + esc((selSt[0] || list[0]).full_name) + ')' : '') + ':</b>\n' +
+        esc(waPreview(w.text, selSt[0] || list[0]) || '—') + '</div></div>';
+    var buses = (S.tGroups || []).slice().sort(function (a, b) { return String(a.assembly_point).localeCompare(String(b.assembly_point), 'ar'); });
+    var filters = '<div class="toolbar" style="align-items:center">' +
+      '<input type="search" id="wa-q" placeholder="اسم الطالب أو ولي الأمر أو الجوال" aria-label="بحث" value="' + esc(w.q) + '" style="max-width:260px">' +
+      '<select id="wa-cls" style="width:auto">' + opt('', 'كل الشعب', w.cls) + schoolClasses().map(function (c) { return opt(c, c, w.cls); }).join('') + '</select>' +
+      '<select id="wa-bus" style="width:auto">' + opt('', 'كل الطلاب (مواصلات أو لا)', w.bus) + buses.map(function (b) { return opt(b.id, 'باص: ' + b.assembly_point, w.bus); }).join('') + opt('none', 'بلا مواصلات', w.bus) + '</select>' +
+      '<select id="wa-fresh" style="width:auto">' + opt('', 'كل تواريخ التسجيل', w.fresh) + opt('7', 'سُجّلوا آخر 7 أيام', w.fresh) + opt('30', 'سُجّلوا آخر 30 يومًا', w.fresh) + '</select>' +
+      '<button type="button" class="btn" data-waall>' + (allOn ? 'إلغاء تحديد المعروضين' : 'تحديد المعروضين (' + list.length + ')') + '</button>' +
+      (selIds.length ? '<button type="button" class="btn" data-waclear>مسح الاختيار</button>' : '') + '</div>';
+    var rows = list.map(function (x) {
+      var ph = x.whatsapp || x.phone, grp = (S.tGroups || []).filter(function (b) { return b.id === g[x.id]; })[0];
+      return '<tr><td><input type="checkbox" data-wasel="' + x.id + '"' + (w.sel[x.id] ? ' checked' : '') + ' aria-label="اختيار"></td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td>' +
+        '<td>' + esc(x.guardian_name || '—') + '</td><td dir="ltr" style="text-align:right">' + (ph ? esc(ph) : '<span class="badge unpaid" dir="rtl">بلا رقم</span>') + '</td><td>' + (grp ? esc(grp.assembly_point) : '—') + '</td></tr>';
+    }).join('');
+    var send = '<div class="card" style="position:sticky;bottom:0;z-index:2"><div class="toolbar" style="align-items:center;margin:0">' +
+      '<b>المختارون: ' + selIds.length + ' طالبًا</b>' + (noPh ? '<span class="badge unpaid">' + noPh + ' بلا رقم</span>' : '') +
+      '<label style="display:flex;gap:4px;align-items:center"><input type="radio" name="wa-per" value="family"' + (w.per === 'family' ? ' checked' : '') + '> رسالة واحدة لكل ولي أمر (الإخوة معًا)</label>' +
+      '<label style="display:flex;gap:4px;align-items:center"><input type="radio" name="wa-per" value="student"' + (w.per === 'student' ? ' checked' : '') + '> رسالة لكل طالب</label>' +
+      '<button type="button" class="btn primary" data-wasend' + (nMsg && w.text.trim() && !w.busy ? '' : ' disabled') + '>' + (w.busy ? 'جارٍ الإرسال…' : 'إرسال (' + nMsg + ' رسالة)') + '</button></div></div>';
+    return compose + '<div class="card"><h2 style="margin-top:0">المستلمون</h2>' + filters +
+      (rows ? '<div class="table-wrap" style="max-height:60vh;overflow:auto"><table class="grid"><thead><tr><th></th><th>الطالب</th><th>الشعبة</th><th>ولي الأمر</th><th>واتساب / جوال</th><th>الباص</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا طلاب يطابقون الاختيار.</div>') + '</div>' + send;
+  }
+
+  function waArchiveRows() {
+    var w = waUi(), q = norm(w.aq), d = latinDigits(w.aq).replace(/\D/g, '');
+    return (S.waMsgs || []).filter(function (m) {
+      var day = String(m.created_at).slice(0, 10);
+      if (w.akind && m.kind !== w.akind) return false;
+      if (w.astatus && (w.astatus === 'bad' ? ['failed', 'cancelled', 'rejected', 'nophone'].indexOf(m.status) < 0 : w.astatus === 'ok' ? ['sent', 'delivered', 'read'].indexOf(m.status) < 0 : m.status !== w.astatus)) return false;
+      if (w.afrom && day < w.afrom) return false;
+      if (w.ato && day > w.ato) return false;
+      return !q || norm((m.names || '') + ' ' + (m.title || '') + ' ' + m.body).indexOf(q) > -1 || (d && latinDigits(m.phone || '').replace(/\D/g, '').indexOf(d) > -1);
+    });
+  }
+  function waKindLabel(k) { var t = waTpl(k); return t ? t.title : k === 'custom' ? 'رسالة حرة' : k; }
+  function waTime(ts) { var t = new Date(ts); return isNaN(t) ? '' : dmy(t.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })) + ' ' + t.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' }); }
+
+  function waArchiveHtml() {
+    var w = waUi(), list = waArchiveRows(), cnt = {};
+    list.forEach(function (m) { cnt[m.status] = (cnt[m.status] || 0) + 1; });
+    var ok = (cnt.sent || 0) + (cnt.delivered || 0) + (cnt.read || 0), bad = (cnt.failed || 0) + (cnt.cancelled || 0) + (cnt.rejected || 0) + (cnt.nophone || 0), wait = (cnt.queued || 0) + (cnt.sending || 0);
+    var kinds = {};
+    (S.waMsgs || []).forEach(function (m) { kinds[m.kind] = 1; });
+    var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    // الدفعات: عنوان، وقت، عدد، وحالات
+    var batches = {}, order = [];
+    list.forEach(function (m) { var b = batches[m.batch_id]; if (!b) { b = batches[m.batch_id] = { id: m.batch_id, title: m.title || waKindLabel(m.kind), at: m.created_at, by: m.created_by, n: 0, ok: 0, bad: 0, wait: 0 }; order.push(b); }
+      b.n++; if (['sent', 'delivered', 'read'].indexOf(m.status) > -1) b.ok++; else if (m.status === 'queued' || m.status === 'sending') b.wait++; else b.bad++; });
+    var rows = list.slice(0, 500).map(function (m) {
+      var s = WA_STATUS[m.status] || ['pending', m.status];
+      return '<tr><td style="white-space:nowrap">' + waTime(m.created_at) + '</td><td>' + esc(m.title || waKindLabel(m.kind)) + '</td><td>' + esc(m.names || '') + '</td>' +
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(m.phone || '—') + '</td>' +
+        '<td><details><summary style="cursor:pointer">' + esc(m.body.slice(0, 50)) + (m.body.length > 50 ? '…' : '') + '</summary><div style="white-space:pre-wrap">' + esc(m.body) + '</div></details></td>' +
+        '<td><span class="badge ' + s[0] + '">' + s[1] + '</span>' + (m.error ? '<div class="hint" style="margin:2px 0 0">' + esc(m.error) + '</div>' : '') + '</td></tr>';
+    }).join('');
+    return '<div class="stats"><div class="card stat"><span class="lbl">الرسائل</span><span class="num">' + list.length + '</span><span class="sub">في ' + order.length + ' دفعة</span></div>' +
+        '<div class="card stat"><span class="lbl">أُرسلت</span><span class="num">' + ok + '</span><span class="sub">منها وصلت: ' + ((cnt.delivered || 0) + (cnt.read || 0)) + '</span></div>' +
+        '<div class="card stat"><span class="lbl">في الانتظار</span><span class="num">' + wait + '</span><span class="sub">تُرسل تباعًا بحسب حدود الرقم اليومية</span></div>' +
+        '<div class="card stat"><span class="lbl">لم تُرسل</span><span class="num">' + bad + '</span><span class="sub">فشل أو رقم غير صالح أو بلا رقم</span></div></div>' +
+      '<div class="toolbar" style="align-items:center">' +
+        '<input type="search" id="wa-aq" placeholder="اسم الطالب أو الرقم أو نص الرسالة" aria-label="بحث" value="' + esc(w.aq) + '" style="max-width:240px">' +
+        '<select id="wa-akind" style="width:auto">' + opt('', 'كل الأنواع', w.akind) + Object.keys(kinds).map(function (k) { return opt(k, waKindLabel(k), w.akind); }).join('') + '</select>' +
+        '<select id="wa-astatus" style="width:auto">' + opt('', 'كل الحالات', w.astatus) + opt('ok', 'أُرسلت', w.astatus) + opt('queued', 'في الانتظار', w.astatus) + opt('bad', 'لم تُرسل', w.astatus) + '</select>' +
+        '<label class="field" for="wa-afrom" style="margin:0">من</label><input type="date" id="wa-afrom" value="' + esc(w.afrom) + '" style="width:auto">' +
+        '<label class="field" for="wa-ato" style="margin:0">إلى</label><input type="date" id="wa-ato" value="' + esc(w.ato) + '" style="width:auto">' +
+        '<button type="button" class="btn primary" data-warefresh' + (w.busy ? ' disabled' : '') + ' title="يسأل SendWhats عن حالة الرسائل غير المكتملة في آخر 7 أيام">' + (w.busy ? 'جارٍ التحديث…' : 'تحديث الحالات') + '</button>' +
+        '<button type="button" class="btn" data-waxlsx' + (list.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
+      (order.length ? '<div class="card"><h2 style="margin-top:0">الدفعات</h2><div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>الرسالة</th><th>المرسِل</th><th>العدد</th><th>أُرسلت</th><th>في الانتظار</th><th>لم تُرسل</th></tr></thead><tbody>' +
+        order.slice(0, 100).map(function (b) { return '<tr><td style="white-space:nowrap">' + waTime(b.at) + '</td><td><b>' + esc(b.title) + '</b></td><td dir="ltr" style="text-align:right">' + esc(displayName(b.by || '')) + '</td><td>' + b.n + '</td><td>' + b.ok + '</td><td>' + b.wait + '</td><td>' + (b.bad ? '<b style="color:var(--danger,#b91c1c)">' + b.bad + '</b>' : 0) + '</td></tr>'; }).join('') +
+        '</tbody></table></div></div>' : '') +
+      '<div class="card"><h2 style="margin-top:0">الرسائل' + (list.length > 500 ? ' (أحدث 500 — ضيّق البحث أو صدّر Excel للكل)' : '') + '</h2>' + (rows
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>الرسالة</th><th>الطالب</th><th>الرقم</th><th>النص</th><th>الحالة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">لا رسائل.</div>') + '</div>';
+  }
+
+  function waTemplatesHtml() {
+    var list = S.waTpl || [];
+    return '<p class="hint">القوالب نقطة بداية: عند الإرسال تختار القالب ثم تعدّل نصه كما تشاء. قالبا «غياب اليوم» و«تكرار الغياب» تستعملهما أزرار الغياب في شاشة الحضور مباشرة' +
+        ' (ولتكرار الغياب أيضًا {العدد} {من} {إلى}). المتغيرات: ' + WA_VARS.map(function (v) { return esc(v[0]) + ' ' + esc(v[1]); }).join('، ') + '.</p>' +
+      list.map(function (t) {
+        var fixed = t.key === 'absence' || t.key === 'repeat';
+        return '<div class="card" data-watplcard="' + esc(t.key) + '"><div class="toolbar" style="align-items:center;margin:0 0 6px">' +
+          '<input data-watpltitle value="' + esc(t.title) + '" aria-label="اسم القالب" style="max-width:280px;font-weight:700">' + (fixed ? '<span class="badge published">رسائل الغياب</span>' : '') +
+          '<span style="flex:1"></span><button type="button" class="btn primary" data-watplsave="' + esc(t.key) + '">حفظ</button>' +
+          (fixed ? '' : '<button type="button" class="btn danger" data-watpldel="' + esc(t.key) + '">حذف</button>') + '</div>' +
+          '<textarea data-watplbody rows="5" style="width:100%">' + esc(t.body) + '</textarea>' +
+          (t.updated_by ? '<div class="hint" style="margin:4px 0 0">آخر تعديل ' + waTime(t.updated_at) + ' — ' + esc(displayName(t.updated_by)) + '</div>' : '') + '</div>';
+      }).join('') +
+      '<button type="button" class="btn" data-watpladd>+ قالب جديد</button>';
+  }
+
+  async function waSaveTemplate(key, title, body) {
+    var row = { key: key, title: title.trim() || 'قالب', body: body, updated_at: new Date().toISOString(), updated_by: S.email || '' };
+    var t = waTpl(key);
+    if (!t) row.sort = 100 + (S.waTpl || []).length;
+    var r = await sb.from('wa_templates').upsert(row, { onConflict: 'key' });
+    if (r.error) return fail(r.error), false;
+    await loadWaTemplates();
+    toast('حُفظ القالب');
+    return true;
+  }
+
+  async function waSend() {
+    var w = waUi(), ids = Object.keys(w.sel).filter(function (id) { return w.sel[id] && findStudent(id); });
+    if (!ids.length || !w.text.trim()) return;
+    var noPh = ids.filter(function (id) { var x = findStudent(id); return !(x.whatsapp || x.phone); }).length;
+    if (!confirm('إرسال الرسالة إلى أولياء أمور ' + ids.length + ' طالبًا' + (w.per === 'family' ? ' (رسالة واحدة لكل ولي أمر)' : '') + '؟' + (noPh ? '\n' + noPh + ' منهم بلا رقم فلن تصلهم.' : '') + '\nلا يمكن التراجع بعد الإرسال.')) return;
+    if (!w.batch) w.batch = waBatchId();
+    w.busy = true; render();
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: w.batch, kind: w.tpl || 'custom', title: w.title.trim() || (w.tpl && waTpl(w.tpl) ? waTpl(w.tpl).title : 'رسالة حرة'),
+      text: w.text, student_ids: ids, per: w.per, school: schoolName() } });
+    w.busy = false;
+    if (r.error) { render(); return toast('تعذّر الإرسال: ' + r.error.message + ' — يمكنك الضغط مرة أخرى، ولن تتكرر الرسائل التي وصلت', true); }
+    var d = r.data || {}, skipped = (d.noPhone || []).length + (d.rejected || 0);
+    w.batch = null; w.sel = {}; S.waMsgs = null;
+    render();
+    toast('أُضيف ' + (d.queued || 0) + ' رسالة إلى قائمة الإرسال' + (d.alreadySent ? '، و' + d.alreadySent + ' سبق إرسالها' : '') + (skipped ? '، و' + skipped + ' بلا رقم صحيح' : '') + '. تابعها في «الأرشيف والتقرير».', skipped > 0 && !d.queued);
+  }
+
+  async function waRefresh() {
+    var w = waUi(), weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+    var ids = {};
+    (S.waMsgs || []).forEach(function (m) { if (m.created_at >= weekAgo && ['queued', 'sending', 'sent'].indexOf(m.status) > -1) ids[m.batch_id] = 1; });
+    if (!Object.keys(ids).length) return toast('لا رسائل غير مكتملة في آخر 7 أيام');
+    w.busy = true; render();
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'refresh', batch_ids: Object.keys(ids) } });
+    w.busy = false;
+    if (r.error) { render(); return toast('تعذّر التحديث: ' + r.error.message, true); }
+    await loadWaArchive();
+    toast('حُدّثت الحالات');
+  }
+
+  async function waExport() {
+    try {
+      await loadXlsx();
+      var list = waArchiveRows(), wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['أرشيف رسائل واتساب — ' + dmy(todayISO())], [], ['م', 'الوقت', 'الرسالة', 'الطالب', 'الرقم', 'الحالة', 'السبب', 'النص', 'المرسِل']].concat(list.map(function (m, i) {
+        return [i + 1, waTime(m.created_at), m.title || waKindLabel(m.kind), m.names || '', m.phone || '', (WA_STATUS[m.status] || [0, m.status])[1], m.error || '', m.body, displayName(m.created_by || '')];
+      })));
+      ws['!cols'] = [5, 18, 24, 34, 16, 12, 20, 80, 20].map(function (x) { return { wch: x }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'الرسائل');
+      XLSX.writeFile(wb, 'رسائل-واتساب-' + todayISO() + '.xlsx');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  }
+
+  // رسالة الترحيب بعد تسجيل طالب جديد: سؤال واحد، والإرسال من قالب «welcome» كما هو
+  async function waOfferWelcome(x) {
+    if (!canRecordAtt() || !x || !(x.whatsapp || x.phone)) return;
+    if (S.waTpl == null) await loadWaTemplates();
+    var t = waTpl('welcome');
+    if (!t || !confirm('إرسال رسالة الترحيب لولي أمر «' + x.full_name + '» على واتساب؟\n\n' + waPreview(t.body, x))) return;
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'welcome-' + x.id, kind: 'welcome', title: t.title, text: t.body, student_ids: [x.id], per: 'student', school: schoolName() } });
+    if (r.error) return toast('تعذّر إرسال الترحيب: ' + r.error.message, true);
+    S.waMsgs = null;
+    toast(r.data && r.data.queued ? 'أُضيفت رسالة الترحيب إلى قائمة الإرسال' : 'سبق إرسال الترحيب لهذا الطالب');
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/messages' || !canRecordAtt()) return;
+    var w = waUi(), el;
+    if ((el = e.target.closest('[data-watab]'))) { w.tab = el.getAttribute('data-watab'); if (w.tab === 'archive') S.waMsgs = null; return render(); }
+    if ((el = e.target.closest('[data-wavar]'))) {
+      var ta = document.getElementById('wa-text'), v = el.getAttribute('data-wavar'), p = ta.selectionStart || ta.value.length;
+      w.text = ta.value.slice(0, p) + v + ta.value.slice(ta.selectionEnd || p);
+      render();
+      var t2 = document.getElementById('wa-text'); t2.focus(); t2.setSelectionRange(p + v.length, p + v.length);
+      return;
+    }
+    if (e.target.closest('[data-waall]')) {
+      var list = waShown(), on = !(list.length && list.every(function (x) { return w.sel[x.id]; }));
+      list.forEach(function (x) { if (on) w.sel[x.id] = 1; else delete w.sel[x.id]; });
+      w.batch = null;
+      return render();
+    }
+    if (e.target.closest('[data-waclear]')) { w.sel = {}; w.batch = null; return render(); }
+    if (e.target.closest('[data-wasend]')) return waSend();
+    if (e.target.closest('[data-wasavetpl]')) { var t = waTpl(w.tpl); if (t && confirm('حفظ هذا النص في قالب «' + t.title + '» بدل نصه الحالي؟')) await waSaveTemplate(t.key, t.title, w.text); return render(); }
+    if (e.target.closest('[data-wanewtpl]')) {
+      var name = prompt('اسم القالب الجديد:', w.title || '');
+      if (!name || !name.trim()) return;
+      var key = 't' + Date.now().toString(36);
+      if (await waSaveTemplate(key, name, w.text)) w.tpl = key;
+      return render();
+    }
+    if (e.target.closest('[data-warefresh]')) return waRefresh();
+    if (e.target.closest('[data-waxlsx]')) return waExport();
+    if ((el = e.target.closest('[data-watplsave]'))) {
+      var card = el.closest('[data-watplcard]');
+      await waSaveTemplate(el.getAttribute('data-watplsave'), card.querySelector('[data-watpltitle]').value, card.querySelector('[data-watplbody]').value);
+      return render();
+    }
+    if ((el = e.target.closest('[data-watpldel]'))) {
+      var k = el.getAttribute('data-watpldel'), tt = waTpl(k);
+      if (!tt || !confirm('حذف قالب «' + tt.title + '»؟ الرسائل المرسلة به تبقى في الأرشيف.')) return;
+      var r = await sb.from('wa_templates').delete().eq('key', k);
+      if (r.error) return fail(r.error);
+      if (w.tpl === k) w.tpl = '';
+      await loadWaTemplates();
+      return render();
+    }
+    if (e.target.closest('[data-watpladd]')) {
+      var nm = prompt('اسم القالب الجديد:');
+      if (!nm || !nm.trim()) return;
+      await waSaveTemplate('t' + Date.now().toString(36), nm, 'السلام عليكم ورحمة الله وبركاته،\n\nإدارة الأكاديمية');
+      return render();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/messages') return;
+    var w = waUi(), id = e.target.id, el;
+    if ((el = e.target.closest('[data-wasel]'))) { var sid = el.getAttribute('data-wasel'); if (el.checked) w.sel[sid] = 1; else delete w.sel[sid]; w.batch = null; return render(); }
+    if (e.target.name === 'wa-per') { w.per = e.target.value; w.batch = null; return render(); }
+    if (id === 'wa-tpl') { w.tpl = e.target.value; var t = waTpl(w.tpl); if (t) { w.text = t.body; w.title = t.title; } w.batch = null; return render(); }
+    var map = { 'wa-cls': 'cls', 'wa-bus': 'bus', 'wa-fresh': 'fresh', 'wa-akind': 'akind', 'wa-astatus': 'astatus', 'wa-afrom': 'afrom', 'wa-ato': 'ato' };
+    if (map[id]) { w[map[id]] = e.target.value; return render(); }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/messages') return;
+    var w = waUi(), id = e.target.id;
+    if (id === 'wa-text' || id === 'wa-title') {
+      w[id === 'wa-text' ? 'text' : 'title'] = e.target.value;
+      if (id === 'wa-text') w.batch = null;
+      // المعاينة وزر الإرسال يتبعان النص دون إعادة رسم الحقل نفسه
+      clearTimeout(waUi.t);
+      waUi.t = setTimeout(function () {
+        var a = document.activeElement, pos = a && a.selectionStart;
+        var aid = a && a.id;
+        render();
+        var b = aid && document.getElementById(aid);
+        if (b) { b.focus(); if (pos != null) b.setSelectionRange(pos, pos); }
+      }, 400);
+      return;
+    }
+    if (id === 'wa-q' || id === 'wa-aq') {
+      w[id === 'wa-q' ? 'q' : 'aq'] = e.target.value;
+      var p = e.target.selectionStart;
+      render();
+      var q = document.getElementById(id);
+      if (q) { q.focus(); q.setSelectionRange(p, p); }
+    }
+  });
+
   async function copyText(text, done) {
     try { await navigator.clipboard.writeText(text); toast(done); } catch (err) { prompt('انسخ:', text); }
   }
@@ -15207,7 +15541,7 @@
       var one = e.target.closest('[data-attnotify1]'), sx = findStudent(one.getAttribute('data-attnotify1'));
       if (!sx || !confirm('إرسال رسالة غياب واتساب إلى ولي أمر الطالب «' + sx.full_name + '»؟\nلا تُرسل له مرة ثانية اليوم.')) return;
       one.disabled = true;
-      sb.functions.invoke('send-absence-whatsapp', { body: { student_id: sx.id } }).then(function (r) {
+      sb.functions.invoke('send-absence-whatsapp', { body: { student_id: sx.id, school: schoolName() } }).then(function (r) {
         one.disabled = false;
         if (r.error) return toast('تعذّر الإرسال: ' + r.error.message, true);
         var d = r.data || {};
@@ -15217,7 +15551,7 @@
       var notifyBtn = e.target.closest('[data-attnotify]');
       if (!confirm('إرسال رسالة واتساب إلى أولياء أمور ' + notifyBtn.dataset.attnotify + ' طالبًا غائبًا اليوم؟\nمن أُرسل له اليوم لن تصله الرسالة مرة أخرى.')) return;
       notifyBtn.disabled = true;
-      sb.functions.invoke('send-absence-whatsapp', { body: {} }).then(function (r) {
+      sb.functions.invoke('send-absence-whatsapp', { body: { school: schoolName() } }).then(function (r) {
         notifyBtn.disabled = false;
         if (r.error) return toast('تعذّر إرسال الغياب: ' + r.error.message, true);
         var d = r.data, skipped = d.noPhone.length + d.rejected;

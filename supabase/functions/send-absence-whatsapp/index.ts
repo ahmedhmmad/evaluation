@@ -1,122 +1,75 @@
-// Sends today's absence notices to parents on WhatsApp through SendWhats. Called from «الحضور والغياب» by the
-// people who record attendance, after they have reviewed the day's list: nothing here runs on its own.
+// Sends absence notices to parents on WhatsApp through SendWhats. Called from «الحضور والغياب» by the
+// people who record attendance, after they have reviewed the list: nothing here runs on its own.
 //
-// The batch id is the day and the message id is the student, so pressing the button again never repeats a notice:
-// SendWhats only queues the students it has not seen today. Excused students are not notified.
+// The wording comes from the templates «absence» and «repeat» (wa_templates, edited from the «رسائل واتساب» screen),
+// and every notice is kept in the archive (wa_messages). Without whatsapp_messages.sql the built-in wording is used.
 //
-// The API key stays here, never in the page, because every visitor can read the page's source.
-// Secrets: SENDWHATS_API_URL (e.g. https://api.example.com), SENDWHATS_API_KEY.
-import { createClient } from "npm:@supabase/supabase-js@2";
+// The batch id is the day (or the period) and the message id is the student, so pressing the button again never repeats
+// a notice: SendWhats only queues the students it has not seen. Excused students are not notified.
+// Secrets: SENDWHATS_API_URL, SENDWHATS_API_KEY.
+import { cairoToday, cors, dmy, fill, json, open, sendBatch, template, type Out } from "../_shared/wa.ts";
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const ABSENCE = "السلام عليكم ورحمة الله وبركاته،\nنحيطكم علمًا بغياب الطالب/ـة {الاسم} عن المدرسة اليوم {التاريخ}.\nإدارة المدرسة";
+const REPEAT = "السلام عليكم ورحمة الله وبركاته،\nنحيطكم علمًا بتكرر غياب الطالب/ـة {الاسم}، إذ غاب {العدد} أيام خلال الفترة من {من} إلى {إلى}.\nنأمل متابعة انتظامه/ـا في الدوام والتواصل مع إدارة المدرسة عند وجود ظرف.\nإدارة المدرسة";
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
-
-const MAX_PER_REQUEST = 500;   // the most SendWhats accepts in one request
-
-const cairoToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
-const dmy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
-const notice = (name: string, day: string) =>
-  `السلام عليكم ورحمة الله وبركاته،\nنحيطكم علمًا بغياب الطالب/ـة ${name} عن المدرسة اليوم ${dmy(day)}.\nإدارة المدرسة`;
-
-const repeatNotice = (name: string, n: number, from: string, to: string) =>
-  `السلام عليكم ورحمة الله وبركاته،\nنحيطكم علمًا بتكرر غياب الطالب/ـة ${name}، إذ غاب ${n} أيام خلال الفترة من ${dmy(from)} إلى ${dmy(to)}.\nنأمل متابعة انتظامه/ـا في الدوام والتواصل مع إدارة المدرسة عند وجود ظرف.\nإدارة المدرسة`;
+type St = { full_name: string; whatsapp: string; phone: string; class_name: string | null; guardian_name: string | null };
+const SEL = "student_id, students(full_name, whatsapp, phone, class_name, guardian_name)";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
-
-  const url = Deno.env.get("SENDWHATS_API_URL");
-  const key = Deno.env.get("SENDWHATS_API_KEY");
-  if (!url || !key) return json({ error: "SENDWHATS_API_URL and SENDWHATS_API_KEY are not set for this function" }, 500);
-
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
-  });
-  const { data: role, error: roleError } = await supabase.rpc("my_role");
-  if (roleError || (role !== "superadmin" && role !== "registrar")) return json({ error: "forbidden" }, 403);
-  const { data: readOnly } = await supabase.rpc("my_read_only");
-  if (readOnly === true) return json({ error: "forbidden" }, 403);
+  const ctx = await open(req);
+  if (ctx instanceof Response) return ctx;
+  const body = await req.json().catch(() => ({}));
+  const only = typeof body?.student_id === "string" && body.student_id ? body.student_id : null;
+  const vars = (s: St) => ({ "الاسم": s.full_name, "الاسم_الأول": s.full_name.split(/\s+/)[0], "الشعبة": s.class_name ?? "", "ولي_الأمر": s.guardian_name || "ولي الأمر", "الأكاديمية": String(body?.school ?? "").slice(0, 120) });
+  const split = (rows: { student_id: string; s: St | null; text: string }[]) => {
+    const msgs: Out[] = [], noPhone: Out[] = [];
+    for (const r of rows) {
+      const ph = (r.s?.whatsapp || r.s?.phone || "").trim();
+      const m = { externalId: r.student_id, phone: ph, text: r.text, studentIds: [r.student_id], names: r.s?.full_name ?? r.student_id };
+      (ph ? msgs : noPhone).push(m);
+    }
+    return { msgs, noPhone };
+  };
 
   // Repeated-absence notices: { repeat: { from, to, min }, student_id? }. The counts are taken here from the attendance table,
   // never from the page, and each student gets one notice per period (batch id = the period).
-  const body0 = await req.clone().json().catch(() => ({}));
-  const rep = body0?.repeat;
+  const rep = body?.repeat;
   if (rep) {
     const from = String(rep.from ?? ""), to = String(rep.to ?? ""), min = Number(rep.min);
     const okDay = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
     if (!okDay(from) || !okDay(to) || from > to || !(min >= 2) || (Date.parse(to) - Date.parse(from)) / 864e5 > 40) return json({ error: "bad period" }, 400);
-    let rq = supabase.from("attendance").select("student_id, students(full_name, whatsapp, phone)").eq("status", "absent").gte("day", from).lte("day", to);
-    if (typeof body0?.student_id === "string" && body0.student_id) rq = rq.eq("student_id", body0.student_id);
+    let rq = ctx.user.from("attendance").select(SEL).eq("status", "absent").gte("day", from).lte("day", to);
+    if (only) rq = rq.eq("student_id", only);
     const { data: ar, error: re } = await rq;
     if (re) return json({ error: re.message }, 502);
-    const cnt = new Map<string, { n: number; s: { full_name: string; whatsapp: string; phone: string } | null }>();
+    const cnt = new Map<string, { n: number; s: St | null }>();
     for (const r of ar ?? []) {
-      const e = cnt.get(r.student_id) ?? { n: 0, s: r.students as unknown as { full_name: string; whatsapp: string; phone: string } | null };
+      const e = cnt.get(r.student_id) ?? { n: 0, s: r.students as unknown as St | null };
       e.n++; cnt.set(r.student_id, e);
     }
-    const msgs: { externalId: string; phone: string; text: string }[] = [];
-    const np: string[] = [];
-    for (const [id, e] of cnt) {
-      if (e.n < min) continue;
-      const ph = (e.s?.whatsapp || e.s?.phone || "").trim();
-      if (ph) msgs.push({ externalId: id, phone: ph, text: repeatNotice(e.s!.full_name, e.n, from, to) });
-      else np.push(e.s?.full_name ?? id);
-    }
-    let q2 = 0, al = 0, rj = 0;
-    for (let i = 0; i < msgs.length; i += MAX_PER_REQUEST) {
-      const res = await fetch(`${url.replace(/\/+$/, "")}/api/v1/external/messages`, {
-        method: "POST", headers: { "Content-Type": "application/json", "X-Api-Key": key },
-        body: JSON.stringify({ batchId: `repeat-${from}-${to}`, messages: msgs.slice(i, i + MAX_PER_REQUEST) }),
-      });
-      const o = await res.json().catch(() => null);
-      if (!res.ok) return json({ error: o?.error?.message ?? `SendWhats answered ${res.status}`, queued: q2 }, 502);
-      q2 += o.queued; al += o.alreadyKnown; rj += o.rejected.length;
-    }
-    return json({ from, to, queued: q2, alreadySent: al, rejected: rj, noPhone: np });
+    const tpl = await template(ctx, "repeat", REPEAT);
+    const rows = [...cnt].filter(([, e]) => e.n >= min && e.s).map(([id, e]) => ({
+      student_id: id, s: e.s, text: fill(tpl, { ...vars(e.s!), "العدد": e.n, "من": dmy(from), "إلى": dmy(to), "التاريخ": dmy(cairoToday()) }),
+    }));
+    const { msgs, noPhone } = split(rows);
+    const r = await sendBatch(ctx, `repeat-${from}-${to}`, "repeat", `تكرار الغياب ${dmy(from)} – ${dmy(to)}`, msgs, noPhone);
+    return json({ from, to, ...r }, "error" in r ? 502 : 200);
   }
 
   // Always today: a late notice about an old day would read as a new absence.
   const day = cairoToday();
-  // body { student_id } sends to that one student only (the per-row button); an empty body sends to everyone absent today
-  const body = await req.json().catch(() => ({}));
-  const only = typeof body?.student_id === "string" && body.student_id ? body.student_id : null;
-  let q = supabase
-    .from("attendance")
-    .select("student_id, students(full_name, whatsapp, phone)")
-    .eq("day", day)
-    .eq("status", "absent");
+  let q = ctx.user.from("attendance").select(SEL).eq("day", day).eq("status", "absent");
   if (only) q = q.eq("student_id", only);
   const { data: rows, error } = await q;
   if (error) return json({ error: error.message }, 502);
-
-  const messages: { externalId: string; phone: string; text: string }[] = [];
-  const noPhone: string[] = [];
-  for (const row of rows ?? []) {
-    const s = row.students as unknown as { full_name: string; whatsapp: string; phone: string } | null;
-    const phone = (s?.whatsapp || s?.phone || "").trim();
-    if (phone) messages.push({ externalId: row.student_id, phone, text: notice(s!.full_name, day) });
-    else noPhone.push(s?.full_name ?? row.student_id);
-  }
-  if (!messages.length) return json({ day, queued: 0, alreadySent: 0, rejected: 0, noPhone });
-
-  let queued = 0, alreadySent = 0, rejected = 0;
-  for (let i = 0; i < messages.length; i += MAX_PER_REQUEST) {
-    const res = await fetch(`${url.replace(/\/+$/, "")}/api/v1/external/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Api-Key": key },
-      body: JSON.stringify({ batchId: `absence-${day}`, messages: messages.slice(i, i + MAX_PER_REQUEST) }),
-    });
-    const out = await res.json().catch(() => null);
-    if (!res.ok) return json({ error: out?.error?.message ?? `SendWhats answered ${res.status}`, queued }, 502);
-    queued += out.queued;
-    alreadySent += out.alreadyKnown;
-    rejected += out.rejected.length;
-  }
-  return json({ day, queued, alreadySent, rejected, noPhone });
+  const tpl = await template(ctx, "absence", ABSENCE);
+  const { msgs, noPhone } = split((rows ?? []).map((r) => {
+    const s = r.students as unknown as St | null;
+    return { student_id: r.student_id, s, text: s ? fill(tpl, { ...vars(s), "التاريخ": dmy(day) }) : "" };
+  }));
+  if (!msgs.length) return json({ day, queued: 0, alreadySent: 0, rejected: 0, noPhone: noPhone.map((m) => m.names) });
+  const r = await sendBatch(ctx, `absence-${day}`, "absence", `غياب ${dmy(day)}`, msgs, noPhone);
+  return json({ day, ...r }, "error" in r ? 502 : 200);
 });
