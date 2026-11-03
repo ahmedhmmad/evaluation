@@ -61,7 +61,7 @@
 </style>
 </head>
 <body>
-<div class="bar" id="bar" hidden><button type="button" onclick="print()">طباعة / حفظ PDF</button></div>
+<div class="bar" id="bar" hidden><button type="button" onclick="print()">طباعة / حفظ PDF</button> <button type="button" id="copy">نسخ الرابط</button></div>
 <div id="root"><div class="msg">جارٍ التحميل…</div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
@@ -106,6 +106,10 @@
     show('<div class="page">' + side + main + '</div>');
   }
 
+  document.getElementById('copy').onclick = function () {
+    var b = this, done = function () { b.textContent = 'نُسخ ✓'; setTimeout(function () { b.textContent = 'نسخ الرابط'; }, 1800); };
+    if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(done, function () { prompt('انسخ الرابط:', location.href); }); else prompt('انسخ الرابط:', location.href);
+  };
   if (!sb) return show('<div class="msg">تعذّر الاتصال.</div>');
   if (!token) return show('<div class="msg">الرابط غير مكتمل.</div>');
   sb.rpc('staff_cv', { p_token: token }).then(function (r) {

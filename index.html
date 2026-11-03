@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 6';
+  var APP_BUILD = '04/11 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2069,6 +2069,7 @@
   document.addEventListener('click', async function (e) {
     if (location.hash !== '#/staff' || !canView()) return;
     var el, t = ui.editTeacher && ui.editTeacher !== 'new' ? find(ui.editTeacher) : null;
+    if (!t && (el = e.target.closest('[data-sfopen]'))) return sfOpen(el.getAttribute('data-sfopen'));
     if (!t) return;
     if (e.target.closest('[data-sfpick]')) return document.getElementById('sf-input').click();
     if ((el = e.target.closest('[data-sfopen]'))) return sfOpen(el.getAttribute('data-sfopen'));
@@ -2328,11 +2329,11 @@
     if (done) toast(done);
   }
   // زر السيرة الذاتية في قائمة العاملين وتقرير المؤهلات: فتح ونسخ، أو إنشاء الرابط إن كانت البطاقة معتمدة
-  function cvCell(id) {
+  function cvCell(id, onlyOpen) {
     var p = S.spRows && S.spRows[id];
     if (!p || !p.reviewed || !('cv_public' in p)) return '';
-    if (p.cv_public && p.cv_token) return '<span style="white-space:nowrap"><a class="btn" target="_blank" rel="noopener" href="' + esc(cvLink(p.cv_token)) + '">السيرة</a> <button type="button" class="btn" data-cvcopy2="' + id + '" title="نسخ الرابط">نسخ</button></span>';
-    return '<button type="button" class="btn" data-cvmake="' + id + '">إنشاء رابط</button>';
+    if (p.cv_public && p.cv_token) return '<a class="btn" target="_blank" rel="noopener" href="' + esc(cvLink(p.cv_token)) + '">السيرة الذاتية</a>';
+    return onlyOpen ? '' : '<button type="button" class="btn" data-cvmake="' + id + '">إنشاء رابط</button>';
   }
   document.addEventListener('click', async function (e) {
     if (location.hash !== '#/staff' || !canView()) return;
@@ -2464,6 +2465,63 @@
     if (q) { q.focus(); q.setSelectionRange(pos, pos); }
   });
 
+  /* ----- بطاقة الموظف: تُفتح بالضغط على اسمه في قائمة العاملين -----
+     الدوام في فترة (من بداية العام حتى اليوم افتراضيًا): حضور وغياب وإجازات ومأموريات وتأخير، والمؤهلات، والسيرة الذاتية، والملفات */
+
+  async function loadStaffCard(id, from, to) {
+    var at = await fetchAll(function () { return sb.from('staff_attendance').select('day, status, time_in, time_out').eq('teacher_id', id).gte('day', from).lte('day', to).order('day'); });
+    var fl = await sb.from('staff_files').select('*').eq('staff_id', id).order('uploaded_at', { ascending: false });
+    if (!S.saHours) { var h = await sb.from('staff_hours').select('*').eq('id', 1).maybeSingle(); if (!h.error) S.saHours = saParseHours(h.data); }
+    ui.tCard = Object.assign(ui.tCard || {}, { id: id, from: from, to: to, att: at, files: fl.error ? null : fl.data || [], loaded: id + from + to });
+    render();
+  }
+
+  function staffCardHtml() {
+    var c = ui.tCard, t = find(c.id);
+    if (!t) { ui.tCard = null; return ''; }
+    if (c.loaded !== c.id + c.from + c.to) { loadStaffCard(c.id, c.from, c.to); return '<div class="card empty">جارٍ تحميل بطاقة ' + esc(t.name) + '…</div>'; }
+    var sh = shiftOf(t), n = { present: 0, absent: 0, leave: 0, mission: 0 }, lateDays = 0, lateMins = 0;
+    (c.att || []).forEach(function (r) { n[r.status] = (n[r.status] || 0) + 1; var l = saLate(r, sh); if (l) { lateDays++; lateMins += l; } });
+    var p = S.spRows && S.spRows[t.id], d = (p && p.data) || {};
+    var stat = function (lbl, num, sub, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
+    var info = [['الفئة', S.staffMissing ? '' : staffCat(t)], ['المسمى الوظيفي', t.job_title], ['المباحث', t.subject], ['الصفوف', t.classes], ['الجوال', t.phone], ['الواتساب', t.whatsapp],
+      ['تاريخ التعيين', t.hire_date ? dmy(t.hire_date) : ''], ['انتهاء العقد', t.contract_end ? dmy(t.contract_end) : ''], ['الدوام', sh.name + ' (' + sh.time_in + ' – ' + sh.time_out + ')'],
+      ['حساب الدخول', t.user_id ? displayName(t.login) : '']].filter(function (x) { return x[1]; });
+    var qual = [['أعلى مؤهل', d.degree || t.qualification], ['التخصص', d.major], ['الجامعة', d.university], ['سنة التخرج', d.grad_year], ['سنوات الخبرة', d.experience_years ? d.experience_years + ' سنة' : '']].filter(function (x) { return x[1]; });
+    var kv = function (list) { return '<div class="grid2">' + list.map(function (x) { return '<div><span class="hint" style="margin:0">' + x[0] + '</span><div><b>' + esc(x[1]) + '</b></div></div>'; }).join('') + '</div>'; };
+    var files = c.files == null ? '<p class="hint">لملفات العاملين شغّل الملف supabase/staff_files.sql.</p>' : c.files.length
+      ? '<div class="acts" style="flex-wrap:wrap">' + c.files.map(function (f) { return '<button type="button" class="btn" data-sfopen="' + f.id + '" title="' + esc(f.name) + '">' + esc(SF_KINDS[f.kind] || f.kind) + ' — ' + esc(f.name.length > 28 ? f.name.slice(0, 26) + '…' : f.name) + '</button>'; }).join('') + '</div>'
+      : '<p class="hint">لا ملفات مرفوعة.</p>';
+    var cv = p && p.reviewed && p.cv_public && p.cv_token
+      ? '<a class="btn primary" target="_blank" rel="noopener" href="' + esc(cvLink(p.cv_token)) + '">فتح السيرة الذاتية</a><button type="button" class="btn" data-cvcopy2="' + t.id + '">نسخ رابط السيرة</button>'
+      : '<span class="hint" style="margin:0">' + (p ? (p.reviewed ? 'لا رابط مفعّل للسيرة الذاتية' : 'بطاقة المؤهلات تحتاج مراجعة واعتمادًا') : 'لم تُقرأ ملفاته بعد') + '</span>';
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 10px"><h2 style="margin:0;flex:1">' + esc(t.name) + '</h2>' +
+        '<button type="button" class="btn" data-tedit="' + t.id + '">تعديل البيانات والملفات</button><button type="button" class="btn" data-tcardclose>رجوع للقائمة</button></div>' +
+        kv(info) + '</div>' +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">الدوام</h2>' +
+        '<label class="field" for="tc-from" style="margin:0">من</label><input type="date" id="tc-from" value="' + c.from + '" style="width:auto">' +
+        '<label class="field" for="tc-to" style="margin:0">إلى</label><input type="date" id="tc-to" value="' + c.to + '" style="width:auto"></div>' +
+        '<div class="stats" style="margin:0">' + stat('حضور', n.present, 'يوم') + stat('غياب', n.absent, 'يوم', n.absent ? 'var(--red)' : '') + stat('إجازات', n.leave, 'يوم') +
+          stat('مأموريات', n.mission, 'يوم') + stat('تأخير', lateDays, lateMins ? 'يوم · ' + lateMins + ' دقيقة' : 'يوم', lateDays ? 'var(--red)' : '') + '</div>' +
+        '<p class="hint">من سجل «دوام الموظفين»، والتأخير بحسب موعد دوامه.</p></div>' +
+      '<div class="card"><h2 style="margin-top:0">المؤهلات والسيرة الذاتية</h2>' + (qual.length ? kv(qual) : '') +
+        (d.summary ? '<p style="margin:10px 0 0">' + esc(d.summary) + '</p>' : '') + '<div class="toolbar" style="margin:10px 0 0;align-items:center">' + cv + '</div></div>' +
+      '<div class="card"><h2 style="margin-top:0">الملفات والشهادات</h2>' + files + '</div>';
+  }
+
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staff' || !canView()) return;
+    var el;
+    if ((el = e.target.closest('[data-tcard]'))) { ui.tCard = { id: el.getAttribute('data-tcard'), from: ui.tCard && ui.tCard.from || afYearStart(), to: ui.tCard && ui.tCard.to || todayISO() }; ui.spReport = false; scrollTo(0, 0); return render(); }
+    if (e.target.closest('[data-tcardclose]')) { ui.tCard = null; return render(); }
+    if (ui.tCard && e.target.closest('[data-tedit]')) ui.tCard = null;
+  }, true);
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/staff' || !ui.tCard || (e.target.id !== 'tc-from' && e.target.id !== 'tc-to')) return;
+    ui.tCard[e.target.id === 'tc-from' ? 'from' : 'to'] = e.target.value;
+    render();
+  });
+
   function renderStaff() {
     if (canView() && S.spRows == null && !ui.spLoading) { ui.spLoading = true; loadStaffProfiles().then(function () { ui.spLoading = false; }); }
     if (S.accountsMissing) {
@@ -2532,14 +2590,14 @@
         : x.hire_date && x.hire_date > today ? '<span class="badge part">يبدأ ' + dmy(x.hire_date) + '</span>'
         : x.contract_end ? '<span class="badge part">ينتهي عقده ' + dmy(x.contract_end) + '</span>' : '';
       if (x.not_staff) term = '<span class="badge pending">ليس من العاملين</span>';
-      return '<tr' + (x.not_staff || (x.contract_end && x.contract_end < today) ? ' style="color:var(--muted)"' : '') + '><td><b>' + esc(x.name) + '</b>' + (canView() && S.spRows && S.spRows[x.id] && S.spRows[x.id].cv_public ? ' ' + cvCell(x.id) : '') + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
+      return '<tr' + (x.not_staff || (x.contract_end && x.contract_end < today) ? ' style="color:var(--muted)"' : '') + '><td>' + (canView() ? '<button type="button" class="btn link" style="padding:0;font-weight:700;text-align:right" data-tcard="' + x.id + '">' + esc(x.name) + '</button>' : '<b>' + esc(x.name) + '</b>') + (term ? '<br>' + term : '') + '</td><td>' + (S.staffMissing ? '' : '<span class="badge ' + (teach ? 'published' : 'pending') + '">' + staffCat(x) + '</span>') + '</td>' +
         '<td>' + esc(x.job_title || x.subject || '—') + (teach && x.classes ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.classes) + '</span>' : '') + '</td>' +
         // الجوال، والواتساب تحته إن اختلف عنه (عمود واحد يوفّر عرض الجدول)
         '<td><span dir="ltr" style="white-space:nowrap">' + esc(x.phone || '—') + '</span>' +
           (x.whatsapp && plainPhone(x.whatsapp) !== plainPhone(x.phone) ? '<br><span style="color:var(--muted);font-size:.85rem">واتساب <span dir="ltr" style="white-space:nowrap">' + esc(x.whatsapp) + '</span></span>' : '') + '</td>' +
         '<td dir="ltr" style="text-align:right">' + (x.user_id ? esc(displayName(x.login)) : '<span class="badge pending" dir="rtl">بدون حساب</span>') + '</td>' +
         // الأزرار في شبكة من عمودين تلتف، فلا يخرج أحدها عن الجدول مهما ضاقت الشاشة
-        '<td><div class="staff-acts"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button>' +
+        '<td><div class="staff-acts"><button type="button" class="btn" data-tedit="' + x.id + '">تعديل</button>' + (canView() ? cvCell(x.id, true) : '') +
         (x.user_id ? '<button type="button" class="btn" data-treset="' + x.id + '" title="إعادة تعيين كلمة المرور">كلمة مرور جديدة</button>' : '<button type="button" class="btn" data-tacc="' + x.id + '">إنشاء حساب</button>') +
         (S.contractMissing ? '' : x.contract_end && x.contract_end < today
           ? '<button type="button" class="btn" data-tcontract="' + x.id + '">إعادة التعاقد</button>'
@@ -2554,22 +2612,22 @@
         'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
         '<button type="submit" class="btn">حفظ</button></div></form>' : '') +
       (S.staffMissing ? '<p class="formhint">لتسجيل فئة العامل ومسماه الوظيفي ورقم الواتساب شغّل الملف <code dir="ltr">supabase/staff.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' : '') +
-      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) + staffProfileHtml(t) : '') : ui.spReport && canView() ? spReportHtml() : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
+      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) + staffProfileHtml(t) : '') : ui.tCard && canView() ? staffCardHtml() : ui.spReport && canView() ? spReportHtml() : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
         (S.staffMissing ? '' : (canView() ? '<button type="button" class="btn" data-spreport>مؤهلات العاملين</button>' : '') + (canView() ? '<button type="button" class="btn" data-sfbulk>رفع مجلد ملفات العاملين</button><input type="file" id="sf-dir" webkitdirectory multiple hidden>' : '') + '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
           '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>') + '</div>') +
-      (ed || ui.staffImp ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
+      (ed || ui.staffImp || ui.tCard || ui.spReport ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
         '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات العاملين (المباحث والجوال والواتساب)</button>' +
         '<button type="button" class="btn" data-stlist="jobs" data-ro-ok>كشف العاملين (الوظيفة ورقم الاتصال)</button>' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-mgr" data-ro-ok' + (ui.stlNoMgr ? '' : ' checked') + '> مع المدير</label>' +
         '<label class="check" style="margin:0"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label></div>' +
         '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p></div>') +
-      (ed || ui.staffImp ? '' : '<div class="toolbar" style="margin:0 0 10px"><input type="search" id="st-q" data-ro-ok placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث في العاملين" style="flex:1;min-width:240px" value="' + esc(ui.staffQ || '') + '"></div>') +
-      (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', activeN]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
+      (ed || ui.staffImp || ui.tCard || ui.spReport ? '' : '<div class="toolbar" style="margin:0 0 10px"><input type="search" id="st-q" data-ro-ok placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث في العاملين" style="flex:1;min-width:240px" value="' + esc(ui.staffQ || '') + '"></div>') +
+      (ed || ui.staffImp || ui.tCard || ui.spReport ? '' :       (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', activeN]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
       '<div class="card">' + (rows
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>' + (S.staffMissing ? '' : 'الفئة') + '</th><th>المسمى / المباحث</th><th>الجوال / واتساب</th><th>حساب الدخول</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-        : '<div class="empty">لا يوجد عاملون في هذا التصنيف.</div>') + '</div>';
+        : '<div class="empty">لا يوجد عاملون في هذا التصنيف.</div>') + '</div>');
   }
 
   async function saveTeacherForm() {
