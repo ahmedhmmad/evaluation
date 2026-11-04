@@ -141,12 +141,12 @@ declare who staff_bot_phones;
 begin
   if not att_bot_ok(p_key) then return jsonb_build_object('error', 'bad key: the n8n key does not match the one in the settings screen (الإعدادات والمستخدمون)'); end if;
   who := staff_bot_sender(p_phone);
-  -- غير مسموح: تُتجاهل صورته بصمت. مسموح لكن لم يبدأ بـ«دوام»: يُذكَّر بذلك
+  -- تُتجاهل الصورة بصمت إلا من رقم مسموح بدأ محادثة الدوام بكلمة «دوام» (فلا يُرد على الصور العادية)
   if who.phone is null then
     return jsonb_build_object('ok', false, 'allowed', false, 'note', 'الرقم +' || att_phone(p_phone) || ' ليس من الأرقام المسموحة في «دوام الموظفين»؛ تُتجاهل صورته');
   end if;
   if not exists (select 1 from staff_bot_state where phone = right(att_phone(p_phone), 9) and step = 'image' and updated_at > now() - interval '30 minutes') then
-    return jsonb_build_object('ok', false, 'allowed', true, 'note', 'لإرسال كشف الدوام أرسل كلمة «دوام» أولًا، ثم الصورة.');
+    return jsonb_build_object('ok', false, 'allowed', false, 'note', 'صورة خارج محادثة الدوام (لم تبدأ بكلمة «دوام»)؛ تُتجاهل بصمت');
   end if;
   return jsonb_build_object('ok', true, 'staff', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'title', coalesce(nullif(to_jsonb(t) ->> 'job_title', ''), to_jsonb(t) ->> 'category', '')) order by t.name)
     from teachers t where coalesce((to_jsonb(t) ->> 'contract_end')::date, att_today()) >= att_today() - 60), '[]'::jsonb));
