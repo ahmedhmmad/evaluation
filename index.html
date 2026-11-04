@@ -419,6 +419,37 @@
   #print-sheet.bus-rep .rh-banner { width: 100%; height: 18mm; object-fit: contain; margin: 0; }
   /* كشف الرواتب: الترويسة كاملة، وهوامش أضيق، وصفوف متقاربة بخط أسود واضح؛ والصفوف تمتد لتملأ الصفحة */
   #print-sheet.pay-reg { padding: 0 10mm 8mm !important; }
+  /* ورقة العمل والاختبار بقالب الأكاديمية: ترويسة وتذييل ثابتان في كل صفحة، والمحتوى بين مسافتيهما */
+  #print-sheet.paper { padding: 0 !important; width: 210mm !important; font-family: "Cairo", var(--font-body); font-size: 12pt; color: #222; line-height: 1.6; }
+  #print-sheet.paper .pp-hdr { position: fixed; top: 0; left: 0; width: 210mm; z-index: 3; }
+  #print-sheet.paper .pp-ftr { position: fixed; bottom: 0; left: 0; width: 210mm; z-index: 3; }
+  #print-sheet.paper .pp-wm { position: fixed; top: 50%; left: 50%; width: 120mm; transform: translate(-50%, -50%); opacity: .9; z-index: 0; }
+  #print-sheet.paper table.pp-frame { width: 100%; border-collapse: collapse; position: relative; z-index: 1; }
+  #print-sheet.paper td.pp-top { height: 24mm; padding: 0; }
+  #print-sheet.paper td.pp-bottom { height: 22mm; padding: 0; }
+  #print-sheet.paper td.pp-content { padding: 0 14mm; vertical-align: top; }
+  #print-sheet.paper .pp-title { display: flex; align-items: center; gap: 10px; margin: 0 0 3mm; }
+  #print-sheet.paper .pp-title span { background: #0B2F5A; color: #fff; font-weight: 800; padding: 1.5mm 6mm; border-radius: 99px; font-size: 1.1em; }
+  #print-sheet.paper .pp-title b { color: #0B2F5A; font-size: 1.25em; font-weight: 800; flex: 1; }
+  #print-sheet.paper .pp-title small { color: #7E8896; font-size: .85em; }
+  #print-sheet.paper table.pp-info { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
+  #print-sheet.paper .pp-info th { background: #0B2F5A; color: #fff; font-weight: 700; padding: 1.5mm 2.5mm; width: 13%; border: .6pt solid #0B2F5A; text-align: center; white-space: nowrap; }
+  #print-sheet.paper .pp-info td { border: .6pt solid #B9C1CC; padding: 1.5mm 2.5mm; background: #FFFCF4; height: 8mm; }
+  #print-sheet.paper .pp-info td.pp-score { text-align: center; font-weight: 800; color: #0B2F5A; letter-spacing: .05em; }
+  #print-sheet.paper .pp-instr { border: 1pt solid #C6A668; background: #FFFCF4; border-radius: 2mm; padding: 2mm 4mm; margin-bottom: 4mm; }
+  #print-sheet.paper .pp-instr b { color: #0B2F5A; display: block; }
+  #print-sheet.paper .pp-item { margin-bottom: 4mm; break-inside: avoid; page-break-inside: avoid; }
+  #print-sheet.paper .pp-ihead { display: flex; align-items: center; gap: 3mm; border-bottom: 1.2pt solid #C6A668; padding-bottom: 1.2mm; margin-bottom: 1.5mm; }
+  #print-sheet.paper .pp-num { flex: none; width: 8mm; height: 8mm; border-radius: 50%; background: #0B2F5A; color: #fff; font-weight: 800; display: grid; place-items: center; font-size: .95em; }
+  #print-sheet.paper .pp-ititle { flex: 1; font-weight: 700; color: #0B2F5A; }
+  #print-sheet.paper .pp-grade { display: flex; align-items: center; border: .8pt solid #0B2F5A; border-radius: 1.5mm; overflow: hidden; font-size: .85em; }
+  #print-sheet.paper .pp-grade span { background: #0B2F5A; color: #fff; padding: .6mm 2mm; }
+  #print-sheet.paper .pp-grade b { padding: .6mm 3mm; color: #0B2F5A; }
+  #print-sheet.paper .pp-body { padding: 0 2mm 1mm; white-space: pre-wrap; }
+  #print-sheet.paper .pp-instr div { white-space: pre-wrap; }
+  #print-sheet.paper .pp-line { height: 8.5mm; border-bottom: .8pt dotted #9AA3AE; margin: 0 2mm; }
+  #print-sheet.paper .pp-notes { margin-top: 6mm; color: #0B2F5A; font-weight: 700; display: flex; gap: 3mm; break-inside: avoid; }
+  #print-sheet.paper .pp-notes span { flex: 1; border-bottom: .8pt dotted #9AA3AE; }
   #print-sheet.pay-reg section.pr-page { padding-top: 8mm; }
   #print-sheet.pay-reg table.rz tbody td { color: #000; font-weight: 600; line-height: 1.3; padding-inline: 3px; }
   #print-sheet.pay-reg table.rz thead th { font-size: .82em; padding: 4px 1px; white-space: nowrap; }
@@ -1250,7 +1281,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 9';
+  var APP_BUILD = '05/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1533,6 +1564,7 @@
 
   var ICONS = {
     // دوامي وراتبي: ساعة
+    papers: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
     mine: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
     home: 'M3 11l9-8 9 8M5 10v10h14V10',
     teachers: 'M12 3l2.7 5.6 6.3.9-4.5 4.3 1 6.2L12 17l-5.5 3 1-6.2L3 9.5l6.3-.9z',
@@ -1575,7 +1607,8 @@
     var groups = navModel0();
     if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد']); });
     if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب']); });
-    if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي']] });
+    if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
+    else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
     return groups;
   }
   function navModel0() {
@@ -1605,6 +1638,7 @@
   function activeKey() {
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
+    if (h === '#/papers' && canPapers()) return 'papers';
     if (h === '#/messages' && canRecordAtt()) return 'messages';
     if (h === '#/exits' && canAttView()) return 'exits';
     if (h === '#/discipline' && canDisc()) return 'discipline';
@@ -9304,6 +9338,7 @@
     if (role() === 'pending') return renderPending();
     if (S.profile && S.profile.must_change_password) return renderChangePw();
     if (location.hash === '#/mine' && S.myStaff) return renderMine();
+    if (location.hash === '#/papers' && canPapers()) return renderPapers();
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
@@ -11976,6 +12011,265 @@
     return ui.mine;
   }
   var loadingMine = false;
+  /* ---------- أوراق العمل والاختبارات ----------
+     المعلم يكتب المحتوى فقط (التعليمات، والأنشطة أو الأسئلة ودرجاتها)، ويطبعها البرنامج بقالب الأكاديمية الرسمي
+     (ترويسة وتذييل الأكاديمية، وخط Cairo، والكحلي والذهبي). أوراقه خاصة به إلا ما ينشره لزملائه.
+     المدير العام والمدير والمشرف التربوي يرون كل الأوراق؛ والمشرف التربوي يعتمد أو يعيد حين يُفعَّل الاعتماد (supabase/teacher_papers.sql) */
+
+  var PP_KINDS = { worksheet: 'ورقة عمل', quiz: 'اختبار قصير', monthly: 'اختبار شهري', midterm: 'اختبار نصفي', final: 'اختبار نهائي' };
+  var PP_STATUS = { draft: ['pending', 'مسودة'], submitted: ['part', 'بانتظار الاعتماد'], approved: ['paid', 'معتمدة'], returned: ['unpaid', 'معادة للتعديل'] };
+  var PP_TERMS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
+
+  function canPapers() { return !!S.myStaff || isAdmin() || isManager() || isSup(); }
+  function ppReviewer() { return isAdmin() || isSup(); }
+  function ppIsExam(p) { return p.kind !== 'worksheet'; }
+  function arDigits(v) { return String(v).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'[d]; }); }
+  function ppTotal(p) { return (p.items || []).reduce(function (s, it) { return s + (Number(it.points) || 0); }, 0); }
+  function ppUi() { return ui.pp || (ui.pp = { tab: S.myStaff ? 'mine' : 'all', q: '', kind: '', teacher: '', status: '', edit: null }); }
+  function ppMine(p) { return S.myStaff && p.teacher_id === S.myStaff.id; }
+
+  async function loadPapers() {
+    var r = await sb.from('papers').select('*').order('updated_at', { ascending: false }).limit(2000);
+    S.ppMissing = !!r.error;
+    S.papers = r.data || [];
+    var c = await sb.from('paper_settings').select('*').eq('id', 1).maybeSingle();
+    S.ppCfg = c.data || { review_enabled: false };
+    render();
+  }
+
+  function ppNew(kind) {
+    var me = S.myStaff ? find(S.myStaff.id) : null;
+    var n = kind === 'worksheet' ? 3 : 3;
+    return { id: null, teacher_id: S.myStaff ? S.myStaff.id : '', kind: kind || 'worksheet', subject: me ? String(me.subject || '').split(/[،,]/)[0].trim() : '', class_name: '', lesson: '',
+      term: PP_TERMS[0], paper_date: todayISO(), duration: '', instructions: '', visibility: 'private', status: 'draft',
+      items: Array.apply(null, Array(n)).map(function () { return { title: '', points: kind === 'worksheet' ? '' : 5, body: '', lines: 4 }; }) };
+  }
+
+  function renderPapers() {
+    var u = ppUi();
+    var head = '<div class="page-head"><div><h1>أوراق العمل والاختبارات</h1><p>اكتب المحتوى فقط، ويطبعه البرنامج بقالب الأكاديمية الرسمي (PDF). ' +
+      'أوراقك خاصة بك، إلا ما تختار نشره لزملائك.</p></div></div>';
+    if (S.papers == null) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadPapers(); return; }
+    if (S.ppMissing) { app.innerHTML = head + '<div class="card empty">الأوراق تحتاج إلى جداول جديدة: شغّل الملف <code dir="ltr">supabase/teacher_papers.sql</code> في محرر SQL ثم حدّث الصفحة.</div>'; return; }
+    app.innerHTML = head + (u.edit ? ppEditorHtml(u.edit) : ppListHtml());
+  }
+
+  function ppListHtml() {
+    var u = ppUi(), rev = S.ppCfg && S.ppCfg.review_enabled;
+    var tabs = (S.myStaff ? [['mine', 'أوراقي'], ['public', 'أوراق الزملاء المنشورة']] : []).concat(isAdmin() || isManager() || isSup() ? [['all', 'كل الأوراق']] : []);
+    var q = norm(u.q);
+    var list = S.papers.filter(function (p) {
+      if (u.tab === 'mine' && !ppMine(p)) return false;
+      if (u.tab === 'public' && (ppMine(p) || p.visibility !== 'public')) return false;
+      if (u.kind && p.kind !== u.kind) return false;
+      if (u.teacher && p.teacher_id !== u.teacher) return false;
+      if (u.status && p.status !== u.status) return false;
+      var t = find(p.teacher_id);
+      return !q || norm([p.subject, p.class_name, p.lesson, t ? t.name : ''].join(' ')).indexOf(q) > -1;
+    });
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var teachers = {};
+    S.papers.forEach(function (p) { teachers[p.teacher_id] = 1; });
+    var rows = list.map(function (p) {
+      var t = find(p.teacher_id), st = PP_STATUS[p.status] || PP_STATUS.draft;
+      return '<tr><td><b>' + PP_KINDS[p.kind] + '</b></td><td>' + esc(p.subject || '—') + '</td><td>' + esc(p.class_name || '—') + '</td><td>' + esc(p.lesson || '') + '</td>' +
+        '<td style="white-space:nowrap">' + (p.paper_date ? dmy(p.paper_date) : '') + '</td>' + (u.tab !== 'mine' ? '<td>' + esc(t ? t.name : '') + '</td>' : '') +
+        '<td>' + (p.items || []).length + (ppTotal(p) ? ' · ' + ppTotal(p) + ' درجة' : '') + '</td>' +
+        '<td>' + (p.visibility === 'public' ? '<span class="badge published">منشورة</span>' : '<span class="badge pending">خاصة</span>') + '</td>' +
+        (rev ? '<td><span class="badge ' + st[0] + '">' + st[1] + '</span>' + (p.status === 'returned' && p.review_note ? '<div class="hint" style="margin:2px 0 0">' + esc(p.review_note) + '</div>' : '') + '</td>' : '') +
+        '<td><div class="acts"><button type="button" class="btn" data-ppopen="' + p.id + '">' + (ppMine(p) || isAdmin() ? 'فتح' : 'عرض') + '</button>' +
+        '<button type="button" class="btn" data-ppprint="' + p.id + '">طباعة / PDF</button>' +
+        (S.myStaff ? '<button type="button" class="btn" data-ppcopy="' + p.id + '" title="نسخة جديدة في أوراقي">نسخ</button>' : '') + '</div></td></tr>';
+    }).join('');
+    return '<div class="toolbar" style="align-items:center">' + tabs.map(function (t) { return '<button type="button" class="btn' + (u.tab === t[0] ? ' primary' : '') + '" data-pptab="' + t[0] + '">' + t[1] + '</button>'; }).join('') +
+        '<span style="flex:1"></span>' + (S.myStaff || isAdmin() ? Object.keys(PP_KINDS).map(function (k) { return k === 'worksheet' || k === 'quiz' ? '<button type="button" class="btn primary" data-ppnew="' + k + '">+ ' + PP_KINDS[k] + '</button>' : ''; }).join('') +
+          '<select id="pp-newkind" style="width:auto"><option value="">+ اختبار آخر…</option>' + ['monthly', 'midterm', 'final'].map(function (k) { return opt(k, PP_KINDS[k], ''); }).join('') + '</select>' : '') + '</div>' +
+      '<div class="toolbar" style="align-items:center"><input type="search" id="pp-q" placeholder="المادة أو الشعبة أو الدرس أو المعلم" value="' + esc(u.q) + '" style="max-width:260px">' +
+        '<select id="pp-kind" style="width:auto">' + opt('', 'كل الأنواع', u.kind) + Object.keys(PP_KINDS).map(function (k) { return opt(k, PP_KINDS[k], u.kind); }).join('') + '</select>' +
+        (u.tab !== 'mine' ? '<select id="pp-teacher" style="width:auto">' + opt('', 'كل المعلمين', u.teacher) + Object.keys(teachers).map(function (id) { var t = find(id); return t ? opt(id, t.name, u.teacher) : ''; }).join('') + '</select>' : '') +
+        (rev ? '<select id="pp-status" style="width:auto">' + opt('', 'كل الحالات', u.status) + Object.keys(PP_STATUS).map(function (k) { return opt(k, PP_STATUS[k][1], u.status); }).join('') + '</select>' : '') +
+        (isAdmin() ? '<label class="check" style="margin-inline-start:auto"><input type="checkbox" id="pp-review"' + (rev ? ' checked' : '') + '> تفعيل اعتماد المشرف التربوي</label>' : '') + '</div>' +
+      '<div class="card">' + (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>النوع</th><th>المادة</th><th>الشعبة</th><th>الدرس</th><th>التاريخ</th>' + (u.tab !== 'mine' ? '<th>المعلم</th>' : '') +
+          '<th>الفقرات</th><th>النشر</th>' + (rev ? '<th>الاعتماد</th>' : '') + '<th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="empty">' + (u.tab === 'mine' ? 'لا أوراق بعد. ابدأ بزر «+ ورقة عمل» أو «+ اختبار قصير».' : 'لا أوراق.') + '</div>') + '</div>';
+  }
+
+  function ppEditorHtml(p) {
+    var own = !p.id || ppMine(p) || isAdmin(), rev = S.ppCfg && S.ppCfg.review_enabled, exam = ppIsExam(p), t = find(p.teacher_id);
+    var ro = own ? '' : ' disabled', unit = exam ? 'السؤال' : 'النشاط';
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var f = function (id, label, inner) { return '<div><label class="field" for="' + id + '">' + label + '</label>' + inner + '</div>'; };
+    var st = PP_STATUS[p.status] || PP_STATUS.draft;
+    var items = (p.items || []).map(function (it, i) {
+      return '<div class="card" style="border-inline-start:4px solid #C6A668;margin:10px 0"><div class="toolbar" style="align-items:center;margin:0 0 6px">' +
+        '<b style="background:#0B2F5A;color:#fff;border-radius:50%;width:30px;height:30px;display:grid;place-items:center">' + arDigits(i + 1) + '</b>' +
+        '<input data-ppi="' + i + '" data-ppk="title" value="' + esc(it.title) + '" placeholder="عنوان ' + unit + ' أو تعليماته (مثلًا: اختر الإجابة الصحيحة)" style="flex:1"' + ro + '>' +
+        '<label class="hint" style="margin:0">الدرجة</label><input type="number" min="0" step="0.5" data-ppi="' + i + '" data-ppk="points" value="' + esc(it.points) + '" style="width:5em"' + ro + '>' +
+        (own ? '<button type="button" class="btn" data-ppup="' + i + '" title="أعلى"' + (i ? '' : ' disabled') + '>▲</button><button type="button" class="btn" data-ppdown="' + i + '" title="أسفل"' + (i < p.items.length - 1 ? '' : ' disabled') + '>▼</button>' +
+          '<button type="button" class="btn danger" data-ppdel="' + i + '" title="حذف">✕</button>' : '') + '</div>' +
+        '<textarea data-ppi="' + i + '" data-ppk="body" rows="4" style="width:100%" placeholder="نص ' + unit + ' وفقراته (كل فقرة في سطر). للاختيار من متعدد: اكتب الخيارات أسطرًا، مثل: أ) … ب) …"' + ro + '>' + esc(it.body) + '</textarea>' +
+        '<div class="toolbar" style="align-items:center;margin:4px 0 0"><label class="hint" style="margin:0">أسطر للإجابة تحت ' + unit + '</label><input type="number" min="0" max="25" data-ppi="' + i + '" data-ppk="lines" value="' + esc(it.lines) + '" style="width:5em"' + ro + '></div></div>';
+    }).join('');
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 10px"><h2 style="margin:0;flex:1">' + (p.id ? (own ? 'تعديل ' : '') : 'جديد: ') + PP_KINDS[p.kind] +
+        (t && !ppMine(p) ? ' — ' + esc(t.name) : '') + '</h2>' + (rev && p.id ? '<span class="badge ' + st[0] + '">' + st[1] + '</span>' : '') +
+        '<button type="button" class="btn" data-ppback>رجوع للقائمة</button></div>' +
+      (p.status === 'returned' && p.review_note ? '<div class="formhint" style="margin:0 0 10px"><b>ملاحظة المشرف:</b> ' + esc(p.review_note) + '</div>' : '') +
+      '<div class="grid2">' +
+        (isAdmin() && !S.myStaff || isAdmin() && p.teacher_id !== (S.myStaff && S.myStaff.id) ? f('pp-teacherid', 'المعلم', '<select id="pp-teacherid"' + ro + '>' + opt('', '— اختر —', p.teacher_id) +
+          S.teachers.filter(function (x) { return !x.not_staff; }).map(function (x) { return opt(x.id, x.name, p.teacher_id); }).join('') + '</select>') : '') +
+        f('pp-kindsel', 'النوع', '<select id="pp-kindsel"' + ro + '>' + Object.keys(PP_KINDS).map(function (k) { return opt(k, PP_KINDS[k], p.kind); }).join('') + '</select>') +
+        f('pp-subject', 'المادة', '<input id="pp-subject" data-ppf="subject" value="' + esc(p.subject) + '"' + ro + '>') +
+        f('pp-class', 'الصف / الشعبة', '<select id="pp-class" data-ppf="class_name"' + ro + '>' + opt('', '— اختر —', p.class_name) + schoolClasses().map(function (c) { return opt(c, c, p.class_name); }).join('') + '</select>') +
+        (exam ? f('pp-duration', 'الزمن', '<input id="pp-duration" data-ppf="duration" placeholder="مثلًا: 45 دقيقة" value="' + esc(p.duration) + '"' + ro + '>')
+          : f('pp-lesson', 'الدرس', '<input id="pp-lesson" data-ppf="lesson" value="' + esc(p.lesson) + '"' + ro + '>')) +
+        (exam ? f('pp-lesson', 'الوحدة / الدروس (اختياري، لا تُطبع)', '<input id="pp-lesson" data-ppf="lesson" value="' + esc(p.lesson) + '"' + ro + '>') : '') +
+        f('pp-date', 'التاريخ', '<input type="date" id="pp-date" data-ppf="paper_date" value="' + esc(p.paper_date || '') + '"' + ro + '>') +
+        f('pp-term', 'الفصل الدراسي', '<select id="pp-term" data-ppf="term"' + ro + '>' + PP_TERMS.map(function (x) { return opt(x, x, p.term); }).join('') + '</select>') +
+      '</div>' +
+      '<label class="field" for="pp-instr">التعليمات</label><textarea id="pp-instr" data-ppf="instructions" rows="3" style="width:100%" placeholder="تعليمات ' + (exam ? 'الاختبار' : 'ورقة العمل') + ' (تُطبع في إطار أعلى الورقة)"' + ro + '>' + esc(p.instructions) + '</textarea>' +
+      '</div>' +
+      '<h2 style="margin:16px 0 0">' + (exam ? 'الأسئلة' : 'الأنشطة') + ' <span class="hint" style="margin:0">— المجموع: <b id="pp-total">' + ppTotal(p) + '</b> درجة</span></h2>' + items +
+      (own ? '<button type="button" class="btn" data-ppadd>+ ' + (exam ? 'سؤال' : 'نشاط') + '</button>' : '') +
+      '<div class="card" style="position:sticky;bottom:0;z-index:2;margin-top:12px"><div class="toolbar" style="align-items:center;margin:0">' +
+        (own ? '<label class="check"><input type="checkbox" id="pp-public"' + (p.visibility === 'public' ? ' checked' : '') + '> نشر الورقة لزملائي</label>' +
+          '<button type="button" class="btn primary" data-ppsave>حفظ</button>' : '') +
+        '<button type="button" class="btn" data-ppsaveprint>' + (own ? 'حفظ و' : '') + 'طباعة / PDF</button>' +
+        (own && rev && p.status !== 'submitted' && p.status !== 'approved' ? '<button type="button" class="btn" data-ppsubmit>إرسال للاعتماد</button>' : '') +
+        (!own && S.myStaff ? '<button type="button" class="btn" data-ppcopy="' + p.id + '">نسخ إلى أوراقي</button>' : '') +
+        (rev && ppReviewer() && p.id && !ppMine(p) ? '<button type="button" class="btn primary" data-ppapprove>اعتماد</button><button type="button" class="btn danger" data-ppreturn>إعادة للتعديل</button>' : '') +
+        (own && p.id && p.status !== 'approved' ? '<button type="button" class="btn danger" data-ppremove style="margin-inline-start:auto">حذف الورقة</button>' : '') + '</div></div>';
+  }
+
+  // قراءة النموذج إلى الورقة المفتوحة (الحقول تُحدَّث أولًا بأول؛ هنا ما تبقّى)
+  function ppCollect() {
+    var p = ppUi().edit, pub = document.getElementById('pp-public'), tid = document.getElementById('pp-teacherid');
+    if (pub) p.visibility = pub.checked ? 'public' : 'private';
+    if (tid) p.teacher_id = tid.value;
+    return p;
+  }
+
+  async function ppSave(extra) {
+    var p = ppCollect();
+    if (!p.teacher_id) return toast('اختر المعلم', true), null;
+    if (!p.subject.trim()) return toast('اكتب المادة', true), null;
+    var row = { teacher_id: p.teacher_id, kind: p.kind, subject: p.subject.trim(), class_name: p.class_name, lesson: p.lesson.trim(), term: p.term, paper_date: p.paper_date || null,
+      duration: p.duration.trim(), instructions: p.instructions, visibility: p.visibility,
+      items: p.items.map(function (it) { return { title: String(it.title || '').trim(), points: it.points === '' || it.points == null ? '' : Number(it.points), body: String(it.body || ''), lines: Math.max(0, Math.min(25, Number(it.lines) || 0)) }; }) };
+    Object.assign(row, extra || {});
+    var r = p.id ? await sb.from('papers').update(row).eq('id', p.id).select().single() : await sb.from('papers').insert(row).select().single();
+    if (r.error) return fail(r.error), null;
+    var saved = Object.assign({}, p, row, r.data || {});
+    Object.assign(p, saved);
+    S.papers = S.papers.filter(function (x) { return x.id !== saved.id; });
+    S.papers.unshift(JSON.parse(JSON.stringify(saved)));
+    return saved;
+  }
+
+  var pendingPaper = null;
+  function ppPrint(p) { pendingPaper = p; printNow(); }
+
+  // الورقة بقالب الأكاديمية: ترويسة وتذييل ثابتان في كل صفحة، وبيانات الطالب، والتعليمات، ثم الأنشطة أو الأسئلة بمساحات الإجابة
+  function buildPaperSheet(p) {
+    var exam = ppIsExam(p), total = ppTotal(p);
+    var lines = function (n) { var s = ''; for (var i = 0; i < n; i++) s += '<div class="pp-line"></div>'; return s; };
+    var body = function (t) { return esc(t); };
+    var items = (p.items || []).map(function (it, i) {
+      return '<div class="pp-item"><div class="pp-ihead"><span class="pp-num">' + arDigits(i + 1) + '</span><span class="pp-ititle">' + (it.title ? esc(it.title) : (exam ? 'السؤال ' : 'النشاط ') + arDigits(i + 1)) + '</span>' +
+        '<span class="pp-grade"><span>الدرجة</span><b>ــ / ' + (it.points !== '' && it.points != null ? arDigits(it.points) : '') + '</b></span></div>' +
+        (it.body ? '<div class="pp-body">' + body(it.body) + '</div>' : '') + lines(Number(it.lines) || 0) + '</div>';
+    }).join('');
+    var info = '<table class="pp-info"><tr><th>اسم الطالب</th><td colspan="3"></td><th>الصف</th><td>' + esc(p.class_name || '') + '</td></tr>' +
+      '<tr><th>المادة</th><td>' + esc(p.subject) + '</td><th>التاريخ</th><td>' + (p.paper_date ? '<span dir="ltr">' + arDigits(dmy(p.paper_date)) + '</span>' : '/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;/') + '</td>' +
+      (exam ? '<th>الزمن</th><td>' + esc(p.duration || '') + '</td></tr><tr><th>الدرجة</th><td colspan="5" class="pp-score">ــــ / ' + (total ? arDigits(total) : '') + '</td></tr>'
+        : '<th>الدرس</th><td>' + esc(p.lesson || '') + '</td></tr><tr><th>التقييم</th><td colspan="5" class="pp-score">ــــ / ' + (total ? arDigits(total) : '') + '</td></tr>') + '</table>';
+    sheet.className = 'paper';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = '<img class="pp-hdr" src="paper-header.png" alt=""><img class="pp-ftr" src="paper-footer.png" alt="">' + (exam ? '' : '<img class="pp-wm" src="paper-wm.png" alt="">') +
+      '<table class="pp-frame"><thead><tr><td class="pp-top"></td></tr></thead><tfoot><tr><td class="pp-bottom"></td></tr></tfoot><tbody><tr><td class="pp-content">' +
+        '<div class="pp-title"><span>' + (exam ? 'نموذج اختبار' : 'ورقة عمل') + (p.kind !== 'worksheet' && p.kind !== 'quiz' ? ' — ' + PP_KINDS[p.kind].replace('اختبار ', '') : '') + '</span><b>' + esc(p.subject) + '</b>' +
+          (p.term ? '<small>' + esc(p.term) + '</small>' : '') + '</div>' + info +
+        (p.instructions ? '<div class="pp-instr"><b>التعليمات</b><div>' + body(p.instructions) + '</div></div>' : '') + items +
+        (exam ? '<div class="pp-notes">ملاحظات المصحح <span></span></div>' : '') +
+      '</td></tr></tbody></table>';
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/papers' || !canPapers()) return;
+    var u = ppUi(), el, p = u.edit;
+    if ((el = e.target.closest('[data-pptab]'))) { u.tab = el.getAttribute('data-pptab'); return render(); }
+    if ((el = e.target.closest('[data-ppnew]'))) { u.edit = ppNew(el.getAttribute('data-ppnew')); scrollTo(0, 0); return render(); }
+    if ((el = e.target.closest('[data-ppopen]'))) { var o = S.papers.filter(function (x) { return x.id === el.getAttribute('data-ppopen'); })[0]; if (o) { u.edit = JSON.parse(JSON.stringify(o)); scrollTo(0, 0); render(); } return; }
+    if ((el = e.target.closest('[data-ppprint]'))) { var q = S.papers.filter(function (x) { return x.id === el.getAttribute('data-ppprint'); })[0]; return q && ppPrint(q); }
+    if ((el = e.target.closest('[data-ppcopy]'))) {
+      var src = S.papers.filter(function (x) { return x.id === el.getAttribute('data-ppcopy'); })[0];
+      if (!src) return;
+      u.edit = Object.assign(JSON.parse(JSON.stringify(src)), { id: null, teacher_id: S.myStaff.id, status: 'draft', visibility: 'private', review_note: null, paper_date: todayISO() });
+      toast('نسخة جديدة — عدّلها ثم احفظها في أوراقك');
+      scrollTo(0, 0);
+      return render();
+    }
+    if (e.target.closest('[data-ppback]')) { u.edit = null; return render(); }
+    if (!p) return;
+    if (e.target.closest('[data-ppadd]')) { ppCollect(); p.items.push({ title: '', points: ppIsExam(p) ? 5 : '', body: '', lines: 4 }); return render(); }
+    if ((el = e.target.closest('[data-ppdel]'))) { ppCollect(); var di = +el.getAttribute('data-ppdel'); if (p.items[di].body || p.items[di].title) { if (!confirm('حذف هذه الفقرة؟')) return; } p.items.splice(di, 1); return render(); }
+    if ((el = e.target.closest('[data-ppup]'))) { ppCollect(); var a = +el.getAttribute('data-ppup'); p.items.splice(a - 1, 0, p.items.splice(a, 1)[0]); return render(); }
+    if ((el = e.target.closest('[data-ppdown]'))) { ppCollect(); var b = +el.getAttribute('data-ppdown'); p.items.splice(b + 1, 0, p.items.splice(b, 1)[0]); return render(); }
+    if (e.target.closest('[data-ppsave]')) { if (await ppSave()) { render(); toast('حُفظت الورقة'); } return; }
+    if (e.target.closest('[data-ppsaveprint]')) {
+      var own = !p.id || ppMine(p) || isAdmin();
+      if (own) { var sv = await ppSave(); if (!sv) return; render(); }
+      return ppPrint(p);
+    }
+    if (e.target.closest('[data-ppsubmit]')) { if (await ppSave({ status: 'submitted' })) { render(); toast('أُرسلت الورقة للمشرف التربوي'); } return; }
+    if (e.target.closest('[data-ppapprove]') || e.target.closest('[data-ppreturn]')) {
+      var ok = !!e.target.closest('[data-ppapprove]'), note = ok ? null : prompt('ملاحظة للمعلم (سبب الإعادة):', p.review_note || '');
+      if (!ok && note == null) return;
+      var r = await sb.from('papers').update({ status: ok ? 'approved' : 'returned', review_note: note, reviewed_by: (S.profile && S.profile.full_name) || displayName(S.email), reviewed_at: new Date().toISOString() }).eq('id', p.id).select().single();
+      if (r.error) return fail(r.error);
+      S.papers = S.papers.map(function (x) { return x.id === p.id ? r.data : x; });
+      u.edit = null; render();
+      return toast(ok ? 'اعتُمدت الورقة' : 'أُعيدت للمعلم');
+    }
+    if (e.target.closest('[data-ppremove]')) {
+      if (!confirm('حذف هذه الورقة نهائيًا؟')) return;
+      var d = await sb.from('papers').delete().eq('id', p.id);
+      if (d.error) return fail(d.error);
+      S.papers = S.papers.filter(function (x) { return x.id !== p.id; });
+      u.edit = null; render();
+      return toast('حُذفت الورقة');
+    }
+  });
+  document.addEventListener('change', async function (e) {
+    if (location.hash !== '#/papers' || !canPapers()) return;
+    var u = ppUi(), id = e.target.id;
+    if (id === 'pp-newkind' && e.target.value) { u.edit = ppNew(e.target.value); scrollTo(0, 0); return render(); }
+    var map = { 'pp-kind': 'kind', 'pp-teacher': 'teacher', 'pp-status': 'status' };
+    if (map[id]) { u[map[id]] = e.target.value; return render(); }
+    if (id === 'pp-review') {
+      var r = await sb.from('paper_settings').update({ review_enabled: e.target.checked }).eq('id', 1);
+      if (r.error) return fail(r.error);
+      S.ppCfg.review_enabled = e.target.checked; render();
+      return toast(e.target.checked ? 'فُعّل اعتماد المشرف التربوي' : 'عُطّل الاعتماد');
+    }
+    if (u.edit && id === 'pp-kindsel') { ppCollect(); u.edit.kind = e.target.value; return render(); }
+    if (u.edit && e.target.getAttribute('data-ppf')) u.edit[e.target.getAttribute('data-ppf')] = e.target.value;
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/papers') return;
+    var u = ppUi(), el = e.target;
+    if (el.id === 'pp-q') {
+      u.q = el.value; var pos = el.selectionStart; render();
+      var q = document.getElementById('pp-q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+      return;
+    }
+    if (!u.edit) return;
+    if (el.getAttribute('data-ppf')) u.edit[el.getAttribute('data-ppf')] = el.value;
+    if (el.hasAttribute('data-ppi')) {
+      u.edit.items[+el.getAttribute('data-ppi')][el.getAttribute('data-ppk')] = el.value;
+      var tot = document.getElementById('pp-total'); if (tot) tot.textContent = ppTotal(u.edit);
+    }
+  });
+
   async function loadMine(month) {
     if (loadingMine) return;
     loadingMine = true;
@@ -11984,6 +12278,18 @@
     S.mine = { month: month, data: r.error ? null : r.data, error: r.error ? r.error.message : '' };
     render();
   }
+  // السيرة الذاتية للعامل نفسه في «دوامي وراتبي» (بطاقة المؤهلات المعتمدة ورابطها)
+  function mineCvHtml() {
+    if (S.myCv === undefined) { S.myCv = null; sb.rpc('my_staff_cv').then(function (r) { S.myCv = r.error ? false : r.data || false; render(); }); return ''; }
+    var c = S.myCv, d = (c && c.data) || {};
+    var facts = [['المؤهل', d.degree], ['التخصص', d.major], ['الجامعة', d.university], ['التخرج', d.grad_year], ['الخبرة', d.experience_years ? d.experience_years + ' سنة' : '']].filter(function (x) { return x[1]; });
+    return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">سيرتي الذاتية</h2>' +
+      (c && c.token ? '<a class="btn primary" target="_blank" rel="noopener" href="' + esc(cvLink(c.token)) + '">فتح سيرتي الذاتية</a>' : '') +
+      '<a class="btn" href="#/papers">أوراق العمل والاختبارات</a></div>' +
+      (facts.length ? '<div class="grid2">' + facts.map(function (x) { return '<div><span class="hint" style="margin:0">' + x[0] + '</span><div><b>' + esc(x[1]) + '</b></div></div>'; }).join('') + '</div>'
+        : '<p class="hint" style="margin:0">لم تُعتمد بطاقة مؤهلاتك بعد. ترفع الإدارة سيرتك الذاتية وشهاداتك، ثم تراجع بطاقتك وتعتمدها.</p>') + '</div>';
+  }
+
   function renderMine() {
     var st = mineState(), head = '<div class="page-head"><div><h1>دوامي وراتبي</h1><p>دوامك في الشهر بحسب مواعيد دوامك.</p></div></div>';
     var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><span class="monthpick"><label class="field" for="mine-month">الشهر</label><input type="month" id="mine-month" data-ro-ok value="' + st.month + '"></span></div></div>';
@@ -12024,7 +12330,7 @@
     } else slip = '';
     app.innerHTML = head + bar +
       '<p class="hint">مواعيد دوامك: <b>' + esc(sh.name || '') + '</b> من ' + sh.time_in + ' إلى ' + sh.time_out + '. التأخير يُحسب من وقت الحضور هذا.</p>' +
-      '<div class="stats">' + card('أيام الحضور', n.present, lateDays ? 'منها ' + lateDays + ' بتأخير' : 'بلا تأخير') + card('أيام الغياب', n.absent, 'في الشهر', n.absent ? 'var(--red)' : '') +
+      mineCvHtml() + '<div class="stats">' + card('أيام الحضور', n.present, lateDays ? 'منها ' + lateDays + ' بتأخير' : 'بلا تأخير') + card('أيام الغياب', n.absent, 'في الشهر', n.absent ? 'var(--red)' : '') +
         card('الإجازات والمأموريات', n.leave + n.mission, 'إجازة ' + n.leave + ' · مأمورية ' + n.mission) + card('دقائق التأخير', lateMins, lateDays + ' يوم', lateMins ? 'var(--red)' : '') + '</div>' +
       slip +
       '<div class="card"><h2>دوام ' + esc(monthLabel(st.month)) + '</h2>' + (list.length
@@ -17637,7 +17943,8 @@
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.removeAttribute('data-pages');
-    if (pendingSign) buildSignSheet(pendingSign);
+    if (pendingPaper) buildPaperSheet(pendingPaper);
+    else if (pendingSign) buildSignSheet(pendingSign);
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
     else if (pendingCu) buildCustodySheet();
@@ -17672,6 +17979,7 @@
     else return false;
     if (sheet.classList.contains('ls')) { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
     pendingTT = null;
+    pendingPaper = null;
     pendingPay = null;
     pendingSign = null;
     pendingStList = null;
