@@ -110,3 +110,9 @@ begin
     'data', (r -> 'data') - 'unsure' - 'pages');
 end $$;
 grant execute on function public.my_staff_cv() to authenticated;
+
+-- ورقة جاهزة: يرفع المعلم صورة أو PDF لورقة أعدّها من قبل، فتُطبع بترويسة الأكاديمية وتذييلها.
+-- الملفات في Cloudflare R2 (دالة staff-files)، وهنا أسماؤها فقط.
+alter table public.papers
+  add column if not exists mode text not null default 'build',   -- build: محتوى يُكتب في الموقع؛ scan: صور أو PDF جاهزة
+  add column if not exists files jsonb not null default '[]';     -- [{key, name, mime, size}]

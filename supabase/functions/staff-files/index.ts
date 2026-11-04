@@ -44,6 +44,33 @@ Deno.serve(async (req) => {
   if (!u?.user) return json({ error: "forbidden" }, 403);
   const body = await req.json().catch(() => ({}));
 
+  // Files of a ready-made worksheet or exam (papers.mode = 'scan'): the owner uploads and deletes, and whoever may read
+  // the paper (its owner, colleagues when it is shared, the management) opens them. papers' row-level security decides.
+  if (typeof body?.action === "string" && body.action.startsWith("paper_")) {
+    const { data: paper } = await db.from("papers").select("id, teacher_id, files").eq("id", String(body.paper_id ?? "")).maybeSingle();
+    if (!paper) return json({ error: "not found" }, 404);
+    const { data: me } = await db.rpc("my_teacher_id");
+    const { data: role } = await db.rpc("my_role");
+    const owner = paper.teacher_id === me || role === "superadmin";
+    if (body.action === "paper_upload") {
+      if (!owner) return json({ error: "forbidden" }, 403);
+      const name = String(body.name ?? "").trim().slice(0, 200), size = Number(body.size);
+      if (!name || !(size > 0) || size > MAX_SIZE) return json({ error: "الملف فارغ أو أكبر من 50 ميجابايت" }, 400);
+      const ext = (/\.([A-Za-z0-9]{1,6})$/.exec(name)?.[1] ?? "bin").toLowerCase();
+      const key = `papers/${paper.id}/${crypto.randomUUID()}.${ext}`;
+      return json({ key, url: await presign("PUT", key) });
+    }
+    const key = String(body.key ?? "");
+    if (!key.startsWith(`papers/${paper.id}/`)) return json({ error: "bad key" }, 400);
+    if (body.action === "paper_open") return json({ url: await presign("GET", key) });
+    if (body.action === "paper_delete") {
+      if (!owner) return json({ error: "forbidden" }, 403);
+      const res = await r2.fetch(objUrl(key), { method: "DELETE" });
+      return res.ok || res.status === 404 ? json({ ok: true }) : json({ error: `R2 answered ${res.status}` }, 502);
+    }
+    return json({ error: "unknown action" }, 400);
+  }
+
   if (body?.action === "upload") {
     const name = String(body.name ?? "").trim().slice(0, 200), size = Number(body.size);
     if (!name || !(size > 0) || size > MAX_SIZE) return json({ error: "الملف فارغ أو أكبر من 50 ميجابايت" }, 400);

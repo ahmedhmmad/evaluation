@@ -450,6 +450,8 @@
   #print-sheet.paper .pp-line { height: 8.5mm; border-bottom: .8pt dotted #9AA3AE; margin: 0 2mm; }
   #print-sheet.paper .pp-notes { margin-top: 6mm; color: #0B2F5A; font-weight: 700; display: flex; gap: 3mm; break-inside: avoid; }
   #print-sheet.paper .pp-notes span { flex: 1; border-bottom: .8pt dotted #9AA3AE; }
+  #print-sheet.paper .pp-scan { height: 297mm; box-sizing: border-box; padding: 23mm 10mm 21mm; display: flex; align-items: center; justify-content: center; }
+  #print-sheet.paper .pp-scan img { max-width: 100%; max-height: 100%; object-fit: contain; }
   #print-sheet.pay-reg section.pr-page { padding-top: 8mm; }
   #print-sheet.pay-reg table.rz tbody td { color: #000; font-weight: 600; line-height: 1.3; padding-inline: 3px; }
   #print-sheet.pay-reg table.rz thead th { font-size: .82em; padding: 4px 1px; white-space: nowrap; }
@@ -1281,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '05/11 — 1';
+  var APP_BUILD = '05/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -12026,6 +12028,10 @@
   function arDigits(v) { return String(v).replace(/\d/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'[d]; }); }
   function ppTotal(p) { return (p.items || []).reduce(function (s, it) { return s + (Number(it.points) || 0); }, 0); }
   function ppUi() { return ui.pp || (ui.pp = { tab: S.myStaff ? 'mine' : 'all', q: '', kind: '', teacher: '', status: '', edit: null }); }
+  // مباحث وشعب معلم الورقة: من سجله؛ وإن لم تُسجَّل فكل الشعب وإدخال حر للمادة
+  function ppTeacherRow(p) { return (S.ppMe && S.ppMe.id === p.teacher_id ? S.ppMe : null) || find(p.teacher_id) || null; }
+  function ppSubjects(p) { var t = ppTeacherRow(p); return t ? splitList(String(t.subject || '').replace(/،/g, ',')) : []; }
+  function ppClasses(p) { var t = ppTeacherRow(p), own = t ? splitList(String(t.classes || '').replace(/،/g, ',')) : []; return own.length ? own : schoolClasses(); }
   function ppMine(p) { return S.myStaff && p.teacher_id === S.myStaff.id; }
 
   async function loadPapers() {
@@ -12034,13 +12040,15 @@
     S.papers = r.data || [];
     var c = await sb.from('paper_settings').select('*').eq('id', 1).maybeSingle();
     S.ppCfg = c.data || { review_enabled: false };
+    // مباحث المعلم وشعبه من سجله في «بيانات العاملين»
+    var me = S.myStaff ? await sb.from('teachers').select('id, name, subject, classes').eq('id', S.myStaff.id).maybeSingle() : { data: null };
+    S.ppMe = me.data || null;
     render();
   }
 
-  function ppNew(kind) {
-    var me = S.myStaff ? find(S.myStaff.id) : null;
-    var n = kind === 'worksheet' ? 3 : 3;
-    return { id: null, teacher_id: S.myStaff ? S.myStaff.id : '', kind: kind || 'worksheet', subject: me ? String(me.subject || '').split(/[،,]/)[0].trim() : '', class_name: '', lesson: '',
+  function ppNew(kind, mode) {
+    var n = mode === 'scan' ? 0 : 3, base = { teacher_id: S.myStaff ? S.myStaff.id : '' }, subs = ppSubjects(base), cls = ppClasses(base);
+    return { id: null, mode: mode || 'build', files: [], teacher_id: base.teacher_id, kind: kind || 'worksheet', subject: subs[0] || '', class_name: cls.length === 1 ? cls[0] : '', lesson: '',
       term: PP_TERMS[0], paper_date: todayISO(), duration: '', instructions: '', visibility: 'private', status: 'draft',
       items: Array.apply(null, Array(n)).map(function () { return { title: '', points: kind === 'worksheet' ? '' : 5, body: '', lines: 4 }; }) };
   }
@@ -12074,7 +12082,7 @@
       var t = find(p.teacher_id), st = PP_STATUS[p.status] || PP_STATUS.draft;
       return '<tr><td><b>' + PP_KINDS[p.kind] + '</b></td><td>' + esc(p.subject || '—') + '</td><td>' + esc(p.class_name || '—') + '</td><td>' + esc(p.lesson || '') + '</td>' +
         '<td style="white-space:nowrap">' + (p.paper_date ? dmy(p.paper_date) : '') + '</td>' + (u.tab !== 'mine' ? '<td>' + esc(t ? t.name : '') + '</td>' : '') +
-        '<td>' + (p.items || []).length + (ppTotal(p) ? ' · ' + ppTotal(p) + ' درجة' : '') + '</td>' +
+        '<td>' + (p.mode === 'scan' ? 'ورقة جاهزة · ' + (p.files || []).length + ' ملف' : (p.items || []).length + (ppTotal(p) ? ' · ' + ppTotal(p) + ' درجة' : '')) + '</td>' +
         '<td>' + (p.visibility === 'public' ? '<span class="badge published">منشورة</span>' : '<span class="badge pending">خاصة</span>') + '</td>' +
         (rev ? '<td><span class="badge ' + st[0] + '">' + st[1] + '</span>' + (p.status === 'returned' && p.review_note ? '<div class="hint" style="margin:2px 0 0">' + esc(p.review_note) + '</div>' : '') + '</td>' : '') +
         '<td><div class="acts"><button type="button" class="btn" data-ppopen="' + p.id + '">' + (ppMine(p) || isAdmin() ? 'فتح' : 'عرض') + '</button>' +
@@ -12083,6 +12091,7 @@
     }).join('');
     return '<div class="toolbar" style="align-items:center">' + tabs.map(function (t) { return '<button type="button" class="btn' + (u.tab === t[0] ? ' primary' : '') + '" data-pptab="' + t[0] + '">' + t[1] + '</button>'; }).join('') +
         '<span style="flex:1"></span>' + (S.myStaff || isAdmin() ? Object.keys(PP_KINDS).map(function (k) { return k === 'worksheet' || k === 'quiz' ? '<button type="button" class="btn primary" data-ppnew="' + k + '">+ ' + PP_KINDS[k] + '</button>' : ''; }).join('') +
+          '<button type="button" class="btn" data-ppscan title="صورة أو PDF لورقة أعددتها من قبل، تُطبع بترويسة الأكاديمية وتذييلها">+ ورقة جاهزة (صورة أو PDF)</button>' +
           '<select id="pp-newkind" style="width:auto"><option value="">+ اختبار آخر…</option>' + ['monthly', 'midterm', 'final'].map(function (k) { return opt(k, PP_KINDS[k], ''); }).join('') + '</select>' : '') + '</div>' +
       '<div class="toolbar" style="align-items:center"><input type="search" id="pp-q" placeholder="المادة أو الشعبة أو الدرس أو المعلم" value="' + esc(u.q) + '" style="max-width:260px">' +
         '<select id="pp-kind" style="width:auto">' + opt('', 'كل الأنواع', u.kind) + Object.keys(PP_KINDS).map(function (k) { return opt(k, PP_KINDS[k], u.kind); }).join('') + '</select>' +
@@ -12118,18 +12127,24 @@
         (isAdmin() && !S.myStaff || isAdmin() && p.teacher_id !== (S.myStaff && S.myStaff.id) ? f('pp-teacherid', 'المعلم', '<select id="pp-teacherid"' + ro + '>' + opt('', '— اختر —', p.teacher_id) +
           S.teachers.filter(function (x) { return !x.not_staff; }).map(function (x) { return opt(x.id, x.name, p.teacher_id); }).join('') + '</select>') : '') +
         f('pp-kindsel', 'النوع', '<select id="pp-kindsel"' + ro + '>' + Object.keys(PP_KINDS).map(function (k) { return opt(k, PP_KINDS[k], p.kind); }).join('') + '</select>') +
-        f('pp-subject', 'المادة', '<input id="pp-subject" data-ppf="subject" value="' + esc(p.subject) + '"' + ro + '>') +
-        f('pp-class', 'الصف / الشعبة', '<select id="pp-class" data-ppf="class_name"' + ro + '>' + opt('', '— اختر —', p.class_name) + schoolClasses().map(function (c) { return opt(c, c, p.class_name); }).join('') + '</select>') +
+        (function () {
+          var subs = ppSubjects(p), cls = ppClasses(p);
+          if (p.subject && subs.length && subs.indexOf(p.subject) < 0) subs = subs.concat([p.subject]);
+          if (p.class_name && cls.indexOf(p.class_name) < 0) cls = cls.concat([p.class_name]);
+          return f('pp-subject', 'المادة', subs.length ? '<select id="pp-subject" data-ppf="subject"' + ro + '>' + subs.map(function (x) { return opt(x, x, p.subject); }).join('') + '</select>'
+              : '<input id="pp-subject" data-ppf="subject" value="' + esc(p.subject) + '" placeholder="لم تُسجَّل مباحثك في بياناتك"' + ro + '>') +
+            f('pp-class', 'الصف / الشعبة', '<select id="pp-class" data-ppf="class_name"' + ro + '>' + opt('', '— اختر —', p.class_name) + cls.map(function (c) { return opt(c, c, p.class_name); }).join('') + '</select>');
+        })() +
         (exam ? f('pp-duration', 'الزمن', '<input id="pp-duration" data-ppf="duration" placeholder="مثلًا: 45 دقيقة" value="' + esc(p.duration) + '"' + ro + '>')
           : f('pp-lesson', 'الدرس', '<input id="pp-lesson" data-ppf="lesson" value="' + esc(p.lesson) + '"' + ro + '>')) +
         (exam ? f('pp-lesson', 'الوحدة / الدروس (اختياري، لا تُطبع)', '<input id="pp-lesson" data-ppf="lesson" value="' + esc(p.lesson) + '"' + ro + '>') : '') +
         f('pp-date', 'التاريخ', '<input type="date" id="pp-date" data-ppf="paper_date" value="' + esc(p.paper_date || '') + '"' + ro + '>') +
         f('pp-term', 'الفصل الدراسي', '<select id="pp-term" data-ppf="term"' + ro + '>' + PP_TERMS.map(function (x) { return opt(x, x, p.term); }).join('') + '</select>') +
       '</div>' +
-      '<label class="field" for="pp-instr">التعليمات</label><textarea id="pp-instr" data-ppf="instructions" rows="3" style="width:100%" placeholder="تعليمات ' + (exam ? 'الاختبار' : 'ورقة العمل') + ' (تُطبع في إطار أعلى الورقة)"' + ro + '>' + esc(p.instructions) + '</textarea>' +
-      '</div>' +
-      '<h2 style="margin:16px 0 0">' + (exam ? 'الأسئلة' : 'الأنشطة') + ' <span class="hint" style="margin:0">— المجموع: <b id="pp-total">' + ppTotal(p) + '</b> درجة</span></h2>' + items +
-      (own ? '<button type="button" class="btn" data-ppadd>+ ' + (exam ? 'سؤال' : 'نشاط') + '</button>' : '') +
+      (p.mode === 'scan' ? '' : '<label class="field" for="pp-instr">التعليمات</label><textarea id="pp-instr" data-ppf="instructions" rows="3" style="width:100%" placeholder="تعليمات ' + (exam ? 'الاختبار' : 'ورقة العمل') + ' (تُطبع في إطار أعلى الورقة)"' + ro + '>' + esc(p.instructions) + '</textarea>') +
+      '</div>' + (p.mode === 'scan' ? ppScanHtml(p, own) : '') +
+      (p.mode === 'scan' ? '' : '<h2 style="margin:16px 0 0">' + (exam ? 'الأسئلة' : 'الأنشطة') + ' <span class="hint" style="margin:0">— المجموع: <b id="pp-total">' + ppTotal(p) + '</b> درجة</span></h2>' + items +
+      (own ? '<button type="button" class="btn" data-ppadd>+ ' + (exam ? 'سؤال' : 'نشاط') + '</button>' : '')) +
       '<div class="card" style="position:sticky;bottom:0;z-index:2;margin-top:12px"><div class="toolbar" style="align-items:center;margin:0">' +
         (own ? '<label class="check"><input type="checkbox" id="pp-public"' + (p.visibility === 'public' ? ' checked' : '') + '> نشر الورقة لزملائي</label>' +
           '<button type="button" class="btn primary" data-ppsave>حفظ</button>' : '') +
@@ -12153,7 +12168,7 @@
     if (!p.teacher_id) return toast('اختر المعلم', true), null;
     if (!p.subject.trim()) return toast('اكتب المادة', true), null;
     var row = { teacher_id: p.teacher_id, kind: p.kind, subject: p.subject.trim(), class_name: p.class_name, lesson: p.lesson.trim(), term: p.term, paper_date: p.paper_date || null,
-      duration: p.duration.trim(), instructions: p.instructions, visibility: p.visibility,
+      duration: p.duration.trim(), instructions: p.instructions, visibility: p.visibility, mode: p.mode || 'build', files: p.files || [],
       items: p.items.map(function (it) { return { title: String(it.title || '').trim(), points: it.points === '' || it.points == null ? '' : Number(it.points), body: String(it.body || ''), lines: Math.max(0, Math.min(25, Number(it.lines) || 0)) }; }) };
     Object.assign(row, extra || {});
     var r = p.id ? await sb.from('papers').update(row).eq('id', p.id).select().single() : await sb.from('papers').insert(row).select().single();
@@ -12165,11 +12180,72 @@
     return saved;
   }
 
+  // ورقة جاهزة: صفحاتها صور أو PDF، كل صفحة تُطبع بين ترويسة الأكاديمية وتذييلها
+  function ppScanHtml(p, own) {
+    var fl = p.files || [], busy = ppUi().busy;
+    return '<div class="card"><h2 style="margin-top:0">صفحات الورقة (' + fl.length + ')</h2>' +
+      (fl.length ? '<div class="table-wrap"><table class="grid"><tbody>' + fl.map(function (x, i) {
+        return '<tr><td>' + arDigits(i + 1) + '</td><td><b>' + esc(x.name) + '</b></td><td><div class="acts"><button type="button" class="btn" data-ppfopen="' + i + '">فتح</button>' +
+          (own ? '<button type="button" class="btn" data-ppfup="' + i + '"' + (i ? '' : ' disabled') + '>▲</button><button type="button" class="btn danger" data-ppfdel="' + i + '">حذف</button>' : '') + '</div></td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">لم تُرفع صفحات بعد.</div>') +
+      (own ? '<div class="toolbar" style="margin:10px 0 0"><button type="button" class="btn primary" data-ppfpick' + (busy ? ' disabled' : '') + '>' + (busy ? esc(busy) : 'رفع صور أو PDF…') + '</button>' +
+        '<input type="file" id="pp-files" multiple hidden accept="image/jpeg,image/png,image/webp,.pdf"></div>' : '') +
+      '<p class="hint">صورة لكل صفحة، أو ملف PDF بصفحاته. عند الطباعة توضع كل صفحة بين ترويسة الأكاديمية في الأعلى وبياناتها في الأسفل. ' +
+        'الأفضل صورة واضحة للورقة بلا هوامش كبيرة، وبلا ترويسة قديمة.</p></div>';
+  }
+
+  async function ppUploadFiles(files) {
+    var u = ppUi(), p = u.edit;
+    if (!p.id) { var sv = await ppSave(); if (!sv) return; }
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      u.busy = 'جارٍ رفع ' + (i + 1) + ' من ' + files.length + '…'; render();
+      var r = await sb.functions.invoke('staff-files', { body: { action: 'paper_upload', paper_id: p.id, name: file.name, size: file.size, mime: file.type } });
+      var ok = false;
+      if (!r.error && r.data && r.data.url) { try { ok = (await fetch(r.data.url, { method: 'PUT', body: file })).ok; } catch (err) { ok = false; } }
+      if (!ok) { toast('تعذّر رفع «' + file.name + '»' + (r.error ? ': ' + r.error.message : ''), true); continue; }
+      p.files.push({ key: r.data.key, name: file.name, mime: file.type, size: file.size });
+    }
+    u.busy = null;
+    if (await ppSave()) toast('رُفعت الصفحات');
+    render();
+  }
+
+  async function ppFileBlob(p, x) {
+    var r = await sb.functions.invoke('staff-files', { body: { action: 'paper_open', paper_id: p.id, key: x.key } });
+    if (r.error || !r.data) throw new Error('تعذّر فتح «' + x.name + '»');
+    var b = await (await fetch(r.data.url)).blob();
+    return new File([b], x.name, { type: x.mime || b.type });
+  }
+
   var pendingPaper = null;
-  function ppPrint(p) { pendingPaper = p; printNow(); }
+  async function ppPrint(p) {
+    if (p.mode === 'scan') {
+      if (!(p.files || []).length) return toast('ارفع صفحات الورقة أولًا', true);
+      var keep = SCAN_MAX_SIDE, imgs = [];
+      SCAN_MAX_SIDE = 2400;
+      toast('جارٍ تجهيز الصفحات للطباعة…');
+      try {
+        for (var i = 0; i < p.files.length; i++) imgs = imgs.concat(await scanFilePages(await ppFileBlob(p, p.files[i])));
+      } catch (err) { SCAN_MAX_SIDE = keep; return toast(err.message || String(err), true); }
+      SCAN_MAX_SIDE = keep;
+      p = Object.assign({}, p, { _imgs: imgs });
+    }
+    pendingPaper = p;
+    printNow();
+  }
 
   // الورقة بقالب الأكاديمية: ترويسة وتذييل ثابتان في كل صفحة، وبيانات الطالب، والتعليمات، ثم الأنشطة أو الأسئلة بمساحات الإجابة
   function buildPaperSheet(p) {
+    if (p.mode === 'scan') {
+      sheet.className = 'paper';
+      sheet.removeAttribute('data-fit');
+      sheet.innerHTML = '<img class="pp-hdr" src="paper-header.png" alt=""><img class="pp-ftr" src="paper-footer.png" alt="">' +
+        (p._imgs || []).map(function (im, i, a) {
+          return '<div class="pp-scan"' + (i < a.length - 1 ? ' style="break-after:page;page-break-after:always"' : '') + '><img src="data:' + im.media_type + ';base64,' + im.data + '" alt=""></div>';
+        }).join('');
+      return;
+    }
     var exam = ppIsExam(p), total = ppTotal(p);
     var lines = function (n) { var s = ''; for (var i = 0; i < n; i++) s += '<div class="pp-line"></div>'; return s; };
     var body = function (t) { return esc(t); };
@@ -12198,6 +12274,7 @@
     var u = ppUi(), el, p = u.edit;
     if ((el = e.target.closest('[data-pptab]'))) { u.tab = el.getAttribute('data-pptab'); return render(); }
     if ((el = e.target.closest('[data-ppnew]'))) { u.edit = ppNew(el.getAttribute('data-ppnew')); scrollTo(0, 0); return render(); }
+    if (e.target.closest('[data-ppscan]')) { u.edit = ppNew('worksheet', 'scan'); scrollTo(0, 0); return render(); }
     if ((el = e.target.closest('[data-ppopen]'))) { var o = S.papers.filter(function (x) { return x.id === el.getAttribute('data-ppopen'); })[0]; if (o) { u.edit = JSON.parse(JSON.stringify(o)); scrollTo(0, 0); render(); } return; }
     if ((el = e.target.closest('[data-ppprint]'))) { var q = S.papers.filter(function (x) { return x.id === el.getAttribute('data-ppprint'); })[0]; return q && ppPrint(q); }
     if ((el = e.target.closest('[data-ppcopy]'))) {
@@ -12210,6 +12287,21 @@
     }
     if (e.target.closest('[data-ppback]')) { u.edit = null; return render(); }
     if (!p) return;
+    if (e.target.closest('[data-ppfpick]')) { ppCollect(); return document.getElementById('pp-files').click(); }
+    if ((el = e.target.closest('[data-ppfopen]'))) {
+      var w = window.open('', '_blank'), fx = p.files[+el.getAttribute('data-ppfopen')];
+      var ro = await sb.functions.invoke('staff-files', { body: { action: 'paper_open', paper_id: p.id, key: fx.key } });
+      if (ro.error || !ro.data) { if (w) w.close(); return toast('تعذّر فتح الملف', true); }
+      if (w) w.location = ro.data.url;
+      return;
+    }
+    if ((el = e.target.closest('[data-ppfup]'))) { var fu = +el.getAttribute('data-ppfup'); p.files.splice(fu - 1, 0, p.files.splice(fu, 1)[0]); await ppSave(); return render(); }
+    if ((el = e.target.closest('[data-ppfdel]'))) {
+      var fi = +el.getAttribute('data-ppfdel'), fd = p.files[fi];
+      if (!confirm('حذف «' + fd.name + '» من الورقة؟')) return;
+      await sb.functions.invoke('staff-files', { body: { action: 'paper_delete', paper_id: p.id, key: fd.key } });
+      p.files.splice(fi, 1); await ppSave(); return render();
+    }
     if (e.target.closest('[data-ppadd]')) { ppCollect(); p.items.push({ title: '', points: ppIsExam(p) ? 5 : '', body: '', lines: 4 }); return render(); }
     if ((el = e.target.closest('[data-ppdel]'))) { ppCollect(); var di = +el.getAttribute('data-ppdel'); if (p.items[di].body || p.items[di].title) { if (!confirm('حذف هذه الفقرة؟')) return; } p.items.splice(di, 1); return render(); }
     if ((el = e.target.closest('[data-ppup]'))) { ppCollect(); var a = +el.getAttribute('data-ppup'); p.items.splice(a - 1, 0, p.items.splice(a, 1)[0]); return render(); }
@@ -12232,6 +12324,7 @@
     }
     if (e.target.closest('[data-ppremove]')) {
       if (!confirm('حذف هذه الورقة نهائيًا؟')) return;
+      for (var k = 0; k < (p.files || []).length; k++) await sb.functions.invoke('staff-files', { body: { action: 'paper_delete', paper_id: p.id, key: p.files[k].key } });
       var d = await sb.from('papers').delete().eq('id', p.id);
       if (d.error) return fail(d.error);
       S.papers = S.papers.filter(function (x) { return x.id !== p.id; });
@@ -12250,6 +12343,14 @@
       if (r.error) return fail(r.error);
       S.ppCfg.review_enabled = e.target.checked; render();
       return toast(e.target.checked ? 'فُعّل اعتماد المشرف التربوي' : 'عُطّل الاعتماد');
+    }
+    if (u.edit && id === 'pp-files' && e.target.files.length) return ppUploadFiles(Array.prototype.slice.call(e.target.files));
+    if (u.edit && id === 'pp-teacherid') {
+      ppCollect();
+      var subs = ppSubjects(u.edit), cls = ppClasses(u.edit);
+      u.edit.subject = subs[0] || u.edit.subject;
+      if (cls.indexOf(u.edit.class_name) < 0) u.edit.class_name = cls.length === 1 ? cls[0] : '';
+      return render();
     }
     if (u.edit && id === 'pp-kindsel') { ppCollect(); u.edit.kind = e.target.value; return render(); }
     if (u.edit && e.target.getAttribute('data-ppf')) u.edit[e.target.getAttribute('data-ppf')] = e.target.value;
