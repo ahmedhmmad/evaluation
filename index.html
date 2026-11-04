@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 8';
+  var APP_BUILD = '04/11 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -4790,7 +4790,7 @@
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span>' + pickupInput(m, x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
         '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + shareOf({ student_id: x.id, share: null }) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
-        (ex ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
+        (ex ? exReceiptCells(p, rec) :
         receiptCells(p, rec)) +
         '<td><span class="badge ' + badge[0] + '">' + badge[1] + '</span>' + (ex ? '<br><span style="color:var(--muted);font-size:.8rem">' + exemptText(m) + '</span>' : rideBadge(rideState(m, Math.max(0, sh - p)))) + (p > 0 ? '<br><span style="color:var(--muted);font-size:.8rem">' + esc(issuedNote(rec)) + '</span>' : '') + '</td>' +
         '<td class="no-print" style="white-space:nowrap">' + (p > 0 ? '<button type="button" class="btn" data-mreceipt="' + x.id + '">إيصال</button> <button type="button" class="btn danger" data-mvoid="' + x.id + '" title="حذف الإيصال (يُحفظ في الأرشيف)">حذف</button> ' : '') + (sh > p && !ex ? '<button type="button" class="btn" data-mfull="' + x.id + '">دفع كامل</button> ' : '') +
@@ -6055,7 +6055,7 @@
       var famNote = familyNote(x.id);
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون شعبة') + (famNote ? ' · ' + famNote : '') + '</span></td>' +
         '<td class="bus"><a href="#/transport/' + r.g.id + '">' + esc(r.g.assembly_point) + '</a></td><td>' + (r.exempt ? '<span style="color:#6d28d9">إعفاء</span>' : plainNum(r.share)) + '</td>' +
-        (r.exempt ? '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>' :
+        (r.exempt ? exReceiptCells(r.paid, rec) :
         receiptCells(r.paid, rec)) +
         '<td>' + (r.status === 'none' ? '—' : '<span class="badge ' + r.status + '">' + PAY_STATUS[r.status] + '</span>') +
           (r.paid ? '<br><span dir="ltr" style="color:var(--muted);font-size:.85rem">' + (issuedWhen(rec) || dmy(rec.paid_on)) + '</span>' + (rec.issued_by ? '<br><span style="color:var(--muted);font-size:.85rem">' + esc(rec.issued_by) + '</span>' : '') : '') + '</td>' +
@@ -6210,6 +6210,13 @@
   }
 
   // ما تحت خانة البحث: الطالب المختار، أو قائمة المطابقين، أو رسالة
+  // المعفى: لا يُحصَّل منه شيء؛ وإن صدر له إيصال في شهر إعفائه يظهر الإيصال تنبيهًا ليُحذف إن لم يُستلم المال
+  function exReceiptCells(p, rec) {
+    if (!(p > 0)) return '<td style="color:#6d28d9">—</td><td style="color:#6d28d9">لا يُحصَّل منه شيء</td>';
+    return '<td style="color:var(--red)"><b>' + plainNum(p) + '</b></td><td><span class="badge unpaid">إيصال ' + (rec.receipt_no != null ? rec.receipt_no : '') + ' صدر رغم الإعفاء</span>' +
+      '<div class="hint" style="margin:2px 0 0">إن لم يُستلم مال فاحذفه (يُحفظ في الأرشيف)</div></td>';
+  }
+
   function deskBodyHtml() {
     var st = ui.rcStaff && find(ui.rcStaff);
     if (st) return staffDeskHtml(st);
@@ -6245,6 +6252,7 @@
     var x = findStudent(ui.rcStudent), amount = Number(document.getElementById('rc-amount').value);
     if (!x) return;
     if (!(amount > 0)) return toast('اكتب مبلغًا أكبر من صفر.', true);
+    if (exemptIn(memberOf(x.id), ui.tMonth) && !confirm('«' + x.full_name + '» معفى من اشتراك ' + tLabel(ui.tMonth) + ' ولا يُحصَّل منه شيء.\nإصدار إيصال بمبلغ ' + money(amount) + ' رغم ذلك؟ لا تفعل إلا إن استلمت المال فعلًا.')) return;
     var prev = (S.tPay[ui.tMonth] || {})[x.id];
     // جدول الإيصالات المكمِّلة قد يكون جُهّز بعد فتح الصفحة: يُفحص من جديد قبل الدمج بالطريقة القديمة
     if (prev && prev.amount > 0 && S.topupMissing) await loadTopups(ui.tMonth);
