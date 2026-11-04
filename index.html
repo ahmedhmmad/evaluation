@@ -1250,7 +1250,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '04/11 — 7';
+  var APP_BUILD = '04/11 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -7117,7 +7117,7 @@
         var v = t.days[d];
         return '<tr><td style="white-space:nowrap">' + dayName(d) + ' ' + dmy(d) + '</td><td>' + v.n + '</td>' + Object.keys(PAY_METHODS).map(function (k) { return '<td>' + (v.by[k] ? plainNum(v.by[k]) : '—') + '</td>'; }).join('') + '<td><b>' + plainNum(v.sum) + '</b></td></tr>';
       }).join('') + '</tbody></table></div></details>' : '';
-    return head + filters + stats + ledRefCardHtml(list) +
+    return head + filters + stats + ledRefCardHtml(list) + ledExemptCardHtml() +
       '<div class="card"><h2 style="margin-top:0">الدفعات (' + list.length + ')</h2>' + (rows
         ? '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>رقم الإيصال</th><th>تاريخ السداد</th><th>الطالب</th><th>عن شهر</th><th>المبلغ (ج.م)</th><th>وسيلة الدفع</th><th>رقم الدفع</th><th>المسجِّل والوقت</th></tr></thead><tbody>' + rows +
           '</tbody><tfoot><tr><td colspan="5">المجموع</td><td>' + plainNum(t.sum) + '</td><td colspan="3"></td></tr></tfoot></table></div>'
@@ -7153,6 +7153,38 @@
   var pendingLed = false;
 
   // صفحة غلاف سجل الدفعات: إحصائية المحصَّل حسب وسيلة الدفع، وحسب الرقم المحوَّل إليه لغير النقد، وتشغل صفحة كاملة
+  // المعفون في دورات فترة السجل: الطلاب والموظفون (المعلمون وغيرهم)، بلا مبلغ، خارج المحصَّل
+  function ledExempts() {
+    var l = ledState(), a = currentCycle(l.loadedFrom || l.from), b = currentCycle(l.loadedTo || l.to), keys = [];
+    for (var k = a, i = 0; k <= b && i < 24; k = shiftMonth(k, 1), i++) keys.push(k);
+    var months = function (m) { return keys.filter(function (k) { return exemptIn(m, k); }); };
+    var rows = [];
+    S.tMembers.forEach(function (m) {
+      var x = findStudent(m.student_id), g = findGroup(m.group_id), ks = x ? months(m) : [];
+      if (ks.length) rows.push({ staff: false, name: x.full_name, cls: x.class_name || '', bus: g ? g.assembly_point : '', ks: ks, note: m.exempt_note || '' });
+    });
+    (S.sMembers || []).forEach(function (m) {
+      var t = find(m.staff_id), g = findGroup(m.group_id), ks = t ? months(m) : [];
+      if (ks.length) rows.push({ staff: true, name: t.name, cls: 'موظف', bus: g ? g.assembly_point : '', ks: ks, note: m.exempt_note || '' });
+    });
+    rows.sort(function (p, q) { return (p.staff - q.staff) || p.name.localeCompare(q.name, 'ar'); });
+    return { rows: rows, students: rows.filter(function (r) { return !r.staff; }).length, staff: rows.filter(function (r) { return r.staff; }).length };
+  }
+  function ledExemptTable(E, print) {
+    var th = print ? 'th' : 'th';
+    return '<table class="' + (print ? 'rz' : 'grid') + '"><thead><tr><' + th + '>م</' + th + '><' + th + '>الاسم</' + th + '><' + th + '>الشعبة</' + th + '><' + th + '>الباص</' + th + '><' + th + '>دورات الإعفاء</' + th + '><' + th + '>السبب</' + th + '></tr></thead><tbody>' +
+      E.rows.map(function (r, i) {
+        return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(r.name) + (r.staff ? ' <b style="color:#6d28d9">(موظف)</b>' : '') + '</td><td class="c">' + esc(r.cls) + '</td><td class="c">' + esc(r.bus) + '</td>' +
+          '<td class="c">' + r.ks.map(tLabel).join('، ') + '</td><td>' + esc(r.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  function ledExemptCardHtml() {
+    var E = ledExempts();
+    if (!E.rows.length) return '';
+    return '<div class="card"><h2 style="margin-top:0">المعفون في هذه الفترة — طلاب: ' + E.students + '، موظفون: ' + E.staff + '</h2>' +
+      '<p class="hint">لا مبلغ لهم، ولا يدخلون في المحصَّل ولا المطلوب.</p><div class="table-wrap">' + ledExemptTable(E) + '</div></div>';
+  }
+
   function ledCoverHtml(list, t) {
     var R = ledRefSummary(list), pct = function (v) { return t.sum ? Math.round(v / t.sum * 1000) / 10 + '%' : '—'; };
     var th = function (a) { return '<tr>' + a.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr>'; };
@@ -7169,6 +7201,7 @@
         '<tr class="total"><td class="c">المجموع</td><td class="c">' + t.n + '</td><td class="c">' + plainNum(t.sum) + '</td><td class="c">100%</td></tr></tbody></table>' +
       (refs.length ? '<div class="rsec">حسب الرقم المحوَّل إليه</div><table class="rz"><thead>' + th(['وسيلة الدفع', 'الرقم المحوَّل إليه', 'عدد الدفعات', 'المبلغ (ج.م)', 'النسبة']) + '</thead><tbody>' +
         refs.map(function (g) { return '<tr><td class="c">' + PAY_METHODS[g.method] + '</td><td class="c" dir="ltr"><b>' + esc(ledRefLabel(g)) + '</b></td><td class="c">' + g.n + '</td><td class="c"><b>' + plainNum(g.sum) + '</b></td><td class="c">' + pct(g.sum) + '</td></tr>'; }).join('') + '</tbody></table>' : '') +
+      (function () { var E = ledExempts(); return E.rows.length ? '<div class="rsec">الإعفاءات (بلا مبلغ، خارج المحصَّل) — طلاب: ' + E.students + '، موظفون: ' + E.staff + '</div>' + ledExemptTable(E, true) : ''; })() +
       '</div>';
   }
 
