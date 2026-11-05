@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '05/11 — 2';
+  var APP_BUILD = '05/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -16665,6 +16665,9 @@
     return { state: paid > 0 && paid >= due ? 'دفع' : paid > 0 ? 'دفع جزئيًا' : 'لم يدفع', due: due, paid: paid, rec: rec };
   }
 
+  // يوم اعتماد التسجيل النهائي (لمن لم يُعتمد بعد: لا يوم)
+  function repRegDay(x) { return stStatus(x) === 'final' && x.finalized_at ? String(x.finalized_at).slice(0, 10) : ''; }
+
   function repState() {
     if (!ui.rep) ui.rep = { scope: 'enrolled', filters: [], g1: 'class_name', g2: 'gender', cols: ['full_name', 'national_id', 'class_name', 'gender'], title: '' };
     return ui.rep;
@@ -16693,6 +16696,7 @@
       { k: '_tpaidon', label: 'تاريخ الدفع', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 && t.rec.paid_on ? dmy(t.rec.paid_on) : ''; } },
       { k: '_tmethod', label: 'وسيلة الدفع', cat: true, get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 ? PAY_METHODS[repPayMethod(t.rec)] : ''; } },
       { k: '_tref', label: 'الرقم المحوَّل إليه', get: function (x) { var t = repTpayOf(x); return t && t.paid > 0 ? repPayRef(t.rec) : ''; } },
+      { k: '_regdate', label: 'تاريخ التسجيل النهائي', get: function (x) { var d = repRegDay(x); return d ? dmy(d) : ''; } },
       { k: '_age', label: 'العمر عند بداية العام', cat: true, get: function (x) {
         if (!x.birth_date) return '';
         var a = Math.floor((start - new Date(String(x.birth_date).slice(0, 10) + 'T00:00')) / (365.25 * 864e5));
@@ -16748,6 +16752,7 @@
 
   function repResult() {
     var r = repState(), fields = repFields(), list = repScoped();
+    if (r.regFrom || r.regTo) list = list.filter(function (x) { var d = repRegDay(x); return d && (!r.regFrom || d >= r.regFrom) && (!r.regTo || d <= r.regTo); });
     r.filters.forEach(function (fl) {
       var fd = repField(fl.k, fields);
       if (fd && fl.v != null) list = list.filter(function (x) { return fd.get(x) === fl.v; });
@@ -16771,6 +16776,7 @@
   function repDesc(res) {
     var r = repState(), parts = [['يشمل', REP_SCOPES[r.scope]]];
     if (repUsesTpay()) parts.push(['شهر المواصلات', tLabel(ui.tMonth)]);
+    if (r.regFrom || r.regTo) parts.push(['التسجيل النهائي', (r.regFrom ? 'من ' + dmy(r.regFrom) : '') + (r.regFrom && r.regTo ? ' ' : '') + (r.regTo ? 'إلى ' + dmy(r.regTo) : '')]);
     r.filters.forEach(function (fl) {
       var fd = repField(fl.k, res.fields);
       if (fd && fl.v != null) parts.push([fd.label, fl.v === '' ? '(فارغ)' : fl.v]);
@@ -16780,7 +16786,7 @@
 
   // أعمدة أرقام لا تنقسم على سطرين
   function repNoWrap(k) {
-    return ['national_id', 'guardian_id', 'phone', 'alt_phone', 'whatsapp', 'student_phone', 'birth_date', '_age', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon', '_tmethod', '_tref'].indexOf(k) > -1;
+    return ['national_id', 'guardian_id', 'phone', 'alt_phone', 'whatsapp', 'student_phone', 'birth_date', '_regdate', '_age', '_tdue', '_tpaid', '_tleft', '_treceipt', '_tpaidon', '_tmethod', '_tref'].indexOf(k) > -1;
   }
 
   function repStatHeadNw(h) { return h === 'العدد' || h === 'المجموع' || h === 'النسبة'; }
@@ -16836,6 +16842,8 @@
         '<div class="toolbar" style="align-items:center">' +
           '<label class="field" for="rep-scope" style="margin:0">يشمل</label><select id="rep-scope" data-ro-ok style="width:auto">' + Object.keys(REP_SCOPES).map(function (k) { return opt(k, REP_SCOPES[k], r.scope); }).join('') + '</select>' +
           (repUsesTpay() ? '<label class="field" for="rep-month" style="margin:0">دورة المواصلات (شهر بدايتها)</label><input type="month" id="rep-month" data-ro-ok value="' + ui.tMonth + '" style="width:auto">' : '') +
+          '<label class="field" for="rep-regfrom" style="margin:0" title="يقتصر التقرير على من اعتُمد تسجيلهم النهائي في هذه الفترة">التسجيل النهائي من</label><input type="date" id="rep-regfrom" data-ro-ok value="' + esc(r.regFrom || '') + '" style="width:auto">' +
+          '<label class="field" for="rep-regto" style="margin:0">إلى</label><input type="date" id="rep-regto" data-ro-ok value="' + esc(r.regTo || '') + '" style="width:auto">' +
           '<input type="text" id="rep-title" data-ro-ok placeholder="عنوان التقرير (اختياري)" value="' + esc(r.title) + '" style="flex:1;min-width:200px"></div>' +
           '<div class="toolbar" style="align-items:center;margin-top:8px"><span class="hint" style="margin:0">تقارير جاهزة:</span>' +
           '<button type="button" class="btn" data-reppreset="tpay" data-ro-ok>دفع رسوم المواصلات (المضافون إلى باص)</button></div>' +
@@ -16973,6 +16981,7 @@
     else if (el.id === 'rep-title') { r.title = el.value.trim(); return; }
     else if (el.id === 'rep-g1') r.g1 = el.value;
     else if (el.id === 'rep-g2') r.g2 = el.value;
+    else if (el.id === 'rep-regfrom' || el.id === 'rep-regto') { r[el.id === 'rep-regfrom' ? 'regFrom' : 'regTo'] = el.value; }
     else if (el.hasAttribute('data-repfk')) { var f = r.filters[Number(el.getAttribute('data-repfk'))]; f.k = el.value; f.v = null; }
     else if (el.hasAttribute('data-repfv')) { r.filters[Number(el.getAttribute('data-repfv'))].v = el.value === '\u0000' ? null : el.value; }
     else if (el.hasAttribute('data-repcol')) {
