@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 6';
+  var APP_BUILD = '08/11 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -18261,22 +18261,21 @@
     var t = h ? sigText(h) : '';
     return (t || document.title || 'ورقة رسمية').slice(0, 200);
   }
-  // كتلة التوقيع: صورة التوقيع واسم صاحبه وصفته وتاريخه، ورمز QR ورقم الورقة؛ ورقم الورقة باهت فوق التوقيع فلا يُقص ويُلصق على ورقة أخرى
+  // كتلة التوقيع: صورة التوقيع (ورقم الورقة باهت فوقها فلا تُقص وتُلصق على ورقة أخرى) ورمز QR تحته رقم الورقة فقط.
+  // تُثبَّت في الركن الأيسر أسفل آخر صفحة فوق ما فيها، فلا تزيد طول الورقة ولا تدفعها إلى صفحة ثانية
   async function sigBlock(d) {
     var qr = await sigQr(), q = qr(0, 'M');
     q.addData(sigVerifyUrl(d.code)); q.make();
     var svg = q.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
-    return '<div class="sig-block" style="display:flex;align-items:center;justify-content:space-between;gap:5mm;margin-top:4mm;padding-top:2mm;border-top:.5pt dashed #9aa;font-size:8.5pt;line-height:1.4;break-inside:avoid;page-break-inside:avoid;direction:rtl">' +
-      '<div style="position:relative;text-align:center;min-width:45mm">' +
-        '<img src="' + d.image + '" alt="" style="height:17mm;max-width:55mm;object-fit:contain;display:block;margin:0 auto">' +
-        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13pt;letter-spacing:.25em;color:rgba(19,48,107,.13);transform:rotate(-12deg);pointer-events:none;font-weight:700">' + esc(d.code) + '</div>' +
-        '<b>' + esc(d.name) + '</b>' + (d.title ? '<br>' + esc(d.title) : '') + '<br>' + dmy(String(d.at || new Date().toISOString()).slice(0, 10)) + '</div>' +
-      '<div style="display:flex;align-items:center;gap:3mm"><div>موقّعة إلكترونيًا<br>رقم الورقة: <b style="letter-spacing:.08em">' + esc(d.code) + '</b><br><span style="font-size:7.5pt">للتحقق امسح الرمز</span></div>' +
-        '<div style="width:20mm;height:20mm">' + svg.replace('<svg ', '<svg style="width:20mm;height:20mm" ') + '</div></div></div>';
+    return '<div class="sig-block" style="position:absolute;left:0;bottom:0;display:flex;align-items:flex-end;gap:3mm;direction:ltr;z-index:2;pointer-events:none">' +
+      '<div style="text-align:center;font-size:7pt;line-height:1.2;font-weight:700;letter-spacing:.06em"><div style="width:17mm;height:17mm;background:#fff">' + svg.replace('<svg ', '<svg style="width:17mm;height:17mm;display:block" ') + '</div>' + esc(d.code) + '</div>' +
+      '<div style="position:relative"><img src="' + d.image + '" alt="" style="height:15mm;max-width:45mm;object-fit:contain;display:block">' +
+        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11pt;letter-spacing:.2em;color:rgba(19,48,107,.14);transform:rotate(-12deg);font-weight:700">' + esc(d.code) + '</div></div></div>';
   }
   function sigAppend(html) {
     var kids = sheet.children, last = kids.length ? kids[kids.length - 1] : null;
     var host = last && (last.tagName === 'SECTION' || /page/.test(last.className || '')) ? last : sheet;
+    if (!host.style.position) host.style.position = 'relative';
     host.insertAdjacentHTML('beforeend', html);
   }
   function sigMeta() { return { cls: sheet.className, width: sheet.style.width, font: sheet.style.fontSize, land: !!printLandscape, fit: sheet.getAttribute('data-fit') || '' }; }
