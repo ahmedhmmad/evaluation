@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 5';
+  var APP_BUILD = '08/11 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1565,6 +1565,8 @@
   var sideNav = document.getElementById('side-nav');
 
   var ICONS = {
+    // التوقيع الإلكتروني: خط توقيع وقلم
+    signatures: 'M3 17c3-4 5-4 6 0s3 2 5-2M3 21h18M15 4l5 5-8 8H7v-5z',
     // دوامي وراتبي: ساعة
     papers: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
     mine: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2',
@@ -1611,6 +1613,7 @@
     if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
     else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
+    if (isStaff() || isRegistrar() || S.myStaff) groups.push({ title: 'التوقيعات', items: [['#/signatures', 'signatures', 'التوقيع الإلكتروني']] });
     return groups;
   }
   function navModel0() {
@@ -1641,6 +1644,7 @@
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
     if (h === '#/papers' && canPapers()) return 'papers';
+    if (h === '#/signatures') return 'signatures';
     if (h === '#/messages' && canRecordAtt()) return 'messages';
     if (h === '#/exits' && canAttView()) return 'exits';
     if (h === '#/discipline' && canDisc()) return 'discipline';
@@ -9341,6 +9345,7 @@
     if (S.profile && S.profile.must_change_password) return renderChangePw();
     if (location.hash === '#/mine' && S.myStaff) return renderMine();
     if (location.hash === '#/papers' && canPapers()) return renderPapers();
+    if (location.hash === '#/signatures') return renderSignatures();
 
     var h = location.hash;
     var r = h.match(/^#\/r\/(.+)$/);
@@ -18073,7 +18078,8 @@
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.removeAttribute('data-pages');
-    if (pendingPaper) buildPaperSheet(pendingPaper);
+    if (pendingSigned) buildSignedReqSheet(pendingSigned);
+    else if (pendingPaper) buildPaperSheet(pendingPaper);
     else if (pendingSign) buildSignSheet(pendingSign);
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
@@ -18209,11 +18215,270 @@
     });
   }
 
+  /* ----- التوقيع الإلكتروني -----
+     صاحب التوقيع يرفع صورته في «التوقيع الإلكتروني». عند طباعة أي ورقة يُسأل: بلا توقيع، أو بتوقيعي، أو (لمدير النظام) بتوقيع غيره،
+     أو «طلب توقيع» يصل لصاحب التوقيع فيعتمده ثم يطبعه الطالب. الورقة الموقّعة تُحفظ في القاعدة برقم ونصها وبصمتها،
+     وتُطبع برمز QR يفتح verify.html فيظهر نصها الأصلي ومن وقّعها، أو أنها ملغاة. (supabase/signatures.sql) */
+  var SIG = { loaded: false, missing: false, signers: [], mine: null, inbox: [], mineReqs: [], docs: [] };
+  var pendingSigned = null; // { html, meta, data? }: طباعة طلب معتمد بتوقيعه (data)، أو معاينته لصاحب التوقيع (بلا data)
+  async function loadSig(force) {
+    if (SIG.loaded && !force) return SIG;
+    var r = await sb.rpc('sig_signers');
+    if (r.error) { SIG.missing = true; SIG.loaded = true; return SIG; }
+    SIG.missing = false;
+    SIG.signers = r.data || [];
+    var me = await sb.from('signatures').select('*').eq('user_id', S.uid).maybeSingle();
+    SIG.mine = me.data || null;
+    var q = await sb.from('sign_requests').select('id, requester, requester_name, signer_id, title, status, code, note, created_at, decided_at').order('created_at', { ascending: false }).limit(200);
+    var all = q.data || [];
+    SIG.inbox = all.filter(function (x) { return x.signer_id === S.uid || (isAdmin() && x.requester !== S.uid); });
+    SIG.mineReqs = all.filter(function (x) { return x.requester === S.uid; });
+    var d = await sb.from('signed_docs').select('code, title, signer_name, signer_title, signed_by_name, created_at, revoked_at').order('created_at', { ascending: false }).limit(200);
+    SIG.docs = d.data || [];
+    SIG.loaded = true;
+    return SIG;
+  }
+  function sigName(id) { var s = SIG.signers.filter(function (x) { return x.user_id === id; })[0]; return s ? s.name + (s.title ? ' — ' + s.title : '') : ''; }
+  function sigVerifyUrl(code) { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'verify.html?c=' + code; }
+  var sigQrLib = null;
+  function sigQr() {
+    if (window.qrcode) return Promise.resolve(window.qrcode);
+    return sigQrLib || (sigQrLib = new Promise(function (ok, no) {
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+      s.onload = function () { ok(window.qrcode); };
+      s.onerror = function () { sigQrLib = null; no(new Error('تعذّر تحميل مولّد رمز QR')); };
+      document.head.appendChild(s);
+    }));
+  }
+  function sigText(el) { return String(el.textContent || '').replace(/[\s ]+/g, ' ').trim(); }
+  async function sigHash(t) {
+    var b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+    return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  }
+  function sigTitle(el) {
+    var h = el.querySelector('.tt-ptitle, h1, h2, .rc-title, .title');
+    var t = h ? sigText(h) : '';
+    return (t || document.title || 'ورقة رسمية').slice(0, 200);
+  }
+  // كتلة التوقيع: صورة التوقيع واسم صاحبه وصفته وتاريخه، ورمز QR ورقم الورقة؛ ورقم الورقة باهت فوق التوقيع فلا يُقص ويُلصق على ورقة أخرى
+  async function sigBlock(d) {
+    var qr = await sigQr(), q = qr(0, 'M');
+    q.addData(sigVerifyUrl(d.code)); q.make();
+    var svg = q.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
+    return '<div class="sig-block" style="display:flex;align-items:center;justify-content:space-between;gap:5mm;margin-top:4mm;padding-top:2mm;border-top:.5pt dashed #9aa;font-size:8.5pt;line-height:1.4;break-inside:avoid;page-break-inside:avoid;direction:rtl">' +
+      '<div style="position:relative;text-align:center;min-width:45mm">' +
+        '<img src="' + d.image + '" alt="" style="height:17mm;max-width:55mm;object-fit:contain;display:block;margin:0 auto">' +
+        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13pt;letter-spacing:.25em;color:rgba(19,48,107,.13);transform:rotate(-12deg);pointer-events:none;font-weight:700">' + esc(d.code) + '</div>' +
+        '<b>' + esc(d.name) + '</b>' + (d.title ? '<br>' + esc(d.title) : '') + '<br>' + dmy(String(d.at || new Date().toISOString()).slice(0, 10)) + '</div>' +
+      '<div style="display:flex;align-items:center;gap:3mm"><div>موقّعة إلكترونيًا<br>رقم الورقة: <b style="letter-spacing:.08em">' + esc(d.code) + '</b><br><span style="font-size:7.5pt">للتحقق امسح الرمز</span></div>' +
+        '<div style="width:20mm;height:20mm">' + svg.replace('<svg ', '<svg style="width:20mm;height:20mm" ') + '</div></div></div>';
+  }
+  function sigAppend(html) {
+    var kids = sheet.children, last = kids.length ? kids[kids.length - 1] : null;
+    var host = last && (last.tagName === 'SECTION' || /page/.test(last.className || '')) ? last : sheet;
+    host.insertAdjacentHTML('beforeend', html);
+  }
+  function sigMeta() { return { cls: sheet.className, width: sheet.style.width, font: sheet.style.fontSize, land: !!printLandscape, fit: sheet.getAttribute('data-fit') || '' }; }
+
+  // نافذة الاختيار قبل الطباعة
+  function sigAsk() {
+    return new Promise(function (resolve) {
+      var others = SIG.signers.filter(function (x) { return x.user_id !== S.uid; }), mine = SIG.mine;
+      var o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;background:rgba(12,33,82,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+      o.innerHTML = '<div class="card" style="max-width:460px;width:100%;margin:0"><h2 style="margin-top:0">التوقيع على الورقة</h2><div style="display:grid;gap:8px">' +
+        '<button type="button" class="btn" data-sg="none">طباعة بلا توقيع إلكتروني</button>' +
+        (mine ? '<button type="button" class="btn primary" data-sg="me">توقيعها بتوقيعي (' + esc(mine.title || mine.name) + ')</button>' : '') +
+        (others.length ? '<label class="field" style="margin:6px 0 0" for="sg-who">' + (isAdmin() ? 'أو بتوقيع:' : 'أو طلب توقيع من:') + '</label><select id="sg-who">' +
+          others.map(function (x) { return '<option value="' + x.user_id + '">' + esc(x.name + (x.title ? ' — ' + x.title : '')) + '</option>'; }).join('') + '</select>' +
+          (isAdmin() ? '<button type="button" class="btn primary" data-sg="as">توقيعها الآن نيابة عنه (مدير النظام)</button>' : '') +
+          '<button type="button" class="btn" data-sg="req">إرسال طلب توقيع (يعتمده صاحبه، ثم تطبعها من «التوقيع الإلكتروني»)</button>' : '') +
+        '<button type="button" class="btn" data-sg="cancel" style="margin-top:4px">إلغاء</button></div></div>';
+      document.body.appendChild(o);
+      o.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-sg]'); if (!b) return;
+        var who = (o.querySelector('#sg-who') || {}).value;
+        o.remove();
+        resolve({ k: b.getAttribute('data-sg'), who: who });
+      });
+    });
+  }
+
+  // تُستدعى من printNow بعد بناء الورقة. false = لا تُطبع الآن
+  async function sigStep() {
+    if (pendingSigned) {
+      var ps = pendingSigned; pendingSigned = null;
+      if (ps.data) { try { sigAppend(await sigBlock(ps.data)); } catch (err) { toast(err.message, true); return false; } }
+      return true;
+    }
+    if (!S.uid || role() === 'pending') return true;
+    try { await loadSig(); } catch (err) { return true; }
+    if (SIG.missing || !SIG.signers.length) return true;
+    var a = await sigAsk();
+    if (a.k === 'cancel') return false;
+    if (a.k === 'none') return true;
+    var body = sigText(sheet), hash = await sigHash(body), title = sigTitle(sheet);
+    if (a.k === 'req') {
+      var row = { requester: S.uid, requester_name: (S.profile && S.profile.full_name) || displayName(S.email), signer_id: a.who, title: title, html: sheet.innerHTML, meta: sigMeta(), body: body.slice(0, 20000), hash: hash };
+      var ir = await sb.from('sign_requests').insert(row).select('id, requester, requester_name, signer_id, title, status, code, note, created_at, decided_at').single();
+      if (ir.error) { fail(ir.error); return false; }
+      if (ir.data) SIG.mineReqs.unshift(ir.data);
+      toast('أُرسل طلب التوقيع إلى ' + sigName(a.who) + '. اطبع الورقة بعد توقيعها من «التوقيع الإلكتروني».');
+      return false;
+    }
+    var r = await sb.rpc('sign_doc', { p_signer: a.k === 'me' ? S.uid : a.who, p_title: title, p_body: body.slice(0, 20000), p_hash: hash, p_request: null });
+    if (r.error) { fail(r.error); return false; }
+    SIG.loaded = false;
+    try { sigAppend(await sigBlock(r.data)); } catch (err) { toast(err.message, true); return false; }
+    return true;
+  }
+  function buildSignedReqSheet(ps) {
+    var m = ps.meta || {};
+    sheet.className = m.cls || '';
+    sheet.style.width = m.width || '';
+    sheet.style.fontSize = m.font || '';
+    if (m.fit) sheet.setAttribute('data-fit', m.fit); else sheet.removeAttribute('data-fit');
+    printLandscape = !!m.land;
+    sheet.innerHTML = ps.html;
+  }
+
+  // صفحة «التوقيع الإلكتروني»
+  async function renderSignatures() {
+    app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>';
+    await loadSig(true);
+    if (location.hash !== '#/signatures') return;
+    if (SIG.missing) { app.innerHTML = '<div class="card"><h2>التوقيع الإلكتروني</h2><p>شغّل الملف <code>supabase/signatures.sql</code> في محرر SQL في Supabase أولًا.</p></div>'; return; }
+    var me = SIG.mine;
+    var badge = function (s) { return s === 'approved' ? '<span class="badge approved">وُقّعت</span>' : s === 'rejected' ? '<span class="badge unpaid">رُفض</span>' : '<span class="badge edit">بانتظار التوقيع</span>'; };
+    var when = function (t) { return t ? dmy(String(t).slice(0, 10)) : ''; };
+    var inboxPend = SIG.inbox.filter(function (x) { return x.status === 'pending'; });
+    app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">التوقيع الإلكتروني</h1>' +
+      '<div class="card"><h2>توقيعي</h2><p class="hint">ارفع صورة توقيعك على ورق أبيض (تُزال الخلفية البيضاء تلقائيًا). لا يراها أحد غيرك، وتُطبع فقط على الأوراق التي توقّعها، ومعها رقم الورقة ورمز QR يثبت صحتها.</p>' +
+        '<div class="grid2"><div><label class="field" for="sg-name">الاسم كما يُطبع</label><input type="text" id="sg-name" value="' + esc(me ? me.name : ((S.profile && S.profile.full_name) || '')) + '"></div>' +
+        '<div><label class="field" for="sg-title">الصفة</label><input type="text" id="sg-title" list="sg-titles" placeholder="مثال: مدير/ة الأكاديمية" value="' + esc(me ? me.title : '') + '"><datalist id="sg-titles"><option value="مدير/ة الأكاديمية"><option value="المشرف التربوي"><option value="مسؤول/ة شؤون الطلاب"><option value="المحاسب/ة"><option value="مسؤول/ة المواصلات"></datalist></div></div>' +
+        '<div style="margin:12px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div id="sg-prev" style="min-width:200px;min-height:70px;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;padding:6px;background:#fff">' +
+          (me ? '<img src="' + me.image + '" alt="توقيعي" style="max-height:80px;max-width:260px">' : '<span class="hint" style="margin:0">لا توقيع</span>') + '</div>' +
+          '<input type="file" id="sg-file" accept="image/*"></div>' +
+        '<div class="actions"><button type="button" class="btn primary" data-sgsave>حفظ التوقيع</button>' + (me ? '<button type="button" class="btn danger" data-sgdel>حذف توقيعي</button>' : '') + '</div></div>' +
+      (SIG.inbox.length ? '<div class="card"><h2>طلبات التوقيع الواردة' + (inboxPend.length ? ' (' + inboxPend.length + ' بانتظارك)' : '') + '</h2><div class="table-wrap"><table class="grid"><thead><tr><th>الورقة</th><th>من</th><th>إلى</th><th>التاريخ</th><th>الحالة</th><th></th></tr></thead><tbody>' +
+        SIG.inbox.slice(0, 60).map(function (x) {
+          return '<tr><td>' + esc(x.title) + '</td><td>' + esc(x.requester_name) + '</td><td>' + esc(sigName(x.signer_id)) + '</td><td>' + when(x.created_at) + '</td><td>' + badge(x.status) + (x.code ? ' <small>' + esc(x.code) + '</small>' : '') + '</td><td style="white-space:nowrap">' +
+            (x.status === 'pending' ? '<button type="button" class="btn sm" data-sgview="' + x.id + '">معاينة</button> <button type="button" class="btn sm primary" data-sgok="' + x.id + '">توقيع</button> <button type="button" class="btn sm danger" data-sgno="' + x.id + '">رفض</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>' : '') +
+      '<div class="card"><h2>طلباتي</h2>' + (SIG.mineReqs.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الورقة</th><th>إلى</th><th>التاريخ</th><th>الحالة</th><th></th></tr></thead><tbody>' +
+        SIG.mineReqs.slice(0, 60).map(function (x) {
+          return '<tr><td>' + esc(x.title) + '</td><td>' + esc(sigName(x.signer_id)) + '</td><td>' + when(x.created_at) + '</td><td>' + badge(x.status) + (x.note ? '<br><small>' + esc(x.note) + '</small>' : '') + '</td><td style="white-space:nowrap">' +
+            (x.status === 'approved' ? '<button type="button" class="btn sm primary" data-sgprint="' + x.id + '">طباعة موقّعة / PDF</button>' : x.status === 'pending' ? '<button type="button" class="btn sm" data-sgcancel="' + x.id + '">سحب الطلب</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<p class="hint" style="margin:0">لا طلبات. عند طباعة أي ورقة اختر «إرسال طلب توقيع».</p>') + '</div>' +
+      (SIG.docs.length ? '<div class="card"><h2>الأوراق الموقّعة</h2><p class="hint">إلغاء ورقة يجعل صفحة التحقق تُظهرها «ملغاة» لكل من يمسح رمزها.</p><div class="table-wrap"><table class="grid"><thead><tr><th>الرقم</th><th>الورقة</th><th>الموقّع</th><th>وقّعها</th><th>التاريخ</th><th></th></tr></thead><tbody>' +
+        SIG.docs.slice(0, 100).map(function (d) {
+          return '<tr><td><a href="' + esc(sigVerifyUrl(d.code)) + '" target="_blank" rel="noopener">' + esc(d.code) + '</a></td><td>' + esc(d.title) + '</td><td>' + esc(d.signer_name) + '</td><td>' + esc(d.signed_by_name) + '</td><td>' + when(d.created_at) + '</td><td>' +
+            (d.revoked_at ? '<span class="badge unpaid">ملغاة</span>' : '<button type="button" class="btn sm danger" data-sgrevoke="' + esc(d.code) + '">إلغاء</button>') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>' : '');
+  }
+
+  // صورة التوقيع: تُصغَّر وتُقص حوافها وتُزال خلفيتها البيضاء
+  function sigProcess(file) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var k = Math.min(1, 900 / img.width, 400 / img.height), w = Math.round(img.width * k), h = Math.round(img.height * k);
+        var c = document.createElement('canvas'); c.width = w; c.height = h;
+        var g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+        var px = g.getImageData(0, 0, w, h), d = px.data, x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (var i = 0; i < d.length; i += 4) {
+          var lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
+          if (lum > 200 || d[i + 3] < 40) d[i + 3] = 0;
+          else {
+            d[i + 3] = Math.min(255, Math.round((200 - lum) * 2.2) + 60);
+            var p = i / 4, x = p % w, y = (p - x) / w;
+            if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+          }
+        }
+        URL.revokeObjectURL(url);
+        if (x1 < 0) return reject(new Error('لم أجد توقيعًا في الصورة'));
+        g.putImageData(px, 0, 0);
+        var o = document.createElement('canvas'), pad = 6;
+        o.width = x1 - x0 + 1 + 2 * pad; o.height = y1 - y0 + 1 + 2 * pad;
+        o.getContext('2d').drawImage(c, x0, y0, x1 - x0 + 1, y1 - y0 + 1, pad, pad, x1 - x0 + 1, y1 - y0 + 1);
+        resolve(o.toDataURL('image/png'));
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('تعذّر قراءة الصورة')); };
+      img.src = url;
+    });
+  }
+  var sigNewImage = null;
+  document.addEventListener('change', async function (e) {
+    if (e.target.id !== 'sg-file' || location.hash !== '#/signatures') return;
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    try { sigNewImage = await sigProcess(f); document.getElementById('sg-prev').innerHTML = '<img src="' + sigNewImage + '" alt="" style="max-height:80px;max-width:260px">'; }
+    catch (err) { toast(err.message, true); }
+  });
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/signatures') return;
+    var el, r;
+    if (e.target.closest('[data-sgsave]')) {
+      var image = sigNewImage || (SIG.mine && SIG.mine.image);
+      if (!image) return toast('اختر صورة التوقيع أولًا', true);
+      var row = { user_id: S.uid, name: document.getElementById('sg-name').value.trim(), title: document.getElementById('sg-title').value.trim(), image: image, updated_at: new Date().toISOString() };
+      if (!row.name) return toast('اكتب الاسم', true);
+      r = await sb.from('signatures').upsert(row);
+      if (r.error) return fail(r.error);
+      sigNewImage = null; toast('حُفظ التوقيع'); return renderSignatures();
+    }
+    if (e.target.closest('[data-sgdel]')) {
+      if (!confirm('حذف توقيعك؟ الأوراق الموقّعة سابقًا تبقى صحيحة.')) return;
+      r = await sb.from('signatures').delete().eq('user_id', S.uid);
+      if (r.error) return fail(r.error);
+      return renderSignatures();
+    }
+    if ((el = e.target.closest('[data-sgview]'))) {
+      r = await sb.from('sign_requests').select('html, meta').eq('id', el.getAttribute('data-sgview')).single();
+      if (r.error) return fail(r.error);
+      pendingSigned = { html: r.data.html, meta: r.data.meta };
+      return printNow();
+    }
+    if ((el = e.target.closest('[data-sgok]'))) {
+      var id = el.getAttribute('data-sgok'), rq = SIG.inbox.filter(function (x) { return x.id === id; })[0];
+      if (!rq || !confirm('توقيع «' + rq.title + '» المرسلة من ' + rq.requester_name + '؟ يُفضّل معاينتها أولًا.')) return;
+      r = await sb.rpc('sign_doc', { p_signer: rq.signer_id, p_title: '', p_body: '', p_hash: '', p_request: rq.id });
+      if (r.error) return fail(r.error);
+      toast('وُقّعت الورقة، ويطبعها ' + rq.requester_name + ' من صفحته'); return renderSignatures();
+    }
+    if ((el = e.target.closest('[data-sgno]'))) {
+      var note = prompt('سبب الرفض (يظهر لمرسل الطلب):', '');
+      if (note == null) return;
+      r = await sb.rpc('sig_reject', { p_request: el.getAttribute('data-sgno'), p_note: note });
+      if (r.error) return fail(r.error);
+      return renderSignatures();
+    }
+    if ((el = e.target.closest('[data-sgcancel]'))) {
+      r = await sb.from('sign_requests').delete().eq('id', el.getAttribute('data-sgcancel'));
+      if (r.error) return fail(r.error);
+      return renderSignatures();
+    }
+    if ((el = e.target.closest('[data-sgprint]'))) {
+      r = await sb.rpc('sig_request_print', { p_id: el.getAttribute('data-sgprint') });
+      if (r.error) return fail(r.error);
+      pendingSigned = { html: r.data.html, meta: r.data.meta, data: r.data };
+      return printNow();
+    }
+    if ((el = e.target.closest('[data-sgrevoke]'))) {
+      var code = el.getAttribute('data-sgrevoke');
+      if (!confirm('إلغاء الورقة ' + code + '؟ ستظهر «ملغاة» لكل من يتحقق منها، ولا يمكن التراجع.')) return;
+      r = await sb.rpc('sig_revoke', { p_code: code });
+      if (r.error) return fail(r.error);
+      return renderSignatures();
+    }
+  });
+
   async function printNow() {
     await reportFontsReady(document);
     // العلامة المائية في كل التقارير (ومنها كشف الرواتب والسليبات) هي الشعار الباهت نفسه، لا الشعار الرمادي الأغمق
     var faded = await fadedLogo(false);
     if (!buildCurrentSheet()) return window.print();
+    if (!(await sigStep())) { sheet.innerHTML = ''; return; }
     if (faded) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.src = faded; im.classList.add('wm-baked'); });
     var css = pageCss() + 'html,body{margin:0;background:#fff}';
     var rules = document.getElementById('app-css').sheet.cssRules;

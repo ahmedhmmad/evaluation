@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>التحقق من ورقة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* صفحة التحقق من ورقة موقّعة إلكترونيًا: يُفتح من رمز QR المطبوع عليها */
+  :root { --navy: #13306B; --gold: #C8A45D; --ivory: #FAF7F0; --line: #ECE6D8; --ink: #3F4656; --muted: #7E8494; --ok: #1E7B4C; --bad: #B3402F; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "IBM Plex Sans Arabic", system-ui, "Segoe UI", Tahoma, sans-serif; background: var(--ivory); color: var(--ink); line-height: 1.7; }
+  .page { max-width: 760px; margin: 24px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 14px; }
+  h1 { color: var(--navy); font-size: 1.3rem; margin: 0 0 6px; }
+  .st { border-radius: 12px; padding: 14px 16px; font-weight: 700; font-size: 1.05rem; }
+  .st.ok { background: #E7F4EC; color: var(--ok); }
+  .st.bad { background: #FBEAE7; color: var(--bad); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 14px 0 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-weight: 600; }
+  pre { white-space: pre-wrap; font-family: inherit; background: var(--ivory); border-radius: 10px; padding: 12px; margin: 8px 0 0; font-size: .92rem; max-height: 60vh; overflow: auto; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input { flex: 1; min-width: 180px; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  button { font: inherit; font-weight: 700; background: var(--navy); color: #fff; border: 0; border-radius: 10px; padding: 10px 18px; cursor: pointer; }
+  .hint { color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="card"><h1>التحقق من ورقة رسمية</h1>
+    <p class="hint" style="margin:0 0 10px">اكتب رقم الورقة المطبوع بجانب رمز QR، أو امسح الرمز.</p>
+    <form id="f"><input id="c" autocomplete="off" placeholder="رقم الورقة" maxlength="12"><button>تحقق</button></form></div>
+  <div id="root"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+  var root = document.getElementById('root'), input = document.getElementById('c');
+  var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function when(t) { var d = new Date(t); return isNaN(d) ? '' : d.toLocaleString('ar-EG', { dateStyle: 'long', timeStyle: 'short' }); }
+  function check(code) {
+    code = String(code || '').trim().toUpperCase();
+    if (!code) return;
+    input.value = code;
+    if (!sb) { root.innerHTML = '<div class="card st bad">تعذّر الاتصال.</div>'; return; }
+    root.innerHTML = '<div class="card hint">جارٍ التحقق…</div>';
+    sb.rpc('verify_doc', { p_code: code }).then(function (r) {
+      var d = r.data;
+      if (r.error || !d) { root.innerHTML = '<div class="card"><div class="st bad">✗ لا توجد ورقة بهذا الرقم. هذه الورقة غير صادرة من الأكاديمية أو رقمها مكتوب خطأ.</div></div>'; return; }
+      root.innerHTML = '<div class="card">' +
+        (d.revoked ? '<div class="st bad">✗ هذه الورقة أُلغيت في ' + esc(when(d.revoked_at)) + ' ولم تعد معتمدة.</div>'
+          : '<div class="st ok">✓ ورقة صادرة من الأكاديمية وموقّعة إلكترونيًا.</div>') +
+        '<dl><dt>رقم الورقة</dt><dd>' + esc(d.code) + '</dd><dt>الموضوع</dt><dd>' + esc(d.title || '—') + '</dd>' +
+        '<dt>الموقّع</dt><dd>' + esc(d.signer_name) + (d.signer_title ? ' — ' + esc(d.signer_title) : '') + '</dd><dt>تاريخ التوقيع</dt><dd>' + esc(when(d.at)) + '</dd></dl></div>' +
+        '<div class="card"><b>نص الورقة الأصلي</b><p class="hint" style="margin:4px 0 0">قارنه بالورقة التي بين يديك: أي اختلاف في الأسماء أو المبالغ أو التواريخ يعني أن الورقة عُدّلت بعد توقيعها.</p><pre>' + esc(d.body) + '</pre></div>';
+    });
+  }
+  document.getElementById('f').addEventListener('submit', function (e) { e.preventDefault(); check(input.value); });
+  check(new URLSearchParams(location.search).get('c'));
+})();
+</script>
+</body>
+</html>
