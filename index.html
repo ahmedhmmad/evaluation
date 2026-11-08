@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 8';
+  var APP_BUILD = '08/11 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -11284,7 +11284,7 @@
     ['leave_days', 'أيام الإجازات المسموح بها في العام الدراسي', 'يوم', 1],
     ['leave_month', 'أيام الإجازات المسموح بها في الشهر', 'يوم', 1]
   ];
-  var PR_LATE_MODES = { minutes: 'بالدقيقة: ما زاد عن الساعات المسموحة يُخصم بأجر الدقيقة', days: 'باليوم: كل يوم تأخير زائد عن الأيام المسموحة يُخصم منه جزء من أجر اليوم' };
+  var PR_LATE_MODES = { minutes: 'بالدقيقة: ما زاد عن الساعات المسموحة يُخصم بأجر الدقيقة', days: 'باليوم: كل يوم تأخير زائد عن الأيام المسموحة يُخصم منه جزء من أجر اليوم', both: 'الاثنان معًا: ما زاد عن الساعات المسموحة بالدقيقة، وكل يوم زاد عن الأيام المسموحة بجزء من أجر اليوم' };
 
   // صلاحية الرواتب: edit أو view أو ''
   function prLevel() { return isAdmin() ? 'edit' : isManager() ? S.prAccess || '' : ''; }
@@ -11532,7 +11532,7 @@
     if (!(wd >= 1 && wd <= 31)) return toast('أيام العمل في الشهر: رقم من 1 إلى 31', true);
     if (R.quran_in && R.quran_out && minsOf(R.quran_in) >= minsOf(R.quran_out)) return toast('بداية دوام المحفظين بعد نهايته', true);
     rules.leave_from = R.leave_from || ''; rules.leave_to = R.leave_to || '';
-    rules.work_days = wd; rules.late_mode = R.late_mode === 'days' ? 'days' : 'minutes'; rules.late_fraction = Number(R.late_fraction) || 0.25;
+    rules.work_days = wd; rules.late_mode = R.late_mode === 'days' || R.late_mode === 'both' ? R.late_mode : 'minutes'; rules.late_fraction = Number(R.late_fraction) || 0.25;
     rules.quran_in = R.quran_in || ''; rules.quran_out = R.quran_out || '';
     rules.signer_title = String(R.signer_title || '').trim() || 'المشرف العام'; rules.signer_name = String(R.signer_name || '').trim();
     st.busy = true; render();
@@ -11675,15 +11675,13 @@
       var leaveCovered = Math.min(leaveIn, capLeave, Math.max(0, poolLeave - usedLeave));
       x.leaveExtra = leaveIn - leaveCovered;
       x.leaveLeft = allowLeave == null ? null : Math.max(0, allowLeave - usedLeave - leaveCovered);
-      if (R.late_mode === 'days') {
-        x.lateExtra = allowDays == null ? 0 : Math.max(0, x.lateDays - allowDays);
-        x.dLate = x.lateExtra * (Number(R.late_fraction) || 0.25) * dayVal;
-        x.lateNote = x.lateExtra ? x.lateExtra + ' يوم تأخير زائد × ' + ({ 0.25: 'ربع يوم', 0.5: 'نصف يوم', 1: 'يوم كامل' }[Number(R.late_fraction)] || R.late_fraction) : '';
-      } else {
-        x.lateExtra = allowMins == null ? 0 : Math.max(0, x.lateMins - allowMins);
-        x.dLate = x.lateExtra * minVal;
-        x.lateNote = x.lateExtra ? x.lateExtra + ' دقيقة زائدة' : '';
-      }
+      // التأخير: بالدقيقة، أو باليوم، أو الاثنان معًا (كلٌّ بحدّه المسموح)
+      var exDays = allowDays == null ? 0 : Math.max(0, x.lateDays - allowDays), exMins = allowMins == null ? 0 : Math.max(0, x.lateMins - allowMins);
+      var fracTxt = { 0.25: 'ربع يوم', 0.5: 'نصف يوم', 1: 'يوم كامل' }[Number(R.late_fraction)] || R.late_fraction;
+      var useDays = R.late_mode === 'days' || R.late_mode === 'both', useMins = R.late_mode !== 'days';
+      x.lateExtra = useDays && !useMins ? exDays : useMins && !useDays ? exMins : exDays + exMins;
+      x.dLate = (useDays ? exDays * (Number(R.late_fraction) || 0.25) * dayVal : 0) + (useMins ? exMins * minVal : 0);
+      x.lateNote = [useMins && exMins ? exMins + ' دقيقة زائدة' : '', useDays && exDays ? exDays + ' يوم تأخير زائد × ' + fracTxt : ''].filter(Boolean).join(' + ');
       var r2 = function (v) { return Math.round(v * 100) / 100; };
       x.dLate = r2(x.dLate);
       x.dAbsent = r2(x.absent * dayVal);
@@ -11750,7 +11748,7 @@
         '<td><button type="button" class="btn link" data-prslip="' + x.id + '" data-ro-ok>السليب</button></td></tr>';
     }).join('');
     var card = function (lbl, num, sub, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
-    var lateRule = R.late_mode === 'days' ? 'التأخير باليوم: ما زاد عن ' + (R.late_days === '' || R.late_days == null ? '— (بلا حد)' : R.late_days + ' أيام') : 'التأخير بالدقيقة: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— (بلا حد)' : R.late_hours + ' ساعة');
+    var lateRule = R.late_mode === 'both' ? 'التأخير: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— ساعة' : R.late_hours + ' ساعة') + ' بالدقيقة، وما زاد عن ' + (R.late_days === '' || R.late_days == null ? '— أيام' : R.late_days + ' أيام') + ' باليوم' : R.late_mode === 'days' ? 'التأخير باليوم: ما زاد عن ' + (R.late_days === '' || R.late_days == null ? '— (بلا حد)' : R.late_days + ' أيام') : 'التأخير بالدقيقة: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— (بلا حد)' : R.late_hours + ' ساعة');
     app.innerHTML = head + bar +
       '<div class="stats">' + card('مجموع الرواتب', prMoney(sum.salary), rows.length + ' موظفًا') + card('الخصومات', prMoney(sum.ded), 'غياب وإجازات وتأخير ويدوي', sum.ded ? 'var(--red)' : '') +
         card('الإضافات', prMoney(sum.add), 'مكافآت وبدلات') + card('صافي الرواتب', prMoney(sum.net), 'بالجنيه المصري', 'var(--navy-dark)') + '</div>' +
