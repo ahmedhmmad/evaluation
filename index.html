@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '05/11 — 3';
+  var APP_BUILD = '08/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9448,7 +9448,7 @@
 
   function afConsentCardHtml(count) {
     return '<div class="card"><h2>موافقة ولي الأمر</h2><p class="hint" style="margin:0">اكتب موضوع الموافقة ثم اطبعها لكل الطلاب الظاهرين في النتائج بملف PDF واحد، أو لطالب بعينه من «موافقة ولي الأمر» تحت اسمه.</p>' +
-      afConsentFields() + '<div class="actions" id="afc-batch">' + afConsentBatchBtn(count) + '</div></div>';
+      afConsentFields() + '<div class="actions"><span id="afc-batch" style="display:contents">' + afConsentBatchBtn(count) + '</span><button type="button" class="btn" data-afcblank data-ro-ok>طباعة نموذج فارغ بلا اسم (يُكتب باليد) / PDF</button></div></div>';
   }
   function afConsentBatchBtn(count) {
     return '<button type="button" class="btn primary" data-afcbatch data-ro-ok' + (count ? '' : ' disabled') + '>طباعة موافقة ولي الأمر لكل المعروضين' + (count ? ' (' + count + ' طالبًا) ' : '') + '/ PDF</button>' + (count ? '' : '<span class="hint" style="margin:0">اختر شعبة أو ابحث ليظهر الطلاب.</span>');
@@ -9506,6 +9506,7 @@
     if (!/^#\/affairs/.test(location.hash) || !canAttView()) return;
     var el;
     if (e.target.closest('[data-afcbatch]')) { var list = afFiltered(afAgg()); if (!list.length) return; pendingConsent = list; return printNow(); }
+    if (e.target.closest('[data-afcblank]')) { var per = Math.max(1, Math.min(4, Number(afConsent().per) || 2)), blank = []; for (var b = 0; b < per; b++) blank.push({ full_name: '', class_name: '' }); pendingConsent = blank; return printNow(); }
     if ((el = e.target.closest('[data-afcprint]'))) { var x = findStudent(el.getAttribute('data-afcprint')); if (x) { pendingConsent = [x]; return printNow(); } }
   });
 
