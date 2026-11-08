@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 3';
+  var APP_BUILD = '08/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9740,7 +9740,9 @@
   async function afLogWarning(x, w) {
     var key = [x.id, w.date, w.notes.trim(), w.action.trim()].join('|');
     if (w.saved === key) return;
-    var r = await sb.from('discipline_records').insert({ student_id: x.id, day: w.date, kind: 'warning', violation: w.notes.trim(), action: w.action.trim(), created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+    var row = { student_id: x.id, day: w.date, kind: 'warning', violation: w.notes.trim(), action: w.action.trim(), created_by: (S.profile && S.profile.full_name) || displayName(S.email) };
+    var r = await sb.from('discipline_records').insert(row).select().single();
+    if (r.error && /runnable|fetch|network/i.test(r.error.message || '')) r = await sb.from('discipline_records').insert(row).select().single();
     if (r.error) return toast('طُبع الإنذار لكن تعذّر تسجيله في سجل المخالفات: ' + r.error.message, true);
     w.saved = key;
     if (dcState().loaded) dcState().list.unshift(r.data);
@@ -9824,10 +9826,10 @@
     if ((el = e.target.closest('[data-afwprint]'))) {
       var wx = findStudent(el.getAttribute('data-afwprint')), ww = afWarn();
       if (!wx) return;
-      if (ww.log && canEditDisc() && ww.notes.trim()) afLogWarning(wx, ww);
-      else if (ww.log && canEditDisc()) toast('لم تُكتب ملاحظات المخالفة، فلن يُسجَّل الإنذار في سجل المخالفات', true);
-      pendingWarn = wx;
-      return printNow();
+      // يُسجَّل قبل فتح نافذة الطباعة: نافذة الطباعة توقف الصفحة فيفشل الحفظ الجاري معها
+      var logged = ww.log && canEditDisc() && ww.notes.trim() ? afLogWarning(wx, ww).catch(function (err) { toast('تعذّر تسجيل الإنذار في سجل المخالفات: ' + err.message, true); }) : Promise.resolve();
+      if (ww.log && canEditDisc() && !ww.notes.trim()) toast('لم تُكتب ملاحظات المخالفة، فلن يُسجَّل الإنذار في سجل المخالفات', true);
+      return logged.then(function () { pendingWarn = wx; return printNow(); });
     }
     if ((el = e.target.closest('[data-afexp]')) && location.hash === '#/affairs') {
       if (el.getAttribute('data-afexp') === 'xlsx') return afExportXlsx();
