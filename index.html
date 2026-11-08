@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 1';
+  var APP_BUILD = '08/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9465,14 +9465,14 @@
     var m = dense ? '.28em' : '.45em';
     var line = function (v) { return '<span style="flex:1;border-bottom:1px dotted #555;min-height:1.2em">' + (v == null ? '' : v) + '</span>'; };
     var row = function (k, v) { return '<div style="display:flex;gap:.5em;margin:' + m + ' 0;align-items:baseline"><span>' + k + '</span>' + line(v) + '</div>'; };
-    var pair = function (k1, v1, k2, v2) { return '<div style="display:flex;gap:1.2em;margin:' + m + ' 0;align-items:baseline"><span style="flex:1;display:flex;gap:.4em;align-items:baseline"><span>' + k1 + '</span>' + line(v1) + '</span><span style="flex:1;display:flex;gap:.4em;align-items:baseline"><span>' + k2 + '</span>' + line(v2) + '</span></div>'; };
+    var pair = function (k1, v1, k2, v2, w1) { return '<div style="display:flex;gap:1.2em;margin:' + m + ' 0;align-items:baseline"><span style="flex:' + (w1 || 1) + ';display:flex;gap:.4em;align-items:baseline"><span>' + k1 + '</span>' + line(v1) + '</span><span style="flex:1;display:flex;gap:.4em;align-items:baseline"><span>' + k2 + '</span>' + line(v2) + '</span></div>'; };
     var topic = '<b>' + (c.topic ? esc(c.topic) : dots) + '</b>', cls = '<b>' + esc(x.class_name || dots) + '</b>';
     return '<div class="afc-form" style="position:relative;height:' + Z.h + 'mm;font-size:' + Z.font + 'pt;line-height:1.5;box-sizing:border-box;padding:' + (dense ? '1mm 3mm' : '2mm 4mm') + ';overflow:hidden">' +
       '<img class="wm" src="' + REPORT.logo + '" alt="" style="position:absolute;width:' + Z.wm + 'mm">' +
       (full ? letterhead() : '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.15em;margin-bottom:.3em"><b style="font-size:1.1em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(year) + '</span></div>') +
       '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:' + (full ? '1.5em' : dense ? '1.15em' : '1.25em') + ';color:var(--navy);margin:.1em 0 ' + (dense ? '.15em' : '.35em') + '">موافقة ولي الأمر</div>' +
-      (dense ? pair('السيد ولي أمر الطالب/ة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>', 'الصف الدراسي:', '<b>' + esc(x.class_name || '') + '</b>')
-        : row('السيد ولي أمر الطالب / الطالبة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>') + row('الصف الدراسي:', '<b>' + esc(x.class_name || '') + '</b>')) +
+      (dense ? pair('السيد ولي أمر الطالب/ة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>', 'الصف:', '<b>' + esc(x.class_name || '') + '</b>', 3)
+        : pair('السيد ولي أمر الطالب / الطالبة (الاسم رباعي):', '<b>' + esc(x.full_name) + '</b>', 'الصف:', '<b>' + esc(x.class_name || '') + '</b>', 3)) +
       '<p style="margin:' + m + ' 0;line-height:' + (dense ? '1.6' : '1.9') + '">نحيط علم سيادتكم بأنه سيتم ' + topic + ' لطلبة / وطالبات الصف (' + cls + ') بالأكاديمية للعام الدراسي <b>' + esc(year) + '</b>.</p>' +
       '<p style="margin:' + m + ' 0;line-height:' + (dense ? '1.6' : '1.9') + '">' + esc(c.note) + '</p>' +
       (dense
