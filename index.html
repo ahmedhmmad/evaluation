@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 4';
+  var APP_BUILD = '08/11 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -14792,7 +14792,7 @@
         changes.slice(k, k + 26).map(function (c, i) {
           var s = ttChSession(c) || {};
           return '<tr><td class="c">' + (k + i + 1) + '</td><td>' + esc(s.class_name || '') + '</td><td>' + esc(s.subject || '') + '</td><td>' + esc(ttTName(s.teacher_id)) + '</td>' +
-            '<td class="c">' + (c.add ? 'إضافة' : esc(days[c.from.d] || '') + ' — الحصة ' + c.from.p) + '</td><td class="c"><b>' + esc(days[c.to.d] || '') + ' — الحصة ' + c.to.p + '</b></td></tr>';
+            '<td class="c">' + (c.add || !c.from ? 'إضافة' : esc(days[c.from.d] || '') + ' — الحصة ' + c.from.p) + '</td><td class="c"><b>' + (c.rm || !c.to ? 'حذف' : esc(days[c.to.d] || '') + ' — الحصة ' + c.to.p) + '</b></td></tr>';
         }).join('') + '</tbody></table></section>');
     }
     // 3) جداول المعلمين قبل وبعد: معلمان في الصفحة
