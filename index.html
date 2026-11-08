@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 9';
+  var APP_BUILD = '09/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -16095,7 +16095,7 @@
         '<code dir="ltr">send-whatsapp</code> و <code dir="ltr">send-absence-whatsapp</code>، وحدّث الصفحة.</div>';
       return;
     }
-    if (w.tab === 'archive') { if (S.waMsgs == null) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadWaArchive(); return; } app.innerHTML = head + waArchiveHtml(); return; }
+    if (w.tab === 'archive') { if (S.waMsgs == null) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadWaArchive().then(function () { if (!w.autoRefreshed) { w.autoRefreshed = true; waRefresh(true); } }); return; } app.innerHTML = head + waArchiveHtml(); return; }
     if (w.tab === 'templates') { app.innerHTML = head + waTemplatesHtml(); return; }
     app.innerHTML = head + waSendHtml();
   }
@@ -16186,7 +16186,7 @@
         '<select id="wa-astatus" style="width:auto">' + opt('', 'كل الحالات', w.astatus) + opt('ok', 'أُرسلت', w.astatus) + opt('queued', 'في الانتظار', w.astatus) + opt('bad', 'لم تُرسل', w.astatus) + '</select>' +
         '<label class="field" for="wa-afrom" style="margin:0">من</label><input type="date" id="wa-afrom" value="' + esc(w.afrom) + '" style="width:auto">' +
         '<label class="field" for="wa-ato" style="margin:0">إلى</label><input type="date" id="wa-ato" value="' + esc(w.ato) + '" style="width:auto">' +
-        '<button type="button" class="btn primary" data-warefresh' + (w.busy ? ' disabled' : '') + ' title="يسأل SendWhats عن حالة الرسائل غير المكتملة في آخر 7 أيام">' + (w.busy ? 'جارٍ التحديث…' : 'تحديث الحالات') + '</button>' +
+        '<button type="button" class="btn primary" data-warefresh' + (w.busy ? ' disabled' : '') + ' title="يسأل SendWhats عن حالة الرسائل غير المكتملة في آخر 30 يومًا">' + (w.busy ? 'جارٍ التحديث…' : 'تحديث الحالات') + '</button>' +
         '<button type="button" class="btn" data-waxlsx' + (list.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
       (order.length ? '<div class="card"><h2 style="margin-top:0">الدفعات</h2><div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>الرسالة</th><th>المرسِل</th><th>العدد</th><th>أُرسلت</th><th>في الانتظار</th><th>لم تُرسل</th></tr></thead><tbody>' +
         order.slice(0, 100).map(function (b) { return '<tr><td style="white-space:nowrap">' + waTime(b.at) + '</td><td><b>' + esc(b.title) + '</b></td><td dir="ltr" style="text-align:right">' + esc(displayName(b.by || '')) + '</td><td>' + b.n + '</td><td>' + b.ok + '</td><td>' + b.wait + '</td><td>' + (b.bad ? '<b style="color:var(--danger,#b91c1c)">' + b.bad + '</b>' : 0) + '</td></tr>'; }).join('') +
@@ -16240,17 +16240,21 @@
     toast('أُضيف ' + (d.queued || 0) + ' رسالة إلى قائمة الإرسال' + (d.alreadySent ? '، و' + d.alreadySent + ' سبق إرسالها' : '') + (skipped ? '، و' + skipped + ' بلا رقم صحيح' : '') + '. تابعها في «الأرشيف والتقرير».', skipped > 0 && !d.queued);
   }
 
-  async function waRefresh() {
-    var w = waUi(), weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  // يسأل SendWhats عن الرسائل غير المكتملة (آخر 30 يومًا) ويكتب حالتها في الأرشيف.
+  // يعمل تلقائيًا عند فتح الأرشيف، ومن زر «تحديث الحالات»؛ وأي خطأ من الدالة يظهر بدل أن يُبلَع
+  async function waRefresh(quiet) {
+    var w = waUi(), since = new Date(Date.now() - 30 * 864e5).toISOString();
     var ids = {};
-    (S.waMsgs || []).forEach(function (m) { if (m.created_at >= weekAgo && ['queued', 'sending', 'sent'].indexOf(m.status) > -1) ids[m.batch_id] = 1; });
-    if (!Object.keys(ids).length) return toast('لا رسائل غير مكتملة في آخر 7 أيام');
+    (S.waMsgs || []).forEach(function (m) { if (m.created_at >= since && ['queued', 'sending', 'sent', 'delivered'].indexOf(m.status) > -1) ids[m.batch_id] = 1; });
+    if (!Object.keys(ids).length) return quiet ? null : toast('لا رسائل غير مكتملة في آخر 30 يومًا');
     w.busy = true; render();
-    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'refresh', batch_ids: Object.keys(ids) } });
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'refresh', batch_ids: Object.keys(ids).slice(0, 60) } });
     w.busy = false;
-    if (r.error) { render(); return toast('تعذّر التحديث: ' + r.error.message, true); }
+    var d = r.data || {};
+    if (r.error || d.error) { render(); return toast('تعذّر تحديث الحالات: ' + (d.error || r.error.message), true); }
     await loadWaArchive();
-    toast('حُدّثت الحالات');
+    if (d.failed && d.failed.length) return toast('حُدّث ' + (d.updated || 0) + ' رسالة، وتعذّر ' + d.failed.length + ': ' + d.failed.slice(0, 2).join(' — '), true);
+    if (!quiet) toast('حُدّثت حالة ' + (d.updated || 0) + ' رسالة');
   }
 
   async function waExport() {

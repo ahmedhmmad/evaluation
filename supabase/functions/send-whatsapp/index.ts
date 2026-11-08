@@ -105,18 +105,20 @@ async function archive(ctx: Ctx, batchId: string, kind: string, title: string, m
 export async function refresh(ctx: Ctx, batchIds: string[]) {
   if (!ctx.admin) return { error: "SUPABASE_SERVICE_ROLE_KEY is missing" };
   let updated = 0;
-  for (const b of batchIds.slice(0, 30)) {
+  const failed: string[] = [];
+  for (const b of batchIds.slice(0, 60)) {
     const res = await fetch(`${ctx.url}/api/v1/external/batches/${encodeURIComponent(b)}`, { headers: { "X-Api-Key": ctx.key } });
-    if (!res.ok) continue;
+    if (!res.ok) { failed.push(`${b}: ${res.status}`); continue; }
     const out = await res.json().catch(() => null);
     for (const m of out?.messages ?? []) {
       const { error } = await ctx.admin.from("wa_messages")
         .update({ status: m.status, sent_at: m.sentAt, delivered_at: m.deliveredAt, error: m.error ?? null })
         .eq("batch_id", b).eq("external_id", m.externalId).not("status", "in", "(rejected,nophone)");
       if (!error) updated++;
+      else failed.push(`${b}/${m.externalId}: ${error.message}`);
     }
   }
-  return { updated };
+  return { updated, failed };
 }
 // ---- end of shared part ----
 
