@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '08/11 — 7';
+  var APP_BUILD = '08/11 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -18261,22 +18261,73 @@
     var t = h ? sigText(h) : '';
     return (t || document.title || 'ورقة رسمية').slice(0, 200);
   }
-  // كتلة التوقيع: صورة التوقيع (ورقم الورقة باهت فوقها فلا تُقص وتُلصق على ورقة أخرى) ورمز QR تحته رقم الورقة فقط.
-  // تُثبَّت في الركن الأيسر أسفل آخر صفحة فوق ما فيها، فلا تزيد طول الورقة ولا تدفعها إلى صفحة ثانية
-  async function sigBlock(d) {
+  // التوقيع على الورقة: صورة التوقيع اليدوي مكان نقاط «التوقيع» في خانة صاحبه (المطابقة لصفته)، وعليها رقم الورقة مائلًا باهتًا.
+  // ورمز QR وتحته رقم الورقة مكان دائرة «الختم»، أو في أعلى يسار الصفحة الأولى إن لم يكن في الورقة ختم.
+  // لا يُضاف شيء إلى طول الورقة
+  function sigWords(t) {
+    return String(t || '').replace(/\/ة/g, '').replace(/[أإآ]/g, 'ا').split(/[\s:،,—-]+/).map(function (w) { return w.replace(/^ال/, ''); }).filter(function (w) { return w.length >= 3; });
+  }
+  function sigMatches(text, title) {
+    var have = sigWords(text).join(' '), need = sigWords(title);
+    return need.length > 0 && need.every(function (w) { return have.indexOf(w) > -1; });
+  }
+  function sigImgHtml(d) {
+    return '<span class="sig-hand" style="position:relative;display:inline-block;vertical-align:middle;margin:-6mm 0 -5mm">' +
+      '<img src="' + d.image + '" alt="" style="height:13mm;max-width:40mm;object-fit:contain;display:block">' +
+      '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9pt;letter-spacing:.18em;color:rgba(19,48,107,.22);transform:rotate(-14deg);font-weight:700;white-space:nowrap">' + esc(d.code) + '</span></span>';
+  }
+  async function sigQrHtml(d, mm) {
     var qr = await sigQr(), q = qr(0, 'M');
     q.addData(sigVerifyUrl(d.code)); q.make();
     var svg = q.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
-    return '<div class="sig-block" style="position:absolute;left:0;bottom:0;display:flex;align-items:flex-end;gap:3mm;direction:ltr;z-index:2;pointer-events:none">' +
-      '<div style="text-align:center;font-size:7pt;line-height:1.2;font-weight:700;letter-spacing:.06em"><div style="width:17mm;height:17mm;background:#fff">' + svg.replace('<svg ', '<svg style="width:17mm;height:17mm;display:block" ') + '</div>' + esc(d.code) + '</div>' +
-      '<div style="position:relative"><img src="' + d.image + '" alt="" style="height:15mm;max-width:45mm;object-fit:contain;display:block">' +
-        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11pt;letter-spacing:.2em;color:rgba(19,48,107,.14);transform:rotate(-12deg);font-weight:700">' + esc(d.code) + '</div></div></div>';
+    return '<span class="sig-qr" style="display:inline-flex;flex-direction:column;align-items:center;font-size:6.5pt;line-height:1.15;font-weight:700;letter-spacing:.05em;color:#222;background:#fff">' +
+      svg.replace('<svg ', '<svg style="width:' + mm + 'mm;height:' + mm + 'mm;display:block" ') + esc(d.code) + '</span>';
   }
-  function sigAppend(html) {
-    var kids = sheet.children, last = kids.length ? kids[kids.length - 1] : null;
-    var host = last && (last.tagName === 'SECTION' || /page/.test(last.className || '')) ? last : sheet;
-    if (!host.style.position) host.style.position = 'relative';
-    host.insertAdjacentHTML('beforeend', html);
+  async function sigApply(d) {
+    // 1) التوقيع مكان النقاط: خانات reportSigns (.rs) أولًا، ثم أي سطر فيه صفة الموقّع ونقاط
+    var placed = false, dotsRe = /[.…_]{6,}/;
+    Array.prototype.forEach.call(sheet.querySelectorAll('.rs > div'), function (box) {
+      if (placed || box.classList.contains('stamp')) return;
+      var head = box.querySelector('b');
+      if (!head || !sigMatches(head.textContent, d.title)) return;
+      var line = Array.prototype.filter.call(box.querySelectorAll('span'), function (sp) { return /التوقيع/.test(sp.textContent) && dotsRe.test(sp.textContent); })[0];
+      if (!line) return;
+      line.innerHTML = esc(line.textContent.replace(dotsRe, '\u0000')).replace('\u0000', sigImgHtml(d));
+      placed = true;
+    });
+    if (!placed) {
+      var walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT), n, hit = null;
+      while ((n = walker.nextNode())) {
+        if (!dotsRe.test(n.nodeValue)) continue;
+        var ctx = n.nodeValue.split(dotsRe)[0];
+        if (!sigMatches(ctx, d.title) && !(n.parentNode && sigMatches(n.parentNode.textContent.split(dotsRe)[0], d.title))) continue;
+        hit = n; break;
+      }
+      if (hit) {
+        var m = dotsRe.exec(hit.nodeValue), tail = hit.splitText(m.index);
+        tail.nodeValue = tail.nodeValue.slice(m[0].length);
+        var holder = document.createElement('span');
+        holder.innerHTML = sigImgHtml(d);
+        tail.parentNode.insertBefore(holder.firstChild, tail);
+        placed = true;
+      }
+    }
+    // 2) رمز QR مكان الختم، وإلا أعلى يسار الصفحة الأولى
+    var stamp = sheet.querySelector('.rs .stamp');
+    if (stamp) {
+      stamp.style.borderRadius = '0';
+      stamp.style.border = '0';
+      stamp.innerHTML = await sigQrHtml(d, 17);
+    } else {
+      var first = sheet.querySelector('section, .tt-page') || sheet;
+      if (!first.style.position) first.style.position = 'relative';
+      first.insertAdjacentHTML('afterbegin', '<div style="position:absolute;top:0;left:0;z-index:2">' + await sigQrHtml(d, 16) + '</div>');
+    }
+    // لا مكان لتوقيعه في الورقة: يوضع بجانب رمز QR
+    if (!placed) {
+      var q = sheet.querySelector('.sig-qr');
+      if (q) q.insertAdjacentHTML('afterend', sigImgHtml(d).replace('margin:-6mm 0 -5mm', 'margin:0 2mm'));
+    }
   }
   function sigMeta() { return { cls: sheet.className, width: sheet.style.width, font: sheet.style.fontSize, land: !!printLandscape, fit: sheet.getAttribute('data-fit') || '' }; }
 
@@ -18308,7 +18359,7 @@
   async function sigStep() {
     if (pendingSigned) {
       var ps = pendingSigned; pendingSigned = null;
-      if (ps.data) { try { sigAppend(await sigBlock(ps.data)); } catch (err) { toast(err.message, true); return false; } }
+      if (ps.data) { try { await sigApply(ps.data); } catch (err) { toast(err.message, true); return false; } }
       return true;
     }
     if (!S.uid || role() === 'pending') return true;
@@ -18329,7 +18380,7 @@
     var r = await sb.rpc('sign_doc', { p_signer: a.k === 'me' ? S.uid : a.who, p_title: title, p_body: body.slice(0, 20000), p_hash: hash, p_request: null });
     if (r.error) { fail(r.error); return false; }
     SIG.loaded = false;
-    try { sigAppend(await sigBlock(r.data)); } catch (err) { toast(err.message, true); return false; }
+    try { await sigApply(r.data); } catch (err) { toast(err.message, true); return false; }
     return true;
   }
   function buildSignedReqSheet(ps) {
@@ -18422,7 +18473,7 @@
       if (!image) return toast('اختر صورة التوقيع أولًا', true);
       var row = { user_id: S.uid, name: document.getElementById('sg-name').value.trim(), title: document.getElementById('sg-title').value.trim(), image: image, updated_at: new Date().toISOString() };
       if (!row.name) return toast('اكتب الاسم', true);
-      r = await sb.from('signatures').upsert(row);
+      r = await sb.from('signatures').upsert(row, { onConflict: 'user_id' });
       if (r.error) return fail(r.error);
       sigNewImage = null; toast('حُفظ التوقيع'); return renderSignatures();
     }
