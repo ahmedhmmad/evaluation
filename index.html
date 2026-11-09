@@ -527,6 +527,9 @@
   #print-sheet.ps .ps-domains td { height: 2.3em; }
   #print-sheet.ps .rbox { min-height: 3.2em; }
   #print-sheet.ps .rs { margin-top: 1em; }
+  /* خطاب الطلبية: خانة المدير والاسم في وسطها، وسطر العنوان والهاتف في أسفل الصفحة */
+  #print-sheet .rs.or-signs > div { text-align: center; }
+  #print-sheet .or-foot { position: fixed; bottom: 7mm; left: 15mm; right: 15mm; padding-top: .4em; border-top: 1.5px solid #C8A45D; text-align: center; font-size: .85em; color: #13306B; }
   /* تقييم المعلم */
   #print-sheet .pe-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8em; margin-bottom: .8em; }
   #print-sheet .pe-summary > div { border: .5pt solid var(--rule); border-top: 1.5pt solid var(--gold); padding: .3em; text-align: center; }
@@ -1283,7 +1286,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '09/11 — 4';
+  var APP_BUILD = '09/11 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10029,8 +10032,9 @@
         items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.unit || '-') + '</td><td class="c">' + esc(it.qty) + '</td></tr>'; }).join('') + '</tbody></table>' +
       '<p style="margin:0 0 .4em;line-height:1.9;white-space:pre-wrap">' + esc(o.closing) + '</p>' +
       '<p style="margin:0 0 .4em;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير ' + schoolName(), principalName()]]) +
-      '<div style="margin-top:1.4em;padding-top:.4em;border-top:1.5px solid #C8A45D;text-align:center;font-size:.85em;color:#13306B">' +
+      reportSigns([['مدير ' + schoolName(), principalName()]]).replace('<div class="rs">', '<div class="rs or-signs">') +
+      // سطر العنوان والهاتف ثابت أسفل الورقة دائمًا مهما كان طول الخطاب
+      '<div class="or-foot">' +
         esc((S.settings && S.settings.school_address) || REPORT.address) + '&nbsp;&nbsp;|&nbsp;&nbsp;<span dir="ltr">' + esc((S.settings && S.settings.school_phone) || REPORT.phone) + '</span></div>';
     fitSheet();
   }
