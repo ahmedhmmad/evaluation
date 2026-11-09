@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '09/11 — 1';
+  var APP_BUILD = '09/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1603,13 +1603,15 @@
     // اللجان المدرسية: مجموعة أشخاص
     committees: 'M9 11a3 3 0 100-6 3 3 0 000 6zM3 20a6 6 0 0112 0M16 5.5a3 3 0 010 5.5M17.5 14a5.5 5.5 0 013.5 6',
     // العهد: صندوق
-    custody: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8'
+    custody: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8',
+    // الطلبيات: قائمة بعلامات
+    orders: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4'
   };
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
   function navModel() {
     var groups = navModel0();
-    if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد']); });
+    if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد'], ['#/orders', 'orders', 'الطلبيات']); });
     if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
     else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
@@ -1649,6 +1651,7 @@
     if (h === '#/exits' && canAttView()) return 'exits';
     if (h === '#/discipline' && canDisc()) return 'discipline';
     if (h === '#/custody' && canView()) return 'custody';
+    if (h === '#/orders' && canView()) return 'orders';
     if (/^#\/affairs/.test(h) && canAttView()) return 'affairs';
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
@@ -9353,6 +9356,7 @@
     if (h === '#/exits' && canAttView()) return renderExits();
     if (h === '#/discipline' && canDisc()) return renderDiscipline();
     if (h === '#/custody' && canView()) return renderCustody();
+    if (h === '#/orders' && canView()) return renderOrders();
     if (/^#\/affairs/.test(h) && canAttView()) return renderAffairs();
     if (isRegistrar()) {
       if (/^#\/classes/.test(h)) return renderClasses();
@@ -9927,6 +9931,152 @@
       (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="empty">' + (c.list.length ? 'لا أصناف مطابقة.' : 'لا توجد أصناف بعد' + (edit ? '؛ أضف صنفًا من الأعلى.' : '.')) + '</div>') + '</div>';
   }
+
+  /* ---------- الطلبيات ----------
+     خطابات طلب احتياجات للجهات الداعمة (جمعية ...): المرسَل إليه والموضوع وجدول الأصناف (الصنف، الوحدة، الكمية أو المبلغ)،
+     وتُطبع خطابًا رسميًا بالترويسة وتوقيع المدير. يعدّلها المدير العام ويراها المدير (supabase/orders.sql) */
+  var OR_STATUS = { draft: 'مسودة', sent: 'أُرسلت', received: 'استُلمت' };
+  var OR_UNITS = ['عدد', 'دستة', 'ربطة', 'علبة', 'كرتونة', 'رزمة', 'متر', 'كيلو', 'لتر', '-'];
+  function orState() { return S.or || (S.or = { list: [], loaded: false, loading: false, missing: false, edit: null, q: '' }); }
+  function orNew(src) {
+    var last = src || orState().list[0];
+    return {
+      id: null, order_date: todayISO(), status: 'draft', notes: '',
+      recipient: last ? last.recipient : 'السادة / ', recipient2: last ? last.recipient2 : '',
+      subject: 'طلب احتياجات مدرسية',
+      intro: last && last.intro ? last.intro : 'تهديكم إدارة ' + schoolName() + ' أطيب التحيات، وتشكر لكم دعمكم المتواصل لمسيرة تعليم أبنائنا الطلاب. ونظراً لحاجة الأكاديمية إلى تقديم خدماتها للطلاب، نرجو من حضراتكم التكرم بتوفير الاحتياجات التالية:',
+      closing: last && last.closing ? last.closing : 'شاكرين لكم حسن تعاونكم، وجزاكم الله خيراً.',
+      items: src ? JSON.parse(JSON.stringify(src.items || [])) : [{ item: '', unit: 'عدد', qty: '' }]
+    };
+  }
+  async function loadOrders() {
+    var c = orState();
+    if (c.loading) return;
+    c.loading = true;
+    var rows = await fetchAll(function () { return sb.from('orders').select('*').order('order_date', { ascending: false }).order('no', { ascending: false }); });
+    c.loading = false; c.loaded = true; c.missing = !rows; c.list = rows || [];
+    render();
+  }
+  function orItemsHtml(o) {
+    var dl = '<datalist id="or-units">' + OR_UNITS.map(function (u) { return '<option value="' + esc(u) + '">'; }).join('') + '</datalist>';
+    return dl + '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الصنف</th><th style="width:9em">الوحدة</th><th style="width:9em">الكمية / المبلغ</th><th></th></tr></thead><tbody>' +
+      o.items.map(function (it, i) {
+        return '<tr><td>' + (i + 1) + '</td><td><input type="text" data-oi="' + i + '|item" value="' + esc(it.item) + '" aria-label="الصنف"></td>' +
+          '<td><input type="text" list="or-units" data-oi="' + i + '|unit" value="' + esc(it.unit) + '" aria-label="الوحدة"></td>' +
+          '<td><input type="text" data-oi="' + i + '|qty" value="' + esc(it.qty) + '" aria-label="الكمية" placeholder="10 أو 300 جنيه"></td>' +
+          '<td style="white-space:nowrap"><button type="button" class="btn" data-orup="' + i + '" title="لأعلى"' + (i ? '' : ' disabled') + '>↑</button> <button type="button" class="btn danger" data-ordelit="' + i + '" title="حذف السطر">×</button></td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn" data-oradd>+ إضافة صنف</button></div>';
+  }
+  function renderOrders() {
+    var c = orState(), edit = isAdmin();
+    if (!c.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadOrders(); return; }
+    if (c.missing) {
+      app.innerHTML = '<div class="card empty">الطلبيات تحتاج جدولًا جديدًا.<br>' + (isAdmin() ? 'شغّل الملف <code dir="ltr">supabase/orders.sql</code> في محرر SQL، ثم حدّث الصفحة.' : 'يشغّل المدير العام الملف <code dir="ltr">supabase/orders.sql</code>.') + '</div>';
+      return;
+    }
+    var o = c.edit, head = '<div class="page-head"><div><h1>الطلبيات</h1><p>خطابات طلب احتياجات للجهات الداعمة، بجدول الأصناف ووحداتها وكمياتها، وتُطبع خطابًا رسميًا بالترويسة وتوقيع المدير.</p></div>' +
+      (edit && !o ? '<button type="button" class="btn primary" data-ornew>طلبية جديدة</button>' : '') + '</div>';
+    if (o) {
+      app.innerHTML = head + '<div class="card"><h2 style="margin-top:0">' + (o.id ? 'تعديل الطلبية رقم ' + esc(o.no) : 'طلبية جديدة') + '</h2>' +
+        '<div class="toolbar" style="align-items:flex-end">' +
+          '<div style="width:11em"><label class="field" for="or-date">التاريخ</label><input type="date" id="or-date" data-of="order_date" value="' + esc(o.order_date) + '"></div>' +
+          '<div style="width:10em"><label class="field" for="or-status">الحالة</label><select id="or-status" data-of="status">' + Object.keys(OR_STATUS).map(function (k) { return '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + OR_STATUS[k] + '</option>'; }).join('') + '</select></div>' +
+          '<div style="flex:1;min-width:220px"><label class="field" for="or-subject">الموضوع</label><input type="text" id="or-subject" data-of="subject" value="' + esc(o.subject) + '"></div></div>' +
+        '<div class="toolbar" style="align-items:flex-end">' +
+          '<div style="flex:1;min-width:220px"><label class="field" for="or-rec">المرسَل إليه <span class="req">*</span></label><input type="text" id="or-rec" data-of="recipient" value="' + esc(o.recipient) + '" placeholder="السادة / جمعية ..."></div>' +
+          '<div style="flex:1;min-width:220px"><label class="field" for="or-rec2">سطر ثانٍ</label><input type="text" id="or-rec2" data-of="recipient2" value="' + esc(o.recipient2) + '" placeholder="للأعمال الخيرية"></div></div>' +
+        '<label class="field" for="or-intro">نص المقدمة</label><textarea id="or-intro" data-of="intro" rows="3" style="width:100%">' + esc(o.intro) + '</textarea>' +
+        '<h3>الأصناف</h3>' + orItemsHtml(o) +
+        '<label class="field" for="or-closing">الخاتمة</label><textarea id="or-closing" data-of="closing" rows="2" style="width:100%">' + esc(o.closing) + '</textarea>' +
+        '<label class="field" for="or-notes">ملاحظات داخلية (لا تُطبع)</label><input type="text" id="or-notes" data-of="notes" value="' + esc(o.notes) + '">' +
+        '<div class="toolbar" style="margin-top:12px"><button type="button" class="btn primary" data-orsave>حفظ</button><button type="button" class="btn" data-orsaveprint>حفظ وطباعة</button><button type="button" class="btn" data-orcancel>إلغاء</button></div></div>';
+      return;
+    }
+    var q = norm(c.q), list = c.list.filter(function (x) { return !q || norm(x.recipient + ' ' + x.subject + ' ' + (x.items || []).map(function (i) { return i.item; }).join(' ')).indexOf(q) > -1; });
+    app.innerHTML = head + '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">عدد الطلبيات: ' + list.length + '</h2>' +
+      '<input type="search" id="or-q" placeholder="بحث في الجهة والموضوع والأصناف" aria-label="بحث" style="max-width:260px" value="' + esc(c.q) + '"></div>' +
+      (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم</th><th>التاريخ</th><th>المرسَل إليه</th><th>الموضوع</th><th>الأصناف</th><th>الحالة</th><th></th></tr></thead><tbody>' +
+        list.map(function (x) {
+          return '<tr><td>' + esc(x.no) + '</td><td>' + dmy(x.order_date) + '</td><td><b>' + esc(x.recipient) + '</b>' + (x.recipient2 ? ' ' + esc(x.recipient2) : '') + '</td><td>' + esc(x.subject) + '</td><td>' + (x.items || []).length + '</td>' +
+            '<td>' + esc(OR_STATUS[x.status] || x.status) + '</td><td style="white-space:nowrap"><button type="button" class="btn" data-orprint="' + x.id + '" data-ro-ok>طباعة / PDF</button>' +
+            (edit ? ' <button type="button" class="btn" data-oropen="' + x.id + '">تعديل</button> <button type="button" class="btn" data-orcopy="' + x.id + '" title="طلبية جديدة بنفس الأصناف">نسخ</button> <button type="button" class="btn danger" data-ordel="' + x.id + '">حذف</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>'
+        : '<div class="empty">' + (c.list.length ? 'لا طلبيات مطابقة.' : 'لا توجد طلبيات بعد' + (edit ? '؛ اضغط «طلبية جديدة».' : '.')) + '</div>') + '</div>';
+  }
+
+  var pendingOr = null;
+  // خطاب الطلبية: الترويسة، التاريخ، المرسَل إليه، الموضوع، المقدمة، جدول الأصناف، الخاتمة، ثم توقيع المدير
+  function buildOrderSheet(o) {
+    var items = (o.items || []).filter(function (i) { return String(i.item || '').trim(); });
+    var d = String(o.order_date || '').split('-'), months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    var date = d.length === 3 ? Number(d[2]) + ' ' + months[Number(d[1]) - 1] + ' ' + d[0] : '';
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + letterhead() +
+      '<div style="display:flex;justify-content:space-between;margin:.8em 0 1em"><span><b>التاريخ:</b> ' + esc(date) + '</span><span><b>رقم الطلبية:</b> ' + esc(o.no || '') + '</span></div>' +
+      '<p style="margin:0;font-size:1.12em"><b>' + esc(o.recipient) + '</b></p>' +
+      '<p style="margin:0 0 .9em;font-size:1.12em;display:flex;justify-content:space-between"><b>' + esc(o.recipient2 || '') + '</b><b>المحترمين</b></p>' +
+      '<p style="margin:0 0 .7em">السلام عليكم ورحمة الله وبركاته، وبعد،</p>' +
+      '<p style="margin:0 0 .8em;text-align:center;font-size:1.12em"><b><u>الموضوع: ' + esc(o.subject) + '</u></b></p>' +
+      '<p style="margin:0 0 .8em;line-height:1.9;white-space:pre-wrap">' + esc(o.intro) + '</p>' +
+      '<table class="rz" style="margin:.4em 0 .9em"><thead><tr><th style="width:3em">م</th><th>الصنف</th><th style="width:7em">الوحدة</th><th style="width:7em">الكمية</th></tr></thead><tbody>' +
+        items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.unit || '-') + '</td><td class="c">' + esc(it.qty) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<p style="margin:0 0 .4em;line-height:1.9;white-space:pre-wrap">' + esc(o.closing) + '</p>' +
+      '<p style="margin:0 0 .4em;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
+      reportSigns([['مدير ' + schoolName(), principalName()]]);
+    fitSheet();
+  }
+  function orPick(id) { return orState().list.filter(function (x) { return x.id === id; })[0]; }
+  async function orSave(andPrint) {
+    var c = orState(), o = c.edit;
+    if (!o.recipient.trim() || o.recipient.trim() === 'السادة /') return toast('اكتب المرسَل إليه', true);
+    var items = o.items.map(function (i) { return { item: String(i.item || '').trim(), unit: String(i.unit || '').trim(), qty: String(i.qty || '').trim() }; }).filter(function (i) { return i.item; });
+    if (!items.length) return toast('أضف صنفًا واحدًا على الأقل', true);
+    var row = { order_date: o.order_date || todayISO(), recipient: o.recipient.trim(), recipient2: o.recipient2.trim(), subject: o.subject.trim(), intro: o.intro, items: items, closing: o.closing, status: o.status, notes: o.notes, updated_at: new Date().toISOString() };
+    var r = o.id ? await sb.from('orders').update(row).eq('id', o.id).select().single()
+      : await sb.from('orders').insert(Object.assign(row, { created_by: (S.profile && S.profile.full_name) || displayName(S.email) })).select().single();
+    if (r.error) return fail(r.error);
+    c.list = [r.data].concat(c.list.filter(function (x) { return x.id !== r.data.id; }));
+    c.edit = null;
+    render();
+    toast('حُفظت الطلبية رقم ' + r.data.no);
+    if (andPrint) { pendingOr = r.data; printNow(); }
+  }
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/orders' || !canView()) return;
+    var el, c = orState(), o = c.edit;
+    if ((el = e.target.closest('[data-orprint]'))) { var p = orPick(el.getAttribute('data-orprint')); if (p) { pendingOr = p; printNow(); } return; }
+    if (!isAdmin()) return;
+    if (e.target.closest('[data-ornew]')) { c.edit = orNew(); scrollTo(0, 0); return render(); }
+    if ((el = e.target.closest('[data-oropen]'))) { var x = orPick(el.getAttribute('data-oropen')); if (x) { c.edit = JSON.parse(JSON.stringify(x)); if (!c.edit.items.length) c.edit.items.push({ item: '', unit: 'عدد', qty: '' }); scrollTo(0, 0); render(); } return; }
+    if ((el = e.target.closest('[data-orcopy]'))) { var y = orPick(el.getAttribute('data-orcopy')); if (y) { c.edit = Object.assign(orNew(y), { recipient: y.recipient, recipient2: y.recipient2, subject: y.subject }); scrollTo(0, 0); render(); toast('طلبية جديدة بنفس الأصناف — عدّلها ثم احفظ'); } return; }
+    if ((el = e.target.closest('[data-ordel]'))) {
+      var z = orPick(el.getAttribute('data-ordel'));
+      if (!z || !confirm('حذف الطلبية رقم ' + z.no + '؟')) return;
+      var d = await sb.from('orders').delete().eq('id', z.id);
+      if (d.error) return fail(d.error);
+      c.list = c.list.filter(function (q) { return q.id !== z.id; });
+      return render();
+    }
+    if (!o) return;
+    if (e.target.closest('[data-oradd]')) { o.items.push({ item: '', unit: 'عدد', qty: '' }); render(); var ins = document.querySelectorAll('[data-oi$="|item"]'); if (ins.length) ins[ins.length - 1].focus(); return; }
+    if ((el = e.target.closest('[data-ordelit]'))) { o.items.splice(Number(el.getAttribute('data-ordelit')), 1); if (!o.items.length) o.items.push({ item: '', unit: 'عدد', qty: '' }); return render(); }
+    if ((el = e.target.closest('[data-orup]'))) { var k = Number(el.getAttribute('data-orup')); var t = o.items[k]; o.items[k] = o.items[k - 1]; o.items[k - 1] = t; return render(); }
+    if (e.target.closest('[data-orcancel]')) { c.edit = null; return render(); }
+    if (e.target.closest('[data-orsave]')) return orSave(false);
+    if (e.target.closest('[data-orsaveprint]')) return orSave(true);
+  });
+  function orInput(e) {
+    if (location.hash !== '#/orders') return;
+    var c = orState(), o = c.edit, el = e.target, a;
+    if (el.id === 'or-q') { var pos = el.selectionStart; c.q = el.value; render(); var q = document.getElementById('or-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } return; }
+    if (!o) return;
+    if ((a = el.getAttribute('data-of'))) o[a] = el.value;
+    else if ((a = el.getAttribute('data-oi'))) { var p = a.split('|'); o.items[Number(p[0])][p[1]] = el.value; }
+  }
+  document.addEventListener('input', orInput);
+  document.addEventListener('change', orInput);
 
   var pendingCu = false;
   // كشف العهد المطبوع: الأصناف المعروضة (بحسب البحث) بأعدادها وملاحظاتها
@@ -18085,6 +18235,7 @@
     else if (pendingSign) buildSignSheet(pendingSign);
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
+    else if (pendingOr) buildOrderSheet(pendingOr);
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
     else if (pendingDc) buildDisciplineSheet();
@@ -18123,6 +18274,7 @@
     pendingStList = null;
     pendingCm = null;
     pendingCu = false;
+    pendingOr = null;
     pendingWarn = null;
     pendingDc = false;
     pendingEx = null;
