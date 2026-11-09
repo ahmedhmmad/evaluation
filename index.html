@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '09/11 — 2';
+  var APP_BUILD = '09/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10024,7 +10024,9 @@
         items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.unit || '-') + '</td><td class="c">' + esc(it.qty) + '</td></tr>'; }).join('') + '</tbody></table>' +
       '<p style="margin:0 0 .4em;line-height:1.9;white-space:pre-wrap">' + esc(o.closing) + '</p>' +
       '<p style="margin:0 0 .4em;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير ' + schoolName(), principalName()]]);
+      reportSigns([['مدير ' + schoolName(), principalName()]]) +
+      '<div style="margin-top:1.4em;padding-top:.4em;border-top:1.5px solid #C8A45D;text-align:center;font-size:.85em;color:#13306B">' +
+        esc((S.settings && S.settings.school_address) || REPORT.address) + '&nbsp;&nbsp;|&nbsp;&nbsp;<span dir="ltr">' + esc((S.settings && S.settings.school_phone) || REPORT.phone) + '</span></div>';
     fitSheet();
   }
   function orPick(id) { return orState().list.filter(function (x) { return x.id === id; })[0]; }
@@ -17619,6 +17621,8 @@
     nameEn: 'Third Pillar Academy',
     logo: 'logo.png',     // الشعار الدائري: علامة مائية فقط
     banner: 'banner.jpg', // الترويسة أعلى كل ملف مطبوع
+    address: '12 شارع الدكتور نجيب محفوظ، متفرع من عباس العقاد، المنطقة الثامنة، مدينة نصر', // يُغيَّر من الإعدادات (school_address)
+    phone: '01070761330', // يُغيَّر من الإعدادات (school_phone)
     // A4 عمودي: 12mm أعلى وأسفل، 15mm من الجانبين
     page: { width: 210, height: 297, marginY: 12, marginX: 15 },
     fonts: 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Montserrat:wght@600;700&display=swap',
@@ -18446,7 +18450,10 @@
       if (!head || !sigMatches(head.textContent, d.title)) return;
       var line = Array.prototype.filter.call(box.querySelectorAll('span'), function (sp) { return /التوقيع/.test(sp.textContent) && dotsRe.test(sp.textContent); })[0];
       if (!line) return;
-      line.innerHTML = esc(line.textContent.replace(dotsRe, '\u0000')).replace('\u0000', sigImgHtml(d));
+      line.innerHTML = sigImgHtml(d);
+      Array.prototype.forEach.call(box.querySelectorAll('span'), function (sp) {
+        if (sp !== line && /^\s*الاسم:\s*/.test(sp.textContent) && !dotsRe.test(sp.textContent)) sp.textContent = sp.textContent.replace(/^\s*الاسم:\s*/, '');
+      });
       placed = true;
     });
     if (!placed) {
