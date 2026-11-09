@@ -1283,7 +1283,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '09/11 — 3';
+  var APP_BUILD = '09/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8395,6 +8395,11 @@
         '<label class="field" for="principal-name" style="margin-top:14px">اسم مدير/ة الأكاديمية</label>' +
         '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
         '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p>' +
+        '<label class="field" for="school-address" style="margin-top:14px">عنوان الأكاديمية (أسفل الخطابات الرسمية كالطلبيات)</label>' +
+        '<input type="text" id="school-address" data-settingtext="school_address" placeholder="' + esc(REPORT.address) + '" value="' + esc((S.settings && S.settings.school_address) || '') + '">' +
+        '<label class="field" for="school-phone" style="margin-top:14px">هاتف الأكاديمية</label>' +
+        '<input type="text" id="school-phone" dir="ltr" style="text-align:right" data-settingtext="school_phone" placeholder="' + esc(REPORT.phone) + '" value="' + esc((S.settings && S.settings.school_phone) || '') + '">' +
+        '<p class="hint" style="margin:6px 0 0">اتركهما فارغين لاستعمال العنوان والهاتف الحاليين الظاهرين في الخانتين.</p>' +
         '<label class="field" style="margin-top:16px">الصفوف والشعب</label>' +
         '<p class="hint" style="margin:0">الشعب: ' + (schoolClasses().map(esc).join('، ') || 'لا توجد بعد') + '. تُدار من <a href="#/rooms">إعداد الفصول</a>.</p></div>' +
       '<div class="card"><h2>ما يراه المشاهدون</h2>' +
