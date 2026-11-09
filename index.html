@@ -1286,7 +1286,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '09/11 — 5';
+  var APP_BUILD = '09/11 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9442,10 +9442,156 @@
     var u = afUi();
     if (!u.from) { u.from = afYearStart(); u.to = todayISO(); }
     if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
+    if (location.hash === '#/affairs/lists') { app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب — قوائم الطلاب</h1>' + slScreen(); return; }
     var cur = afCurrent();
     if (location.hash !== '#/affairs' && !cur) return go('#/affairs');
     app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afView() === 'warning' ? afWarnScreen(cur) : afView() === 'consent' ? afConsentScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
   }
+
+  /* ----- قوائم الطلاب (عامة) -----
+     قائمة بعنوان (مثل «تطعيم الحصبة») يُختار فيها الطلاب (من وافق)، وتُطبع كشفًا حسب الشعبة للمختارين أو لغير المختارين.
+     تصلح لأي غرض: تطعيم، رحلة، نشاط، استلام كتب. يعدّلها المدير العام والمسجِّل (supabase/student_lists.sql) */
+  function slState() { return S.sl || (S.sl = { list: [], loaded: false, loading: false, missing: false, open: '', sel: null, dirty: false, cls: '', q: '', show: '', perPage: true, newTitle: '' }); }
+  function slCanEdit() { return isAdmin() || isRegistrar(); }
+  async function slLoad() {
+    var c = slState();
+    if (c.loading) return;
+    c.loading = true;
+    var rows = await fetchAll(function () { return sb.from('student_lists').select('*').order('created_at', { ascending: false }); });
+    c.loading = false; c.loaded = true; c.missing = !rows; c.list = rows || [];
+    render();
+  }
+  function slCur() { var c = slState(); return c.list.filter(function (x) { return x.id === c.open; })[0]; }
+  function slStudents() {
+    var order = attClasses();
+    return S.students.filter(enrolled).slice().sort(function (a, b) {
+      var ia = order.indexOf(a.class_name || ''), ib = order.indexOf(b.class_name || '');
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || String(a.full_name).localeCompare(String(b.full_name), 'ar');
+    });
+  }
+  function slShown() {
+    var c = slState(), q = norm(c.q);
+    return slStudents().filter(function (x) {
+      if (c.cls && (x.class_name || '') !== c.cls) return false;
+      if (c.show === 'yes' && !c.sel[x.id]) return false;
+      if (c.show === 'no' && c.sel[x.id]) return false;
+      return !q || norm(x.full_name).indexOf(q) > -1;
+    });
+  }
+  function slScreen() {
+    var c = slState(), edit = slCanEdit();
+    if (!c.loaded) { slLoad(); return '<div class="card empty">جارٍ التحميل…</div>'; }
+    if (c.missing) return '<div class="card empty">قوائم الطلاب تحتاج جدولًا جديدًا.<br>شغّل الملف <code dir="ltr">supabase/student_lists.sql</code> في محرر SQL، ثم حدّث الصفحة.</div>';
+    var back = '<div class="toolbar"><a class="btn" href="#/affairs">→ رجوع إلى شئون الطلاب</a></div>';
+    var L = slCur();
+    if (!L) {
+      return back + '<div class="card"><h2 style="margin-top:0">قوائم الطلاب</h2><p class="hint" style="margin:0">قائمة لأي غرض (موافقة على تطعيم، رحلة، نشاط…): تختار فيها الطلاب، ثم تطبع كشفًا بأسمائهم حسب الشعبة، للمختارين أو لغير المختارين.</p>' +
+        (edit ? '<div class="toolbar" style="margin-top:10px"><input type="text" id="sl-new" placeholder="عنوان القائمة، مثل: الموافقون على تطعيم الحصبة" style="flex:1;min-width:240px" value="' + esc(c.newTitle) + '"><button type="button" class="btn primary" data-slnew>إنشاء قائمة</button></div>' : '') +
+        (c.list.length ? '<div class="table-wrap" style="margin-top:10px"><table class="grid"><thead><tr><th>القائمة</th><th>المختارون</th><th>التاريخ</th><th></th></tr></thead><tbody>' +
+          c.list.map(function (x) {
+            return '<tr><td><b>' + esc(x.title) + '</b></td><td>' + (x.student_ids || []).length + '</td><td>' + dmy(x.created_at) + '</td><td style="white-space:nowrap"><button type="button" class="btn primary" data-slopen="' + x.id + '">فتح</button>' +
+              (edit ? ' <button type="button" class="btn" data-slren="' + x.id + '">إعادة تسمية</button> <button type="button" class="btn danger" data-sldel="' + x.id + '">حذف</button>' : '') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : '<div class="empty">لا توجد قوائم بعد.</div>') + '</div>';
+    }
+    if (!c.sel) { c.sel = {}; (L.student_ids || []).forEach(function (id) { c.sel[id] = true; }); }
+    var all = slStudents(), yes = all.filter(function (x) { return c.sel[x.id]; }).length, shown = slShown();
+    var opt = function (v, t, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(t) + '</option>'; };
+    return back + '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">' + esc(L.title) + '</h2>' +
+        (edit ? '<button type="button" class="btn primary" data-slsave' + (c.dirty ? '' : ' disabled') + '>' + (c.dirty ? 'حفظ التغييرات' : 'محفوظة') + '</button>' : '') + '<button type="button" class="btn" data-slclose>كل القوائم</button></div>' +
+      '<p class="hint" style="margin:6px 0 0">المختارون (' + esc(L.yes_label) + '): <b>' + yes + '</b> — غير المختارين (' + esc(L.no_label) + '): <b>' + (all.length - yes) + '</b> من ' + all.length + ' طالبًا مسجلًا.</p>' +
+      (edit ? '<div class="toolbar" style="margin:8px 0 0;align-items:center"><label class="field" for="sl-yes" style="margin:0">وصف المختارين</label><input type="text" id="sl-yes" value="' + esc(L.yes_label) + '" style="width:9em"><label class="field" for="sl-no" style="margin:0">وصف غير المختارين</label><input type="text" id="sl-no" value="' + esc(L.no_label) + '" style="width:9em"></div>' : '') +
+      '<div class="toolbar" style="margin:10px 0 0;align-items:center"><b>طباعة كشف حسب الشعبة:</b>' +
+        '<button type="button" class="btn" data-slprint="yes" data-ro-ok>' + esc(L.yes_label) + ' / PDF</button><button type="button" class="btn" data-slprint="no" data-ro-ok>' + esc(L.no_label) + ' / PDF</button><button type="button" class="btn" data-slprint="all" data-ro-ok>الكل مع الحالة / PDF</button>' +
+        '<label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="sl-pp"' + (c.perPage ? ' checked' : '') + '> كل شعبة في صفحة</label>' +
+        (c.cls ? '<span class="hint">(الشعبة المختارة فقط: ' + esc(c.cls) + ')</span>' : '') + '</div></div>' +
+      '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
+        '<input type="search" id="sl-q" placeholder="ابحث بالاسم" style="flex:1;min-width:200px" value="' + esc(c.q) + '">' +
+        '<select id="sl-cls" style="width:auto">' + opt('', 'كل الشعب', c.cls) + attClasses().map(function (n) { return opt(n, n, c.cls); }).join('') + '</select>' +
+        '<select id="sl-show" style="width:auto">' + opt('', 'الكل', c.show) + opt('yes', 'المختارون فقط', c.show) + opt('no', 'غير المختارين فقط', c.show) + '</select>' +
+        (edit ? '<button type="button" class="btn" data-slall="1">تحديد الظاهرين</button><button type="button" class="btn" data-slall="0">إلغاء تحديد الظاهرين</button>' : '') + '</div>' +
+      (shown.length ? '<div class="table-wrap" style="margin-top:8px"><table class="grid"><thead><tr><th style="width:3em">✓</th><th>م</th><th>الطالب</th><th>الشعبة</th></tr></thead><tbody>' +
+        shown.map(function (x, i) {
+          return '<tr><td><input type="checkbox" data-slpick="' + x.id + '"' + (c.sel[x.id] ? ' checked' : '') + (edit ? '' : ' disabled') + ' aria-label="' + esc(x.full_name) + '"></td><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">لا طلاب مطابقون.</div>') + '</div>';
+  }
+
+  var pendingSl = null;
+  // كشف القائمة: لكل شعبة عنوانها وعددها ثم الأسماء، مع عمود للحالة في «الكل»، وعمود فارغ للملاحظات
+  function buildSlSheet(p) {
+    var c = slState(), L = slCur(), mode = p.mode;
+    var rows = slStudents().filter(function (x) { return (!c.cls || (x.class_name || '') === c.cls) && (mode === 'all' || (mode === 'yes' ? c.sel[x.id] : !c.sel[x.id])); });
+    var groups = [], by = {};
+    rows.forEach(function (x) { var k = x.class_name || 'بلا شعبة'; if (!by[k]) { by[k] = []; groups.push(k); } by[k].push(x); });
+    var n = mode === 'all' ? 4 : 3, label = mode === 'yes' ? L.yes_label : mode === 'no' ? L.no_label : 'الكل';
+    var head = reportHead(L.title, [['الكشف', label], ['العدد', rows.length]].concat(c.cls ? [['الشعبة', c.cls]] : [])).replace(/^<img class="wm"[^>]*>/, '');
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th style="width:3em">م</th><th>اسم الطالب</th>' + (mode === 'all' ? '<th style="width:8em">الحالة</th>' : '') + '<th style="width:30%">ملاحظات</th></tr></thead>' +
+      groups.map(function (g, gi) {
+        return '<tbody' + (c.perPage && gi ? ' style="break-before:page;page-break-before:always"' : '') + '><tr class="total"><td colspan="' + n + '">الشعبة: ' + esc(g) + ' — العدد: ' + by[g].length + '</td></tr>' +
+          by[g].map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td>' + (mode === 'all' ? '<td class="c">' + esc(c.sel[x.id] ? L.yes_label : L.no_label) + '</td>' : '') + '<td></td></tr>'; }).join('') + '</tbody>';
+      }).join('') +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['شئون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+  }
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/affairs/lists') return;
+    var el, c = slState(), L = slCur();
+    if ((el = e.target.closest('[data-slopen]'))) { c.open = el.getAttribute('data-slopen'); c.sel = null; c.dirty = false; c.show = ''; scrollTo(0, 0); return render(); }
+    if (e.target.closest('[data-slclose]')) { if (c.dirty && !confirm('لم تُحفظ التغييرات. الخروج بدون حفظ؟')) return; c.open = ''; c.sel = null; c.dirty = false; return render(); }
+    if ((el = e.target.closest('[data-slprint]'))) { pendingSl = { mode: el.getAttribute('data-slprint') }; return printNow(); }
+    if (!slCanEdit()) return;
+    if (e.target.closest('[data-slnew]')) {
+      var t = c.newTitle.trim();
+      if (!t) return toast('اكتب عنوان القائمة', true);
+      var r = await sb.from('student_lists').insert({ title: t, created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+      if (r.error) return fail(r.error);
+      c.list.unshift(r.data); c.newTitle = ''; c.open = r.data.id; c.sel = null; c.dirty = false;
+      return render();
+    }
+    if ((el = e.target.closest('[data-slren]'))) {
+      var x = c.list.filter(function (q) { return q.id === el.getAttribute('data-slren'); })[0], nt = x && prompt('العنوان الجديد', x.title);
+      if (!nt || !nt.trim()) return;
+      var u = await sb.from('student_lists').update({ title: nt.trim(), updated_at: new Date().toISOString() }).eq('id', x.id);
+      if (u.error) return fail(u.error);
+      x.title = nt.trim(); return render();
+    }
+    if ((el = e.target.closest('[data-sldel]'))) {
+      var y = c.list.filter(function (q) { return q.id === el.getAttribute('data-sldel'); })[0];
+      if (!y || !confirm('حذف القائمة «' + y.title + '»؟')) return;
+      var d = await sb.from('student_lists').delete().eq('id', y.id);
+      if (d.error) return fail(d.error);
+      c.list = c.list.filter(function (q) { return q.id !== y.id; }); return render();
+    }
+    if (!L) return;
+    if ((el = e.target.closest('[data-slall]'))) { var on = el.getAttribute('data-slall') === '1'; slShown().forEach(function (s1) { if (on) c.sel[s1.id] = true; else delete c.sel[s1.id]; }); c.dirty = true; return render(); }
+    if (e.target.closest('[data-slsave]')) {
+      var valid = {}; slStudents().forEach(function (s2) { valid[s2.id] = 1; });
+      var ids = Object.keys(c.sel).filter(function (id) { return c.sel[id]; });
+      var keep = (L.student_ids || []).filter(function (id) { return !valid[id]; }); // طلاب انسحبوا يبقون كما كانوا
+      var patch = { student_ids: keep.concat(ids), yes_label: L.yes_label, no_label: L.no_label, updated_at: new Date().toISOString() };
+      var w = await sb.from('student_lists').update(patch).eq('id', L.id);
+      if (w.error) return fail(w.error);
+      Object.assign(L, patch); c.dirty = false; render(); toast('حُفظت القائمة');
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/affairs/lists') return;
+    var c = slState(), L = slCur(), el = e.target, id;
+    if ((id = el.getAttribute('data-slpick')) && slCanEdit()) { if (el.checked) c.sel[id] = true; else delete c.sel[id]; c.dirty = true; return render(); }
+    if (el.id === 'sl-cls') { c.cls = el.value; return render(); }
+    if (el.id === 'sl-show') { c.show = el.value; return render(); }
+    if (el.id === 'sl-pp') { c.perPage = el.checked; return; }
+    if (L && (el.id === 'sl-yes' || el.id === 'sl-no') && el.value.trim()) { L[el.id === 'sl-yes' ? 'yes_label' : 'no_label'] = el.value.trim(); c.dirty = true; return render(); }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/affairs/lists') return;
+    var c = slState();
+    if (e.target.id === 'sl-new') { c.newTitle = e.target.value; return; }
+    if (e.target.id === 'sl-q') { var pos = e.target.selectionStart; c.q = e.target.value; render(); var q = document.getElementById('sl-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } }
+  });
 
   /* ----- موافقة ولي الأمر -----
      نموذج موافقة يُكتب موضوعه (مثل «تطعيم الحصبة الألمانية») ويُطبع لطالب واحد، أو لكل الطلاب الظاهرين في البحث في ملف PDF واحد.
@@ -9701,7 +9847,7 @@
       '<div class="toolbar" style="align-items:center;margin:8px 0 0"><b style="font-size:.95rem">العمر:</b>' +
         '<label class="field" for="af-a1" style="margin:0">من</label><input type="number" id="af-a1" min="0" max="30" step="1" placeholder="سنة" style="width:6em" value="' + esc(u.ageFrom == null ? '' : u.ageFrom) + '">' +
         '<label class="field" for="af-a2" style="margin:0">إلى</label><input type="number" id="af-a2" min="0" max="30" step="1" placeholder="سنة" style="width:6em" value="' + esc(u.ageTo == null ? '' : u.ageTo) + '">' +
-        '<span style="flex:1"></span><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
+        '<span style="flex:1"></span><a class="btn" href="#/affairs/lists" title="قوائم بعنوان يُختار فيها الطلاب (مثل الموافقين على التطعيم) وتُطبع حسب الشعبة">قوائم الطلاب (موافقات وغيرها)</a><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
       '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
         ' مرّر الفأرة على «سجل الغياب» لترى ملخصه، واضغط عليه أو على «ملف الطالب» للانتقال إلى شاشته.' + (shown ? ' الطلاب: <b id="af-n">' + list.length + '</b>' : '<span id="af-n"></span>') + '</p></div>' +
       '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>' + afConsentCardHtml(list.length);
@@ -18249,6 +18395,7 @@
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
     else if (pendingOr) buildOrderSheet(pendingOr);
+    else if (pendingSl) buildSlSheet(pendingSl);
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
     else if (pendingDc) buildDisciplineSheet();
@@ -18288,6 +18435,7 @@
     pendingCm = null;
     pendingCu = false;
     pendingOr = null;
+    pendingSl = null;
     pendingWarn = null;
     pendingDc = false;
     pendingEx = null;
