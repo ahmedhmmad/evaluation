@@ -1318,7 +1318,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 13';
+  var APP_BUILD = '11/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1640,7 +1640,9 @@
     // العهد: صندوق
     custody: 'M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8',
     // الطلبيات: قائمة بعلامات
-    orders: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4'
+    orders: 'M6 3h12v18H6zM9 8h6M9 12h6M9 16h4',
+    // المطالبات المالية: ورقة وعملة
+    claims: 'M5 3h10l4 4v14H5zM15 3v4h4M12 10v8M14.5 11.5c-.5-.9-1.5-1.2-2.5-1.2-1.4 0-2.3.7-2.3 1.7 0 2.4 5 1.3 5 3.8 0 1-1 1.7-2.5 1.7-1.2 0-2.2-.5-2.7-1.4'
   };
 
   // صفحات القائمة الجانبية بحسب الصلاحية، مقسّمة إلى مجموعات
@@ -1651,7 +1653,27 @@
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
     else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
     if (isStaff() || isRegistrar() || S.myStaff) groups.push({ title: 'التوقيعات', items: [['#/signatures', 'signatures', 'التوقيع الإلكتروني']] });
-    return groups;
+    return navArrange(groups);
+  }
+  // إعادة الترتيب: الرئيسية، الموظفون، الطلاب، المواصلات، المالية، الإدارة، ثم الباقي
+  function navArrange(groups) {
+    var by = function (t) { return groups.filter(function (g) { return g.title === t; })[0]; };
+    var take = function (g, href) { if (!g) return null; var i = g.items.map(function (x) { return x[0]; }).indexOf(href); return i < 0 ? null : g.items.splice(i, 1)[0]; };
+    var emp = by('المعلمون'); if (emp) emp.title = 'الموظفون';
+    var st = by('الطلاب'), adm = by('الإدارة'), pay = by('الرواتب');
+    var tr = take(st, '#/transport');
+    var trG = tr ? { title: 'المواصلات', items: [tr] } : null;
+    var fin = pay || (canView() ? { title: 'المالية', items: [] } : null);
+    if (fin) {
+      fin.title = 'المالية';
+      var od = take(adm, '#/orders'); if (od) fin.items.push(od);
+      if (canView()) fin.items.push(['#/claims', 'claims', 'المطالبات المالية']);
+    }
+    var order = [emp, st, trG, fin, adm], out = [];
+    groups.forEach(function (g) { if (!g.title) out.push(g); });
+    order.forEach(function (g) { if (g && g.items.length) out.push(g); });
+    groups.forEach(function (g) { if (g.title && order.indexOf(g) < 0 && g !== pay) out.push(g); });
+    return out;
   }
   function navModel0() {
     if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات'], ['#/messages', 'messages', 'رسائل واتساب']] }];
@@ -1687,6 +1709,7 @@
     if (h === '#/discipline' && canDisc()) return 'discipline';
     if (h === '#/custody' && canView()) return 'custody';
     if (h === '#/orders' && canView()) return 'orders';
+    if (h === '#/claims' && canView()) return 'claims';
     if (/^#\/affairs/.test(h) && canAttView()) return 'affairs';
     if (isRegistrar()) return /^#\/transport/.test(h) ? 'transport' : /^#\/classes/.test(h) ? 'classes' : h === '#/attendance' ? 'attendance' : h === '#/reports' ? 'reports' : 'students';
     if (/^#\/timetable/.test(h) && (isStaff() || isTeacherRole())) return 'timetable';
@@ -9418,6 +9441,7 @@
     if (h === '#/discipline' && canDisc()) return renderDiscipline();
     if (h === '#/custody' && canView()) return renderCustody();
     if (h === '#/orders' && canView()) return renderOrders();
+    if (h === '#/claims' && canView()) return renderClaims();
     if (/^#\/affairs/.test(h) && canAttView()) return renderAffairs();
     if (isRegistrar()) {
       if (/^#\/classes/.test(h)) return renderClasses();
@@ -10211,6 +10235,133 @@
         }).join('') + '</tbody></table></div>'
         : '<div class="empty">' + (c.list.length ? 'لا طلبيات مطابقة.' : 'لا توجد طلبيات بعد' + (edit ? '؛ اضغط «طلبية جديدة».' : '.')) + '</div>') + '</div>';
   }
+
+  /* ---------- المطالبات المالية ----------
+     دفع مبلغ لشخص استُعين به أو اشتُري منه شيء بلا فاتورة: اسمه، وما أنجزه أو الأصناف ومبالغها، والتاريخ،
+     وتُطبع سندًا بإقرار المستلم وتوقيعه، وتوقيع مسلِّم المبلغ، واعتماد المدير. يعدّلها المدير العام ويراها المدير (supabase/payment_claims.sql) */
+  var CL_KIND = { service: 'خدمة أو عمل منجز', purchase: 'شراء أصناف بدون فاتورة' };
+  function clState() { return S.cl || (S.cl = { list: [], loaded: false, loading: false, missing: false, edit: null, q: '' }); }
+  function clNew() { return { id: null, claim_date: todayISO(), payee: '', payee_id: '', kind: 'service', description: '', items: [{ item: '', qty: '', amount: '' }], payer: '', status: 'pending', notes: '' }; }
+  function clTotal(c) { return (c.items || []).reduce(function (t, i) { return t + (Number(latinDigits(String(i.amount || '')).replace(/[^\d.]/g, '')) || 0); }, 0); }
+  function clMoney(n) { return (Math.round(n * 100) / 100).toLocaleString('en-US') + ' جنيه'; }
+  async function loadClaims() {
+    var c = clState();
+    if (c.loading) return;
+    c.loading = true;
+    var rows = await fetchAll(function () { return sb.from('payment_claims').select('*').order('claim_date', { ascending: false }).order('no', { ascending: false }); });
+    c.loading = false; c.loaded = true; c.missing = !rows; c.list = rows || [];
+    render();
+  }
+  function renderClaims() {
+    var c = clState(), edit = isAdmin();
+    if (!c.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadClaims(); return; }
+    if (c.missing) { app.innerHTML = '<div class="card empty">المطالبات المالية تحتاج جدولًا جديدًا.<br>شغّل الملف <code dir="ltr">supabase/payment_claims.sql</code> في محرر SQL، ثم حدّث الصفحة.</div>'; return; }
+    var o = c.edit, head = '<div class="page-head"><div><h1>المطالبات المالية</h1><p>دفع مبلغ لشخص استُعين به أو اشتُري منه شيء بلا فاتورة، ويُطبع سندًا بتوقيع المستلم ومسلِّم المبلغ.</p></div>' +
+      (edit && !o ? '<button type="button" class="btn primary" data-clnew>مطالبة جديدة</button>' : '') + '</div>';
+    if (o) {
+      var f = function (id, k, label, extra) { return '<div' + (extra || '') + '><label class="field" for="' + id + '">' + label + '</label><input type="text" id="' + id + '" data-cf="' + k + '" value="' + esc(o[k]) + '"></div>'; };
+      app.innerHTML = head + '<div class="card"><h2 style="margin-top:0">' + (o.id ? 'تعديل المطالبة رقم ' + esc(o.no) : 'مطالبة جديدة') + '</h2>' +
+        '<div class="toolbar" style="align-items:flex-end">' +
+          '<div style="width:11em"><label class="field" for="cl-date">التاريخ</label><input type="date" id="cl-date" data-cf="claim_date" value="' + esc(o.claim_date) + '"></div>' +
+          f('cl-payee', 'payee', 'اسم المستفيد <span class="req">*</span>', ' style="flex:2;min-width:220px"') +
+          f('cl-pid', 'payee_id', 'رقم الهوية أو الجوال (اختياري)', ' style="flex:1;min-width:160px"') + '</div>' +
+        '<div class="toolbar" style="align-items:flex-end">' +
+          '<div style="width:15em"><label class="field" for="cl-kind">نوع المطالبة</label><select id="cl-kind" data-cf="kind">' + Object.keys(CL_KIND).map(function (k) { return '<option value="' + k + '"' + (o.kind === k ? ' selected' : '') + '>' + CL_KIND[k] + '</option>'; }).join('') + '</select></div>' +
+          f('cl-payer', 'payer', 'مسلِّم المبلغ', ' style="flex:1;min-width:180px"') +
+          '<div style="width:9em"><label class="field" for="cl-status">الحالة</label><select id="cl-status" data-cf="status"><option value="pending"' + (o.status === 'pending' ? ' selected' : '') + '>لم يُصرف</option><option value="paid"' + (o.status === 'paid' ? ' selected' : '') + '>صُرف</option></select></div></div>' +
+        '<label class="field" for="cl-desc">' + (o.kind === 'purchase' ? 'بيان الشراء' : 'العمل الذي أُنجز') + '</label><textarea id="cl-desc" data-cf="description" rows="2" style="width:100%" placeholder="' + (o.kind === 'purchase' ? 'مثال: أدوات كهرباء لصيانة الفصول' : 'مثال: صيانة مضخة المياه وتغيير المحبس') + '">' + esc(o.description) + '</textarea>' +
+        '<h3>' + (o.kind === 'purchase' ? 'الأصناف' : 'البنود') + '</h3><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>' + (o.kind === 'purchase' ? 'الصنف' : 'البند') + '</th><th style="width:8em">الكمية</th><th style="width:9em">المبلغ (جنيه)</th><th></th></tr></thead><tbody>' +
+          o.items.map(function (it, i) {
+            return '<tr><td>' + (i + 1) + '</td><td><input type="text" data-ci="' + i + '|item" value="' + esc(it.item) + '" aria-label="البند"></td><td><input type="text" data-ci="' + i + '|qty" value="' + esc(it.qty) + '" aria-label="الكمية"></td>' +
+              '<td><input type="text" inputmode="decimal" data-ci="' + i + '|amount" value="' + esc(it.amount) + '" aria-label="المبلغ"></td><td><button type="button" class="btn danger" data-cldelit="' + i + '">×</button></td></tr>';
+          }).join('') + '<tr class="total"><td colspan="3"><b>الإجمالي</b></td><td><b id="cl-total">' + clMoney(clTotal(o)) + '</b></td><td></td></tr></tbody></table></div>' +
+        '<div class="toolbar" style="margin-top:8px"><button type="button" class="btn" data-cladd>+ إضافة بند</button></div>' +
+        '<label class="field" for="cl-notes">ملاحظات داخلية (لا تُطبع)</label><input type="text" id="cl-notes" data-cf="notes" value="' + esc(o.notes) + '">' +
+        '<div class="toolbar" style="margin-top:12px"><button type="button" class="btn primary" data-clsave>حفظ</button><button type="button" class="btn" data-clsaveprint>حفظ وطباعة</button><button type="button" class="btn" data-clcancel>إلغاء</button></div></div>';
+      return;
+    }
+    var q = norm(c.q), list = c.list.filter(function (x) { return !q || norm(x.payee + ' ' + x.description + ' ' + (x.items || []).map(function (i) { return i.item; }).join(' ')).indexOf(q) > -1; });
+    var sum = list.reduce(function (t, x) { return t + clTotal(x); }, 0);
+    app.innerHTML = head + '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">عدد المطالبات: ' + list.length + ' — المجموع: ' + clMoney(sum) + '</h2>' +
+      '<input type="search" id="cl-q" placeholder="بحث بالاسم أو البيان" aria-label="بحث" style="max-width:260px" value="' + esc(c.q) + '"></div>' +
+      (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم</th><th>التاريخ</th><th>المستفيد</th><th>النوع</th><th>البيان</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead><tbody>' +
+        list.map(function (x) {
+          return '<tr><td>' + esc(x.no) + '</td><td>' + dmy(x.claim_date) + '</td><td><b>' + esc(x.payee) + '</b></td><td>' + esc(CL_KIND[x.kind] || '') + '</td><td>' + esc(x.description || (x.items || []).map(function (i) { return i.item; }).join('، ')) + '</td>' +
+            '<td><b>' + clMoney(clTotal(x)) + '</b></td><td>' + (x.status === 'paid' ? '<span class="badge paid">صُرف</span>' : '<span class="badge pending">لم يُصرف</span>') + '</td>' +
+            '<td style="white-space:nowrap"><button type="button" class="btn" data-clprint="' + x.id + '" data-ro-ok>طباعة / PDF</button>' +
+            (edit ? ' <button type="button" class="btn" data-clopen="' + x.id + '">تعديل</button> <button type="button" class="btn danger" data-cldel="' + x.id + '">حذف</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">' + (c.list.length ? 'لا مطالبات مطابقة.' : 'لا توجد مطالبات بعد' + (edit ? '؛ اضغط «مطالبة جديدة».' : '.')) + '</div>') + '</div>';
+  }
+
+  var pendingCl = null;
+  // سند المطالبة: البيانات، جدول البنود والإجمالي، إقرار المستلم، ثم التوقيعات (المستلم، مسلِّم المبلغ، المدير)
+  function buildClaimSheet(o) {
+    var items = (o.items || []).filter(function (i) { return String(i.item || '').trim(); }), total = clTotal(o);
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = reportHead('مطالبة مالية', [['رقم المطالبة', o.no || ''], ['التاريخ', dmy(o.claim_date)], ['النوع', CL_KIND[o.kind] || '']], { noIssueDate: true }) +
+      '<table class="rz" style="margin:.9em 0 .6em"><tbody>' +
+        '<tr><th style="width:28%;text-align:right">اسم المستفيد</th><td><b>' + esc(o.payee) + '</b></td></tr>' +
+        (o.payee_id ? '<tr><th style="text-align:right">رقم الهوية / الجوال</th><td dir="ltr" style="text-align:right">' + esc(o.payee_id) + '</td></tr>' : '') +
+        (o.description ? '<tr><th style="text-align:right">' + (o.kind === 'purchase' ? 'بيان الشراء' : 'العمل المنجز') + '</th><td style="white-space:pre-wrap">' + esc(o.description) + '</td></tr>' : '') +
+      '</tbody></table>' +
+      (items.length ? '<table class="rz" style="margin:.4em 0 .6em"><thead><tr><th style="width:3em">م</th><th>' + (o.kind === 'purchase' ? 'الصنف' : 'البند') + '</th><th style="width:7em">الكمية</th><th style="width:9em">المبلغ</th></tr></thead><tbody>' +
+        items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.qty || '-') + '</td><td class="c">' + esc(it.amount ? clMoney(Number(latinDigits(String(it.amount)).replace(/[^\d.]/g, '')) || 0) : '-') + '</td></tr>'; }).join('') +
+        '<tr class="total"><td colspan="3">الإجمالي</td><td class="c"><b>' + clMoney(total) + '</b></td></tr></tbody></table>' : '') +
+      '<p style="margin:.8em 0 .4em;line-height:2">أقر أنا الموقّع أدناه <b>' + esc(o.payee) + '</b> بأنني استلمت من إدارة ' + esc(schoolName()) + ' مبلغًا وقدره <b>' + clMoney(total) + '</b>' +
+        ' (فقط ............................................................ لا غير)، وذلك مقابل ' + (o.kind === 'purchase' ? 'الأصناف المبيّنة أعلاه' : 'العمل المبيّن أعلاه') + '، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</p>' +
+      reportSigns([['المستلم (المستفيد)', o.payee], ['مسلِّم المبلغ', o.payer], ['مدير/ة الأكاديمية', principalName()]]);
+    fitSheet();
+  }
+  function clPick(id) { return clState().list.filter(function (x) { return x.id === id; })[0]; }
+  async function clSave(andPrint) {
+    var c = clState(), o = c.edit;
+    if (!o.payee.trim()) return toast('اكتب اسم المستفيد', true);
+    var items = o.items.map(function (i) { return { item: String(i.item || '').trim(), qty: String(i.qty || '').trim(), amount: String(i.amount || '').trim() }; }).filter(function (i) { return i.item || i.amount; });
+    if (!items.length) return toast('أضف بندًا واحدًا على الأقل بمبلغه', true);
+    if (!clTotal({ items: items })) return toast('اكتب المبلغ', true);
+    var row = { claim_date: o.claim_date || todayISO(), payee: o.payee.trim(), payee_id: o.payee_id.trim(), kind: o.kind, description: o.description.trim(), items: items, payer: o.payer.trim(), status: o.status, notes: o.notes, updated_at: new Date().toISOString() };
+    var r = o.id ? await sb.from('payment_claims').update(row).eq('id', o.id).select().single()
+      : await sb.from('payment_claims').insert(Object.assign(row, { created_by: (S.profile && S.profile.full_name) || displayName(S.email) })).select().single();
+    if (r.error) return fail(r.error);
+    c.list = [r.data].concat(c.list.filter(function (x) { return x.id !== r.data.id; }));
+    c.edit = null;
+    render();
+    toast('حُفظت المطالبة رقم ' + r.data.no);
+    if (andPrint) { pendingCl = r.data; printNow(); }
+  }
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/claims' || !canView()) return;
+    var el, c = clState(), o = c.edit;
+    if ((el = e.target.closest('[data-clprint]'))) { var p = clPick(el.getAttribute('data-clprint')); if (p) { pendingCl = p; printNow(); } return; }
+    if (!isAdmin()) return;
+    if (e.target.closest('[data-clnew]')) { c.edit = clNew(); scrollTo(0, 0); return render(); }
+    if ((el = e.target.closest('[data-clopen]'))) { var x = clPick(el.getAttribute('data-clopen')); if (x) { c.edit = JSON.parse(JSON.stringify(x)); if (!c.edit.items.length) c.edit.items.push({ item: '', qty: '', amount: '' }); scrollTo(0, 0); render(); } return; }
+    if ((el = e.target.closest('[data-cldel]'))) {
+      var z = clPick(el.getAttribute('data-cldel'));
+      if (!z || !confirm('حذف المطالبة رقم ' + z.no + '؟')) return;
+      var d = await sb.from('payment_claims').delete().eq('id', z.id);
+      if (d.error) return fail(d.error);
+      c.list = c.list.filter(function (q) { return q.id !== z.id; });
+      return render();
+    }
+    if (!o) return;
+    if (e.target.closest('[data-cladd]')) { o.items.push({ item: '', qty: '', amount: '' }); render(); var ins = document.querySelectorAll('[data-ci$="|item"]'); if (ins.length) ins[ins.length - 1].focus(); return; }
+    if ((el = e.target.closest('[data-cldelit]'))) { o.items.splice(Number(el.getAttribute('data-cldelit')), 1); if (!o.items.length) o.items.push({ item: '', qty: '', amount: '' }); return render(); }
+    if (e.target.closest('[data-clcancel]')) { c.edit = null; return render(); }
+    if (e.target.closest('[data-clsave]')) return clSave(false);
+    if (e.target.closest('[data-clsaveprint]')) return clSave(true);
+  });
+  function clInput(e) {
+    if (location.hash !== '#/claims') return;
+    var c = clState(), o = c.edit, el = e.target, a;
+    if (el.id === 'cl-q') { var pos = el.selectionStart; c.q = el.value; render(); var q = document.getElementById('cl-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } return; }
+    if (!o) return;
+    if ((a = el.getAttribute('data-cf'))) { o[a] = el.value; if (a === 'kind' && e.type === 'change') render(); }
+    else if ((a = el.getAttribute('data-ci'))) { var p = a.split('|'); o.items[Number(p[0])][p[1]] = el.value; var t = document.getElementById('cl-total'); if (t) t.textContent = clMoney(clTotal(o)); }
+  }
+  document.addEventListener('input', clInput);
+  document.addEventListener('change', clInput);
 
   var pendingOr = null;
   // خطاب الطلبية: الترويسة، التاريخ، المرسَل إليه، الموضوع، المقدمة، جدول الأصناف، الخاتمة، ثم توقيع المدير
@@ -18694,6 +18845,7 @@
     else if (pendingStList) buildStaffListSheet(pendingStList);
     else if (pendingCm) buildCommitteeSheet(pendingCm);
     else if (pendingOr) buildOrderSheet(pendingOr);
+    else if (pendingCl) buildClaimSheet(pendingCl);
     else if (pendingSl) buildSlSheet(pendingSl);
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
@@ -18735,6 +18887,7 @@
     pendingCm = null;
     pendingCu = false;
     pendingOr = null;
+    pendingCl = null;
     pendingSl = null;
     pendingLa = null;
     pendingWarn = null;
