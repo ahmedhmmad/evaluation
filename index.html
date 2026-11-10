@@ -1288,7 +1288,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 6';
+  var APP_BUILD = '10/11 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -15546,6 +15546,7 @@
 
   // إجازات الطلاب (supabase/student_leaves.sql): كل يوم داخل الإجازة يظهر «مأذون» ويُحفظ كذلك (والقاعدة تفرضه أيضًا، فيشمل الموبايل والروابط)
   async function loadStLeaves() {
+    if (S.waTpl == null && (isAdmin() || isRegistrar())) { try { await loadWaTemplates(); } catch (x) {} }
     var r = await sb.from('student_leaves').select('*').order('from_day', { ascending: false }).limit(2000);
     S.stLeavesMissing = !!r.error;
     S.stLeaves = r.data || [];
@@ -15560,18 +15561,21 @@
     ['family', 'ظرف عائلي', 'نسأل الله أن يكون كل شيء على ما يرام'],
     ['other', 'أخرى', 'مع تمنياتنا بالتوفيق']
   ];
-  function lvUi() { var a = attState(); return a.lv || (a.lv = { q: '', sid: '', kind: 'sick', reason: '', send: false, text: '' }); }
+  function lvUi() { var a = attState(); return a.lv || (a.lv = { q: '', sids: [], kind: 'sick', reason: '', send: false, text: '' }); }
+  var LV_TPL = 'السلام عليكم ورحمة الله وبركاته،\nولي أمر الطالب/ة {الاسم} المحترم،\nنفيدكم بأنه تم تسجيل إجازة لابنكم/ابنتكم من {من} إلى {إلى} بسبب {السبب}، ولن يُحتسب غيابه/ا خلالها.\n{التمني}.\n{الأكاديمية}';
   function lvKind(k) { return LV_KINDS.filter(function (x) { return x[0] === k; })[0] || LV_KINDS[0]; }
   function lvMsg(u, from, to) {
+    // النص من قالب «إجازة طالب» في «رسائل واتساب ← القوالب» (وإلا النص الافتراضي)
     var k = lvKind(u.kind), why = u.kind === 'other' ? (u.reason || 'ظرف خاص') : k[1] + (u.reason ? ' (' + u.reason + ')' : '');
-    return 'السلام عليكم ورحمة الله وبركاته،\nولي أمر الطالب/ة {الاسم} المحترم،\nنفيدكم بأنه تم تسجيل إجازة لابنكم/ابنتكم من ' + dmy(from) + ' إلى ' + dmy(to) + ' بسبب ' + why + '، ولن يُحتسب غيابه/ا خلالها.\n' + k[2] + '.\n{الأكاديمية}';
+    var t = (typeof waTpl === 'function' && waTpl('leave')) || null;
+    return (t ? t.body : LV_TPL).replace(/\{من\}/g, dmy(from)).replace(/\{إلى\}/g, dmy(to)).replace(/\{السبب\}/g, why).replace(/\{التمني\}/g, k[2]);
   }
   // البحث عن الطالب: فارغ في البداية، ويُظهر من تحتوي أسماؤهم كل الكلمات المكتوبة (الاسم الأول أو الأخير أو أي جزء)
   function lvMatches() {
     var u = lvUi(), a = attState(), words = norm(u.q).split(/\s+/).filter(Boolean);
     if (!words.length) return [];
     return S.students.filter(function (x) {
-      if (!enrolled(x) || (a.cls && x.class_name !== a.cls)) return false;
+      if (!enrolled(x) || (a.cls && x.class_name !== a.cls) || u.sids.indexOf(x.id) > -1) return false;
       var n = norm(x.full_name);
       return words.every(function (w) { return n.indexOf(w) > -1; });
     }).slice(0, 12);
@@ -15585,17 +15589,17 @@
     return '<div class="card"><h2>إجازات الطلاب (عذر لفترة)</h2><p class="hint" style="margin:0">الطالب المجاز يُسجَّل «مأذون» تلقائيًا في كل أيام إجازته، في الموقع وتطبيق الموبايل، فلا حاجة لإدخاله يوميًا. لإلغاء ذلك احذف الإجازة أو قصّرها.</p>' +
       (edit ? '<div class="toolbar" style="align-items:flex-end;margin-top:10px">' +
         (function () {
-          var u = lvUi(), picked = u.sid && findStudent(u.sid), m = picked ? [] : lvMatches();
-          return '<div style="flex:2;min-width:240px;position:relative"><label class="field" for="lv-q">الطالب</label>' +
-            (picked ? '<div class="toolbar" style="margin:0;align-items:center"><b>' + esc(picked.full_name) + '</b><span class="meta">' + esc(picked.class_name || '') + '</span><button type="button" class="btn" data-lvpick="">تغيير</button></div>'
-              : '<input type="search" id="lv-q" autocomplete="off" placeholder="اكتب جزءًا من الاسم (الأول أو الأخير…)" value="' + esc(u.q) + '">' +
+          var u = lvUi(), m = lvMatches();
+          return '<div style="flex:2;min-width:240px;position:relative"><label class="field" for="lv-q">الطلاب (اختر واحدًا أو أكثر)</label>' +
+            (u.sids.length ? '<div class="toolbar" style="margin:0 0 6px;gap:6px">' + u.sids.map(function (id) { var x = findStudent(id) || {}; return '<span class="badge part" style="display:inline-flex;gap:6px;align-items:center">' + esc(x.full_name || '') + ' <button type="button" data-lvun="' + id + '" title="إزالة" style="border:0;background:none;cursor:pointer;font-weight:700">×</button></span>'; }).join('') + '</div>' : '') +
+            ('<input type="search" id="lv-q" autocomplete="off" placeholder="اكتب جزءًا من الاسم (الأول أو الأخير…)" value="' + esc(u.q) + '">' +
                 (u.q.trim() ? '<div style="border:1px solid var(--line);border-radius:8px;margin-top:4px;max-height:240px;overflow:auto;background:var(--surface)">' + (m.length ? m.map(function (x) { return '<button type="button" class="btn" style="display:block;width:100%;text-align:right;border:0;border-radius:0" data-lvpick="' + x.id + '">' + esc(x.full_name) + ' <span class="meta">— ' + esc(x.class_name || '') + '</span></button>'; }).join('') : '<div class="hint" style="padding:8px;margin:0">لا أسماء مطابقة.</div>') + '</div>' : '')) + '</div>' +
             '<div><label class="field" for="lv-from">من</label><input type="date" id="lv-from" value="' + esc(u.from || today) + '"></div>' +
             '<div><label class="field" for="lv-to">إلى</label><input type="date" id="lv-to" value="' + esc(u.to || today) + '"></div>' +
             '<div><label class="field" for="lv-kind">نوع الإجازة</label><select id="lv-kind">' + LV_KINDS.map(function (k) { return '<option value="' + k[0] + '"' + (u.kind === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('') + '</select></div>' +
             '<div style="flex:2;min-width:180px"><label class="field" for="lv-reason">تفاصيل (اختياري)</label><input type="text" id="lv-reason" value="' + esc(u.reason) + '" placeholder="مثال: عملية الزائدة"></div></div>' +
             '<label class="check" style="margin:8px 0 0"><input type="checkbox" id="lv-send"' + (u.send ? ' checked' : '') + '> إرسال رسالة واتساب لولي الأمر تؤكد الإجازة (اختياري)</label>' +
-            (u.send ? '<textarea id="lv-text" rows="5" style="width:100%;margin-top:6px">' + esc(u.text || lvMsg(u, u.from || today, u.to || today)) + '</textarea><p class="hint" style="margin:2px 0 0">{الاسم} و{الأكاديمية} تُستبدل عند الإرسال. يتغير النص تلقائيًا عند تغيير النوع أو التاريخ ما لم تعدّله.</p>' : '') +
+            (u.send ? '<textarea id="lv-text" rows="5" style="width:100%;margin-top:6px">' + esc(u.text || lvMsg(u, u.from || today, u.to || today)) + '</textarea><p class="hint" style="margin:2px 0 0">يُرسل لولي أمر كل طالب مختار باسم ابنه. أصل النص من قالب «إجازة طالب» في <a href="#/messages">رسائل واتساب ← القوالب</a>، ويمكن تعديله هنا لهذه المرة.</p>' : '') +
             '<div class="actions" style="margin-top:8px"><button type="button" class="btn primary" data-lvadd>منح إجازة' + (u.send ? ' وإرسال الرسالة' : '') + '</button></div>';
         })() : '') +
       '<div class="toolbar" style="margin:10px 0 0;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="lv-all"' + (a.leaveAll ? ' checked' : '') + '> عرض الإجازات المنتهية أيضًا</label></div>' +
@@ -15610,26 +15614,28 @@
     if (location.hash !== '#/attendance' || !(isAdmin() || isRegistrar())) return;
     var el;
     if (e.target.closest('[data-lvadd]')) {
-      var u = lvUi(), sid = u.sid, from = document.getElementById('lv-from').value, to = document.getElementById('lv-to').value, reason = (lvKind(u.kind)[0] === 'other' ? '' : lvKind(u.kind)[1]) + (u.reason.trim() ? (u.kind === 'other' ? '' : ' — ') + u.reason.trim() : '');
-      if (!sid) return toast('اختر الطالب', true);
+      var u = lvUi(), sids = u.sids.slice(), from = document.getElementById('lv-from').value, to = document.getElementById('lv-to').value, reason = (lvKind(u.kind)[0] === 'other' ? '' : lvKind(u.kind)[1]) + (u.reason.trim() ? (u.kind === 'other' ? '' : ' — ') + u.reason.trim() : '');
+      if (!sids.length) return toast('اختر طالبًا واحدًا على الأقل', true);
       if (!from || !to || to < from) return toast('اختر فترة صحيحة', true);
-      var r = await sb.from('student_leaves').insert({ student_id: sid, from_day: from, to_day: to, reason: reason, created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+      var by = (S.profile && S.profile.full_name) || displayName(S.email);
+      var r = await sb.from('student_leaves').insert(sids.map(function (sid) { return { student_id: sid, from_day: from, to_day: to, reason: reason, created_by: by }; })).select();
       if (r.error) return fail(r.error);
-      S.stLeaves.unshift(r.data);
+      S.stLeaves = (r.data || []).concat(S.stLeaves);
       S.attDay = {}; // الأيام المسجَّلة داخل الإجازة صارت «مأذون» في القاعدة
-      var nm = (findStudent(sid) || {}).full_name, text = u.send ? (u.text || lvMsg(u, from, to)) : '';
+      var nm = sids.length === 1 ? (findStudent(sids[0]) || {}).full_name : sids.length + ' طلاب', text = u.send ? (u.text || lvMsg(u, from, to)) : '';
       attState().lv = null;
       render();
       toast('مُنحت الإجازة لـ' + nm + ' من ' + dmy(from) + ' إلى ' + dmy(to));
       if (text) {
-        var w = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'leave-' + r.data.id, kind: 'leave', title: 'إجازة طالب', text: text, student_ids: [sid], per: 'student', school: schoolName() } });
+        var w = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'leave-' + r.data[0].id, kind: 'leave', title: 'إجازة طالب', text: text, student_ids: sids, per: 'student', school: schoolName() } });
         var wd = w.data || {};
         if (w.error || wd.error) return toast('حُفظت الإجازة، لكن تعذّر إرسال الرسالة: ' + (wd.error || w.error.message), true);
         toast('أُضيفت رسالة الإجازة إلى قائمة الإرسال. تابعها في «رسائل واتساب».');
       }
       return;
     }
-    if ((el = e.target.closest('[data-lvpick]'))) { var lu = lvUi(); lu.sid = el.getAttribute('data-lvpick'); if (!lu.sid) { lu.q = ''; } render(); var qf = document.getElementById('lv-q'); if (qf) qf.focus(); return; }
+    if ((el = e.target.closest('[data-lvpick]'))) { var lu = lvUi(); lu.sids.push(el.getAttribute('data-lvpick')); lu.q = ''; render(); var qf = document.getElementById('lv-q'); if (qf) qf.focus(); return; }
+    if ((el = e.target.closest('[data-lvun]'))) { var lu2 = lvUi(); lu2.sids = lu2.sids.filter(function (id) { return id !== el.getAttribute('data-lvun'); }); return render(); }
     if ((el = e.target.closest('[data-lvdel]'))) {
       var id = el.getAttribute('data-lvdel'), l = S.stLeaves.filter(function (q) { return q.id === id; })[0];
       if (!l || !confirm('حذف إجازة ' + ((findStudent(l.student_id) || {}).full_name || '') + '؟ (ما سُجِّل «مأذون» في أيامها يبقى كما هو، ويُعدَّل يدويًا إن لزم)')) return;
@@ -16606,7 +16612,7 @@
     var nMsg = w.per === 'family' ? Object.keys(fams).length : selSt.length - noPh;
     var allOn = list.length && list.every(function (x) { return w.sel[x.id]; });
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
-    var tplOpts = opt('', '— رسالة حرة —', w.tpl) + (S.waTpl || []).filter(function (t) { return t.key !== 'absence' && t.key !== 'repeat'; }).map(function (t) { return opt(t.key, t.title, w.tpl); }).join('');
+    var tplOpts = opt('', '— رسالة حرة —', w.tpl) + (S.waTpl || []).filter(function (t) { return t.key !== 'absence' && t.key !== 'repeat' && t.key !== 'leave'; }).map(function (t) { return opt(t.key, t.title, w.tpl); }).join('');
     var compose = '<div class="card"><h2 style="margin-top:0">الرسالة</h2>' +
       '<div class="toolbar" style="align-items:center"><label class="field" for="wa-tpl" style="margin:0">القالب</label><select id="wa-tpl" style="width:auto">' + tplOpts + '</select>' +
         (w.tpl ? '<button type="button" class="btn" data-wasavetpl title="يُحفظ هذا النص في القالب ليُستعمل في المرات القادمة">حفظ النص في القالب</button>' : '<button type="button" class="btn" data-wanewtpl' + (w.text.trim() ? '' : ' disabled') + '>حفظه قالبًا جديدًا</button>') + '</div>' +

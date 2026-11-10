@@ -70,3 +70,9 @@ begin
       'leave', (select l.reason from student_leaves l where l.student_id = r.id and att_today() between l.from_day and l.to_day order by l.created_at desc limit 1)) order by r.pos)
     from att_roll(p_class) r), '[]'::jsonb));
 end $$;
+
+-- قالب رسالة الإجازة لولي الأمر: يُعدَّل من «رسائل واتساب» ← «القوالب».
+-- {الاسم} {من} {إلى} {السبب} {التمني} {الأكاديمية} تُستبدل عند الإرسال (التمني بحسب نوع الإجازة: مرض، سفر…)
+insert into public.wa_templates (key, title, body, sort) values
+  ('leave', 'إجازة طالب', E'السلام عليكم ورحمة الله وبركاته،\nولي أمر الطالب/ة {الاسم} المحترم،\nنفيدكم بأنه تم تسجيل إجازة لابنكم/ابنتكم من {من} إلى {إلى} بسبب {السبب}، ولن يُحتسب غيابه/ا خلالها.\n{التمني}.\n{الأكاديمية}', 6)
+on conflict (key) do nothing;
