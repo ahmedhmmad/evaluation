@@ -1315,7 +1315,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 10';
+  var APP_BUILD = '10/11 — 11';
 
   var syncing = null;
   function syncData(quiet) {
@@ -8429,9 +8429,10 @@
         '<td>' + (self || isTeacher ? '' : '<button type="button" class="btn" data-resetpw="' + u.id + '">كلمة مرور جديدة</button>') + '</td></tr>';
     }).join('');
 
-    app.innerHTML = tabs('admin') +
-      backupCardHtml() + botKeyCardHtml() +
-      '<div class="card"><h2>بيانات المدرسة</h2>' +
+    var adTab = vtab('admin', 'users');
+    app.innerHTML = tabs('admin') + vtabsHtml('admin', 'users', [['users', 'المستخدمون والصلاحيات'], ['school', 'بيانات المدرسة'], ['viewers', 'ما يراه المشاهدون'], ['backup', 'النسخ الاحتياطي والربط']]) +
+      (adTab === 'backup' ? backupCardHtml() + botKeyCardHtml() : '') +
+      (adTab !== 'school' ? '' : '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
         '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
         '<p class="hint" style="margin:6px 0 0">يظهر بجانب الشعار في ترويسة كل التقارير المطبوعة. اتركه فارغًا لاستخدام «أكاديمية الركيزة الثالثة».</p>' +
@@ -8452,12 +8453,12 @@
         '<input type="text" id="school-fb" dir="ltr" style="text-align:right" data-settingtext="school_facebook" placeholder="' + esc(REPORT.facebook) + '" value="' + esc((S.settings && S.settings.school_facebook) || '') + '">' +
         '<p class="hint" style="margin:6px 0 0">تظهر هذه الثلاثة في تذييل كل ورقة مطبوعة. اتركها فارغة لاستعمال القيم الظاهرة في الخانات.</p>' +
         '<label class="field" style="margin-top:16px">الصفوف والشعب</label>' +
-        '<p class="hint" style="margin:0">الشعب: ' + (schoolClasses().map(esc).join('، ') || 'لا توجد بعد') + '. تُدار من <a href="#/rooms">إعداد الفصول</a>.</p></div>' +
-      '<div class="card"><h2>ما يراه المشاهدون</h2>' +
+        '<p class="hint" style="margin:0">الشعب: ' + (schoolClasses().map(esc).join('، ') || 'لا توجد بعد') + '. تُدار من <a href="#/rooms">إعداد الفصول</a>.</p></div>') +
+      (adTab !== 'viewers' ? '' : '<div class="card"><h2>ما يراه المشاهدون</h2>' +
         '<p class="hint">يُطبَّق على جميع حسابات «مشاهد» في التقييمات المنشورة.</p>' + checks + '</div>' +
       '<div class="card"><h2>التقييمات الظاهرة للمشاهدين</h2>' +
-        '<p class="hint">أزل العلامة لإخفاء تقييم منشور عن المشاهدين.</p>' + vis + '</div>' +
-      '<div class="card"><h2>المستخدمون والصلاحيات</h2>' +
+        '<p class="hint">أزل العلامة لإخفاء تقييم منشور عن المشاهدين.</p>' + vis + '</div>') +
+      (adTab !== 'users' ? '' : '<div class="card"><h2>المستخدمون والصلاحيات</h2>' +
         '<p class="hint">الحسابات الجديدة تبقى «بانتظار التفعيل» إلى أن تحدد صلاحيتها.</p>' +
         '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th><th></th></tr></thead><tbody>' + users + '</tbody></table></div>' +
         // إنشاء حساب جاهز (يحتاج supabase/registrar.sql)
@@ -8469,7 +8470,7 @@
             '<div><label class="field" for="nu-pw">كلمة المرور المؤقتة <span class="req">*</span></label><input type="text" id="nu-pw" required minlength="6" dir="ltr" style="text-align:right" autocomplete="off" value="' + esc(S.defaultPw || '') + '"></div>' +
             '<div><label class="field" for="nu-role">الصلاحية</label><select id="nu-role"><option value="registrar">' + ROLES.registrar + '</option><option value="attclerk">' + ROLES.attclerk + '</option><option value="supervisor">' + ROLES.supervisor + '</option><option value="viewer">' + ROLES.viewer + '</option><option value="manager">' + ROLES.manager + '</option>' +
               (roColumn() ? '<option value="observer">' + ROLES.observer + '</option>' : '') + '</select></div>' +
-          '</div><div class="actions"><button type="submit" class="btn primary">إنشاء الحساب</button></div></form></div>';
+          '</div><div class="actions"><button type="submit" class="btn primary">إنشاء الحساب</button></div></form></div>');
   }
 
   /* ---------- إعداد الفصول الدراسية (مدير النظام) ----------
@@ -8709,7 +8710,9 @@
     }).join('');
     var free = cfg.rooms - cfg.list.length;
 
-    app.innerHTML = tabs('rooms') +
+    var hrHtml = homeroomAccountsHtml(), rmTab = hrHtml ? vtab('rooms', 'list') : 'list';
+    if (rmTab === 'accounts') { app.innerHTML = tabs('rooms') + vtabsHtml('rooms', 'list', [['list', 'الغرف والشعب'], ['accounts', 'حسابات مربي الفصول']]) + hrHtml; return; }
+    app.innerHTML = tabs('rooms') + (hrHtml ? vtabsHtml('rooms', 'list', [['list', 'الغرف والشعب'], ['accounts', 'حسابات مربي الفصول']]) : '') +
       '<div class="toolbar"><button type="button" class="btn" data-act="print"' + (cfg.list.length ? '' : ' disabled') + '>طباعة / تصدير PDF</button>' +
         '<button type="button" class="btn" data-homeroom' + (cfg.list.length ? '' : ' disabled') + '>استيراد مربي الفصول من ملف Word</button>' +
         '<input type="file" id="homeroom-file" accept=".docx" hidden></div>' +
@@ -8732,8 +8735,7 @@
           '<div><label class="field" for="nr-cap">السعة القصوى</label><input type="number" id="nr-cap" min="1" step="1" placeholder="مثال: 30"></div>' +
           '<div><label class="field" for="nr-teacher">مربي الصف</label><input type="text" id="nr-teacher" list="dl-teachers"></div>' +
           '</div><div class="actions"><button type="submit" class="btn primary">إضافة الشعبة</button></div></form>' +
-        '<datalist id="dl-teachers">' + evalTeachers().map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist></div>' +
-      homeroomAccountsHtml();
+        '<datalist id="dl-teachers">' + evalTeachers().map(function (t) { return '<option value="' + esc(t.name) + '">'; }).join('') + '</datalist></div>';
   }
 
   function addRoomClass() {
@@ -10562,8 +10564,10 @@
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x ? x.full_name : '(طالب محذوف)') + '</b></td><td>' + esc(x ? x.class_name || '' : '') + '</td><td>' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td>' +
         (edit ? '<td><button type="button" class="btn danger" data-exdel="' + r.id + '">حذف</button></td>' : '') + '</tr>';
     }).join('');
+    var exTab = edit ? vtab('ex', 'new') : 'log';
     app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إذن خروج الطلاب</h1>' +
-      (edit ? '<form class="card" id="ex-form"><h2>تسجيل خروج</h2><div class="toolbar" style="align-items:flex-end;margin:10px 0 0">' +
+      (edit ? vtabsHtml('ex', 'new', [['new', 'تسجيل خروج'], ['log', 'السجل والتقارير', dayList.length || '']]) : '') +
+      (edit && exTab === 'new' ? '<form class="card" id="ex-form"><h2>تسجيل خروج</h2><div class="toolbar" style="align-items:flex-end;margin:10px 0 0">' +
         '<div><label class="field" for="ex-day">اليوم</label><input type="date" id="ex-day-new" value="' + esc(c.day) + '"></div>' +
         '<div><label class="field" for="ex-time">ساعة الخروج</label><input type="time" id="ex-time" required value="' + esc(c.time) + '"></div>' +
         '<div style="flex:1;min-width:220px"><label class="field" for="ex-reason">سبب الخروج <span class="req">*</span></label><input type="text" id="ex-reason" required list="ex-reasons" autocomplete="off" value="' + esc(c.reason) + '"><datalist id="ex-reasons">' +
@@ -10571,14 +10575,14 @@
         '<h3 style="margin:14px 0 6px">اختر الطالب أو الطلاب</h3><div class="toolbar" style="align-items:center;margin:0 0 8px"><input type="search" id="ex-q" placeholder="ابحث بالاسم أو رقم الهوية" aria-label="بحث" style="flex:1;min-width:200px" value="' + esc(c.q) + '">' +
         '<select id="ex-cls" aria-label="الشعبة" style="width:auto"><option value="">كل الشعب</option>' + attClasses().map(function (n) { return '<option' + (n === c.cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select></div>' +
         '<div id="ex-cands" style="max-height:280px;overflow:auto">' + exCands() + '</div><div class="actions" id="ex-submit">' + exSelBtn() + '</div></form>' : '') +
-      '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">خروج يوم ' + esc(dayName(c.day)) + ' ' + dmy(c.day) + ' (' + dayList.length + ')</h2>' +
+      (exTab !== 'log' ? '' : '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">خروج يوم ' + esc(dayName(c.day)) + ' ' + dmy(c.day) + ' (' + dayList.length + ')</h2>' +
         '<input type="date" id="ex-day" aria-label="اليوم المعروض" data-ro-ok value="' + esc(c.day) + '">' +
         '<button type="button" class="btn" data-exprint="day" data-ro-ok' + (dayList.length ? '' : ' disabled') + '>طباعة التقرير اليومي</button></div>' +
         (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ساعة الخروج</th><th>السبب</th>' + (edit ? '<th></th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
           : '<div class="empty">لم يخرج أحد في هذا اليوم.</div>') + '</div>' +
       '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">التقرير الشهري</h2>' +
         '<input type="month" id="ex-month" aria-label="الشهر" data-ro-ok value="' + esc(c.month) + '"><span class="hint" style="margin:0">' + monthN + ' إذن خروج</span>' +
-        '<button type="button" class="btn" data-exprint="month" data-ro-ok' + (monthN ? '' : ' disabled') + '>طباعة التقرير الشهري</button></div></div>';
+        '<button type="button" class="btn" data-exprint="month" data-ro-ok' + (monthN ? '' : ' disabled') + '>طباعة التقرير الشهري</button></div></div>');
   }
 
   function buildExitSheet(q) {
@@ -11864,13 +11868,16 @@
     var num = function (k, label, unit, step, hint) {
       return '<div><label class="field" for="pr-r-' + k + '">' + label + '</label><span style="display:flex;gap:6px;align-items:center"><input type="number" min="0" step="' + step + '" id="pr-r-' + k + '" data-prrule="' + k + '" value="' + esc(R[k]) + '" placeholder="بلا حد" style="width:120px"' + dis + '>' + unit + '</span>' + (hint ? '<div class="hint" style="margin:2px 0 0">' + hint + '</div>' : '') + '</div>';
     };
-    var H = S.saHours || null;
+    var H = S.saHours || null, prTab = vtab('pr', 'sal');
+    if (prTab === 'access' && !isAdmin()) prTab = 'sal';
+    if (st.imp && edit) prTab = 'sal';
     app.innerHTML = head +
       '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
         '<span class="monthpick"><label class="field" for="pr-month">الشهر</label><input type="month" id="pr-month" data-ro-ok value="' + st.month + '"></span>' + src +
         (locked ? ' <span class="badge paid">رواتب هذا الشهر معتمدة</span> <span class="hint" style="margin:0">تعديل الإعدادات لا يغيّر كشفه المعتمد.</span>' : '') + '</div></div>' +
+      vtabsHtml('pr', 'sal', [['sal', 'رواتب الموظفين'], ['rules', 'قواعد الدوام والخصم']].concat(isAdmin() ? [['access', 'صلاحيات الرواتب']] : [])) +
       (st.imp && edit ? prImportHtml(list) : '') +
-      '<div class="card"><h2>قواعد الدوام</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">' +
+      (prTab !== 'rules' ? '' : '<div class="card"><h2>قواعد الدوام</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">' +
         '<div><label class="field" for="pr-r-work_days">أيام العمل في الشهر</label><span style="display:flex;gap:6px;align-items:center"><input type="number" min="1" max="31" step="1" id="pr-r-work_days" data-prrule="work_days" value="' + esc(R.work_days) + '" style="width:120px"' + dis + '>يوم</span>' +
           '<div class="hint" style="margin:2px 0 0">أجر اليوم = الراتب ÷ هذا العدد، في كل الشهور (العمل كل الأيام عدا الجمعة والسبت).</div></div>' +
         PR_RULES.map(function (r) { return num(r[0], r[1], r[2], r[3]); }).join('') +
@@ -11886,17 +11893,17 @@
       '<h3 style="margin:16px 0 6px">التوقيع على السليبات وكشف الرواتب</h3>' +
         '<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">الصفة <input type="text" data-prrule="signer_title" value="' + esc(R.signer_title) + '" style="width:160px"' + dis + '>' +
         ' الاسم <input type="text" data-prrule="signer_name" value="' + esc(R.signer_name) + '" placeholder="اسم المشرف العام" style="width:220px"' + dis + '></span>' +
-      '<p class="hint" style="margin:10px 0 0">الخانة الفارغة تعني بلا حد (لا خصم). الإجازات تراكمية عبر أشهر العام الدراسي (الفترة المحددة أعلاه)، فيُسمح بعدد أيام في العام وبحد أقصى في الشهر الواحد، وما زاد عن حد الشهر أو عن رصيد العام يُخصم من الراتب في شهره. أما أيام الغياب فتُخصم كل شهر. لا يُحسب الانصراف المبكر.</p></div>' +
-      (edit ? '<div class="toolbar" style="align-items:center">' +
+      '<p class="hint" style="margin:10px 0 0">الخانة الفارغة تعني بلا حد (لا خصم). الإجازات تراكمية عبر أشهر العام الدراسي (الفترة المحددة أعلاه)، فيُسمح بعدد أيام في العام وبحد أقصى في الشهر الواحد، وما زاد عن حد الشهر أو عن رصيد العام يُخصم من الراتب في شهره. أما أيام الغياب فتُخصم كل شهر. لا يُحسب الانصراف المبكر.</p></div>') +
+      (edit && prTab !== 'access' ? '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn primary" data-prsave data-ro-mgr' + ((dirty || (!own && b)) && !st.busy ? '' : ' disabled') + '>' + (st.busy ? 'جارٍ الحفظ…' : 'حفظ إعدادات ' + esc(monthLabel(st.month)) + (dirty ? ' (' + dirty + ')' : '')) + '</button>' +
         (dirty ? '<button type="button" class="btn link" data-prcancel data-ro-mgr>تراجع عن غير المحفوظ</button>' : '') +
-        '<button type="button" class="btn" data-primp data-ro-mgr>استيراد الرواتب من Excel</button><input type="file" id="pr-file" accept=".xlsx,.xls,.csv" hidden>' + '</div>' : '') +
-      '<div class="card">' + (list.length
+        (prTab === 'sal' ? '<button type="button" class="btn" data-primp data-ro-mgr>استيراد الرواتب من Excel</button>' : '') + '<input type="file" id="pr-file" accept=".xlsx,.xls,.csv" hidden>' + '</div>' : '') +
+      (prTab !== 'sal' ? '' : '<div class="card">' + (list.length
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>الراتب (ج.م)</th><th>تغيير الراتب من تاريخ (اختياري)</th></tr></thead><tbody>' + rows + '</tbody>' +
           '<tfoot><tr><th colspan="2" style="text-align:right">مجموع الرواتب الشهرية</th><th id="pr-total" style="text-align:right"></th><th></th></tr></tfoot></table></div>' +
           '<p class="hint" style="margin:8px 0 0">تغيير الراتب خلال الشهر (مثل نصف نصاب ثم نصاب كامل): يُحسب الشهر بأيام العمل قبل التاريخ بالراتب القديم وبعده بالجديد، والأشهر التالية بالجديد.</p>'
-        : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>' +
-      (isAdmin() ? prAccessHtml() : '');
+        : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>') +
+      (isAdmin() && prTab === 'access' ? prAccessHtml() : '');
     prTotal();
     if (!S.saHours) prLoadHours();
   }
