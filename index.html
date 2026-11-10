@@ -1288,7 +1288,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 4';
+  var APP_BUILD = '10/11 — 5';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10622,7 +10622,9 @@
      ومجموع ساعاته ورسالة بضرورة الالتزام، ويُطبع بتوقيع المدير وإقرار الموظف بالاستلام. يُحسب التأخير عن دوام مجموعة الموظف (saLate) */
   var LT_MSG = 'نؤكد على ضرورة الالتزام بمواعيد الدوام الرسمي حرصًا على انتظام العملية التعليمية وحسن سير العمل، ونأمل ألا يتكرر ذلك مستقبلًا، وإلا اضطررنا إلى اتخاذ الإجراءات اللازمة وفق نظام العمل المعتمد.';
   var pendingLt = null;
-  function ltUi() { return ui.lt || (ui.lt = { month: '', data: null, loading: false, sid: '', date: todayISO(), msg: LT_MSG, days: true }); }
+  // نص الكتاب بعد «تحية طيبة وبعد»؛ {الأيام} {الشهر} {الموعد} {المجموع} تُستبدل عند الطباعة
+  var LT_REASON = 'نحيطكم علمًا بأنه قد تقرر توجيه لفت نظر إليكم بسبب التأخر عن موعد الحضور الرسمي ({الموعد}) مدة {الأيام} خلال شهر {الشهر}، بمجموع تأخير {المجموع}، وذلك لعدم الالتزام بسياسة الحضور والانصراف المعتمدة لدى الأكاديمية، ويُعد ذلك مخالفة تستوجب اتخاذ الإجراءات الإدارية وفقًا للسياسات واللوائح المعمول بها بالأكاديمية.';
+  function ltUi() { return ui.lt || (ui.lt = { month: '', data: null, loading: false, sid: '', date: todayISO(), msg: LT_MSG, reason: LT_REASON, days: true }); }
   function ltHours(mins) {
     mins = Math.round(mins);
     var h = Math.floor(mins / 60), m = mins % 60;
@@ -10662,6 +10664,7 @@
         '<p class="hint" style="margin:0 0 8px">أيام التأخر: <b>' + days.length + '</b> · مجموع التأخير: <b>' + esc(ltHours(cur.late)) + '</b>. يُدرج في الكتاب جدول بأيام التأخر وساعاتها.</p>' +
         '<div class="grid2"><div><label class="field" for="lt-date">تاريخ الكتاب</label><input type="date" id="lt-date" data-ro-ok value="' + esc(u.date) + '"></div>' +
         '<div style="align-self:end"><label class="check"><input type="checkbox" id="lt-days" data-ro-ok' + (u.days ? ' checked' : '') + '> إدراج جدول أيام التأخر في الكتاب</label></div>' +
+        '<div style="grid-column:1/-1"><label class="field" for="lt-reason">نص لفت النظر وسببه ({الأيام} {الشهر} {الموعد} {المجموع} تُستبدل تلقائيًا)</label><textarea id="lt-reason" data-ro-ok rows="3">' + esc(u.reason) + '</textarea></div>' +
         '<div style="grid-column:1/-1"><label class="field" for="lt-msg">رسالة الالتزام</label><textarea id="lt-msg" data-ro-ok rows="4">' + esc(u.msg) + '</textarea></div></div>' +
         '<div class="actions"><button type="button" class="btn primary" data-ltprint="' + cur.t.id + '" data-ro-ok>طباعة كتاب لفت النظر / PDF</button></div></div>';
     }
@@ -10682,7 +10685,8 @@
     sheet.innerHTML = reportHead('كتاب لفت نظر', [['التاريخ', dmy(u.date)], ['الموضوع', 'التأخر المتكرر عن الدوام']], { noIssueDate: true }) +
       '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ' + esc(t.name) + '</b>' + (t.job_title ? ' — ' + esc(t.job_title) : '') + '</p>' +
       '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
-      '<p style="margin:0 0 .6em;line-height:1.9">بالإشارة إلى سجلات الدوام عن شهر <b>' + esc(monthLabel(D.month)) + '</b>، تبيّن تأخركم عن الحضور في الموعد الرسمي (<b>' + esc(T.time_in) + '</b>) خلال <b>' + (days.length === 1 ? 'يوم واحد' : days.length === 2 ? 'يومين' : days.length + (days.length <= 10 ? ' أيام' : ' يومًا')) + '</b>، وبلغ مجموع التأخير <b>' + esc(ltHours(s.late)) + '</b>.</p>' +
+      '<p style="margin:0 0 .6em;line-height:1.9;white-space:pre-wrap">' + esc(u.reason.trim().replace(/\{الأيام\}/g, days.length === 1 ? 'يوم واحد' : days.length === 2 ? 'يومين' : days.length + (days.length <= 10 ? ' أيام' : ' يومًا'))
+        .replace(/\{الشهر\}/g, monthLabel(D.month)).replace(/\{الموعد\}/g, T.time_in || '').replace(/\{المجموع\}/g, ltHours(s.late))) + '</p>' +
       table +
       '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
       '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
@@ -10701,6 +10705,7 @@
     if (location.hash !== '#/staffatt') return;
     var u = ltUi();
     if (e.target.id === 'lt-msg') u.msg = e.target.value;
+    else if (e.target.id === 'lt-reason') u.reason = e.target.value;
     else if (e.target.id === 'lt-date' && e.target.value) u.date = e.target.value;
     else if (e.target.id === 'lt-days') u.days = e.target.checked;
   });
@@ -15539,7 +15544,65 @@
     return nm.family ? first + ' ' + nm.family : x.full_name;
   }
 
+  // إجازات الطلاب (supabase/student_leaves.sql): كل يوم داخل الإجازة يظهر «مأذون» ويُحفظ كذلك (والقاعدة تفرضه أيضًا، فيشمل الموبايل والروابط)
+  async function loadStLeaves() {
+    var r = await sb.from('student_leaves').select('*').order('from_day', { ascending: false }).limit(2000);
+    S.stLeavesMissing = !!r.error;
+    S.stLeaves = r.data || [];
+  }
+  function stLeaveOn(sid, day) {
+    return (S.stLeaves || []).filter(function (l) { return l.student_id === sid && day >= l.from_day && day <= l.to_day; })[0] || null;
+  }
+  function stLeavesHtml() {
+    if (S.stLeaves == null) return '';
+    var a = attState(), edit = isAdmin() || isRegistrar(), today = todayISO();
+    if (S.stLeavesMissing) return '<div class="card"><h2>إجازات الطلاب</h2><p class="hint" style="margin:0">تحتاج جدولًا جديدًا: شغّل الملف <code dir="ltr">supabase/student_leaves.sql</code> في محرر SQL، ثم حدّث الصفحة.</p></div>';
+    var list = S.stLeaves.filter(function (l) { var x = findStudent(l.student_id); return l.to_day >= (a.leaveAll ? '0000' : today) && (!a.cls || (x && x.class_name === a.cls)); });
+    var pool = S.students.filter(function (x) { return enrolled(x) && (!a.cls || x.class_name === a.cls); }).sort(function (p, q) { return (p.class_name || '').localeCompare(q.class_name || '', 'ar') || p.full_name.localeCompare(q.full_name, 'ar'); });
+    return '<div class="card"><h2>إجازات الطلاب (عذر لفترة)</h2><p class="hint" style="margin:0">الطالب المجاز يُسجَّل «مأذون» تلقائيًا في كل أيام إجازته، في الموقع وتطبيق الموبايل، فلا حاجة لإدخاله يوميًا. لإلغاء ذلك احذف الإجازة أو قصّرها.</p>' +
+      (edit ? '<div class="toolbar" style="align-items:flex-end;margin-top:10px">' +
+        '<div style="flex:2;min-width:220px"><label class="field" for="lv-st">الطالب</label><select id="lv-st"><option value="">— اختر الطالب —</option>' + pool.map(function (x) { return '<option value="' + x.id + '">' + esc(x.full_name + ' — ' + (x.class_name || '')) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label class="field" for="lv-from">من</label><input type="date" id="lv-from" value="' + today + '"></div>' +
+        '<div><label class="field" for="lv-to">إلى</label><input type="date" id="lv-to" value="' + today + '"></div>' +
+        '<div style="flex:2;min-width:180px"><label class="field" for="lv-reason">السبب</label><input type="text" id="lv-reason" placeholder="مثال: إجراء عملية جراحية"></div>' +
+        '<button type="button" class="btn primary" data-lvadd>منح إجازة</button></div>' : '') +
+      '<div class="toolbar" style="margin:10px 0 0;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="lv-all"' + (a.leaveAll ? ' checked' : '') + '> عرض الإجازات المنتهية أيضًا</label></div>' +
+      (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>الشعبة</th><th>من</th><th>إلى</th><th>الأيام</th><th>السبب</th><th></th></tr></thead><tbody>' +
+        list.map(function (l) {
+          var x = findStudent(l.student_id), n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1;
+          return '<tr><td><b>' + esc(x ? x.full_name : '—') + '</b>' + (l.from_day <= today && today <= l.to_day ? ' <span class="badge part">مجاز اليوم</span>' : '') + '</td><td>' + esc(x ? x.class_name || '' : '') + '</td><td>' + dmy(l.from_day) + '</td><td>' + dmy(l.to_day) + '</td><td>' + n + '</td><td>' + esc(l.reason) + '</td>' +
+            '<td>' + (edit ? '<button type="button" class="btn danger" data-lvdel="' + l.id + '">حذف</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty" style="margin-top:8px">لا إجازات ' + (a.leaveAll ? '' : 'حالية أو قادمة') + (a.cls ? ' في هذه الشعبة' : '') + '.</div>') + '</div>';
+  }
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/attendance' || !(isAdmin() || isRegistrar())) return;
+    var el;
+    if (e.target.closest('[data-lvadd]')) {
+      var sid = document.getElementById('lv-st').value, from = document.getElementById('lv-from').value, to = document.getElementById('lv-to').value, reason = document.getElementById('lv-reason').value.trim();
+      if (!sid) return toast('اختر الطالب', true);
+      if (!from || !to || to < from) return toast('اختر فترة صحيحة', true);
+      var r = await sb.from('student_leaves').insert({ student_id: sid, from_day: from, to_day: to, reason: reason, created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+      if (r.error) return fail(r.error);
+      S.stLeaves.unshift(r.data);
+      S.attDay = {}; // الأيام المسجَّلة داخل الإجازة صارت «مأذون» في القاعدة
+      render();
+      return toast('مُنحت الإجازة لـ' + (findStudent(sid) || {}).full_name + ' من ' + dmy(from) + ' إلى ' + dmy(to));
+    }
+    if ((el = e.target.closest('[data-lvdel]'))) {
+      var id = el.getAttribute('data-lvdel'), l = S.stLeaves.filter(function (q) { return q.id === id; })[0];
+      if (!l || !confirm('حذف إجازة ' + ((findStudent(l.student_id) || {}).full_name || '') + '؟ (ما سُجِّل «مأذون» في أيامها يبقى كما هو، ويُعدَّل يدويًا إن لزم)')) return;
+      var d = await sb.from('student_leaves').delete().eq('id', id);
+      if (d.error) return fail(d.error);
+      S.stLeaves = S.stLeaves.filter(function (q) { return q.id !== id; });
+      render();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash === '#/attendance' && e.target.id === 'lv-all') { attState().leaveAll = e.target.checked; render(); }
+  });
+
   async function loadAttDay(day) {
+    if (S.stLeaves == null) await loadStLeaves();
     var rows = await fetchAll(function () { return sb.from('attendance').select('*').eq('day', day).order('student_id'); });
     if (!rows) { S.attMissing = true; render(); return; }
     var map = {};
@@ -15562,7 +15625,8 @@
 
   // حالة الطالب في اليوم المعروض: ما عُدِّل ولم يُحفظ، ثم المحفوظ، وإلا حاضر
   function attOf(sid) {
-    var a = attState(), d = a.draft[sid], saved = (S.attDay[a.day] || {})[sid];
+    var a = attState(), d = a.draft[sid], saved = (S.attDay[a.day] || {})[sid], lv = !d && !saved ? stLeaveOn(sid, a.day) : null;
+    if (lv) return { status: 'excused', note: 'إجازة' + (lv.reason ? ': ' + lv.reason : ''), saved: saved, leave: lv };
     return { status: d ? d.status : saved ? saved.status : 'present', note: d && d.note != null ? d.note : saved ? saved.note || '' : '', saved: saved };
   }
 
@@ -15873,7 +15937,7 @@
   /* ----- كشوف الحضور: Excel و PDF -----
      كشف شهري لكل شعبة بالأسماء وأيام الشهر، وتقارير المدرسة: يومي وأسبوعي (السبت إلى الجمعة) وشهري */
 
-  var ATT_MARK = { present: '✓', absent: 'غـ', excused: 'مأ' };
+  var ATT_MARK = { present: '✓', absent: 'غـ', excused: 'م' };
 
   // يوم لا دراسة فيه: الجمعة والسبت، وما أُضيف عطلةً
   function attOff(day) {
@@ -15975,7 +16039,7 @@
           });
           var foot = ['', 'عدد الغائبين في اليوم'].concat(absentPerDay.map(function (v, j) { return recorded[j] ? v : ''; }));
           xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + monthLabel(month)], ['الصف: ' + cls, '', 'مربي الصف: ' + (classTeacher(cls) || ''), '', '', '', '', '', 'عدد الطلاب: ' + roll.length], [], head].concat(body, [foot, [],
-            ['', 'المفتاح: ✓ حاضر · غـ غائب · مأ مأذون · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
+            ['', 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
             [4, 30].concat(days.map(function (dd) { return attOff(dd) ? 9 : 5; }), [10, 10]));
         });
         XLSX.writeFile(wb, ('كشف-الحضور-' + (a.cls || 'كل-الشعب') + '-' + month).replace(/\s+/g, '-') + '.xlsx');
@@ -16098,7 +16162,7 @@
         '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
           (p.teacher ? '' : '<th class="tot">حضور</th><th class="tot">غياب</th>') + '</tr></thead>' +
         '<tbody>' + body + (p.teacher ? '</tbody></table>' : '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>') +
-        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · مأ مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · مأ مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
+        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
@@ -16806,7 +16870,7 @@
           return '<option' + (c === a.cls ? ' selected' : '') + '>' + esc(c) + '</option>';
         }).join('') + '</select>' +
         (a.view === 'day' ? '<span class="monthpick"><label class="field" for="att-day">اليوم</label><input type="date" id="att-day" max="' + todayISO() + '" value="' + a.day + '"></span>' : '') + '</div>' +
-      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml()) + attExportHtml() + attLinksHtml();
+      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml()) + (a.view === 'day' ? stLeavesHtml() : '') + attExportHtml() + attLinksHtml();
   }
 
   async function saveAttendance() {
