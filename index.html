@@ -811,9 +811,20 @@
   }
   nav.pills button:hover { border-color: var(--primary); }
   nav.pills button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
-  nav.pills.sub { margin: -6px 0 14px; padding: 8px; background: rgba(19,48,107,.05); border-radius: 12px; }
-  nav.pills.sub button { font-size: .86rem; padding: 5px 12px; }
-  nav.pills.sub button.on { background: #fff; color: var(--primary); border-color: var(--gold); font-weight: 700; }
+  /* تبويبات الشاشة: شريط أبيض مستقل، والتبويب المفتوح بخط كحلي عريض وخط ذهبي تحته */
+  .tabbar { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(19,48,107,.07); }
+  .tabbar.has-sub { border-radius: 14px 14px 0 0; margin-bottom: 0; }
+  nav.tabs { display: flex; flex: 1; min-width: 0; gap: 2px; margin: 0; overflow-x: auto; scrollbar-width: none; }
+  nav.tabs::-webkit-scrollbar { display: none; }
+  nav.tabs button { font: inherit; cursor: pointer; flex: none; white-space: nowrap; min-height: 50px; padding: 12px 14px 9px; background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; font-weight: 600; color: #5A6072; }
+  nav.tabs button:hover { color: var(--primary); background: rgba(19,48,107,.05); }
+  nav.tabs button.on { color: var(--primary); font-weight: 700; border-bottom-color: var(--gold); }
+  nav.tabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: 6px; }
+  nav.tabs button b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 5px; margin-inline-start: 6px; border: 1.5px solid currentColor; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+  nav.tabs.sub { flex: none; background: rgba(19,48,107,.06); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 14px 14px; padding: 0 12px; margin: 0 0 16px; }
+  nav.tabs.sub button { min-height: 42px; padding: 9px 12px 6px; font-size: .88rem; }
+  .tabbar .monthpick, .tabbar > select { flex: none; margin: 6px 0; }
+  @media (max-width: 640px) { .tabbar { padding: 0 6px; flex-wrap: wrap; gap: 0 8px; } .tabbar nav.tabs { flex: 1 1 100%; } .tabbar > select { min-width: 0 !important; flex: 1 1 40%; } }
   nav.pills button b { font-weight: 800; opacity: .85; margin-inline-start: 4px; }
 
   /* Students */
@@ -1291,7 +1302,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 8';
+  var APP_BUILD = '10/11 — 9';
 
   var syncing = null;
   function syncData(quiet) {
@@ -6024,14 +6035,14 @@
   function transportGroupOf(view) { return T_NAV.filter(function (g) { return g[1].some(function (it) { return it[0] === view; }); })[0] || T_NAV[0]; }
   function transportNav(view) {
     var cur = transportGroupOf(view);
-    return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + T_NAV.map(function (g) {
+    return '<nav class="tabs" aria-label="أقسام المواصلات">' + T_NAV.map(function (g) {
       return '<button type="button" data-tgo="' + g[1][0][1] + '"' + (g === cur ? ' class="on" aria-current="true"' : '') + '>' + g[0] + '</button>';
     }).join('') + '</nav>';
   }
   function transportSubNav(view) {
     var cur = transportGroupOf(view);
     if (cur[1].length < 2) return '';
-    return '<nav class="pills sub no-print" aria-label="' + cur[0] + '">' + cur[1].map(function (it) {
+    return '<nav class="tabs sub no-print" aria-label="' + cur[0] + '">' + cur[1].map(function (it) {
       return '<button type="button" data-tgo="' + it[1] + '"' + (view === it[0] ? ' class="on" aria-current="page"' : '') + '>' + it[2] + '</button>';
     }).join('') + '</nav>';
   }
@@ -6696,8 +6707,7 @@
 
     var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : hash === '#/transport/buses' ? 'busrep' : hash === '#/transport/status' ? 'status' : hash === '#/transport/setup' ? 'setup' : 'groups';
     var all = payRows();
-    var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
-      '<span style="flex:1"></span>' + monthPick + '</div>' + transportSubNav(view);
+    var head = tabs('transport') + '<div class="tabbar' + (transportGroupOf(view)[1].length > 1 ? ' has-sub' : '') + '">' + transportNav(view) + monthPick + '</div>' + transportSubNav(view);
 
     if (view === 'setup') {
       app.innerHTML = head + cyclesCardHtml();
@@ -11354,11 +11364,11 @@
     var item = function (key, hash, label, n) {
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + (n ? '<b>' + n + '</b>' : '') + '</button>';
     };
-    return '<nav class="pills" aria-label="أقسام جدول الحصص">' + item('classes', '#/timetable', 'جداول الصفوف') + item('teachers', '#/timetable/teachers', 'جداول المعلمين') +
+    return '<div class="tabbar"><nav class="tabs" aria-label="أقسام جدول الحصص">' + item('classes', '#/timetable', 'جداول الصفوف') + item('teachers', '#/timetable/teachers', 'جداول المعلمين') +
       item('bells', '#/timetable/bells', 'مواعيد الدوام') + item('review', '#/timetable/review', 'المراجعة', badge) +
       item('subs', '#/timetable/subs', 'الاحتياط') +
       item('quota', '#/timetable/quota', 'النصاب والقواعد') + item('improve', '#/timetable/improve', 'تحسين الجدول', pend) +
-      (canEditTT() ? item('import', '#/timetable/import', 'استيراد من ملف') : '') + '</nav>';
+      (canEditTT() ? item('import', '#/timetable/import', 'استيراد من ملف') : '') + '</nav></div>';
   }
 
   // أزرار الطباعة: الجدول المعروض، والكل، والجدولان العامان، ومواعيد الدوام
@@ -11534,9 +11544,9 @@
   function vtab(key, def) { return (ui.vtab && ui.vtab[key]) || def; }
   function vtabsHtml(key, def, items) {
     var cur = vtab(key, def);
-    return '<nav class="pills no-print" aria-label="أقسام الشاشة">' + items.map(function (it) {
+    return '<div class="tabbar no-print"><nav class="tabs" aria-label="أقسام الشاشة">' + items.map(function (it) {
       return '<button type="button" data-ro-ok data-vtab="' + key + ':' + it[0] + '"' + (cur === it[0] ? ' class="on" aria-current="true"' : '') + '>' + it[1] + (it[2] ? ' <b>' + it[2] + '</b>' : '') + '</button>';
-    }).join('') + '</nav>';
+    }).join('') + '</nav></div>';
   }
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-vtab]');
@@ -16636,7 +16646,7 @@
     if (S.waTpl == null) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadWaTemplates().then(render); return; }
     var tabs = [['send', 'إرسال رسالة'], ['archive', 'الأرشيف والتقرير'], ['templates', 'القوالب']];
     var head = '<div class="page-head"><div><h1>رسائل واتساب</h1><p>رسائل لأولياء الأمور من رقم الأكاديمية عبر SendWhats: ترحيب، وتنويهات، ودعوات، ورسائل الغياب. وكل ما يُرسل محفوظ في الأرشيف بحالته.</p></div></div>' +
-      '<div class="toolbar">' + tabs.map(function (t) { return '<button type="button" class="btn' + (w.tab === t[0] ? ' primary' : '') + '" data-watab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+      '<div class="tabbar"><nav class="tabs" aria-label="أقسام الرسائل">' + tabs.map(function (t) { return '<button type="button"' + (w.tab === t[0] ? ' class="on" aria-current="true"' : '') + ' data-watab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</nav></div>';
     if (S.waMissing) {
       app.innerHTML = head + '<div class="card empty">شاشة الرسائل تحتاج إلى جدولين جديدين في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/whatsapp_messages.sql</code> في محرر SQL، ثم انشر الدالتين ' +
         '<code dir="ltr">send-whatsapp</code> و <code dir="ltr">send-absence-whatsapp</code>، وحدّث الصفحة.</div>';
@@ -16970,7 +16980,7 @@
       return;
     }
     app.innerHTML = tabs('attendance') +
-      '<div class="toolbar" style="align-items:center"><nav class="pills" style="margin:0">' +
+      '<div class="tabbar"><nav class="tabs" aria-label="أقسام الحضور والغياب">' +
         [['day', 'الحضور اليومي'], ['leaves', 'الإجازات'], ['sheets', 'الكشوف'], ['report', 'تقرير فترة']].concat(isAdmin() ? [['links', 'تسجيل المعلمين']] : []).map(function (v) {
           return '<button type="button" data-attview="' + v[0] + '"' + (a.view === v[0] ? ' class="on" aria-current="true"' : '') + '>' + v[1] + '</button>';
         }).join('') + '</nav>' +
