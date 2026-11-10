@@ -1286,7 +1286,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '09/11 — 6';
+  var APP_BUILD = '10/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10704,6 +10704,69 @@
     else if (e.target.id === 'lt-days') u.days = e.target.checked;
   });
 
+  /* ----- كتاب لفت نظر بسبب الغياب -----
+     مثل كتاب التأخير، على دوام الشهر نفسه (ltUi().data): يُعرض الغائبون بأيام غيابهم (بدون إجازة)، ويُختار أحدهم فيُكتب له كتاب
+     يذكر عدد أيام الغياب وجدولها، ورسالة الالتزام، ويُطبع بتوقيع المدير وإقرار الموظف بالاستلام */
+  var LA_MSG = 'نؤكد على ضرورة الالتزام بالحضور وعدم التغيب عن العمل إلا بعذر مقبول أو إجازة معتمدة مسبقًا من الإدارة، حرصًا على انتظام العملية التعليمية وحسن سير العمل، ونأمل ألا يتكرر ذلك مستقبلًا، وإلا اضطررنا إلى اتخاذ الإجراءات اللازمة وفق نظام العمل المعتمد.';
+  var pendingLa = null;
+  function laUi() { return ui.la || (ui.la = { sid: '', date: todayISO(), msg: LA_MSG, days: true }); }
+  function laCardHtml() {
+    var lu = ltUi(), u = laUi(), month = saState().month, D = lu.data && lu.month === month ? lu.data : null;
+    var head = '<div class="card"><h2>كتب لفت النظر (الغياب)</h2>';
+    if (!D) return head + '<div class="toolbar" style="align-items:center;margin:8px 0 0"><span class="hint" style="margin:0">الشهر: <b>' + esc(monthLabel(month)) + '</b></span>' +
+      '<button type="button" class="btn primary" data-ltload data-ro-ok' + (lu.loading ? ' disabled' : '') + '>' + (lu.loading ? 'جارٍ الجلب…' : 'عرض الغائبين') + '</button></div>' +
+      '<p class="hint" style="margin:8px 0 0">اضغط «عرض الغائبين» لتظهر قائمة من غابوا بدون إجازة في هذا الشهر.</p></div>';
+    var list = D.staff.filter(function (s) { return s.absent > 0; }).sort(function (a, b) { return b.absent - a.absent; });
+    var rows = list.map(function (s, i) {
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(s.t.name) + '</b><br><span class="meta" style="font-size:.85rem">' + esc(s.t.job_title || staffCat(s.t)) + '</span></td><td><b>' + s.absent + '</b></td>' +
+        '<td>' + dmAbsDays(s).map(function (k) { return dmy(k).slice(0, 5); }).join('، ') + '</td>' +
+        '<td><button type="button" class="btn' + (u.sid === s.t.id ? ' primary' : '') + '" data-lapick="' + s.t.id + '" data-ro-ok>كتاب لفت نظر</button></td></tr>';
+    }).join('');
+    var form = '', cur = list.filter(function (s) { return s.t.id === u.sid; })[0];
+    if (cur) {
+      form = '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><h3 style="margin:0 0 8px">كتاب لفت نظر (غياب): ' + esc(cur.t.name) + '</h3>' +
+        '<p class="hint" style="margin:0 0 8px">أيام الغياب: <b>' + cur.absent + '</b>.</p>' +
+        '<div class="grid2"><div><label class="field" for="la-date">تاريخ الكتاب</label><input type="date" id="la-date" data-ro-ok value="' + esc(u.date) + '"></div>' +
+        '<div style="align-self:end"><label class="check"><input type="checkbox" id="la-days" data-ro-ok' + (u.days ? ' checked' : '') + '> إدراج جدول أيام الغياب في الكتاب</label></div>' +
+        '<div style="grid-column:1/-1"><label class="field" for="la-msg">رسالة الالتزام</label><textarea id="la-msg" data-ro-ok rows="4">' + esc(u.msg) + '</textarea></div></div>' +
+        '<div class="actions"><button type="button" class="btn primary" data-laprint="' + cur.t.id + '" data-ro-ok>طباعة كتاب لفت النظر / PDF</button></div></div>';
+    }
+    return head + (rows ? '<div class="table-wrap"><table class="grid" style="margin-top:8px"><thead><tr><th>م</th><th>الموظف</th><th>أيام الغياب</th><th>التواريخ</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div class="empty" style="margin-top:8px">لا غياب بدون إجازة في هذا الشهر.</div>') + form + '</div>';
+  }
+  function buildAbsLetterSheet(sid) {
+    var u = laUi(), D = ltUi().data, s = D && D.staff.filter(function (x) { return x.t.id === sid; })[0];
+    if (!s) { sheet.className = 'ps'; sheet.innerHTML = '<p>لا بيانات.</p>'; return; }
+    var days = dmAbsDays(s), t = s.t;
+    var table = u.days && days.length ? '<table class="rz" style="margin:.6em 0"><thead><tr><th style="width:3em">م</th><th>التاريخ</th><th>اليوم</th></tr></thead><tbody>' +
+      days.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d) + '</td><td class="c">' + esc(dayName(d)) + '</td></tr>'; }).join('') +
+      '<tr class="total"><td colspan="2">المجموع</td><td class="c"><b>' + esc(dmDaysTxt(days.length)) + '</b></td></tr></tbody></table>' : '';
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = reportHead('كتاب لفت نظر', [['التاريخ', dmy(u.date)], ['الموضوع', 'الغياب عن العمل']], { noIssueDate: true }) +
+      '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ' + esc(t.name) + '</b>' + (t.job_title ? ' — ' + esc(t.job_title) : '') + '</p>' +
+      '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
+      '<p style="margin:0 0 .6em;line-height:1.9">بالإشارة إلى سجلات الدوام عن شهر <b>' + esc(monthLabel(D.month)) + '</b>، تبيّن تغيبكم عن العمل دون إجازة معتمدة أو عذر مقبول مدة <b>' + esc(days.length === 2 ? 'يومين' : dmDaysTxt(days.length)) + '</b>' + (u.days ? ' على النحو المبيّن في الجدول التالي' : '') + '.</p>' +
+      table +
+      '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
+      '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
+      reportSigns([['مدير/ة الأكاديمية', principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
+    fitSheet();
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staffatt' || !canView()) return;
+    var el, u = laUi();
+    if ((el = e.target.closest('[data-lapick]'))) { u.sid = el.getAttribute('data-lapick'); return render(); }
+    if ((el = e.target.closest('[data-laprint]'))) { pendingLa = el.getAttribute('data-laprint'); return printNow(); }
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/staffatt') return;
+    var u = laUi();
+    if (e.target.id === 'la-msg') u.msg = e.target.value;
+    else if (e.target.id === 'la-date' && e.target.value) u.date = e.target.value;
+    else if (e.target.id === 'la-days') u.days = e.target.checked;
+  });
+
   /* ----- كتاب الاستغناء عن خدمات موظف -----
      تحت «كتب لفت النظر (التأخير)» ويعتمد على دوام الشهر نفسه (ltUi().data): يُعرض المتأخرون والغائبون، ويُختار أحدهم وسبب أو أكثر للاستغناء.
      إن كان التأخير المتكرر أو الغياب المتكرر أو كثرة الإجازات من الأسباب كُتب في الكتاب مجموع كلٍّ منها (مع جدول أيامها اختياريًّا) */
@@ -11506,7 +11569,7 @@
           '<button type="button" class="btn primary" data-sasign data-ro-ok>طباعة</button></div>' +
         '<p class="hint" style="margin:6px 0 0">ورقة لكل يوم عمل في الفترة (تُتخطى الجمعة والسبت والعطل)، بترتيب الموظفين في هذه الصفحة: الرقم، الاسم، وقت الحضور والتوقيع، وقت الانصراف والتوقيع. «بدون أسماء (مرقم)»: الكشف نفسه وخانة الاسم فارغة، بعدد الموظفين أو بالعدد الذي تكتبه. بلا علامة مائية ولا توقيعات في آخرها.</p>' +
         '<p class="hint" style="margin:8px 0 0"><b>كشف الحضور</b> مثل كشف الطلاب: اسم كل موظف وعمود لكل يوم من الشهر؛ + حاضر، L إجازة، غ غائب، م مأمورية، وتظليل الجمعة والسبت والعطل والإجازات. ' +
-          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>' + ltCardHtml() + dmCardHtml();
+          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>' + ltCardHtml() + laCardHtml() + dmCardHtml();
   }
 
   /* ----- كشف التوقيع اليومي، وكشفا العاملين -----
@@ -18402,6 +18465,7 @@
     else if (pendingEx) buildExitSheet(pendingEx);
     else if (pendingAfList) buildAffairsListSheet();
     else if (pendingLt) buildLateLetterSheet(pendingLt);
+    else if (pendingLa) buildAbsLetterSheet(pendingLa);
     else if (pendingDm) buildDismissSheet(pendingDm);
     else if (pendingTs) buildTransportStatusSheet();
     else if (pendingLedRef) buildLedRefSheet();
@@ -18436,6 +18500,7 @@
     pendingCu = false;
     pendingOr = null;
     pendingSl = null;
+    pendingLa = null;
     pendingWarn = null;
     pendingDc = false;
     pendingEx = null;
