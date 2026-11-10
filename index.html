@@ -529,6 +529,8 @@
   #print-sheet.ps .rs { margin-top: 1em; }
   /* خطاب الطلبية: خانة المدير والاسم في وسطها، وسطر العنوان والهاتف في أسفل الصفحة */
   #print-sheet .rs.or-signs > div { text-align: center; }
+  #print-sheet .doc-foot { position: fixed; bottom: 3mm; left: 15mm; right: 15mm; padding-top: 1mm; border-top: .75pt solid #C8A45D; text-align: center; font-size: 7.5pt; line-height: 1.3; color: #13306B; }
+  #print-sheet .sig-code { position: fixed; left: 4mm; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center; font-size: 9pt; font-weight: 700; letter-spacing: .3em; color: rgba(19,48,107,.28); white-space: nowrap; }
   #print-sheet .or-foot { position: fixed; bottom: 7mm; left: 15mm; right: 15mm; padding-top: .4em; border-top: 1.5px solid #C8A45D; text-align: center; font-size: .85em; color: #13306B; }
   /* تقييم المعلم */
   #print-sheet .pe-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8em; margin-bottom: .8em; }
@@ -1286,7 +1288,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 1';
+  var APP_BUILD = '10/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10178,10 +10180,7 @@
         items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.unit || '-') + '</td><td class="c">' + esc(it.qty) + '</td></tr>'; }).join('') + '</tbody></table>' +
       '<p style="margin:0 0 .4em;line-height:1.9;white-space:pre-wrap">' + esc(o.closing) + '</p>' +
       '<p style="margin:0 0 .4em;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير ' + schoolName(), principalName()]]).replace('<div class="rs">', '<div class="rs or-signs">') +
-      // سطر العنوان والهاتف ثابت أسفل الورقة دائمًا مهما كان طول الخطاب
-      '<div class="or-foot">' +
-        esc((S.settings && S.settings.school_address) || REPORT.address) + '&nbsp;&nbsp;|&nbsp;&nbsp;<span dir="ltr">' + esc((S.settings && S.settings.school_phone) || REPORT.phone) + '</span></div>';
+      reportSigns([['مدير ' + schoolName(), principalName()]]).replace('<div class="rs">', '<div class="rs or-signs">');
     fitSheet();
   }
   function orPick(id) { return orState().list.filter(function (x) { return x.id === id; })[0]; }
@@ -17447,7 +17446,7 @@
   var roPending = false;
   new MutationObserver(function () {
     // شاشة تغيير كلمة المرور (أول دخول) وشاشة الدخول ليستا من الشاشات المقفلة
-    if (!(isManager() || supViewPage()) || roPending || !S.ready || (S.profile && S.profile.must_change_password)) return;
+    if (!(isManager() || supViewPage()) || roPending || !S.ready || (S.profile && S.profile.must_change_password) || location.hash === '#/signatures') return;
     roPending = true;
     Promise.resolve().then(function () { roPending = false; applyReadOnly(app); });
   }).observe(app, { childList: true, subtree: true });
@@ -17841,6 +17840,7 @@
     banner: 'banner.jpg', // الترويسة أعلى كل ملف مطبوع
     address: '12 شارع الدكتور نجيب محفوظ، متفرع من عباس العقاد، المنطقة الثامنة، مدينة نصر', // يُغيَّر من الإعدادات (school_address)
     phone: '01070761330', // يُغيَّر من الإعدادات (school_phone)
+    facebook: 'facebook.com/thirdpillaracademy',
     // A4 عمودي: 12mm أعلى وأسفل، 15mm من الجانبين
     page: { width: 210, height: 297, marginY: 12, marginX: 15 },
     fonts: 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Montserrat:wght@600;700&display=swap',
@@ -18678,6 +18678,15 @@
       });
       placed = true;
     });
+    if (!placed && /مدير/.test(d.title || '')) {
+      Array.prototype.forEach.call(sheet.querySelectorAll('.rs > div'), function (box) {
+        if (placed || box.classList.contains('stamp')) return;
+        var head = box.querySelector('b'), line = Array.prototype.filter.call(box.querySelectorAll('span'), function (sp) { return /التوقيع/.test(sp.textContent) && dotsRe.test(sp.textContent); })[0];
+        if (!head || !line || !/مدير/.test(head.textContent) || /مدير النظام/.test(head.textContent)) return;
+        line.innerHTML = sigImgHtml(d);
+        placed = true;
+      });
+    }
     if (!placed) {
       var walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT), n, hit = null;
       while ((n = walker.nextNode())) {
@@ -18695,22 +18704,10 @@
         placed = true;
       }
     }
-    // 2) رمز QR مكان الختم، وإلا أعلى يسار الصفحة الأولى
-    var stamp = sheet.querySelector('.rs .stamp');
-    if (stamp) {
-      stamp.style.borderRadius = '0';
-      stamp.style.border = '0';
-      stamp.innerHTML = await sigQrHtml(d, 17);
-    } else {
-      var first = sheet.querySelector('section, .tt-page') || sheet;
-      if (!first.style.position) first.style.position = 'relative';
-      first.insertAdjacentHTML('afterbegin', '<div style="position:absolute;top:0;left:0;z-index:2">' + await sigQrHtml(d, 16) + '</div>');
-    }
-    // لا مكان لتوقيعه في الورقة: يوضع بجانب رمز QR
-    if (!placed) {
-      var q = sheet.querySelector('.sig-qr');
-      if (q) q.insertAdjacentHTML('afterend', sigImgHtml(d).replace('margin:-6mm 0 -5mm', 'margin:0 2mm'));
-    }
+    // 2) رقم الورقة علامة مائية رأسية في الهامش الأيسر لكل صفحة
+    sheet.insertAdjacentHTML('beforeend', '<div class="sig-code">' + esc(d.code) + '</div>');
+    // لا مكان لتوقيعه في الورقة: يوضع في آخرها
+    if (!placed) sheet.insertAdjacentHTML('beforeend', '<div style="text-align:left;margin-top:2mm">' + sigImgHtml(d).replace('margin:-6mm 0 -5mm', 'margin:0') + '</div>');
   }
   function sigMeta() { return { cls: sheet.className, width: sheet.style.width, font: sheet.style.fontSize, land: !!printLandscape, fit: sheet.getAttribute('data-fit') || '' }; }
 
@@ -18912,6 +18909,11 @@
     var faded = await fadedLogo(false);
     if (!buildCurrentSheet()) return window.print();
     if (!(await sigStep())) { sheet.innerHTML = ''; return; }
+    // تذييل كل ورقة مطبوعة: عنوان الأكاديمية ووسائل الاتصال وصفحة فيسبوك (أوراق العمل لها تذييلها المصوَّر)
+    if (!sheet.classList.contains('paper') && !sheet.querySelector('.doc-foot')) {
+      var st = S.settings || {};
+      sheet.insertAdjacentHTML('beforeend', '<div class="doc-foot">' + esc(st.school_address || REPORT.address) + '&nbsp;&nbsp;|&nbsp;&nbsp;هاتف: <span dir="ltr">' + esc(st.school_phone || REPORT.phone) + '</span>&nbsp;&nbsp;|&nbsp;&nbsp;فيسبوك: <span dir="ltr">' + esc(st.school_facebook || REPORT.facebook) + '</span></div>');
+    }
     if (faded) Array.prototype.forEach.call(sheet.querySelectorAll('img.wm'), function (im) { im.src = faded; im.classList.add('wm-baked'); });
     var css = pageCss() + 'html,body{margin:0;background:#fff}';
     var rules = document.getElementById('app-css').sheet.cssRules;
