@@ -1318,7 +1318,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '11/11 — 1';
+  var APP_BUILD = '11/11 — 2';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10293,13 +10293,38 @@
         }).join('') + '</tbody></table></div>' : '<div class="empty">' + (c.list.length ? 'لا مطالبات مطابقة.' : 'لا توجد مطالبات بعد' + (edit ? '؛ اضغط «مطالبة جديدة».' : '.')) + '</div>') + '</div>';
   }
 
+  // المبلغ بالحروف: «مائة وخمسون جنيهًا مصريًا» (حتى المليارات، مع القروش)
+  function arWords(n) {
+    var ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+    var tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+    var hund = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+    function lt1000(x) {
+      var h = Math.floor(x / 100), r = x % 100, p = [];
+      if (h) p.push(hund[h]);
+      if (r) p.push(r < 20 ? ones[r] : (r % 10 ? ones[r % 10] + ' و' : '') + tens[Math.floor(r / 10)]);
+      return p.join(' و');
+    }
+    function scale(x, one, two, few, many) { return x === 1 ? one : x === 2 ? two : x <= 10 ? lt1000(x) + ' ' + few : lt1000(x) + ' ' + many; }
+    if (!n) return 'صفر';
+    var b = Math.floor(n / 1e9), m = Math.floor(n / 1e6) % 1000, t = Math.floor(n / 1000) % 1000, r = n % 1000, p = [];
+    if (b) p.push(scale(b, 'مليار', 'ملياران', 'مليارات', 'مليار'));
+    if (m) p.push(scale(m, 'مليون', 'مليونان', 'ملايين', 'مليون'));
+    if (t) p.push(scale(t, 'ألف', 'ألفان', 'آلاف', 'ألف'));
+    if (r) p.push(lt1000(r));
+    return p.join(' و');
+  }
+  function arMoneyWords(v) {
+    var pounds = Math.floor(v + 1e-9), pt = Math.round((v - pounds) * 100);
+    return (pounds ? arWords(pounds) + ' جنيهًا مصريًا' : '') + (pt ? (pounds ? ' و' : '') + arWords(pt) + ' قرشًا' : '') || 'صفر';
+  }
+
   var pendingCl = null;
   // سند المطالبة: البيانات، جدول البنود والإجمالي، إقرار المستلم، ثم التوقيعات (المستلم، مسلِّم المبلغ، المدير)
   function buildClaimSheet(o) {
     var items = (o.items || []).filter(function (i) { return String(i.item || '').trim(); }), total = clTotal(o);
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
-    sheet.innerHTML = reportHead('مطالبة مالية', [['رقم المطالبة', o.no || ''], ['التاريخ', dmy(o.claim_date)], ['النوع', CL_KIND[o.kind] || '']], { noIssueDate: true }) +
+    var one = function (copy) { return '<div style="position:relative;' + (copy ? 'border-top:1px dashed #999;margin-top:5mm;padding-top:4mm' : '') + '"><span style="position:absolute;top:' + (copy ? '4mm' : '0') + ';left:0;border:1.5px solid #13306B;color:#13306B;font-weight:700;padding:1px 10px;border-radius:4px;z-index:3">' + (copy ? 'نسخة' : 'أصل') + '</span>' + reportHead('مطالبة مالية', [['رقم المطالبة', o.no || ''], ['التاريخ', dmy(o.claim_date)], ['النوع', CL_KIND[o.kind] || '']], { noIssueDate: true }).replace(copy ? /^<img class="wm"[^>]*>/ : /^$/, '') +
       '<table class="rz" style="margin:.9em 0 .6em"><tbody>' +
         '<tr><th style="width:28%;text-align:right">اسم المستفيد</th><td><b>' + esc(o.payee) + '</b></td></tr>' +
         (o.payee_id ? '<tr><th style="text-align:right">رقم الهوية / الجوال</th><td dir="ltr" style="text-align:right">' + esc(o.payee_id) + '</td></tr>' : '') +
@@ -10309,8 +10334,9 @@
         items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.qty || '-') + '</td><td class="c">' + esc(it.amount ? clMoney(Number(latinDigits(String(it.amount)).replace(/[^\d.]/g, '')) || 0) : '-') + '</td></tr>'; }).join('') +
         '<tr class="total"><td colspan="3">الإجمالي</td><td class="c"><b>' + clMoney(total) + '</b></td></tr></tbody></table>' : '') +
       '<p style="margin:.8em 0 .4em;line-height:2">أقر أنا الموقّع أدناه <b>' + esc(o.payee) + '</b> بأنني استلمت من إدارة ' + esc(schoolName()) + ' مبلغًا وقدره <b>' + clMoney(total) + '</b>' +
-        ' (فقط ............................................................ لا غير)، وذلك مقابل ' + (o.kind === 'purchase' ? 'الأصناف المبيّنة أعلاه' : 'العمل المبيّن أعلاه') + '، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</p>' +
-      reportSigns([['المستلم (المستفيد)', o.payee], ['مسلِّم المبلغ', o.payer], ['مدير/ة الأكاديمية', principalName()]]);
+        ' (فقط ' + esc(arMoneyWords(total)) + ' لا غير)، وذلك مقابل ' + (o.kind === 'purchase' ? 'الأصناف المبيّنة أعلاه' : 'العمل المبيّن أعلاه') + '، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</p>' +
+      reportSigns([['المستلم (المستفيد)', o.payee], ['مسلِّم المبلغ', o.payer], ['مدير/ة الأكاديمية', principalName()]]) + '</div>'; };
+    sheet.innerHTML = one(false) + one(true);
     fitSheet();
   }
   function clPick(id) { return clState().list.filter(function (x) { return x.id === id; })[0]; }
