@@ -822,6 +822,9 @@
   .menu-pop .btn:hover { background: rgba(19,48,107,.07); }
   .menu-pop .check { padding: 6px 12px; margin: 0; }
   .menu-pop .hint { margin: 4px 12px; }
+  details.menu.row { display: inline-block; vertical-align: middle; }
+  details.menu.row .menu-pop { min-width: 190px; }
+  .menu-pop .btn.danger { color: var(--red); }
   .menu-pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
   @media (max-width: 640px) { .toolbar { position: relative; } details.menu { position: static; } .menu-pop { left: 0; right: 0; max-width: none; } }
   /* تبويبات الشاشة: شريط أبيض مستقل، والتبويب المفتوح بخط كحلي عريض وخط ذهبي تحته */
@@ -1315,7 +1318,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 12';
+  var APP_BUILD = '10/11 — 13';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10204,7 +10207,7 @@
         list.map(function (x) {
           return '<tr><td>' + esc(x.no) + '</td><td>' + dmy(x.order_date) + '</td><td><b>' + esc(x.recipient) + '</b>' + (x.recipient2 ? ' ' + esc(x.recipient2) : '') + '</td><td>' + esc(x.subject) + '</td><td>' + (x.items || []).length + '</td>' +
             '<td>' + esc(OR_STATUS[x.status] || x.status) + '</td><td style="white-space:nowrap"><button type="button" class="btn" data-orprint="' + x.id + '" data-ro-ok>طباعة / PDF</button>' +
-            (edit ? ' <button type="button" class="btn" data-oropen="' + x.id + '">تعديل</button> <button type="button" class="btn" data-orcopy="' + x.id + '" title="طلبية جديدة بنفس الأصناف">نسخ</button> <button type="button" class="btn danger" data-ordel="' + x.id + '">حذف</button>' : '') + '</td></tr>';
+            (edit ? ' <button type="button" class="btn" data-oropen="' + x.id + '">تعديل</button> ' + menuHtml('المزيد', '<button type="button" class="btn" data-orcopy="' + x.id + '">نسخ إلى طلبية جديدة بنفس الأصناف</button><button type="button" class="btn danger" data-ordel="' + x.id + '">حذف</button>', true) : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>'
         : '<div class="empty">' + (c.list.length ? 'لا طلبيات مطابقة.' : 'لا توجد طلبيات بعد' + (edit ? '؛ اضغط «طلبية جديدة».' : '.')) + '</div>') + '</div>';
   }
@@ -11558,7 +11561,21 @@
   }
 
   // قائمة منسدلة تجمع الأزرار قليلة الاستعمال؛ تُغلق عند اختيار زر منها أو النقر خارجها
-  function menuHtml(label, inner) { return '<details class="menu no-print"><summary class="btn" data-ro-ok>' + label + '</summary><div class="menu-pop">' + inner + '</div></details>'; }
+  function menuHtml(label, inner, row) { return '<details class="menu no-print' + (row ? ' row' : '') + '"><summary class="btn" data-ro-ok>' + label + '</summary><div class="menu-pop">' + inner + '</div></details>'; }
+  // قائمة داخل صف جدول: تُعرض فوق الجدول (موضع ثابت) حتى لا يقصّها إطار التمرير، وتُغلق عند التمرير
+  document.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (!d.matches || !d.matches('details.menu.row') || !d.open) return;
+    var r = d.querySelector('summary').getBoundingClientRect(), p = d.querySelector('.menu-pop');
+    p.style.position = 'fixed';
+    var w = p.offsetWidth, h = p.offsetHeight;
+    p.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    p.style.right = 'auto';
+    p.style.top = (r.bottom + 6 + h > window.innerHeight && r.top - h - 6 > 0 ? r.top - h - 6 : r.bottom + 6) + 'px';
+  }, true);
+  document.addEventListener('scroll', function () {
+    Array.prototype.forEach.call(document.querySelectorAll('details.menu.row[open]'), function (d) { d.removeAttribute('open'); });
+  }, true);
   document.addEventListener('click', function (e) {
     Array.prototype.forEach.call(document.querySelectorAll('details.menu[open]'), function (d) {
       if (!d.contains(e.target) || e.target.closest('.menu-pop button')) d.removeAttribute('open');
