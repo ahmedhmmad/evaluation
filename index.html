@@ -811,6 +811,9 @@
   }
   nav.pills button:hover { border-color: var(--primary); }
   nav.pills button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  nav.pills.sub { margin: -6px 0 14px; padding: 8px; background: rgba(19,48,107,.05); border-radius: 12px; }
+  nav.pills.sub button { font-size: .86rem; padding: 5px 12px; }
+  nav.pills.sub button.on { background: #fff; color: var(--primary); border-color: var(--gold); font-weight: 700; }
   nav.pills button b { font-weight: 800; opacity: .85; margin-inline-start: 4px; }
 
   /* Students */
@@ -1288,7 +1291,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 7';
+  var APP_BUILD = '10/11 — 8';
 
   var syncing = null;
   function syncData(quiet) {
@@ -5070,7 +5073,7 @@
     }).join('');
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
         '<span><b>آخر موعد لسداد اشتراك ' + tLabel(ui.tMonth) + ': ' + dmy(payDeadline(ui.tMonth)) + '</b></span>' +
-        (isAdmin() ? '<a class="btn link" href="#/transport">تعديل الدورات ومواعيدها</a>' : '') + '</div>' +
+        (isAdmin() ? '<a class="btn link" href="#/transport/setup">تعديل الدورات ومواعيدها</a>' : '') + '</div>' +
         '<p class="hint" style="margin:8px 0 0">من فاته الموعد ولم يسدد كاملًا يظهر «متأخرًا». القرار لك: تعليقه عن الركوب، أو منحه مهلة إضافية حتى تاريخ تختاره. لا يُعلَّق أحد تلقائيًا، والسداد الكامل يرفع التعليق.</p></div>' +
       '<div class="stats">' + card('late', 'متأخرون', 'فات الموعد — بانتظار قرارك', n.late ? 'var(--red)' : '') + card('extended', 'بمهلة إضافية', 'لم تنتهِ مهلتهم بعد') +
         card('suspended', 'موقوفون عن الركوب', 'لشهر ' + tLabel(ui.tMonth), n.suspended ? 'var(--red)' : '') + card('grace', 'ضمن المهلة', 'لم يحن الموعد بعد') + '</div>' +
@@ -6011,12 +6014,26 @@
     render();
   });
 
+  // أقسام المواصلات في أربع مجموعات؛ الصف الثاني يعرض شاشات المجموعة المفتوحة فقط
+  var T_NAV = [
+    ['الباصات', [['groups', '#/transport', 'الباصات']]],
+    ['الدفع', [['desk', '#/transport/receipt', 'إصدار إيصال'], ['pay', '#/transport/payments', 'دفعات الطلاب'], ['ledger', '#/transport/ledger', 'سجل الدفعات'], ['late', '#/transport/late', 'المتأخرون والتعليق']]],
+    ['التقارير', [['busrep', '#/transport/buses', 'تقرير الباصات'], ['status', '#/transport/status', 'المسددون وغير المسددين'], ['classes', '#/transport/classes', 'ملخص الشعب'], ['refunds', '#/transport/refunds', 'المستردات'], ['archive', '#/transport/archive', 'أرشيف الإيصالات']]],
+    ['الإعدادات', [['setup', '#/transport/setup', 'الدورات والرسوم']]]
+  ];
+  function transportGroupOf(view) { return T_NAV.filter(function (g) { return g[1].some(function (it) { return it[0] === view; }); })[0] || T_NAV[0]; }
   function transportNav(view) {
-    var item = function (key, hash, label) {
-      return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + '</button>';
-    };
-    return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + item('groups', '#/transport', 'الباصات') + item('late', '#/transport/late', 'المتأخرون والتعليق') +
-      item('desk', '#/transport/receipt', 'إصدار إيصال') + item('pay', '#/transport/payments', 'دفعات الطلاب') + item('ledger', '#/transport/ledger', 'سجل الدفعات') + item('busrep', '#/transport/buses', 'تقرير الباصات') + item('status', '#/transport/status', 'المسددون وغير المسددين') + item('classes', '#/transport/classes', 'ملخص الشعب') + item('refunds', '#/transport/refunds', 'المستردات') + item('archive', '#/transport/archive', 'أرشيف الإيصالات') + '</nav>';
+    var cur = transportGroupOf(view);
+    return '<nav class="pills" style="margin:0" aria-label="أقسام المواصلات">' + T_NAV.map(function (g) {
+      return '<button type="button" data-tgo="' + g[1][0][1] + '"' + (g === cur ? ' class="on" aria-current="true"' : '') + '>' + g[0] + '</button>';
+    }).join('') + '</nav>';
+  }
+  function transportSubNav(view) {
+    var cur = transportGroupOf(view);
+    if (cur[1].length < 2) return '';
+    return '<nav class="pills sub no-print" aria-label="' + cur[0] + '">' + cur[1].map(function (it) {
+      return '<button type="button" data-tgo="' + it[1] + '"' + (view === it[0] ? ' class="on" aria-current="page"' : '') + '>' + it[2] + '</button>';
+    }).join('') + '</nav>';
   }
 
   function payStatsHtml(t, firstSub) {
@@ -6677,10 +6694,15 @@
       return;
     }
 
-    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : hash === '#/transport/buses' ? 'busrep' : hash === '#/transport/status' ? 'status' : 'groups';
+    var view = hash === '#/transport/payments' ? 'pay' : hash === '#/transport/classes' ? 'classes' : hash === '#/transport/receipt' ? 'desk' : hash === '#/transport/archive' ? 'archive' : hash === '#/transport/refunds' ? 'refunds' : hash === '#/transport/late' ? 'late' : hash === '#/transport/ledger' ? 'ledger' : hash === '#/transport/buses' ? 'busrep' : hash === '#/transport/status' ? 'status' : hash === '#/transport/setup' ? 'setup' : 'groups';
     var all = payRows();
     var head = tabs('transport') + '<div class="toolbar" style="align-items:center">' + transportNav(view) +
-      '<span style="flex:1"></span>' + monthPick + '</div>';
+      '<span style="flex:1"></span>' + monthPick + '</div>' + transportSubNav(view);
+
+    if (view === 'setup') {
+      app.innerHTML = head + cyclesCardHtml();
+      return;
+    }
 
     if (view === 'refunds') {
       app.innerHTML = head + refundsHtml();
@@ -6784,7 +6806,6 @@
       (ui.editGroup === 'new' ? groupFormHtml(null) :
         '<div class="toolbar" style="align-items:center"><button type="button" class="btn primary" data-gedit="new">+ باص جديد</button>' +
         '<button type="button" class="btn" data-clopen>اقتراح نقاط التجمع من العناوين</button></div>') +
-      cyclesCardHtml() +
       (cards ? '<div class="teachers">' + cards + '</div>'
         : '<div class="card empty">لا توجد باصات بعد. أنشئ باصًا لكل مسار ثم أضف طلابه.</div>');
   }
@@ -8091,7 +8112,7 @@
   }
 
   document.addEventListener('click', async function (e) {
-    if (!isAdmin() || location.hash !== '#/transport') return;
+    if (!isAdmin() || (location.hash !== '#/transport' && location.hash !== '#/transport/setup')) return;
     var cl = ui.cl, cr = e.target.closest('[data-cycreset]');
     if (cr) {
       var k = cr.getAttribute('data-cycreset'), cc = cycleCfg(), over = JSON.parse(JSON.stringify(cc.over));
@@ -11509,6 +11530,22 @@
     if (st.draft[id].status !== 'present') { st.draft[id].time_in = ''; st.draft[id].time_out = ''; }
   }
 
+  // تبويبات داخل الشاشة: يظهر قسم واحد في كل مرة
+  function vtab(key, def) { return (ui.vtab && ui.vtab[key]) || def; }
+  function vtabsHtml(key, def, items) {
+    var cur = vtab(key, def);
+    return '<nav class="pills no-print" aria-label="أقسام الشاشة">' + items.map(function (it) {
+      return '<button type="button" data-ro-ok data-vtab="' + key + ':' + it[0] + '"' + (cur === it[0] ? ' class="on" aria-current="true"' : '') + '>' + it[1] + (it[2] ? ' <b>' + it[2] + '</b>' : '') + '</button>';
+    }).join('') + '</nav>';
+  }
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-vtab]');
+    if (!el) return;
+    var p = el.getAttribute('data-vtab').split(':');
+    (ui.vtab = ui.vtab || {})[p[0]] = p[1];
+    render();
+  });
+
   function renderStaffAtt() {
     var st = saState(), H = S.saHours;
     if (!S.sa || S.sa.day !== st.day) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadSa(st.day); return; }
@@ -11544,18 +11581,25 @@
     }).join('');
     var card = function (lbl, num, sub, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
     var copt = function (v, l) { return '<option value="' + esc(v) + '"' + (st.cat === v ? ' selected' : '') + '>' + l + '</option>'; };
+    var inboxN = ((S.sa && S.sa.inbox) || []).length, tab = vtab('sa', 'day');
+    head += vtabsHtml('sa', 'day', [['day', 'تسجيل اليوم', inboxN || ''], ['sheets', 'الكشوف'], ['letters', 'الكتب'], ['setup', 'إعدادات الدوام']]);
+    var hoursCard = '<div class="card"><h2>الوقت الرسمي</h2><div class="toolbar" style="align-items:center;margin:8px 0 0">' +
+        '<label class="field" for="sa-hin" style="margin:0">الحضور</label><input type="time" id="sa-hin" data-ro-mgr value="' + H.time_in + '" style="width:auto">' +
+        '<label class="field" for="sa-hout" style="margin:0">الانصراف</label><input type="time" id="sa-hout" data-ro-mgr value="' + H.time_out + '" style="width:auto"></div>' +
+        '<p class="hint" style="margin:6px 0 0">دوام من لا مجموعة له، وبه يُحسب التأخير والانصراف المبكر.</p></div>';
+    if (tab === 'setup') { app.innerHTML = head + hoursCard + shiftsHtml() + saPhonesHtml(); return; }
+    if (tab === 'letters') { app.innerHTML = head + ltCardHtml() + laCardHtml() + dmCardHtml(); return; }
+    if (tab === 'sheets') { app.innerHTML = head + sheetsCard(); return; }
     app.innerHTML = head +
       '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
         '<span class="monthpick"><label class="field" for="sa-day">اليوم</label><input type="date" id="sa-day" data-ro-ok value="' + st.day + '"></span>' +
         '<b>' + dayName(st.day) + '</b>' + (off ? ' <span class="badge pending">' + (attHoliday(st.day) ? 'عطلة' : 'نهاية الأسبوع') + '</span>' : '') +
         '<select id="sa-cat" data-ro-ok style="width:auto">' + copt('', 'كل الفئات') + STAFF_CATS.map(function (c) { return copt(c, c); }).join('') + '</select>' +
-        '<span class="st-count" style="margin:0">الوقت الرسمي:</span>' +
-        '<label class="field" for="sa-hin" style="margin:0">الحضور</label><input type="time" id="sa-hin" data-ro-mgr value="' + H.time_in + '" style="width:auto">' +
-        '<label class="field" for="sa-hout" style="margin:0">الانصراف</label><input type="time" id="sa-hout" data-ro-mgr value="' + H.time_out + '" style="width:auto">' +
+        '<span class="st-count" style="margin:0">الوقت الرسمي: ' + H.time_in + ' – ' + H.time_out + '</span>' +
       '</div></div>' +
       '<div class="stats">' + card('حاضرون', n.present, lateN ? 'منهم ' + lateN + ' متأخرون' : 'بلا تأخير') + card('غائبون', n.absent, 'هذا اليوم', n.absent ? 'var(--red)' : '') +
         card('إجازة ومأمورية', n.leave + n.mission, 'إجازة ' + n.leave + ' · مأمورية ' + n.mission) + card('غير مسجَّلين', n.none, 'من ' + list.length + ' موظفًا', n.none ? 'var(--muted)' : '') + '</div>' +
-      saInboxHtml() + saScanHtml() + saPhonesHtml() + shiftsHtml() +
+      saInboxHtml() + saScanHtml() +
       '<div class="toolbar" style="align-items:center">' +
         '<button type="button" class="btn" data-saallin data-ro-mgr>الحضور الموحد للجميع' + (H.groups && H.groups.length ? ' (كلٌّ بمجموعته)' : ' (' + H.time_in + ')') + '</button>' +
         '<button type="button" class="btn" data-saallout data-ro-mgr>الانصراف الموحد للجميع' + (H.groups && H.groups.length ? ' (كلٌّ بمجموعته)' : ' (' + H.time_out + ')') + '</button>' +
@@ -11564,8 +11608,8 @@
       '<p class="hint">الحضور والانصراف الموحدان يُطبَّقان على الحاضرين وغير المسجَّلين' + (st.cat ? ' من فئة «' + esc(st.cat) + '»' : '') + ' فقط؛ الغائب والإجازة والمأمورية لا تتغير. ما تعدّله يظهر بخلفية صفراء حتى تحفظ.</p>' +
       '<div class="card">' + (list.length
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الموظف</th><th>الحالة</th><th>الحضور</th><th>الانصراف</th><th>تأخير</th><th>انصراف مبكر</th><th>ملاحظة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
-        : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>' +
-      '<div class="card"><h2>الكشف الشهري</h2><div class="toolbar" style="align-items:center;margin:8px 0 0">' +
+        : '<div class="empty">لا يوجد عاملون في «بيانات العاملين».</div>') + '</div>';
+    function sheetsCard() { return '<div class="card"><h2>الكشف الشهري</h2><div class="toolbar" style="align-items:center;margin:8px 0 0">' +
         '<span class="monthpick"><label class="field" for="sa-month">الشهر</label><input type="month" id="sa-month" data-ro-ok value="' + st.month + '"></span>' +
         '<b style="margin-inline-start:8px">كشف الحضور:</b><button type="button" class="btn primary" data-sarep="regx" data-ro-ok>Excel</button><button type="button" class="btn primary" data-sarep="regp" data-ro-ok>PDF / طباعة</button>' +
         '<b style="margin-inline-start:8px">الملخص:</b><button type="button" class="btn" data-sarep="xlsx" data-ro-ok>Excel</button><button type="button" class="btn" data-sarep="pdf" data-ro-ok>PDF / طباعة</button></div>' +
@@ -11579,7 +11623,7 @@
           '<button type="button" class="btn primary" data-sasign data-ro-ok>طباعة</button></div>' +
         '<p class="hint" style="margin:6px 0 0">ورقة لكل يوم عمل في الفترة (تُتخطى الجمعة والسبت والعطل)، بترتيب الموظفين في هذه الصفحة: الرقم، الاسم، وقت الحضور والتوقيع، وقت الانصراف والتوقيع. «بدون أسماء (مرقم)»: الكشف نفسه وخانة الاسم فارغة، بعدد الموظفين أو بالعدد الذي تكتبه. بلا علامة مائية ولا توقيعات في آخرها.</p>' +
         '<p class="hint" style="margin:8px 0 0"><b>كشف الحضور</b> مثل كشف الطلاب: اسم كل موظف وعمود لكل يوم من الشهر؛ + حاضر، L إجازة، غ غائب، م مأمورية، وتظليل الجمعة والسبت والعطل والإجازات. ' +
-          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>' + ltCardHtml() + laCardHtml() + dmCardHtml();
+          '<b>الملخص</b>: لكل موظف أيام الحضور والغياب والإجازة والمأمورية، والتأخير والانصراف المبكر بالدقائق.</p></div>'; }
   }
 
   /* ----- كشف التوقيع اليومي، وكشفا العاملين -----
@@ -16915,7 +16959,7 @@
       app.innerHTML = tabs('attendance') + '<div class="card empty">لم تُجهَّز قاعدة البيانات للحضور والغياب بعد.<br>شغّل الملف <code dir="ltr">supabase/attendance.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
       return;
     }
-    if (a.view === 'day' && !S.attDay[a.day]) {
+    if (a.view !== 'report' && !S.attDay[a.day]) {
       app.innerHTML = tabs('attendance') + '<div class="card empty">جارٍ التحميل…</div>';
       loadAttDay(a.day);
       return;
@@ -16927,14 +16971,15 @@
     }
     app.innerHTML = tabs('attendance') +
       '<div class="toolbar" style="align-items:center"><nav class="pills" style="margin:0">' +
-        '<button type="button" data-attview="day"' + (a.view === 'day' ? ' class="on"' : '') + '>الحضور اليومي</button>' +
-        '<button type="button" data-attview="report"' + (a.view === 'report' ? ' class="on"' : '') + '>تقرير فترة</button></nav>' +
+        [['day', 'الحضور اليومي'], ['leaves', 'الإجازات'], ['sheets', 'الكشوف'], ['report', 'تقرير فترة']].concat(isAdmin() ? [['links', 'تسجيل المعلمين']] : []).map(function (v) {
+          return '<button type="button" data-attview="' + v[0] + '"' + (a.view === v[0] ? ' class="on" aria-current="true"' : '') + '>' + v[1] + '</button>';
+        }).join('') + '</nav>' +
         '<span style="flex:1"></span>' +
-        '<select id="att-cls" aria-label="الشعبة" style="width:auto;min-width:170px"><option value="">كل المدرسة</option>' + classes.map(function (c) {
+        (a.view === 'links' ? '' : '<select id="att-cls" aria-label="الشعبة" style="width:auto;min-width:170px"><option value="">كل المدرسة</option>' + classes.map(function (c) {
           return '<option' + (c === a.cls ? ' selected' : '') + '>' + esc(c) + '</option>';
-        }).join('') + '</select>' +
+        }).join('') + '</select>') +
         (a.view === 'day' ? '<span class="monthpick"><label class="field" for="att-day">اليوم</label><input type="date" id="att-day" max="' + todayISO() + '" value="' + a.day + '"></span>' : '') + '</div>' +
-      (a.view === 'report' ? attReportHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml()) + (a.view === 'day' ? stLeavesHtml() : '') + attExportHtml() + attLinksHtml();
+      (a.view === 'report' ? attReportHtml() : a.view === 'leaves' ? stLeavesHtml() : a.view === 'sheets' ? attExportHtml() : a.view === 'links' ? attLinksHtml() : a.cls ? attClassHtml(a.cls) : attSchoolHtml());
   }
 
   async function saveAttendance() {
