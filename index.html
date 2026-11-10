@@ -811,6 +811,19 @@
   }
   nav.pills button:hover { border-color: var(--primary); }
   nav.pills button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  /* قائمة منسدلة للأزرار قليلة الاستعمال (أدوات، طباعة وتصدير) */
+  details.menu { position: relative; }
+  details.menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+  details.menu > summary::-webkit-details-marker { display: none; }
+  details.menu > summary::after { content: '▾'; font-size: .8em; opacity: .7; }
+  details.menu[open] > summary { border-color: var(--primary); }
+  .menu-pop { position: absolute; z-index: 40; top: calc(100% + 6px); left: 0; min-width: 270px; max-width: min(380px, 90vw); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(19,48,107,.2); padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .menu-pop .btn { width: 100%; text-align: start; justify-content: flex-start; border-color: transparent; background: none; font-weight: 600; }
+  .menu-pop .btn:hover { background: rgba(19,48,107,.07); }
+  .menu-pop .check { padding: 6px 12px; margin: 0; }
+  .menu-pop .hint { margin: 4px 12px; }
+  .menu-pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+  @media (max-width: 640px) { .toolbar { position: relative; } details.menu { position: static; } .menu-pop { left: 0; right: 0; max-width: none; } }
   /* تبويبات الشاشة: شريط أبيض مستقل، والتبويب المفتوح بخط كحلي عريض وخط ذهبي تحته */
   .tabbar { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 12px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(19,48,107,.07); }
   .tabbar.has-sub { border-radius: 14px 14px 0 0; margin-bottom: 0; }
@@ -1302,7 +1315,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '10/11 — 9';
+  var APP_BUILD = '10/11 — 10';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2668,22 +2681,22 @@
     }).join('');
 
     app.innerHTML = tabs('staff') +
-      (isAdmin() ? '<form class="card" id="defaultpw-form"><h2>كلمة المرور الافتراضية لحسابات المعلمين</h2>' +
+      (isAdmin() ? '<details class="card"' + (String(S.defaultPw || '').length < 6 ? ' open' : '') + '><summary><b>كلمة المرور الافتراضية لحسابات المعلمين</b></summary><form id="defaultpw-form" style="margin-top:8px">' +
         '<p class="hint">تُستخدم عند إنشاء حساب معلم أو إعادة تعيين كلمة مروره، ويُطلب منه تغييرها عند أول دخول.</p>' +
         '<div class="toolbar" style="margin:0"><input type="text" id="default-pw" dir="ltr" minlength="6" required autocomplete="off" aria-label="كلمة المرور الافتراضية" ' +
         'style="flex:1;min-width:180px;text-align:right" placeholder="6 أحرف على الأقل" value="' + esc(S.defaultPw) + '">' +
-        '<button type="submit" class="btn">حفظ</button></div></form>' : '') +
+        '<button type="submit" class="btn">حفظ</button></div></form></details>' : '') +
       (S.staffMissing ? '<p class="formhint">لتسجيل فئة العامل ومسماه الوظيفي ورقم الواتساب شغّل الملف <code dir="ltr">supabase/staff.sql</code> في محرر SQL ثم حدّث الصفحة.</p>' : '') +
-      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) + staffProfileHtml(t) : '') : ui.tCard && canView() ? staffCardHtml() : ui.spReport && canView() ? spReportHtml() : '<div class="toolbar" style="margin-top:16px"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
-        (S.staffMissing ? '' : (canView() ? '<button type="button" class="btn" data-spreport>مؤهلات العاملين</button>' : '') + (canView() ? '<button type="button" class="btn" data-sfbulk>رفع مجلد ملفات العاملين</button><input type="file" id="sf-dir" webkitdirectory multiple hidden>' : '') + '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
-          '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>') + '</div>') +
-      (ed || ui.staffImp || ui.tCard || ui.spReport ? '' : '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b>طباعة:</b>' +
-        '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات العاملين (المباحث والجوال والواتساب)</button>' +
-        '<button type="button" class="btn" data-stlist="jobs" data-ro-ok>كشف العاملين (الوظيفة ورقم الاتصال)</button>' +
-        '<label class="check" style="margin:0"><input type="checkbox" id="stl-mgr" data-ro-ok' + (ui.stlNoMgr ? '' : ' checked') + '> مع المدير</label>' +
-        '<label class="check" style="margin:0"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label></div>' +
-        '<p class="hint" style="margin:6px 0 0">بالفئة المختارة أدناه (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p></div>') +
-      (ed || ui.staffImp || ui.tCard || ui.spReport ? '' : '<div class="toolbar" style="margin:0 0 10px"><input type="search" id="st-q" data-ro-ok placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث في العاملين" style="flex:1;min-width:240px" value="' + esc(ui.staffQ || '') + '"></div>') +
+      (ui.sfBulk && canView() ? sfBulkHtml() : ui.staffImp ? staffImportHtml() : ed ? form + (t && canView() ? staffFilesHtml(t) + staffProfileHtml(t) : '') : ui.tCard && canView() ? staffCardHtml() : ui.spReport && canView() ? spReportHtml() : '<div class="toolbar" style="margin-top:16px;align-items:center"><button type="button" class="btn primary" data-tedit="new">+ إضافة عامل</button>' +
+        '<input type="search" id="st-q" data-ro-ok placeholder="ابحث بالاسم أو رقم الهوية أو الجوال" aria-label="بحث في العاملين" style="flex:1;min-width:200px" value="' + esc(ui.staffQ || '') + '">' +
+        menuHtml('طباعة',
+          '<button type="button" class="btn" data-stlist="teach" data-ro-ok>بيانات العاملين (المباحث والجوال والواتساب)</button>' +
+          '<button type="button" class="btn" data-stlist="jobs" data-ro-ok>كشف العاملين (الوظيفة ورقم الاتصال)</button><hr>' +
+          '<label class="check"><input type="checkbox" id="stl-mgr" data-ro-ok' + (ui.stlNoMgr ? '' : ' checked') + '> مع المدير</label>' +
+          '<label class="check"><input type="checkbox" id="stl-sup" data-ro-ok' + (ui.stlNoSup ? '' : ' checked') + '> مع المشرف التربوي</label>' +
+          '<p class="hint">بالفئة المختارة (أو الكل). المدير والمشرف التربوي يُعرفان من المسمى الوظيفي.</p>') +
+        (S.staffMissing ? '' : menuHtml('أدوات', (canView() ? '<button type="button" class="btn" data-spreport>مؤهلات العاملين</button>' : '') + (canView() ? '<button type="button" class="btn" data-sfbulk>رفع مجلد ملفات العاملين</button><input type="file" id="sf-dir" webkitdirectory multiple hidden>' : '') + '<button type="button" class="btn" data-staffimp>استيراد من Excel / CSV</button><input type="file" id="staff-file" accept=".xlsx,.xls,.csv" hidden>' +
+          '<button type="button" class="btn" data-staffabs title="إضافة من ليس مضافًا منهم إلى روابط الغياب وبوت الواتساب">إضافة هيئة التدريس إلى تسجيل الغياب</button>')) + '</div>') +
       (ed || ui.staffImp || ui.tCard || ui.spReport ? '' :       (S.staffMissing ? '' : '<nav class="pills" aria-label="الفئة">' + [['', 'الكل', activeN]].concat(STAFF_CATS.map(function (c) { return [c, c, counts[c] || 0]; })).map(function (p) {
         return '<button type="button" data-staffcat="' + p[0] + '"' + (catNow === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>') +
@@ -3630,12 +3643,12 @@
         '<div class="toolbar">' +
           '<button type="button" class="btn primary" data-stedit="new">+ تسجيل طالب</button>' +
           '<button type="button" class="btn" data-checkopen>اكتشاف الأخطاء</button>' +
-          (isAdmin() ? '<button type="button" class="btn" data-impopen>استيراد من Excel</button>' +
+          menuHtml('أدوات', '<button type="button" class="btn" data-stblank>طباعة استمارة ورقية فارغة</button>' +
+          '<button type="button" class="btn" data-scanopen>إدخال من استمارات مصوّرة</button>' +
+          (isAdmin() ? '<hr><button type="button" class="btn" data-impopen>استيراد من Excel</button>' +
           '<button type="button" class="btn" data-imptemplate>تنزيل قالب Excel</button>' +
           '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' +
-          '<button type="button" class="btn" data-sibfixopen>تصحيح عدد الأبناء في المركز</button>' : '') +
-          '<button type="button" class="btn" data-stblank>طباعة استمارة ورقية فارغة</button>' +
-          '<button type="button" class="btn" data-scanopen>إدخال من استمارات مصوّرة</button>' +
+          '<button type="button" class="btn" data-sibfixopen>تصحيح عدد الأبناء في المركز</button>' : '')) +
         '</div>') +
       '<nav class="pills no-print" aria-label="حالة التسجيل">' + [['pending', 'تسجيل مبدئي', byStatus.pending], ['reserve', 'احتياط', byStatus.reserve], ['final', 'تسجيل نهائي', byStatus.final], ['', 'الكل', S.students.length]].map(function (p) {
         return '<button type="button" data-ststatus="' + p[0] + '"' + (ui.stStatus === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
@@ -3647,8 +3660,8 @@
           schoolClasses().map(function (c) { return opt(c, esc(c) + ' (' + (counts[c] || 0) + ')', ui.stClass); }).join('') + '</select>' +
         '<select id="st-flag" aria-label="معيار إضافي">' + opt('', 'كل الطلاب', ui.stFlag) +
           Object.keys(ST_FLAGS).map(function (k) { return opt(k, ST_FLAGS[k].label, ui.stFlag); }).join('') + '</select>' +
-        '<button type="button" class="btn" data-stxlsx>تصدير Excel</button>' +
-        '<button type="button" class="btn" data-stprint>تصدير PDF / طباعة</button>' +
+        menuHtml('تصدير', '<button type="button" class="btn" data-stxlsx>تصدير Excel</button>' +
+        '<button type="button" class="btn" data-stprint>تصدير PDF / طباعة</button>') +
       '</div><div id="st-table">' + studentsTableHtml() + '</div></div>';
     syncStudentDeps();
   }
@@ -11376,10 +11389,10 @@
     var b = function (attr, label) { return '<button type="button" class="btn" ' + attr + ' data-ro-ok>' + label + '</button>'; };
     var one = view === 'classes' && ui.ttClass ? b('data-ttprint="c|' + esc(ui.ttClass) + '"', 'طباعة جدول الصف') :
       view === 'teachers' && ui.ttTeacher ? b('data-ttprint="t|' + esc(ui.ttTeacher) + '"', 'طباعة جدول المعلم') : '';
-    return '<div class="card no-print"><div class="toolbar" style="align-items:center;margin:0"><b style="font-size:.95rem">طباعة / PDF:</b>' + one +
-      ttHeadBox() + '<label class="check" style="padding:0"><input type="checkbox" id="tt-sign" data-ro-ok' + (ttSignOn() ? ' checked' : '') + '> مع خانات التوقيع</label>' +
-      b('data-ttprint="c|"', 'جداول كل الصفوف') + b('data-ttprint="t|"', 'جداول كل المعلمين') +
-      b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + b('data-ttprint="form|"', 'تشكيل المعلمين') + '</div></div>';
+    return '<div class="toolbar no-print" style="align-items:center">' + one.replace('class="btn"', 'class="btn primary"') +
+      menuHtml(one ? 'طباعة أخرى' : 'طباعة / PDF', b('data-ttprint="c|"', 'جداول كل الصفوف') + b('data-ttprint="t|"', 'جداول كل المعلمين') +
+      b('data-ttprint="gc|"', 'الجدول العام للشعب') + b('data-ttprint="gt|"', 'الجدول العام للمعلمين') + b('data-ttprint="bells|"', 'مواعيد الدوام') + b('data-ttprint="form|"', 'تشكيل المعلمين')) +
+      ttHeadBox() + '<label class="check" style="padding:0"><input type="checkbox" id="tt-sign" data-ro-ok' + (ttSignOn() ? ' checked' : '') + '> مع خانات التوقيع</label></div>';
   }
 
   // خانات التوقيع في جداول المعلمين والصفوف المطبوعة: اختيارية، ويُحفظ الاختيار في هذا المتصفح
@@ -11539,6 +11552,14 @@
     st.draft[id] = Object.assign({}, cur, patch);
     if (st.draft[id].status !== 'present') { st.draft[id].time_in = ''; st.draft[id].time_out = ''; }
   }
+
+  // قائمة منسدلة تجمع الأزرار قليلة الاستعمال؛ تُغلق عند اختيار زر منها أو النقر خارجها
+  function menuHtml(label, inner) { return '<details class="menu no-print"><summary class="btn" data-ro-ok>' + label + '</summary><div class="menu-pop">' + inner + '</div></details>'; }
+  document.addEventListener('click', function (e) {
+    Array.prototype.forEach.call(document.querySelectorAll('details.menu[open]'), function (d) {
+      if (!d.contains(e.target) || e.target.closest('.menu-pop button')) d.removeAttribute('open');
+    });
+  });
 
   // تبويبات داخل الشاشة: يظهر قسم واحد في كل مرة
   function vtab(key, def) { return (ui.vtab && ui.vtab[key]) || def; }
