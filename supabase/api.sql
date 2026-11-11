@@ -485,7 +485,7 @@ $$;
 create or replace function public.api_att_classes() returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
-  perform public.api_need('teacher', 'superadmin');
+  perform public.api_need('teacher', 'superadmin', 'attclerk');
   return jsonb_build_object('teacher', public.api_att_who(), 'day', att_today(), 'classes', coalesce((
     select jsonb_agg(jsonb_build_object('name', c.class_name, 'students', c.students,
       'recorded', exists (select 1 from attendance a where a.day = att_today() and a.class_name = c.class_name)) order by c.pos)
@@ -495,7 +495,7 @@ end $$;
 create or replace function public.api_att_roll(p_class text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
-  perform public.api_need('teacher', 'superadmin');
+  perform public.api_need('teacher', 'superadmin', 'attclerk');
   return jsonb_build_object('day', att_today(), 'recorded', exists (select 1 from attendance a where a.day = att_today() and a.class_name = p_class),
     'students', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.full_name,
       'absent', exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused'))) order by r.pos)
@@ -506,7 +506,7 @@ create or replace function public.api_att_submit(p_class text, p_absent uuid[]) 
 language plpgsql security definer set search_path = public as $$
 declare n int;
 begin
-  perform public.api_need('teacher', 'superadmin');
+  perform public.api_need('teacher', 'superadmin', 'attclerk');
   if not exists (select 1 from att_classes() c where c.class_name = p_class) then raise exception 'الشعبة غير موجودة'; end if;
   n := att_save(p_class, p_absent, public.api_att_who());
   return jsonb_build_object('saved', n, 'absent', coalesce((
