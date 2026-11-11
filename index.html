@@ -465,6 +465,17 @@
   #print-sheet.tt-pages .rh { margin-bottom: .2em; }
   #print-sheet .tt-plain { display: flex; justify-content: space-between; border-bottom: 1.2pt solid var(--gold); padding-bottom: .2em; margin-bottom: .3em; font-size: .85em; color: var(--navy); }
   #print-sheet .tt-plain b { font-family: var(--font-head); }
+  #print-sheet table.tt-brk { width: 100%; border-collapse: collapse; margin: .5em 0 1em; }
+  #print-sheet table.tt-brk th, #print-sheet table.tt-brk td { border: 1px solid #9aa3b5; padding: .45em .5em; text-align: center; vertical-align: middle; }
+  #print-sheet table.tt-brk thead th { background: var(--navy-dark); color: #fff; font-family: var(--font-head); }
+  #print-sheet .tt-brk-h { font-family: var(--font-head); font-weight: 800; color: var(--navy); margin: .9em 0 .2em; font-size: 1.1em; }
+  #print-sheet .tt-brk-ok { border: 2px solid #1d7a46; color: #1d7a46; border-radius: 8px; padding: .5em .8em; font-weight: 800; text-align: center; margin: .6em 0; }
+  #print-sheet .tt-brk-bad { border: 2px solid #B4493F; color: #B4493F; border-radius: 8px; padding: .5em .8em; font-weight: 800; text-align: center; margin: .6em 0; }
+  .brk-verdict { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; font-weight: 700; }
+  .brk-verdict.ok { background: var(--green-soft); color: var(--green); }
+  .brk-verdict.bad { background: var(--red-soft); color: var(--red); }
+  .brk-verdict b { font-size: 1.15rem; }
+  .brk-chips button { font-size: .95rem; padding: 6px 14px; }
   #print-sheet .tt-ptitle { text-align: center; font-family: var(--font-head); font-weight: 800; color: var(--navy); font-size: 1.4em; line-height: 1.3; }
   #print-sheet .tt-pmeta { text-align: center; color: #5e6b80; font-size: .8em; margin-bottom: .4em; }
   #print-sheet table.tt-ptable { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -11551,7 +11562,7 @@
 
   function ttView() {
     if (isTeacherRole()) return 'mine';
-    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|import|quota|improve|subs)$/);
+    var m = location.hash.match(/^#\/timetable\/(teachers|review|bells|breaks|import|quota|improve|subs)$/);
     return m ? m[1] : 'classes';
   }
 
@@ -11562,7 +11573,7 @@
       return '<button type="button" data-tgo="' + hash + '"' + (view === key ? ' class="on" aria-current="page"' : '') + '>' + label + (n ? '<b>' + n + '</b>' : '') + '</button>';
     };
     return '<div class="tabbar"><nav class="tabs" aria-label="أقسام جدول الحصص">' + item('classes', '#/timetable', 'جداول الصفوف') + item('teachers', '#/timetable/teachers', 'جداول المعلمين') +
-      item('bells', '#/timetable/bells', 'مواعيد الدوام') + item('review', '#/timetable/review', 'المراجعة', badge) +
+      item('bells', '#/timetable/bells', 'مواعيد الدوام') + item('breaks', '#/timetable/breaks', 'مقترح الاستراحة') + item('review', '#/timetable/review', 'المراجعة', badge) +
       item('subs', '#/timetable/subs', 'الاحتياط') +
       item('quota', '#/timetable/quota', 'النصاب والقواعد') + item('improve', '#/timetable/improve', 'تحسين الجدول', pend) +
       (canEditTT() ? item('import', '#/timetable/import', 'استيراد من ملف') : '') + '</nav></div>';
@@ -13824,6 +13835,7 @@
     if (view === 'mine') body = ttMineHtml(cf);
     else if (view === 'import') body = ttImportHtml();
     else if (view === 'bells') body = ttBellsHtml();
+    else if (view === 'breaks') body = ttBreakHtml();
     else if (view === 'quota') body = ttQuotaHtml();
     else if (view === 'improve') body = ttImproveHtml();
     else if (view === 'subs') body = ttSubsHtml();
@@ -14238,6 +14250,141 @@
     h += '<footer><span>بداية الدوام <b>' + esc(R.length ? R[0].f : '—') + '</b></span><span>نهاية الدوام <b>' + esc(R.length ? R[R.length - 1].t : '—') + '</b></span><span><b>' + ttPTimes(st).length + '</b> حصص</span></footer></div>';
     return h;
   }
+
+  /* ----- مقترح الاستراحة: ضم صفوف إلى مرحلة أخرى (استراحتها) وفحص تعارض حصص المعلمين. عرض وطباعة فقط؛ لا يغيّر المواعيد ----- */
+  function ttBrkState() {
+    var st = ttCfg().bells.stages;
+    if (!ui.ttBrk) ui.ttBrk = { target: '', pick: {} };
+    if (!st.some(function (x) { return x.id === ui.ttBrk.target; })) ui.ttBrk.target = st.length ? st[0].id : '';
+    return ui.ttBrk;
+  }
+  // استراحات المرحلة: «بعد الحصة الثانية 9:20–9:45»
+  function ttBrkBreaks(st) {
+    var n = 0, out = [];
+    st.rows.forEach(function (r) {
+      if (r.k === 'p') n++;
+      else if (r.k === 'b') out.push((n ? 'بعد الحصة ' + (TT_ORD[n - 1] || n) : 'قبل الحصة الأولى') + ' ' + r.f + '–' + r.t);
+    });
+    return out.join('، ') || 'بلا استراحة';
+  }
+  function ttBrkPlan() {
+    var b = ttBrkState(), bells = ttCfg().bells, target = bells.stages.filter(function (x) { return x.id === b.target; })[0];
+    var plan = { target: target, classes: [], conflicts: [], teachers: [], changed: 0 };
+    if (!target) return plan;
+    var known = ttClasses();
+    var picked = Object.keys(b.pick).filter(function (c) { return b.pick[c] && known.indexOf(c) > -1 && ttStageOf(c, bells) !== target; });
+    picked.sort(function (x, y) { return known.indexOf(x) - known.indexOf(y); });
+    var newStage = function (c) { return picked.indexOf(c) > -1 ? target : ttStageOf(c, bells); };
+    var span = function (st, p) { var t = st && ttPTimes(st)[p - 1]; return t ? { f: ttMins(t[0]), t: ttMins(t[1]), s: t[0] + '–' + t[1] } : null; };
+    var days = ttCfg().days;
+    picked.forEach(function (c) {
+      var old = ttStageOf(c, bells), diff = [], np = Math.max(ttPTimes(old).length, ttPTimes(target).length);
+      for (var p = 1; p <= np; p++) {
+        var a = span(old, p), z = span(target, p);
+        if ((a && a.s) !== (z && z.s)) diff.push({ p: p, from: a ? a.s : '—', to: z ? z.s : 'لا حصة بهذا الرقم' });
+      }
+      plan.classes.push({ name: c, old: old, diff: diff });
+    });
+    // حصص كل معلم بأوقاتها قبل المقترح وبعده
+    var byT = {};
+    ttLive().forEach(function (x) {
+      if (!x.teacher_id) return;
+      var a = span(ttStageOf(x.class_name, bells), x.period), z = span(newStage(x.class_name), x.period);
+      (byT[x.teacher_id + '|' + x.day] || (byT[x.teacher_id + '|' + x.day] = [])).push({ s: x, a: a, z: z });
+    });
+    var hit = function (p, q) { return p && q && p.f < q.t && q.f < p.t; }, chg = {};
+    Object.keys(byT).forEach(function (k) {
+      var L = byT[k], tid = k.split('|')[0], day = +k.split('|')[1];
+      for (var i = 0; i < L.length; i++) {
+        if (L[i].z && L[i].a && L[i].z.s !== L[i].a.s) { (chg[tid] || (chg[tid] = [])).push({ day: day, s: L[i].s, from: L[i].a.s, to: L[i].z.s }); plan.changed++; }
+        for (var j = i + 1; j < L.length; j++) {
+          // تعارض يسببه المقترح: الحصتان تتداخلان بعده ولم تكونا متداخلتين قبله
+          if (hit(L[i].z, L[j].z) && !hit(L[i].a, L[j].a)) plan.conflicts.push({ tid: tid, day: day, x: L[i], y: L[j] });
+        }
+      }
+    });
+    plan.conflicts.sort(function (p, q) { return p.day - q.day || p.x.z.f - q.x.z.f; });
+    plan.teachers = Object.keys(chg).map(function (tid) { return { tid: tid, list: chg[tid].sort(function (p, q) { return p.day - q.day || p.s.period - q.s.period; }) }; })
+      .sort(function (p, q) { return ttTName(p.tid).localeCompare(ttTName(q.tid), 'ar'); });
+    plan.days = days;
+    return plan;
+  }
+  function ttBrkLesson(x, days) { return esc(x.s.class_name) + ' · الحصة ' + (TT_ORD[x.s.period - 1] || x.s.period) + ' · <span dir="ltr">' + esc(x.z.s) + '</span>'; }
+  function ttBrkTables(plan, cls) {
+    var days = plan.days || ttCfg().days, T = function (head, rows) { return '<table class="' + cls + '"><thead><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table>'; };
+    var classes = T(['الصف', 'الاستراحة الآن', 'الاستراحة بعد الضم', 'الحصص التي يتغير وقتها'], plan.classes.map(function (c) {
+      return '<tr><td><b>' + esc(c.name) + '</b></td><td>' + esc(ttBrkBreaks(c.old)) + '</td><td>' + esc(ttBrkBreaks(plan.target)) + '</td><td>' +
+        (c.diff.length ? c.diff.map(function (d) { return 'الحصة ' + (TT_ORD[d.p - 1] || d.p) + ': <span dir="ltr">' + esc(d.from) + '</span> ← <span dir="ltr">' + esc(d.to) + '</span>'; }).join('<br>') : 'لا يتغير وقت أي حصة') + '</td></tr>';
+    }));
+    var conflicts = plan.conflicts.length ? T(['المعلم', 'اليوم', 'الحصة الأولى', 'تتداخل مع'], plan.conflicts.map(function (c) {
+      return '<tr><td><b>' + esc(ttTName(c.tid)) + '</b></td><td>' + esc(days[c.day] || '') + '</td><td>' + ttBrkLesson(c.x) + '</td><td>' + ttBrkLesson(c.y) + '</td></tr>';
+    })) : '';
+    var teachers = plan.teachers.length ? T(['المعلم', 'حصص يتغير وقتها', 'التفاصيل'], plan.teachers.map(function (t) {
+      return '<tr><td><b>' + esc(ttTName(t.tid)) + '</b></td><td>' + t.list.length + '</td><td>' + t.list.map(function (x) {
+        return esc(days[x.day] || '') + ': ' + esc(x.s.class_name) + ' (الحصة ' + (TT_ORD[x.s.period - 1] || x.s.period) + ')';
+      }).join('، ') + '</td></tr>';
+    })) : '';
+    return { classes: classes, conflicts: conflicts, teachers: teachers };
+  }
+  function ttBrkVerdict(plan) {
+    return plan.conflicts.length
+      ? 'يوجد تعارض: ' + arCount(plan.conflicts.length, ['حالة واحدة', 'حالتان', 'حالات', 'حالة']) + ' يصير فيها للمعلم حصتان في وقت واحد.'
+      : 'لا يوجد تعارض: لا يصير لأي معلم حصتان في وقت واحد.';
+  }
+  function ttBreakHtml() {
+    var b = ttBrkState(), bells = ttCfg().bells, plan = ttBrkPlan(), target = plan.target;
+    if (!bells.stages.length) return '<div class="card empty">حدّد مواعيد الدوام ومراحلها أولًا من «مواعيد الدوام».</div>';
+    if (bells.stages.length < 2) return '<div class="card empty">المقترح يحتاج مرحلتين على الأقل بمواعيد مختلفة في «مواعيد الدوام».</div>';
+    var others = ttClasses().filter(function (c) { return ttStageOf(c, bells) !== target; });
+    var tb = plan.classes.length ? ttBrkTables(plan, 'grid') : null;
+    var wrap = function (t) { return '<div class="table-wrap">' + t + '</div>'; };
+    return '<div class="card no-print"><h2>مقترح ضم صفوف إلى استراحة أخرى</h2>' +
+        '<p class="hint">اختر الاستراحة ثم الصفوف التي تُضم إليها؛ يظهر أثر ذلك على الأوقات، وهل يتعارض مع حصص المعلمين. هذه الشاشة للعرض والطباعة فقط ولا تغيّر المواعيد؛ الاعتماد من «مواعيد الدوام».</p>' +
+        '<div class="toolbar" style="align-items:center"><label class="field" for="brk-target" style="margin:0">الاستراحة المستهدفة</label>' +
+        '<select id="brk-target" data-ro-ok style="width:auto;max-width:100%">' + bells.stages.map(function (st) {
+          return '<option value="' + esc(st.id) + '"' + (st.id === b.target ? ' selected' : '') + '>' + esc(ttBrkBreaks(st)) + ' — ' + esc(st.name) + '</option>';
+        }).join('') + '</select></div>' +
+        '<label class="field" style="margin-top:10px">الصفوف التي تُضم (' + plan.classes.length + ')</label>' +
+        (others.length ? '<div class="tt-chips brk-chips" role="group" aria-label="الصفوف التي تُضم">' + others.map(function (c) {
+          var on = !!b.pick[c];
+          return '<button type="button" data-ro-ok data-brkcls="' + esc(c) + '" aria-pressed="' + on + '"' + (on ? ' class="on"' : '') + '>' + esc(c) + '</button>';
+        }).join('') + '</div>' : '<p class="hint" style="margin:0">كل الصفوف في هذه المرحلة أصلًا.</p>') +
+        '<div class="toolbar" style="margin:14px 0 0;align-items:center"><button type="button" class="btn primary" data-ttprint="brk|" data-ro-ok' + (plan.classes.length ? '' : ' disabled') + '>طباعة المقترح / PDF</button>' +
+        (plan.classes.length ? '<button type="button" class="btn link" data-brkclear data-ro-ok>إلغاء الاختيار</button>' : '') + '</div></div>' +
+      (!tb ? '<div class="card empty">اختر صفًا واحدًا على الأقل ليظهر المقترح وفحص التعارض.</div>' :
+        '<div class="card"><h2>هل يتعارض مع حصص المعلمين؟</h2><div class="brk-verdict ' + (plan.conflicts.length ? 'bad' : 'ok') + '"><b>' + (plan.conflicts.length ? '✕' : '✓') + '</b><span>' + esc(ttBrkVerdict(plan)) + '</span></div>' +
+          (tb.conflicts ? '<div style="margin-top:12px">' + wrap(tb.conflicts) + '</div>' : '') +
+          '<p class="hint" style="margin:10px 0 0">الفحص على الجدول الحالي: ' + ttLive().length + ' حصة. يُحسب تعارضًا كل حصتين لمعلم واحد في يوم واحد يتداخل وقتاهما بعد الضم ولم يكونا متداخلين قبله.</p></div>' +
+        '<div class="card"><h2>ما يتغير للصفوف</h2>' + wrap(tb.classes) + '</div>' +
+        '<div class="card"><h2>المعلمون الذين يتغير وقت حصصهم (' + plan.teachers.length + ')</h2>' +
+          (tb.teachers ? wrap(tb.teachers) + '<p class="hint" style="margin:10px 0 0">تتغير أوقات هذه الحصص فقط (' + plan.changed + ' حصة في الأسبوع)، ومعها وقت استراحة المعلم في تلك الأيام.</p>'
+            : '<div class="empty">لا يتغير وقت أي حصة.</div>') + '</div>');
+  }
+  // ورقة المقترح المطبوعة
+  function ttBreakPage() {
+    var plan = ttBrkPlan();
+    if (!plan.target || !plan.classes.length) return '<p>لم تُختر صفوف.</p>';
+    var tb = ttBrkTables(plan, 'tt-brk');
+    return '<section class="tt-page" data-base="13">' + ttTop() + '<div class="tt-ptitle">مقترح تعديل استراحة الصفوف</div>' +
+      '<div class="tt-pmeta">' + dmy(todayISO()) + ' · العام الدراسي ' + esc(academicYear()) + '</div>' +
+      '<p style="margin:.6em 0">يُقترح ضم ' + (plan.classes.length === 1 ? 'الصف' : 'الصفوف') + ' <b>' + plan.classes.map(function (c) { return esc(c.name); }).join('، ') + '</b> إلى استراحة <b>' + esc(ttBrkBreaks(plan.target)) + '</b> (مواعيد «' + esc(plan.target.name) + '»).</p>' +
+      '<div class="tt-brk-h">أثر المقترح على الصفوف</div>' + tb.classes +
+      '<div class="tt-brk-h">التعارض مع حصص المعلمين</div><div class="' + (plan.conflicts.length ? 'tt-brk-bad' : 'tt-brk-ok') + '">' + esc(ttBrkVerdict(plan)) + '</div>' + tb.conflicts +
+      (tb.teachers ? '<div class="tt-brk-h">المعلمون الذين يتغير وقت حصصهم</div>' + tb.teachers : '') +
+      '</section>';
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/timetable/breaks') return;
+    var el = e.target.closest('[data-brkcls]');
+    if (el) { var b = ttBrkState(), c = el.getAttribute('data-brkcls'); if (b.pick[c]) delete b.pick[c]; else b.pick[c] = true; return render(); }
+    if (e.target.closest('[data-brkclear]')) { ttBrkState().pick = {}; render(); }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/timetable/breaks' || e.target.id !== 'brk-target') return;
+    var b = ttBrkState();
+    b.target = e.target.value; b.pick = {};
+    render();
+  });
 
   function ttBellsLink() { return location.origin + location.pathname.replace(/[^/]*$/, '') + 'bells.html'; }
 
@@ -15578,6 +15725,10 @@
       sheet.style.width = '267mm';
       sheet.className = 'tt-pages land';
       sheet.innerHTML = pr ? ttWm() + ttPropPages(pr) : '<p>لا يوجد اقتراح.</p>';
+    } else if (q.kind === 'brk') {
+      printLandscape = false;
+      sheet.className = 'tt-pages';
+      sheet.innerHTML = ttWm() + ttBreakPage();
     } else if (q.kind === 'bells') {
       printLandscape = false;
       sheet.className = 'tt-pages';
