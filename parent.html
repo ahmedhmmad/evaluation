@@ -63,6 +63,16 @@
   .lesson .s { font-weight: 700; color: var(--navy); }
   .lesson .t { color: var(--muted); font-size: .85rem; }
   .lesson.brk { background: var(--ivory); color: var(--muted); font-size: .9rem; }
+  .login label { display: block; font-weight: 700; color: var(--navy); margin: 12px 0 4px; }
+  .login input { width: 100%; font: inherit; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .btnp { font: inherit; font-weight: 700; padding: 12px 20px; border-radius: 12px; border: 0; background: var(--navy); color: #fff; cursor: pointer; width: 100%; margin-top: 16px; }
+  .out { font: inherit; font-size: .85rem; background: none; border: 1px solid #E9DDBF; color: #fff; border-radius: 99px; padding: 4px 12px; cursor: pointer; margin-inline-start: auto; }
+  table.gr { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  table.gr th, table.gr td { border-bottom: 1px solid var(--line); padding: 7px 4px; text-align: right; }
+  table.gr th { color: var(--muted); font-weight: 500; }
+  .wa { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .wa .when { color: var(--muted); font-size: .82rem; }
+  .wa .body { white-space: pre-wrap; margin-top: 4px; }
   button.more { font: inherit; font-weight: 700; background: none; border: 0; color: var(--gold-dark); cursor: pointer; padding: 8px 0 0; }
   :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 </style>
@@ -77,7 +87,10 @@
 (function () {
   'use strict';
   var main = document.getElementById('main'), sub = document.getElementById('sub');
-  var token = new URLSearchParams(location.search).get('t') || '';
+  // الدخول: بالرابط الخاص (?t=…)، أو بحساب ولي الأمر (رقم الهوية وكلمة المرور) فيُحفظ رمز الجلسة على هذا الجهاز
+  var token = new URLSearchParams(location.search).get('t') || '', viaLogin = false;
+  if (!token) { try { token = localStorage.getItem('parent_token') || ''; viaLogin = !!token; } catch (e) {} }
+  var more = null;
   var cfg = window.APP_CONFIG || {}, sb = window.supabase && cfg.SUPABASE_URL ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
   var WEEK = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
   var ORD = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة', 'الحادية عشرة', 'الثانية عشرة'];
@@ -129,6 +142,8 @@
   var IC = {
     abs: '<path d="M8 2v3M16 2v3M3.5 9h17"/><rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M9.5 13.5l5 5M14.5 13.5l-5 5"/>',
     bus: '<rect x="4" y="3" width="16" height="14" rx="3"/><path d="M4 11h16M8 21v-4M16 21v-4"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/>',
+    gr: '<path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h3M9 16l2 2 4-4"/>',
+    wa: '<path d="M4 20l1.3-3.9A8 8 0 1112 20a8 8 0 01-4.1-1.1z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5"/>',
     tt: '<rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9h17M9 9v11.5M15 9v11.5M8 2v3M16 2v3"/>'
   };
   function h2(icon, text) { return '<h2><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">' + IC[icon] + '</svg></span>' + text + '</h2>'; }
@@ -202,6 +217,56 @@
       }).join('') + '</div>';
   }
 
+  function gradesHtml(k) {
+    var m = more && (more.kids || []).filter(function (x) { return x.name === k.name; })[0], g = m ? m.grades || [] : [];
+    if (!more) return '';
+    if (!g.length) return '<div class="card">' + h2('gr', 'الدرجات') + '<p class="muted" style="margin:0">لم تُرصد درجات بعد.</p></div>';
+    var terms = [];
+    g.forEach(function (x) { if (terms.indexOf(x.term) < 0) terms.push(x.term); });
+    return '<div class="card">' + h2('gr', 'الدرجات') + terms.map(function (t) {
+      var subs = [];
+      g.forEach(function (x) { if (x.term === t && subs.indexOf(x.subject) < 0) subs.push(x.subject); });
+      return '<h3 style="color:var(--navy);margin:10px 0 6px;font-size:1rem">' + esc(t) + '</h3>' + subs.map(function (s) {
+        var rows = g.filter(function (x) { return x.term === t && x.subject === s; }), tot = 0, max = 0;
+        rows.forEach(function (x) { tot += Number(x.score); max += Number(x.max); });
+        return '<details class="day"><summary>' + esc(s) + ' — ' + (Math.round(tot * 100) / 100) + ' من ' + max + '</summary><table class="gr" style="margin:6px 12px;width:calc(100% - 24px)"><tbody>' +
+          rows.map(function (x) { return '<tr><td>' + esc(x.item) + '</td><td style="text-align:left"><b>' + esc(x.score) + '</b> / ' + esc(x.max) + '</td></tr>'; }).join('') + '</tbody></table></details>';
+      }).join('');
+    }).join('') + '</div>';
+  }
+  function msgsHtml() {
+    var list = more ? more.messages || [] : [];
+    if (!more || !list.length) return '';
+    return '<div class="card">' + h2('wa', 'الرسائل الواردة من الأكاديمية') + list.slice(0, allMsgs ? 100 : 5).map(function (m) {
+      return '<div class="wa"><div class="when">' + dmy(m.at) + ' · ' + new Date(m.at).toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + (m.title ? ' · ' + esc(m.title) : '') + '</div><div class="body">' + esc(m.body) + '</div></div>';
+    }).join('') + (list.length > 5 ? '<button type="button" class="more" data-allmsgs>' + (allMsgs ? 'عرض أقل' : 'عرض كل الرسائل (' + list.length + ')') + '</button>' : '') + '</div>';
+  }
+  var allMsgs = false;
+
+  function loginHtml(err) {
+    return '<form class="card login" id="login"><h2>دخول ولي الأمر</h2><p class="muted" style="margin:0">ادخل برقم هويتك وكلمة المرور التي أرسلتها لك الأكاديمية، لتتابع كل أبنائك.</p>' +
+      '<label for="lg-id">رقم الهوية</label><input id="lg-id" inputmode="numeric" autocomplete="username" required>' +
+      '<label for="lg-pw">كلمة المرور</label><input id="lg-pw" type="password" autocomplete="current-password" required>' +
+      (err ? '<p class="err" style="margin:10px 0 0">' + esc(err) + '</p>' : '') +
+      '<button type="submit" class="btnp">دخول</button></form>';
+  }
+  main.addEventListener('submit', async function (e) {
+    if (e.target.id !== 'login') return;
+    e.preventDefault();
+    var b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'جارٍ الدخول…';
+    var r = await sb.rpc('parent_login', { p_id: document.getElementById('lg-id').value, p_pass: document.getElementById('lg-pw').value });
+    var d = r.data || {};
+    if (r.error || d.error || !d.token) { main.innerHTML = loginHtml(d.error || 'تعذّر الدخول. حاول مرة أخرى.'); return; }
+    token = d.token; viaLogin = true;
+    try { localStorage.setItem('parent_token', token); } catch (x) {}
+    load();
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-logout]')) return;
+    try { localStorage.removeItem('parent_token'); } catch (x) {}
+    location.href = location.pathname;
+  });
+
   function draw() {
     var kids = data.children || [];
     if (!kids.length) { main.innerHTML = '<div class="msg">لا يوجد أبناء مسجلون مرتبطون بهذا الرابط حاليًا.</div>'; return; }
@@ -210,7 +275,7 @@
         ? '<div class="kids">' + kids.map(function (x, i) { return '<button type="button" data-kid="' + i + '" aria-pressed="' + (i === cur) + '">' + esc(x.name.split(/\s+/)[0]) + '</button>'; }).join('') + '</div>'
         : '') +
       '<div class="kid-head"><b>' + esc(k.name) + '</b><span>الشعبة: ' + esc(k.class_name || '—') + '</span></div>' +
-      absHtml(k) + busHtml(k) + ttHtml(k) +
+      absHtml(k) + gradesHtml(k) + busHtml(k) + ttHtml(k) + msgsHtml() +
       '<p class="muted" style="text-align:center">البيانات كما سجّلتها الأكاديمية حتى ' + new Date().toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '. لأي استفسار تواصل مع إدارة الأكاديمية.</p>';
   }
 
@@ -218,15 +283,20 @@
     var b = e.target.closest('[data-kid]');
     if (b) { cur = +b.getAttribute('data-kid'); allAbs = false; draw(); window.scrollTo(0, 0); return; }
     if (e.target.closest('[data-allabs]')) { allAbs = !allAbs; draw(); }
+    if (e.target.closest('[data-allmsgs]')) { allMsgs = !allMsgs; draw(); }
   });
 
   async function load() {
     if (!sb) { main.innerHTML = '<div class="msg err">لم يُضبط الاتصال بقاعدة البيانات.</div>'; return; }
-    if (!/^[0-9a-f]{64}$/.test(token)) { main.innerHTML = '<div class="msg err">الرابط غير مكتمل. افتحه كما وصلك من الأكاديمية.</div>'; return; }
+    if (!/^[0-9a-f]{64}$/.test(token)) { main.innerHTML = loginHtml(); return; }
     var r = await sb.rpc('parent_view', { p_token: token });
+    if (viaLogin && r.data && r.data.error) { try { localStorage.removeItem('parent_token'); } catch (x) {} main.innerHTML = loginHtml('انتهت الجلسة أو أُوقف الحساب. ادخل مرة أخرى.'); return; }
     if (r.error) { main.innerHTML = '<div class="msg err">تعذر جلب البيانات. حاول مرة أخرى بعد قليل.</div>'; return; }
     if (r.data && r.data.error) { main.innerHTML = '<div class="msg err">' + esc(r.data.error) + '</div>'; return; }
     data = r.data;
+    var mo = await sb.rpc('parent_more', { p_token: token });
+    more = mo.error || (mo.data && mo.data.error) ? null : mo.data; // قبل تشغيل parent_accounts.sql تبقى الشاشة كما كانت
+    if (viaLogin && !document.querySelector('[data-logout]')) document.querySelector('header').insertAdjacentHTML('beforeend', '<button type="button" class="out" data-logout>خروج</button>');
     document.getElementById('title').textContent = data.school || 'متابعة ولي الأمر';
     document.title = 'متابعة ولي الأمر — ' + (data.school || '');
     sub.textContent = 'متابعة ولي الأمر · ' + new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

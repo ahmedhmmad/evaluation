@@ -1329,7 +1329,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '11/11 — 6';
+  var APP_BUILD = '11/11 — 7';
 
   var syncing = null;
   function syncData(quiet) {
@@ -17222,7 +17222,7 @@
 
   function renderParents() {
     if (S.pLinks == null) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadParentLinks(); return; }
-    var head = '<div class="page-head"><div><h1>روابط أولياء الأمور</h1><p>لكل ولي أمر رابط خاص يرى منه أبناءه فقط: الغياب، وإيصالات المواصلات، وجدول الحصص. بلا حساب ولا كلمة مرور.</p></div></div>';
+    var head = '<div class="page-head"><div><h1>روابط وحسابات أولياء الأمور</h1><p>لكل ولي أمر رابط خاص، أو حساب يدخل به برقم هويته وكلمة مرور على ' + esc(parentLoginUrl()) + '، فيرى كل أبنائه: الحضور والغياب، والدرجات، والرسائل، والمواصلات، وجدول الحصص.</p></div></div>';
     if (S.pLinksMissing) {
       app.innerHTML = head + '<div class="card empty">روابط أولياء الأمور تحتاج إلى جدول جديد في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/parent_links.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
       return;
@@ -17238,17 +17238,19 @@
     var made = fams.filter(function (f) { return f.link; }).length, seen = fams.filter(function (f) { return f.link && f.link.views; }).length;
     var rows = shown.map(function (f) {
       var l = f.link, wa = waNumber(f.phone), key = esc(f.key);
-      var acts = !l
+      var accBtn = f.key.indexOf('id:') === 0 ? '<button type="button" class="btn' + (l && l.pass_hash ? '' : ' primary') + '" data-placc="' + key + '">' + (l && l.pass_hash ? 'كلمة مرور جديدة' : 'إنشاء حساب') + '</button>' : '';
+      var acts = accBtn + (!l
         ? '<button type="button" class="btn primary" data-plmake="' + key + '">إنشاء رابط</button>'
         : '<button type="button" class="btn" data-plcopy="' + key + '">نسخ الرسالة</button>' +
           (wa && l.active ? '<a class="btn" target="_blank" rel="noopener" href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent(parentMsg(f)) + '">إرسال واتساب</a>' : '') +
           '<button type="button" class="btn" data-pltoggle="' + key + '">' + (l.active ? 'إيقاف' : 'تفعيل') + '</button>' +
-          '<button type="button" class="btn danger" data-plnew="' + key + '" title="يتوقف الرابط القديم ويُنشأ غيره">رابط جديد</button>';
+          '<button type="button" class="btn danger" data-plnew="' + key + '" title="يتوقف الرابط القديم ويُنشأ غيره">رابط جديد</button>');
       return '<tr' + (l && !l.active ? ' style="color:var(--muted)"' : '') + '><td>' + f.kids.map(function (k) { return '<div><b>' + esc(k.full_name) + '</b> <span class="hint" style="margin:0">' + esc(k.class_name || '—') + '</span></div>'; }).join('') +
         (f.key.indexOf('st:') === 0 ? '<div class="hint" style="margin:2px 0 0">لا رقم هوية ولي أمر ولا جوال: الرابط لهذا الطالب وحده</div>' : '') + '</td>' +
         '<td>' + esc(f.guardian || '—') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(f.phone || '—') + '</td>' +
         '<td>' + (!l ? '<span class="badge pending">بلا رابط</span>' : !l.active ? '<span class="badge unpaid">موقوف</span>' :
-          l.views ? '<span class="badge paid">فُتح ' + l.views + ' مرة</span><div class="hint" style="margin:2px 0 0">آخر فتح ' + dmy(String(l.last_seen).slice(0, 10)) + '</div>' : '<span class="badge part">لم يُفتح بعد</span>') + '</td>' +
+          l.views ? '<span class="badge paid">فُتح ' + l.views + ' مرة</span><div class="hint" style="margin:2px 0 0">آخر فتح ' + dmy(String(l.last_seen).slice(0, 10)) + '</div>' : '<span class="badge part">لم يُفتح بعد</span>') +
+          (l && l.pass_hash ? '<div class="hint" style="margin:2px 0 0">له حساب' + (l.last_login ? ' · آخر دخول ' + dmy(String(l.last_login).slice(0, 10)) : '') + '</div>' : '') + '</td>' +
         '<td><div class="acts">' + acts + '</div></td></tr>';
     }).join('');
     var opt = function (v, label) { return '<option value="' + v + '"' + ((ui.plFilter || '') === v ? ' selected' : '') + '>' + label + '</option>'; };
@@ -17260,12 +17262,58 @@
         '<input type="search" id="pl-search" placeholder="اسم الطالب أو ولي الأمر أو الجوال" aria-label="بحث" value="' + esc(ui.plSearch || '') + '" style="max-width:280px">' +
         '<select id="pl-filter" style="width:auto">' + opt('', 'الكل') + opt('none', 'بلا رابط') + opt('seen', 'فتحوا الرابط') + opt('off', 'موقوفة') + '</select>' +
         '<button type="button" class="btn primary" data-plall' + (fams.length - made ? '' : ' disabled') + '>إنشاء روابط لكل من ليس له رابط (' + (fams.length - made) + ')</button>' +
-        '<button type="button" class="btn" data-plxlsx' + (made ? '' : ' disabled') + '>تصدير الروابط (Excel)</button></div>' +
+        '<button type="button" class="btn" data-plxlsx' + (made ? '' : ' disabled') + '>تصدير الروابط (Excel)</button>' +
+        '<button type="button" class="btn" data-placcall title="لكل ولي أمر له رقم هوية وليس له حساب: تُولَّد كلمات المرور ويُنزَّل ملف Excel بها">إنشاء حسابات لمن ليس له حساب (Excel)</button></div>' +
       '<p class="hint">«إرسال واتساب» يفتح واتساب برسالة جاهزة فيها الرابط، فترسلها أنت. الإيقاف يمنع فتح الرابط فورًا، و«رابط جديد» يلغي القديم إن وصل لغير صاحبه. ' +
         'الإخوة يجمعهم رقم هوية ولي الأمر في ملف التسجيل؛ ومن نقص رقمه يُجمع بالجوال.</p>' +
       '<div class="card">' + (rows
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الأبناء</th><th>ولي الأمر</th><th>الجوال / واتساب</th><th>الحالة</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="empty">لا يوجد ما يطابق البحث.</div>') + '</div>';
+  }
+
+  // حساب ولي الأمر: رقم هويته وكلمة مرور تُولَّد هنا وتظهر مرة واحدة (تُحفظ مشفّرة في القاعدة)
+  function parentLoginUrl() { return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'parent.html'; }
+  function parentPass() { var a = new Uint32Array(1); crypto.getRandomValues(a); return String(10000000 + a[0] % 90000000); }
+  function parentAccMsg(f, pass) {
+    return 'السلام عليكم ' + (f.guardian ? 'ولي الأمر ' + f.guardian : 'ولي أمر ' + f.kids.map(function (k) { return k.full_name.split(/\s+/)[0]; }).join(' و')) + '،\n' +
+      'حسابكم لمتابعة ' + (f.kids.length > 1 ? 'أبنائكم' : 'ابنكم/ابنتكم') + ' في ' + schoolName() + ' (الحضور والغياب، والدرجات، والرسائل، والمواصلات، وجدول الحصص):\n' +
+      parentLoginUrl() + '\nرقم الهوية: ' + f.key.slice(3) + '\nكلمة المرور: ' + pass + '\nالحساب خاص بكم، فلا تشاركوا كلمة المرور.';
+  }
+  async function makeParentAccount(f) {
+    var pass = parentPass();
+    var r = await sb.rpc('parent_set_password', { p_key: f.key, p_pass: pass });
+    if (r.error) { fail(r.error); return null; }
+    return pass;
+  }
+  function showParentAcc(f, pass) {
+    var msg = parentAccMsg(f, pass), wa = waNumber(f.phone);
+    var o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;background:rgba(12,33,82,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    o.innerHTML = '<div class="card" style="max-width:520px;width:100%;margin:0"><h2 style="margin-top:0">حساب ' + esc(f.guardian || 'ولي الأمر') + '</h2>' +
+      '<p class="hint">كلمة المرور تظهر الآن فقط ولا يمكن عرضها لاحقًا (يمكن تعيين غيرها). أرسلها لولي الأمر:</p>' +
+      '<textarea rows="8" style="width:100%" readonly>' + esc(msg) + '</textarea>' +
+      '<div class="actions"><button type="button" class="btn primary" data-pacopy>نسخ الرسالة</button>' +
+      (wa ? '<a class="btn" target="_blank" rel="noopener" href="https://wa.me/' + esc(wa) + '?text=' + encodeURIComponent(msg) + '">إرسال واتساب</a>' : '') +
+      '<button type="button" class="btn" data-paclose>إغلاق</button></div></div>';
+    document.body.appendChild(o);
+    o.addEventListener('click', function (e) {
+      if (e.target.closest('[data-pacopy]')) copyText(msg, 'نُسخت الرسالة');
+      if (e.target.closest('[data-paclose]') || e.target === o) o.remove();
+    });
+  }
+  async function exportParentAccounts(list) {
+    try {
+      await loadXlsx();
+      var wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName()], ['حسابات أولياء الأمور — ' + dmy(todayISO())], ['سري: كلمات المرور لا تُحفظ في البرنامج إلا مشفّرة، وهذه نسختها الوحيدة.'], [],
+        ['م', 'ولي الأمر', 'الأبناء', 'الجوال', 'رقم الهوية (اسم الدخول)', 'كلمة المرور', 'الرسالة']].concat(list.map(function (x, i) {
+          return [i + 1, x.f.guardian, x.f.kids.map(function (k) { return k.full_name; }).join('، '), x.f.phone, x.f.key.slice(3), x.pass, parentAccMsg(x.f, x.pass)];
+        })));
+      ws['!cols'] = [5, 24, 40, 16, 18, 12, 90].map(function (w) { return { wch: w }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'الحسابات');
+      XLSX.writeFile(wb, 'حسابات-أولياء-الأمور-' + todayISO() + '.xlsx');
+    } catch (err) { toast(err.message, true); }
   }
 
   async function makeParentLinks(keys) {
@@ -17324,6 +17372,23 @@
       makeParentLinks([f.key]);
     }
     else if (e.target.closest('[data-plxlsx]')) exportParentLinks();
+    else if ((el = e.target.closest('[data-placc]'))) {
+      f = famByKey(el.getAttribute('data-placc'));
+      if (!f || (f.link && f.link.pass_hash && !confirm('تعيين كلمة مرور جديدة لـ' + (f.guardian || 'ولي الأمر') + '؟ القديمة تتوقف فورًا.'))) return;
+      var pass = await makeParentAccount(f);
+      if (!pass) return;
+      await loadParentLinks();
+      showParentAcc(famByKey(f.key) || f, pass);
+    }
+    else if (e.target.closest('[data-placcall]')) {
+      var todo = parentFamilies().filter(function (x) { return x.key.indexOf('id:') === 0 && !(x.link && x.link.pass_hash); });
+      if (!todo.length) return toast('كل أولياء الأمور الذين لهم رقم هوية لديهم حسابات');
+      if (!confirm('إنشاء ' + todo.length + ' حسابًا؟ ستُنزَّل كلمات المرور في ملف Excel، وهو نسختها الوحيدة.')) return;
+      var made2 = [];
+      for (var i = 0; i < todo.length; i++) { var pw = await makeParentAccount(todo[i]); if (!pw) break; made2.push({ f: todo[i], pass: pw }); }
+      await loadParentLinks();
+      if (made2.length) { exportParentAccounts(made2); toast('أُنشئ ' + made2.length + ' حسابًا'); }
+    }
   });
   document.addEventListener('change', function (e) {
     if (location.hash === '#/parents' && e.target.id === 'pl-filter') { ui.plFilter = e.target.value; render(); }
