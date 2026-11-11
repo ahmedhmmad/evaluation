@@ -100,6 +100,88 @@
   .wa .body { white-space: pre-wrap; margin-top: 4px; }
   button.more { font: inherit; font-weight: 700; background: none; border: 0; color: var(--gold-dark); cursor: pointer; padding: 8px 0 0; }
   :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  /* ===== تصميم فيجما: صفحة متابعة ولي الأمر ===== */
+  body { background: #F8F5EE; }
+  header { padding-top: 26px; padding-bottom: 30px; gap: 16px; }
+  header .logo { width: 64px; border-radius: 50%; background: #fff url(logo.png) no-repeat center / 86%; border: 2px solid rgba(200,164,93,.55); }
+  header h1 { font-size: 1.55rem; }
+  header .sub { font-size: .95rem; }
+  .out { display: inline-flex; align-items: center; gap: 8px; font-size: .95rem; padding: 9px 18px; border-radius: 10px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.06); }
+  .out svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .layout { grid-template-columns: 300px minmax(0, 1fr); gap: 32px; }
+  .side { padding: 0; border-radius: 18px; overflow: hidden; }
+  .side h3 { margin: 0; padding: 22px 22px 14px; font-size: 1.15rem; color: var(--navy); }
+  .kidrow { display: flex; flex-direction: row; margin: 0; border-radius: 0; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border: 0; border-top: 1px solid var(--line); background: #fff; font: inherit; text-align: right; cursor: pointer; }
+  .kidrow.on { background: #F4F1EA; }
+  .kidrow .av, .banner .av { flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--gold-soft); color: var(--navy); font-weight: 700; border: 1px solid #E7D7B3; }
+  .kidrow .av { width: 44px; height: 44px; font-size: .95rem; }
+  .side button.kidrow, .side button.kidrow[aria-pressed="true"] { flex-direction: row; align-items: center; box-shadow: none; color: inherit; margin: 0; border-radius: 0; }
+  .side button.kidrow[aria-pressed="true"] { background: #F4F1EA; }
+  .kidrow .nm { flex: 1; min-width: 0; }
+  .kidrow .nm b { display: block; color: var(--navy); font-size: 1rem; }
+  .side button.kidrow .nm small { color: var(--muted); font-size: .9rem; }
+  .kidrow .chev { color: var(--muted); font-size: 1.2rem; }
+  .side nav { margin: 0; padding: 10px 12px 14px; border: 0; }
+  .side nav a { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: 10px; color: var(--ink); font-size: 1rem; margin-bottom: 4px; }
+  .side nav a svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: var(--navy); }
+  .side nav a.on { background: var(--navy); color: #fff; font-weight: 700; }
+  .side nav a.on svg { color: #fff; }
+  .side .help { border-top: 1px solid var(--line); padding: 16px 22px 20px; font-size: .9rem; color: var(--muted); }
+  .side .help b { display: block; color: var(--gold-dark); font-weight: 500; margin-top: 4px; }
+  .banner { position: relative; display: flex; align-items: center; gap: 18px; padding: 26px 30px; border-radius: 18px; color: #fff; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(19,48,107,.18);
+    background: var(--navy) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60' viewBox='0 0 120 60'%3E%3Cpath d='M0 30L30 10 60 30 90 10 120 30M0 60L30 40 60 60 90 40 120 60' fill='none' stroke='%23C8A45D' stroke-opacity='.18'/%3E%3C/svg%3E") repeat; }
+  .banner .av { width: 76px; height: 76px; font-size: 1.5rem; background: #fff; border: 4px solid rgba(255,255,255,.25); box-shadow: 0 0 0 1px rgba(200,164,93,.5); }
+  .banner .who { flex: 1; }
+  .banner .who small { display: block; color: #E9DDBF; font-size: .88rem; }
+  .banner .who b { display: block; font-size: 1.55rem; font-weight: 700; margin: 2px 0; }
+  .banner .who span { color: #E9DDBF; }
+  .banner .yr { border: 1px solid rgba(200,164,93,.6); border-radius: 10px; padding: 8px 14px; text-align: center; font-size: .85rem; }
+  .banner .yr b { display: block; font-size: 1rem; }
+  .hello { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 18px; }
+  .hello h2 { margin: 0; font-size: 1.6rem; color: var(--navy); }
+  .hello p { margin: 2px 0 0; color: var(--muted); }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 14px; color: var(--muted); font-size: .88rem; white-space: nowrap; }
+  .stats4 { gap: 16px; margin-bottom: 18px; }
+  .st { position: relative; padding: 20px 20px 18px; border-radius: 16px; display: flex; flex-direction: column; align-items: flex-start; }
+  .st .ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 14px; }
+  .st .ico svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .st .go { position: absolute; top: 24px; left: 20px; color: var(--muted); font-size: 1.2rem; }
+  .st .l { font-size: .95rem; color: var(--ink); }
+  .st .n { font-size: 2.3rem; margin: 2px 0; color: var(--navy); }
+  .st .s { font-size: .85rem; }
+  .st.c-red .ico { background: var(--red-soft); color: var(--red); } .st.c-red .n { color: var(--red); }
+  .st.c-green .ico { background: var(--green-soft); color: var(--green); } .st.c-green .n { color: var(--green); }
+  .st.c-gold .ico { background: var(--gold-soft); color: var(--gold-dark); }
+  .st.c-bus .ico { background: var(--green-soft); color: var(--green); }
+  .today { padding: 0; overflow: hidden; }
+  .today .th { display: flex; align-items: center; gap: 14px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
+  .today .th .ic { width: 46px; height: 46px; border-radius: 12px; background: var(--gold-soft); color: var(--gold-dark); display: grid; place-items: center; flex: none; }
+  .today .th .ic svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .today .th div { flex: 1; } .today .th b { display: block; font-size: 1.15rem; color: var(--navy); } .today .th small { color: var(--muted); }
+  .today .th a { color: var(--gold-dark); font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .lrow { display: grid; grid-template-columns: 44px 170px 1fr 1fr; align-items: center; gap: 14px; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+  .lrow:last-child { border-bottom: 0; }
+  .lrow .no { width: 34px; height: 34px; border-radius: 50%; background: var(--gold-soft); color: var(--navy); font-weight: 700; display: grid; place-items: center; }
+  .lrow .pn b { display: block; color: var(--navy); } .lrow .pn small { color: var(--muted); }
+  .lrow .sj { color: var(--navy); font-size: 1.05rem; }
+  .lrow .tc { color: var(--muted); text-align: left; }
+  .lrow.brk { background: #FBF9F4; } .lrow.brk .no { background: none; border-top: 1px solid var(--line); border-radius: 0; height: 0; }
+  .note { display: flex; align-items: center; justify-content: center; gap: 8px; border-top: 1px solid var(--line); margin-top: 28px; padding-top: 22px; color: var(--muted); font-size: .9rem; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    main { padding: 26px 12px 32px; }
+    .side h3 { display: none; }
+    .side nav { display: flex; gap: 6px; overflow-x: auto; padding: 10px; }
+    .side nav a { flex: none; margin: 0; padding: 9px 12px; font-size: .92rem; }
+    .side .help { display: none; }
+    .stats4 { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .st { padding: 14px; } .st .n { font-size: 1.7rem; } .st .ico { width: 38px; height: 38px; margin-bottom: 10px; }
+    header h1 { font-size: 1.15rem; } header .logo { width: 48px; }
+    .banner .av { width: 56px; height: 56px; font-size: 1.15rem; } .banner .who b { font-size: 1.2rem; }
+    .banner { flex-wrap: wrap; padding: 20px; } .banner .yr { order: 3; }
+    .hello { flex-direction: column; align-items: flex-start; }
+    .lrow { grid-template-columns: 36px 1fr; } .lrow .sj, .lrow .tc { grid-column: 2; text-align: right; }
+  }
 </style>
 </head>
 <body>
@@ -293,44 +375,73 @@
   });
 
   var view = 'home';
-  var VIEWS = [['home', 'الرئيسية'], ['abs', 'الحضور والغياب'], ['grades', 'الدرجات'], ['tt', 'جدول الحصص'], ['bus', 'المواصلات'], ['msgs', 'الرسائل']];
+  var VIEWS = [['home', 'الرئيسية', 'home'], ['abs', 'الحضور والغياب', 'cal'], ['grades', 'الدرجات', 'bars'], ['tt', 'جدول الحصص', 'clock'], ['bus', 'المواصلات', 'bus2'], ['msgs', 'الرسائل', 'chat']];
+  var SV = {
+    home: '<path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/>',
+    cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01"/>',
+    bars: '<path d="M4 20h16M7 20v-8M11 20V8M15 20v-5M19 20V11"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    bus2: '<rect x="5" y="3.5" width="14" height="14" rx="3"/><path d="M5 11h14M8 20.5v-3M16 20.5v-3M8.5 14.5h.01M15.5 14.5h.01"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    out: '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
+    info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/>'
+  };
+  function sv(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + SV[k] + '</svg>'; }
+  function initials(n) { var w = String(n || '').trim().split(/\s+/).map(function (x) { return x.replace(/^ال(?=..)/, ''); }); return (w[0] || '').charAt(0) + ' ' + (w.length > 1 ? w[w.length - 1].charAt(0) : ''); }
+  function schoolYear() { var d = new Date(), y = d.getFullYear(); return d.getMonth() >= 8 ? y + ' / ' + (y + 1) : (y - 1) + ' / ' + y; }
+
   function todayHtml(k) {
     var tt = k.timetable || [], days = Array.isArray(data.days) && data.days.length ? data.days : WEEK.slice(0, 5);
     var di = days.indexOf(WEEK[new Date().getDay()]), lessons = di < 0 ? [] : tt.filter(function (x) { return x.day === di; }).sort(function (a, b) { return a.period - b.period; });
-    var st = stageOf(k.class_name), times = [];
-    if (st) (st.rows || []).forEach(function (r) { if (r.k === 'p') times.push(r); });
-    return '<div class="card">' + h2('tt', 'جدول اليوم' + (di > -1 ? ' — ' + esc(days[di]) : '')) +
-      (lessons.length ? lessons.map(function (x) { var t = times[x.period - 1]; return '<div class="lesson"><div class="p">الحصة ' + (ORD[x.period - 1] || x.period) + (t ? '<br>' + range(t.f, t.t) : '') + '</div><div><div class="s">' + esc(x.subject || '—') + '</div>' + (x.teacher ? '<div class="t">' + esc(shortName(x.teacher)) + '</div>' : '') + '</div></div>'; }).join('')
-        : '<p class="muted" style="margin:0">لا حصص اليوم.</p>') + '</div>';
+    var st = stageOf(k.class_name), rows = st ? st.rows || [] : [], body = '', p = 0;
+    var maxP = lessons.length ? lessons[lessons.length - 1].period : 0;
+    var lrow = function (n, label, time, sj, tc) { return '<div class="lrow"><span class="no">' + n + '</span><div class="pn"><b>' + label + '</b>' + (time ? '<small>' + time + '</small>' : '') + '</div><div class="sj">' + sj + '</div><div class="tc">' + tc + '</div></div>'; };
+    var one = function (pp, t) { var ls = lessons.filter(function (x) { return x.period === pp; }); return lrow(pp, 'الحصة ' + (ORD[pp - 1] || pp), t ? range(t.f, t.t) : '', ls.map(function (x) { return esc(x.subject || '—'); }).join('، ') || '—', ls.map(function (x) { return x.teacher ? 'أ. ' + esc(shortName(x.teacher)) : ''; }).join('، ')); };
+    if (lessons.length && rows.length) rows.forEach(function (r) {
+      if (r.k === 'p') { p++; if (p <= maxP) body += one(p, r); }
+      else if (p > 0 && p < maxP) body += '<div class="lrow brk"><span class="no"></span><div class="pn"><b>' + esc(r.l || (r.k === 'a' ? 'الطابور' : 'الاستراحة')) + '</b><small>' + range(r.f, r.t) + '</small></div><div class="tc" style="text-align:right">' + esc(r.l || 'الاستراحة') + '</div><div></div></div>';
+    });
+    else for (p = 1; p <= maxP; p++) body += one(p, null);
+    return '<div class="card today"><div class="th"><span class="ic">' + sv('clock') + '</span><div><b>جدول اليوم' + (di > -1 ? ' — ' + esc(days[di]) : '') + '</b><small>' + (lessons.length ? lessons.length + ' حصص دراسية' : 'لا حصص اليوم') + '</small></div>' +
+      '<a data-go="tt">عرض الجدول الأسبوعي ←</a></div>' + (body || '<p class="muted" style="margin:0;padding:18px 22px">لا حصص اليوم.</p>') + '</div>';
   }
   function statsHtml(k) {
     var month = today().slice(0, 7), abs = k.absences || [], inMonth = abs.filter(function (d) { return d.slice(0, 7) === month; }).length;
     var m = more && (more.kids || []).filter(function (x) { return x.name === k.name; })[0], g = m ? m.grades || [] : [], tot = 0, max = 0;
     g.forEach(function (x) { tot += Number(x.score); max += Number(x.max); });
     var mo = (k.months || [])[0], left = mo && mo.due != null ? Math.max(0, Number(mo.due) - Number(mo.paid)) : 0;
-    var card = function (cls, v, l, s, go) { return '<div class="st ' + cls + '" data-go="' + go + '"><span class="l">' + l + '</span><span class="n">' + v + '</span><span class="s">' + s + '</span></div>'; };
+    var rate = k.recorded_days ? Math.round((1 - abs.length / k.recorded_days) * 100) : null;
+    var card = function (cls, ic, v, l, s, go) { return '<div class="st ' + cls + '" data-go="' + go + '"><span class="ico">' + sv(ic) + '</span><span class="go">←</span><span class="l">' + l + '</span><span class="n">' + v + '</span><span class="s">' + s + '</span></div>'; };
     return '<div class="stats4">' +
-      card(inMonth ? 'bad' : 'ok', inMonth, 'الغياب هذا الشهر', 'منذ بداية العام: ' + abs.length, 'abs') +
-      card(k.recorded_days && abs.length / k.recorded_days > .1 ? 'bad' : 'ok', k.recorded_days ? Math.round((1 - abs.length / k.recorded_days) * 100) + '%' : '—', 'نسبة الحضور', 'من ' + (k.recorded_days || 0) + ' يومًا مسجّلًا', 'abs') +
-      card('', max ? Math.round(tot / max * 100) + '%' : '—', 'الدرجات', max ? 'المجموع ' + (Math.round(tot * 100) / 100) + ' من ' + max : 'لم تُرصد درجات بعد', 'grades') +
-      card(left ? 'bad' : 'ok', k.bus ? (left ? money(left) : 'مسدَّد') : '—', 'المواصلات', k.bus ? (mo ? cycleLabel(mo) : 'لا إيصالات بعد') : 'غير مشترك', 'bus') + '</div>';
+      card(inMonth ? 'c-red' : 'c-green', 'cal', inMonth, 'الغياب هذا الشهر', 'منذ بداية العام: ' + abs.length, 'abs') +
+      card(rate != null && rate < 90 ? 'c-red' : 'c-green', 'check', rate == null ? '—' : rate + '%', 'نسبة الحضور', 'من ' + (k.recorded_days || 0) + ' يومًا مسجّلًا', 'abs') +
+      card('c-gold', 'bars', max ? Math.round(tot / max * 100) + '%' : '—', 'الدرجات', max ? 'المجموع ' + (Math.round(tot * 100) / 100) + ' من ' + max : 'لم تُرصد درجات بعد', 'grades') +
+      card(left ? 'c-red' : 'c-bus c-green', 'bus2', k.bus ? (left ? money(left) : 'مسدَّد') : '—', 'المواصلات', k.bus ? (mo ? cycleLabel(mo) : 'لا إيصالات بعد') : 'غير مشترك', 'bus') + '</div>';
   }
 
   function draw() {
     var kids = data.children || [];
-    if (!kids.length) { main.innerHTML = '<div class="msg">لا يوجد أبناء مسجلون مرتبطون بهذا الرابط حاليًا.</div>'; return; }
-    var k = kids[cur] || kids[0];
-    var wrap = function (h, cls) { return h ? h.replace('<div class="card', '<div class="' + (cls ? cls + ' ' : '') + 'card') : ''; };
+    if (!kids.length) { main.innerHTML = '<div class="msg">لا يوجد أبناء مسجلون مرتبطون بهذا الحساب حاليًا.</div>'; return; }
+    var k = kids[cur] || kids[0], first = String(k.name).split(/\s+/)[0];
     var nav = VIEWS.filter(function (v) { return v[0] !== 'msgs' || (more && (more.messages || []).length); }).map(function (v) {
-      return '<a data-go="' + v[0] + '"' + (view === v[0] ? ' class="on"' : '') + '>' + v[1] + '</a>';
+      return '<a data-go="' + v[0] + '"' + (view === v[0] ? ' class="on"' : '') + '>' + sv(v[2]) + v[1] + '</a>';
     }).join('');
+    var title = { abs: 'الحضور والغياب', grades: 'الدرجات', tt: 'جدول الحصص', bus: 'المواصلات', msgs: 'الرسائل' }[view];
     var body = view === 'abs' ? absHtml(k) : view === 'grades' ? (gradesHtml(k) || '<div class="card"><p class="muted" style="margin:0">الدرجات غير متاحة بعد.</p></div>')
       : view === 'tt' ? ttHtml(k) : view === 'bus' ? (busHtml(k) || '<div class="card"><p class="muted" style="margin:0">غير مشترك في المواصلات.</p></div>')
       : view === 'msgs' ? msgsHtml() : statsHtml(k) + todayHtml(k);
+    var now = new Date(), dateTxt = now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
     main.innerHTML = '<div class="layout"><aside class="side"><h3>' + (kids.length > 1 ? 'الأبناء' : 'الابن/الابنة') + '</h3>' +
-        kids.map(function (x, i) { return '<button type="button" data-kid="' + i + '" aria-pressed="' + (i === cur) + '"><b>' + esc(x.name) + '</b><small>' + esc(x.class_name || '—') + '</small></button>' + (i === cur ? '<nav>' + nav + '</nav>' : ''); }).join('') + '</aside><div>' +
-      '<div class="kid-head"><b>' + esc(k.name) + '</b><span>الشعبة: ' + esc(k.class_name || '—') + '</span></div>' + body + '</div></div>' +
-      '<p class="muted" style="text-align:center">البيانات كما سجّلتها الأكاديمية حتى ' + new Date().toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '. لأي استفسار تواصل مع إدارة الأكاديمية.</p>';
+        kids.map(function (x, i) {
+          return '<button type="button" class="kidrow' + (i === cur ? ' on' : '') + '" data-kid="' + i + '" aria-pressed="' + (i === cur) + '"><span class="av">' + esc(initials(x.name)) + '</span><span class="nm"><b>' + esc(x.name.split(/\s+/).slice(0, 4).join(' ')) + '</b><small>' + esc(x.class_name || '—') + '</small></span><span class="chev">' + (i === cur ? '⌄' : '‹') + '</span></button>' +
+            (i === cur ? '<nav>' + nav + '</nav>' : '');
+        }).join('') + '<div class="help">تحتاج إلى مساعدة؟<b>تواصل مع إدارة الأكاديمية</b></div></aside><div>' +
+      '<div class="banner"><span class="av">' + esc(initials(k.name)) + '</span><div class="who"><small>بيانات الطالب</small><b>' + esc(k.name) + '</b><span>الشعبة: ' + esc(k.class_name || '—') + '</span></div>' +
+        '<div class="yr">العام الدراسي<b>' + schoolYear() + '</b></div></div>' +
+      (view === 'home' ? '<div class="hello"><div><h2>مرحبًا بك</h2><p>إليك ملخص متابعة ' + esc(first) + ' خلال هذا الشهر</p></div><span class="chip">' + esc(dateTxt) + '</span></div>'
+        : '<div class="hello"><div><h2>' + title + '</h2></div><a class="chip" data-go="home" style="cursor:pointer">→ الرئيسية</a></div>') +
+      body + '<div class="note">' + sv('info').replace('<svg', '<svg style="width:18px;height:18px;fill:none;stroke:var(--gold-dark);stroke-width:1.8"') + 'البيانات كما سجّلتها الأكاديمية. لأي استفسار تواصل مع إدارة الأكاديمية.</div></div></div>';
   }
 
   main.addEventListener('click', function (e) {
@@ -352,7 +463,7 @@
     data = r.data;
     var mo = await sb.rpc('parent_more', { p_token: token });
     more = mo.error || (mo.data && mo.data.error) ? null : mo.data; // قبل تشغيل parent_accounts.sql تبقى الشاشة كما كانت
-    if (viaLogin && !document.querySelector('[data-logout]')) document.querySelector('header').insertAdjacentHTML('beforeend', '<button type="button" class="out" data-logout>خروج</button>');
+    if (viaLogin && !document.querySelector('[data-logout]')) document.querySelector('header').insertAdjacentHTML('beforeend', '<button type="button" class="out" data-logout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg>خروج</button>');
     document.getElementById('title').textContent = data.school || 'متابعة ولي الأمر';
     document.title = 'متابعة ولي الأمر — ' + (data.school || '');
     sub.textContent = 'متابعة ولي الأمر · ' + new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
