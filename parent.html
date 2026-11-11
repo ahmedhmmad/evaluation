@@ -29,6 +29,18 @@
   .side button small { color: var(--muted); font-weight: 500; }
   .side button[aria-pressed="true"] { background: var(--navy); color: #fff; box-shadow: inset -4px 0 0 var(--gold); }
   .side button[aria-pressed="true"] small { color: #E9DDBF; }
+  .side nav { margin: 2px 0 10px; padding-inline-start: 10px; border-inline-start: 2px solid var(--gold-soft); }
+  .side nav a { display: block; padding: 7px 12px; border-radius: 10px; color: var(--ink); text-decoration: none; font-size: .95rem; cursor: pointer; }
+  .side nav a:hover { background: var(--ivory); }
+  .side nav a.on { background: var(--gold-soft); color: var(--navy); font-weight: 700; }
+  .stats4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .st { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); cursor: pointer; }
+  .st .l { color: var(--muted); font-size: .88rem; }
+  .st .n { display: block; font-size: 1.9rem; font-weight: 700; color: var(--navy); line-height: 1.3; }
+  .st .s { font-size: .82rem; color: var(--muted); }
+  .st.bad .n { color: var(--red); }
+  .st.ok .n { color: var(--green); }
+  @media (max-width: 900px) { .stats4 { grid-template-columns: 1fr 1fr; } }
   .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
   .cols .wide { grid-column: 1 / -1; }
   .cols .card { margin-bottom: 0; }
@@ -280,21 +292,52 @@
     location.href = location.pathname;
   });
 
+  var view = 'home';
+  var VIEWS = [['home', 'الرئيسية'], ['abs', 'الحضور والغياب'], ['grades', 'الدرجات'], ['tt', 'جدول الحصص'], ['bus', 'المواصلات'], ['msgs', 'الرسائل']];
+  function todayHtml(k) {
+    var tt = k.timetable || [], days = Array.isArray(data.days) && data.days.length ? data.days : WEEK.slice(0, 5);
+    var di = days.indexOf(WEEK[new Date().getDay()]), lessons = di < 0 ? [] : tt.filter(function (x) { return x.day === di; }).sort(function (a, b) { return a.period - b.period; });
+    var st = stageOf(k.class_name), times = [];
+    if (st) (st.rows || []).forEach(function (r) { if (r.k === 'p') times.push(r); });
+    return '<div class="card">' + h2('tt', 'جدول اليوم' + (di > -1 ? ' — ' + esc(days[di]) : '')) +
+      (lessons.length ? lessons.map(function (x) { var t = times[x.period - 1]; return '<div class="lesson"><div class="p">الحصة ' + (ORD[x.period - 1] || x.period) + (t ? '<br>' + range(t.f, t.t) : '') + '</div><div><div class="s">' + esc(x.subject || '—') + '</div>' + (x.teacher ? '<div class="t">' + esc(shortName(x.teacher)) + '</div>' : '') + '</div></div>'; }).join('')
+        : '<p class="muted" style="margin:0">لا حصص اليوم.</p>') + '</div>';
+  }
+  function statsHtml(k) {
+    var month = today().slice(0, 7), abs = k.absences || [], inMonth = abs.filter(function (d) { return d.slice(0, 7) === month; }).length;
+    var m = more && (more.kids || []).filter(function (x) { return x.name === k.name; })[0], g = m ? m.grades || [] : [], tot = 0, max = 0;
+    g.forEach(function (x) { tot += Number(x.score); max += Number(x.max); });
+    var mo = (k.months || [])[0], left = mo && mo.due != null ? Math.max(0, Number(mo.due) - Number(mo.paid)) : 0;
+    var card = function (cls, v, l, s, go) { return '<div class="st ' + cls + '" data-go="' + go + '"><span class="l">' + l + '</span><span class="n">' + v + '</span><span class="s">' + s + '</span></div>'; };
+    return '<div class="stats4">' +
+      card(inMonth ? 'bad' : 'ok', inMonth, 'الغياب هذا الشهر', 'منذ بداية العام: ' + abs.length, 'abs') +
+      card(k.recorded_days && abs.length / k.recorded_days > .1 ? 'bad' : 'ok', k.recorded_days ? Math.round((1 - abs.length / k.recorded_days) * 100) + '%' : '—', 'نسبة الحضور', 'من ' + (k.recorded_days || 0) + ' يومًا مسجّلًا', 'abs') +
+      card('', max ? Math.round(tot / max * 100) + '%' : '—', 'الدرجات', max ? 'المجموع ' + (Math.round(tot * 100) / 100) + ' من ' + max : 'لم تُرصد درجات بعد', 'grades') +
+      card(left ? 'bad' : 'ok', k.bus ? (left ? money(left) : 'مسدَّد') : '—', 'المواصلات', k.bus ? (mo ? cycleLabel(mo) : 'لا إيصالات بعد') : 'غير مشترك', 'bus') + '</div>';
+  }
+
   function draw() {
     var kids = data.children || [];
     if (!kids.length) { main.innerHTML = '<div class="msg">لا يوجد أبناء مسجلون مرتبطون بهذا الرابط حاليًا.</div>'; return; }
     var k = kids[cur] || kids[0];
     var wrap = function (h, cls) { return h ? h.replace('<div class="card', '<div class="' + (cls ? cls + ' ' : '') + 'card') : ''; };
+    var nav = VIEWS.filter(function (v) { return v[0] !== 'msgs' || (more && (more.messages || []).length); }).map(function (v) {
+      return '<a data-go="' + v[0] + '"' + (view === v[0] ? ' class="on"' : '') + '>' + v[1] + '</a>';
+    }).join('');
+    var body = view === 'abs' ? absHtml(k) : view === 'grades' ? (gradesHtml(k) || '<div class="card"><p class="muted" style="margin:0">الدرجات غير متاحة بعد.</p></div>')
+      : view === 'tt' ? ttHtml(k) : view === 'bus' ? (busHtml(k) || '<div class="card"><p class="muted" style="margin:0">غير مشترك في المواصلات.</p></div>')
+      : view === 'msgs' ? msgsHtml() : statsHtml(k) + todayHtml(k);
     main.innerHTML = '<div class="layout"><aside class="side"><h3>' + (kids.length > 1 ? 'الأبناء' : 'الابن/الابنة') + '</h3>' +
-        kids.map(function (x, i) { return '<button type="button" data-kid="' + i + '" aria-pressed="' + (i === cur) + '"><b>' + esc(x.name) + '</b><small>' + esc(x.class_name || '—') + '</small></button>'; }).join('') + '</aside><div>' +
-      '<div class="kid-head"><b>' + esc(k.name) + '</b><span>الشعبة: ' + esc(k.class_name || '—') + '</span></div>' +
-      '<div class="cols">' + wrap(absHtml(k)) + wrap(gradesHtml(k)) + wrap(busHtml(k)) + wrap(msgsHtml()) + wrap(ttHtml(k), 'wide') + '</div></div></div>' +
+        kids.map(function (x, i) { return '<button type="button" data-kid="' + i + '" aria-pressed="' + (i === cur) + '"><b>' + esc(x.name) + '</b><small>' + esc(x.class_name || '—') + '</small></button>' + (i === cur ? '<nav>' + nav + '</nav>' : ''); }).join('') + '</aside><div>' +
+      '<div class="kid-head"><b>' + esc(k.name) + '</b><span>الشعبة: ' + esc(k.class_name || '—') + '</span></div>' + body + '</div></div>' +
       '<p class="muted" style="text-align:center">البيانات كما سجّلتها الأكاديمية حتى ' + new Date().toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '. لأي استفسار تواصل مع إدارة الأكاديمية.</p>';
   }
 
   main.addEventListener('click', function (e) {
     var b = e.target.closest('[data-kid]');
-    if (b) { cur = +b.getAttribute('data-kid'); allAbs = false; draw(); window.scrollTo(0, 0); return; }
+    if (b) { cur = +b.getAttribute('data-kid'); allAbs = false; view = 'home'; draw(); window.scrollTo(0, 0); return; }
+    var g = e.target.closest('[data-go]');
+    if (g) { view = g.getAttribute('data-go'); draw(); window.scrollTo(0, 0); return; }
     if (e.target.closest('[data-allabs]')) { allAbs = !allAbs; draw(); }
     if (e.target.closest('[data-allmsgs]')) { allMsgs = !allMsgs; draw(); }
   });
