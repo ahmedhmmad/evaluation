@@ -1329,7 +1329,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '11/11 — 3';
+  var APP_BUILD = '11/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -2992,7 +2992,7 @@
     { k: 'mother_job', x: true, sug: ['ربة منزل', 'معلمة', 'موظفة', 'ممرضة', 'طبيبة', 'مهندسة'], label: 'وظيفة الأم السابقة أو الحالية', p: 'وظيفة الأم', req: true },
     { k: 'phone', label: 'رقم جوال ولي الأمر', p: 'جوال ولي الأمر', req: true, ltr: true, num: true },
     { k: 'alt_phone', x: true, label: 'رقم جوال بديل', p: 'جوال بديل', req: true, ltr: true, num: true },
-    { k: 'whatsapp', label: 'رقم واتساب إذا كان مختلفًا عن رقم الجوال', p: 'واتساب', ltr: true, num: true },
+    { k: 'whatsapp', label: 'رقم واتساب الطالب (للتواصل معه؛ رسائل أولياء الأمور تذهب إلى جوال ولي الأمر)', p: 'واتساب الطالب', ltr: true, num: true },
 
     { sec: 'الأسرة والوضع الاجتماعي', k: 'family_size', x: true, label: 'عدد أفراد أسرة الطالب في مصر', p: 'أفراد الأسرة في مصر', type: 'number', max: 40, step: 1, req: true },
     { k: 'siblings_here', x: true, label: 'عدد الأبناء في نفس المركز', p: 'الأبناء في المركز', type: 'number', max: 20, step: 1, req: true },
@@ -4881,7 +4881,7 @@
       var x = findStudent(m.student_id);
       if (awaitingStart(m)) {
         return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span>' +
-          pickupInput(m, x) + '</td>' + '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">أُضيف إلى الباص ولم يبدأ اشتراكه (لم يصدر له إيصال)</td>' +
+          pickupInput(m, x) + '</td>' + '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td><td colspan="3">أُضيف إلى الباص ولم يبدأ اشتراكه (لم يصدر له إيصال)</td>' +
           '<td><span class="badge pending">بانتظار الاشتراك</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button> ' +
           '<button type="button" class="btn" data-mexempt="' + x.id + '" title="إعفاء من الاشتراك لأشهر محددة">إعفاء</button> ' +
@@ -4889,7 +4889,7 @@
       }
       if (!owesThisMonth(m)) {
         return '<tr style="color:var(--muted)"><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
-          '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + tLabel(m.left_from) + '</td>' +
+          '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td><td colspan="3">اشتراكه متوقف منذ ' + tLabel(m.left_from) + '</td>' +
           '<td><span class="badge pending">متوقف</span></td>' +
           '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-mresume="' + x.id + '" title="إعادة الاشتراك">إعادة</button> ' +
           '<button type="button" class="btn" data-mdel="' + x.id + '" title="إزالة من الباص">إزالة</button></td></tr>';
@@ -4900,7 +4900,7 @@
       var badge = ex ? ['exempt', PAY_STATUS.exempt] : sh > 0 && p >= sh ? ['paid', 'مدفوع'] : p > 0 ? ['part', 'جزئي'] : sh > 0 ? ['unpaid', 'غير مدفوع'] : ['pending', '—'];
       var famNote = familyNote(x.id);
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span class="meta" style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + (famNote ? ' · ' + famNote : '') + '</span>' + pickupInput(m, x) + '</td>' +
-        '<td dir="ltr" style="text-align:right">' + esc(x.whatsapp || x.phone || '—') + '</td>' +
+        '<td dir="ltr" style="text-align:right">' + esc(x.phone || '—') + '</td>' +
         '<td><input type="number" min="0" step="any" data-mshare="' + x.id + '" aria-label="حصة ' + esc(x.full_name) + '" placeholder="' + shareOf({ student_id: x.id, share: null }) + '" value="' + (m.share != null ? esc(m.share) : '') + '"></td>' +
         (ex ? exReceiptCells(p, rec) :
         receiptCells(p, rec)) +
@@ -5124,7 +5124,7 @@
       }
       act += '<button type="button" class="btn" data-mdesk="' + x.id + '">إصدار إيصال</button>';
       return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="color:var(--muted);font-size:.85rem">' + esc(x.class_name || 'بدون صف') + '</span></td>' +
-        '<td>' + esc(r.g.assembly_point) + '</td><td dir="ltr" style="text-align:right">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td>' +
+        '<td>' + esc(r.g.assembly_point) + '</td><td dir="ltr" style="text-align:right">' + esc(plainPhone(x.phone) || '—') + '</td>' +
         '<td><b>' + plainNum(r.left) + '</b>' + (r.paid ? '<br><span style="color:var(--muted);font-size:.85rem">دفع ' + plainNum(r.paid) + ' من ' + plainNum(r.share) + '</span>' : '') + '</td>' +
         '<td><span class="badge ' + (r.state === 'late' || r.state === 'suspended' ? 'unpaid' : r.state === 'extended' ? 'part' : 'pending') + '">' + RIDE_STATE[r.state] + '</span>' +
           (r.state === 'extended' ? '<br><span style="color:var(--muted);font-size:.85rem">حتى ' + dmy(m.grace_until) + '</span>' : '') +
@@ -5997,7 +5997,7 @@
     return out.filter(function (sec) { return sec.list.length || sec.key !== 'exempt'; });
   }
   function tsCols(r) {
-    return [r.x.full_name + rsvText(r.x), r.x.class_name || '', r.g.assembly_point, addressWithNeighborhood(r.x) || '', plainPhone(r.x.whatsapp || r.x.phone) || '', r.share, r.paid, r.left];
+    return [r.x.full_name + rsvText(r.x), r.x.class_name || '', r.g.assembly_point, addressWithNeighborhood(r.x) || '', plainPhone(r.x.phone) || '', r.share, r.paid, r.left];
   }
   function tsStatusText(r) { return r.notStarted ? 'لم يدفع بعد' : r.part ? 'سدّد جزءًا' : ''; }
 
@@ -6900,7 +6900,7 @@
         add(title, top(title).concat(
           [['م', 'اسم الطالب', 'الشعبة', 'الباص', 'هاتف ولي الأمر', 'الحصة (ج.م)', 'المدفوع (ج.م)', 'المتبقي (ج.م)', 'الحالة', 'طريقة الدفع', 'تاريخ السداد', 'رقم الإيصال', 'وقت التسجيل', 'المسجِّل']],
           rows.map(function (r, i) {
-            return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, String(r.x.whatsapp || r.x.phone || ''), r.exempt ? 'إعفاء' : r.share, r.exempt ? '' : r.paid, r.exempt ? '' : r.left,
+            return [i + 1, r.x.full_name, r.x.class_name || '', r.g.assembly_point, String(r.x.phone || ''), r.exempt ? 'إعفاء' : r.share, r.exempt ? '' : r.paid, r.exempt ? '' : r.left,
               PAY_STATUS[r.status] || '', r.paid ? payMethodLabel(r.rec) : '', r.paid ? dmy(r.rec.paid_on) : '', r.paid && r.rec.receipt_no != null ? r.rec.receipt_no : '', r.paid ? issuedWhen(r.rec) : '', r.paid ? r.rec.issued_by || '' : ''];
           }),
           [['', 'المجموع', '', '', '', t.due, t.paid, t.left, t.exempt ? 'المعفون: ' + t.exempt + ' (خارج المجموع)' : '', '', '', '']], [[]], [['', 'تفصيل المحصَّل حسب وسيلة الدفع']],
@@ -9964,7 +9964,7 @@
       list.map(function (x, i) {
         var b = stVal(x, 'birth_date');
         return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td class="c">' + esc(x.class_name || '') + '</td>' +
-          '<td class="c">' + (b ? dmy(b) : '') + '</td><td class="c">' + afAgeText(x) + '</td><td>' + esc(stVal(x, 'guardian_name') || '') + '</td><td class="c" dir="ltr">' + esc(plainPhone(x.whatsapp || x.phone) || '') + '</td></tr>';
+          '<td class="c">' + (b ? dmy(b) : '') + '</td><td class="c">' + afAgeText(x) + '</td><td>' + esc(stVal(x, 'guardian_name') || '') + '</td><td class="c" dir="ltr">' + esc(plainPhone(x.phone) || '') + '</td></tr>';
       }).join('') + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
   }
 
@@ -10004,7 +10004,7 @@
       var p = per[x.id] || { present: 0, absent: 0, excused: 0 };
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a> · <a href="#/affairs/' + x.id + '/warning">إنذار</a> · <a href="#/affairs/' + x.id + '/consent">موافقة ولي الأمر</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
         '<td>' + afAgeText(x) + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + attPct(p) + '</td>' +
-        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.phone) || '—') + '</td></tr>';
     }).join('');
     return (body ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>العمر</th><th>أيام الغياب</th><th>مأذون</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + body + '</tbody></table></div>'
       : '<div class="empty">لا يوجد طلاب مطابقون.</div>') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ ضيّق البحث أو اختر شعبة.</p>' : '');
@@ -16269,7 +16269,7 @@
         roll.map(function (x, i) {
           var st = attOf(x.id);
           return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + (st.saved ? '<span class="badge ' + ATT_BADGE[st.status] + '">' + attWord(st.status, x.id, attState().day) + '</span>' : '<span class="badge new">لم يُسجَّل</span>') + '</td>' +
-            '<td>' + esc(st.note) + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+            '<td>' + esc(st.note) + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.phone) || '—') + '</td></tr>';
         }).join('') + '</tbody></table></div></div>';
     }
     var rows = roll.map(function (x, i) {
@@ -16279,7 +16279,7 @@
             (st.status === k && k === 'absent' ? ' style="background:var(--red);border-color:transparent"' : '') + '>' + ATT[k] + '</button>';
         }).join('') + '</div></td>' +
         '<td><input type="text" data-attnote="' + x.id + '" placeholder="ملاحظة (سبب الغياب…)" aria-label="ملاحظة ' + esc(x.full_name) + '" value="' + esc(st.note) + '" style="min-width:180px"></td>' +
-        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
+        '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.phone) || '—') + '</td></tr>';
     }).join('');
     return attStatsHtml(n, cls) +
       '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">حضور ' + esc(cls) + ' — ' + dmy(a.day) + '</h2>' +
@@ -16324,8 +16324,8 @@
         (absentees.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ملاحظة</th><th>ولي الأمر</th><th>واتساب ولي الأمر</th>' + (canRecordAtt() && a.day === todayISO() ? '<th class="no-print">إشعار</th>' : '') + '</tr></thead><tbody>' +
           absentees.map(function (p, i) {
             return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(p.x.full_name) + '</b></td><td>' + esc(p.x.class_name) + '</td>' +
-              '<td>' + esc(p.r.note || '') + '</td><td>' + esc(p.x.guardian_name || '') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(p.x.whatsapp || p.x.phone) || '—') + '</td>' +
-              (canRecordAtt() && a.day === todayISO() ? '<td class="no-print"><button type="button" class="btn" data-attnotify1="' + p.x.id + '"' + (plainPhone(p.x.whatsapp || p.x.phone) ? '' : ' disabled title="لا رقم لولي الأمر"') + '>إرسال</button></td>' : '') + '</tr>';
+              '<td>' + esc(p.r.note || '') + '</td><td>' + esc(p.x.guardian_name || '') + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(p.x.phone) || '—') + '</td>' +
+              (canRecordAtt() && a.day === todayISO() ? '<td class="no-print"><button type="button" class="btn" data-attnotify1="' + p.x.id + '"' + (plainPhone(p.x.phone) ? '' : ' disabled title="لا رقم لولي الأمر"') + '>إرسال</button></td>' : '') + '</tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا غائبين مسجَّلين لهذا اليوم.</div>') + '</div>';
   }
 
@@ -16394,8 +16394,8 @@
           '<span class="hint" style="margin:0">الفترة: من ' + dmy(a.report.from) + ' إلى ' + dmy(a.report.to) + ' (غيّرها من التواريخ أعلاه)</span></div>' + (most.length
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th><th>سجل الطالب</th>' + (canRecordAtt() ? '<th class="no-print">تنبيه</th>' : '') + '</tr></thead><tbody>' + most.map(function (x, i) {
             return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + esc(x.class_name || '') + '</td><td><b style="color:var(--red)">' + d.per[x.id].absent + '</b></td><td>' + attPct(d.per[x.id]) + '</td>' +
-              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td>' + '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-attstu="' + x.id + '|pdf">PDF</button> <button type="button" class="btn" data-attstu="' + x.id + '|xlsx">Excel</button></td>' +
-              (canRecordAtt() ? '<td class="no-print"><button type="button" class="btn" data-attrep1="' + x.id + '"' + (plainPhone(x.whatsapp || x.phone) ? '' : ' disabled title="لا رقم لولي الأمر"') + '>إرسال</button></td>' : '') + '</tr>';
+              '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.phone) || '—') + '</td>' + '<td class="no-print" style="white-space:nowrap"><button type="button" class="btn" data-attstu="' + x.id + '|pdf">PDF</button> <button type="button" class="btn" data-attstu="' + x.id + '|xlsx">Excel</button></td>' +
+              (canRecordAtt() ? '<td class="no-print"><button type="button" class="btn" data-attrep1="' + x.id + '"' + (plainPhone(x.phone) ? '' : ' disabled title="لا رقم لولي الأمر"') + '>إرسال</button></td>' : '') + '</tr>';
           }).join('') + '</tbody></table></div>' : '<div class="empty">لا أحد.</div>') + '</div>';
   }
 
@@ -16943,7 +16943,7 @@
       f.kids.sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
       var x = f.kids[0];
       f.guardian = x.guardian_name || '';
-      f.phone = f.kids.map(function (k) { return k.whatsapp || k.phone; }).filter(Boolean)[0] || '';
+      f.phone = f.kids.map(function (k) { return k.phone; }).filter(Boolean)[0] || '';
       f.link = (S.pLinks || []).filter(function (l) { return l.guardian_key === f.key; })[0] || null;
     });
     return out.sort(function (a, b) { return a.kids[0].full_name.localeCompare(b.kids[0].full_name, 'ar'); });
@@ -17144,7 +17144,7 @@
       if (w.bus && (w.bus === 'none' ? g[x.id] : g[x.id] !== w.bus)) return false;
       if (since && String(x.created_at || '').slice(0, 10) < since) return false;
       if (!q) return true;
-      return norm(x.full_name + ' ' + (x.guardian_name || '')).indexOf(q) > -1 || (digits && waNumber(x.whatsapp || x.phone).indexOf(digits) > -1);
+      return norm(x.full_name + ' ' + (x.guardian_name || '')).indexOf(q) > -1 || (digits && waNumber(x.phone).indexOf(digits) > -1);
     });
   }
 
@@ -17167,9 +17167,9 @@
   function waSendHtml() {
     var w = waUi(), list = waShown(), g = transportGroupOf();
     var selIds = Object.keys(w.sel).filter(function (id) { return w.sel[id] && findStudent(id); });
-    var selSt = selIds.map(findStudent), noPh = selSt.filter(function (x) { return !(x.whatsapp || x.phone); }).length;
+    var selSt = selIds.map(findStudent), noPh = selSt.filter(function (x) { return !(x.phone); }).length;
     var fams = {};
-    selSt.forEach(function (x) { var p = x.whatsapp || x.phone; if (p) fams[waNumber(p)] = 1; });
+    selSt.forEach(function (x) { var p = x.phone; if (p) fams[waNumber(p)] = 1; });
     var nMsg = w.per === 'family' ? Object.keys(fams).length : selSt.length - noPh;
     var allOn = list.length && list.every(function (x) { return w.sel[x.id]; });
     var opt = function (v, label, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(label) + '</option>'; };
@@ -17194,7 +17194,7 @@
       '<button type="button" class="btn" data-waall>' + (allOn ? 'إلغاء تحديد المعروضين' : 'تحديد المعروضين (' + list.length + ')') + '</button>' +
       (selIds.length ? '<button type="button" class="btn" data-waclear>مسح الاختيار</button>' : '') + '</div>';
     var rows = list.map(function (x) {
-      var ph = x.whatsapp || x.phone, grp = (S.tGroups || []).filter(function (b) { return b.id === g[x.id]; })[0];
+      var ph = x.phone, grp = (S.tGroups || []).filter(function (b) { return b.id === g[x.id]; })[0];
       return '<tr><td><input type="checkbox" data-wasel="' + x.id + '"' + (w.sel[x.id] ? ' checked' : '') + ' aria-label="اختيار"></td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td>' +
         '<td>' + esc(x.guardian_name || '—') + '</td><td dir="ltr" style="text-align:right">' + (ph ? esc(ph) : '<span class="badge unpaid" dir="rtl">بلا رقم</span>') + '</td><td>' + (grp ? esc(grp.assembly_point) : '—') + '</td></tr>';
     }).join('');
@@ -17290,7 +17290,7 @@
   async function waSend() {
     var w = waUi(), ids = Object.keys(w.sel).filter(function (id) { return w.sel[id] && findStudent(id); });
     if (!ids.length || !w.text.trim()) return;
-    var noPh = ids.filter(function (id) { var x = findStudent(id); return !(x.whatsapp || x.phone); }).length;
+    var noPh = ids.filter(function (id) { var x = findStudent(id); return !(x.phone); }).length;
     if (!confirm('إرسال الرسالة إلى أولياء أمور ' + ids.length + ' طالبًا' + (w.per === 'family' ? ' (رسالة واحدة لكل ولي أمر)' : '') + '؟' + (noPh ? '\n' + noPh + ' منهم بلا رقم فلن تصلهم.' : '') + '\nلا يمكن التراجع بعد الإرسال.')) return;
     if (!w.batch) w.batch = waBatchId();
     w.busy = true; render();
@@ -17340,7 +17340,7 @@
   // رسالة الترحيب عند اعتماد التسجيل النهائي (خيار في صفحة تسجيل الطالب)، من قالب «welcome»، ومرة واحدة لكل طالب
   async function waSendWelcome(x) {
     if (!canRecordAtt() || !x) return;
-    if (!(x.whatsapp || x.phone)) return toast('لم تُرسل رسالة الترحيب: لا رقم واتساب ولا جوال لولي الأمر', true);
+    if (!(x.phone)) return toast('لم تُرسل رسالة الترحيب: لا رقم جوال لولي الأمر', true);
     if (S.waTpl == null) await loadWaTemplates();
     var t = waTpl('welcome');
     if (!t) return toast('لم تُرسل رسالة الترحيب: لا يوجد قالب «ترحيب بطالب جديد» في شاشة رسائل واتساب', true);
@@ -17551,7 +17551,7 @@
         if (!roll.length) return;
         xlsxSheet(wb, used, cls, [[schoolName()], ['حضور ' + cls + ' — ' + title], [], ['م', 'الطالب', 'أيام الحضور', 'أيام الغياب', 'نسبة الحضور', 'واتساب ولي الأمر']].concat(roll.map(function (x, i) {
           var p = d.per[x.id] || { present: 0, absent: 0 };
-          return [i + 1, x.full_name, p.present, p.absent, attPct(p), plainPhone(x.whatsapp || x.phone)];
+          return [i + 1, x.full_name, p.present, p.absent, attPct(p), plainPhone(x.phone)];
         })), [5, 32, 12, 12, 12, 16]);
       });
       XLSX.writeFile(wb, ('تقرير-الحضور-' + (a.cls || 'المدرسة') + '-' + a.report.from + '-' + a.report.to).replace(/\s+/g, '-') + '.xlsx');

@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
   const split = (rows: { student_id: string; s: St | null; text: string }[]) => {
     const msgs: Out[] = [], noPhone: Out[] = [];
     for (const r of rows) {
-      const ph = (r.s?.whatsapp || r.s?.phone || "").trim();
+      const ph = (r.s?.phone || "").trim(); // جوال ولي الأمر فقط (الواتساب للطالب)
       const m = { externalId: r.student_id, phone: ph, text: r.text, studentIds: [r.student_id], names: r.s?.full_name ?? r.student_id };
       (ph ? msgs : noPhone).push(m);
     }

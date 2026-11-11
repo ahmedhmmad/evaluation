@@ -156,7 +156,8 @@ Deno.serve(async (req) => {
   }
   const day = dmy(cairoToday()), school = String(body.school ?? "").slice(0, 120);
   // الرقم: واتساب ولي الأمر ثم جواله؛ وعند إعادة الإرسال (use: "phone") جوال ولي الأمر أولًا
-  const pick = (s: St) => (body.use === "phone" ? (s.phone || s.whatsapp || "") : (s.whatsapp || s.phone || "")).trim();
+  // رسائل أولياء الأمور تذهب إلى جوال ولي الأمر فقط؛ خانة الواتساب للتواصل مع الطالب نفسه
+  const pick = (s: St) => (s.phone || "").trim();
   const groups = new Map<string, St[]>();
   const noPhone: Out[] = [];
   for (const s of students.sort((a, b) => a.full_name.localeCompare(b.full_name, "ar"))) {
