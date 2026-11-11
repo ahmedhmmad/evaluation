@@ -910,6 +910,31 @@
     .card h2 { border-bottom: 1px solid #000; padding-bottom: 4px; margin-top: 14px; }
     .domain { break-inside: avoid; }
   }
+  /* لوحة المعلم الرئيسية: على تصميم صفحة ولي الأمر (فيجما) */
+  .td-banner { position: relative; display: flex; align-items: center; gap: 16px; padding: 16px 22px; border-radius: 18px; color: #fff; margin-bottom: 18px; box-shadow: 0 10px 30px rgba(19,48,107,.18);
+    background: #13306B url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60' viewBox='0 0 120 60'%3E%3Cpath d='M0 30L30 10 60 30 90 10 120 30M0 60L30 40 60 60 90 40 120 60' fill='none' stroke='%23C8A45D' stroke-opacity='.18'/%3E%3C/svg%3E") repeat; }
+  .td-banner .av { width: 56px; height: 56px; flex: none; border-radius: 50%; background: #fff; color: #13306B; display: grid; place-items: center; font-weight: 700; font-size: 1.15rem; border: 4px solid rgba(255,255,255,.25); }
+  .td-banner .who { flex: 1; } .td-banner .who small, .td-banner .who span { color: #E9DDBF; font-size: .88rem; } .td-banner .who b { display: block; font-size: 1.25rem; margin: 2px 0; }
+  .td-banner .yr { border: 1px solid rgba(200,164,93,.6); border-radius: 10px; padding: 8px 14px; text-align: center; font-size: .82rem; } .td-banner .yr b { display: block; font-size: .95rem; }
+  .td-hello { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 12px; } .td-hello h2 { margin: 0; font-size: 1.25rem; color: #13306B; } .td-hello p { margin: 2px 0 0; color: var(--muted); }
+  .td-chip { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 6px 12px; color: var(--muted); font-size: .85rem; white-space: nowrap; }
+  .td-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .td-st { position: relative; display: flex; flex-direction: column; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px 12px; text-decoration: none; color: inherit; box-shadow: 0 1px 2px rgba(19,48,107,.04), 0 6px 20px rgba(19,48,107,.06); }
+  .td-st .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 8px; }
+  .td-st .ico svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .td-st .go { position: absolute; top: 16px; left: 16px; color: var(--muted); }
+  .td-st .l { font-size: .88rem; } .td-st .n { font-size: 1.7rem; font-weight: 700; color: #13306B; line-height: 1.3; } .td-st .s { font-size: .82rem; color: var(--muted); }
+  .td-st.c1 .ico { background: #F8E7E4; color: #B4493F; } .td-st.c2 .ico { background: #E4F2EA; color: #2F7D57; } .td-st.c3 .ico { background: #F6EFDF; color: #9C7C3C; } .td-st.c4 .ico { background: #E8EDF7; color: #13306B; }
+  .td-today { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(19,48,107,.04), 0 6px 20px rgba(19,48,107,.06); }
+  .td-today .th { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .td-today .th .ic { width: 38px; height: 38px; border-radius: 12px; background: #F6EFDF; color: #9C7C3C; display: grid; place-items: center; }
+  .td-today .th .ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .td-today .th div { flex: 1; } .td-today .th b { display: block; color: #13306B; } .td-today .th small { color: var(--muted); } .td-today .th a { color: #9C7C3C; font-weight: 700; text-decoration: none; }
+  .td-row { display: grid; grid-template-columns: 34px 150px 1fr 1fr; align-items: center; gap: 10px; padding: 9px 18px; border-bottom: 1px solid var(--line); }
+  .td-row:last-child { border-bottom: 0; } .td-row.now { background: #FBF7EC; }
+  .td-row .no { width: 28px; height: 28px; border-radius: 50%; background: #F6EFDF; color: #13306B; font-weight: 700; display: grid; place-items: center; font-size: .85rem; }
+  .td-row .pn b { display: block; color: #13306B; } .td-row .pn small { color: var(--muted); } .td-row .sj { color: #13306B; } .td-row .tc { color: var(--muted); text-align: left; }
+  @media (max-width: 900px) { .td-stats { grid-template-columns: 1fr 1fr; } .td-row { grid-template-columns: 30px 1fr; } .td-row .sj, .td-row .tc { grid-column: 2; text-align: right; } .td-hello { flex-direction: column; align-items: flex-start; } .td-banner { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
@@ -1329,7 +1354,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '11/11 — 8';
+  var APP_BUILD = '12/11 — 1';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1695,7 +1720,7 @@
   }
   function navModel0() {
     if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات'], ['#/messages', 'messages', 'رسائل واتساب']] }];
-    if (!isStaff()) return [{ items: [['#/', 'results', 'نتائج التقييم']].concat(isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
+    if (!isStaff()) return [{ items: (isTeacherRole() ? [['#/thome', 'home', 'الرئيسية']] : []).concat([['#/', 'results', 'نتائج التقييم']], isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
     var groups = [
       { items: [['#/', 'home', 'الرئيسية']] },
       { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة'], ['#/timetable', 'timetable', 'جدول الحصص']] }
@@ -1721,6 +1746,7 @@
     var h = location.hash;
     if (h === '#/mine' && S.myStaff) return 'mine';
     if (h === '#/papers' && canPapers()) return 'papers';
+    if (h === '#/thome' && isTeacherRole()) return 'thome';
     if (h === '#/mystudents' && isTeacherRole()) return 'mystudents';
     if (h === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return 'grades';
     if (h === '#/gradecfg' && isAdmin()) return 'gradecfg';
@@ -9453,6 +9479,8 @@
     if (S.profile && S.profile.must_change_password) return renderChangePw();
     if (location.hash === '#/mine' && S.myStaff) return renderMine();
     if (location.hash === '#/papers' && canPapers()) return renderPapers();
+    if (location.hash === '#/thome' && isTeacherRole()) return renderTeacherHome();
+    if (isTeacherRole() && (location.hash === '' || location.hash === '#') && !ui.thomeSeen) { ui.thomeSeen = true; return go('#/thome'); }
     if (location.hash === '#/mystudents' && isTeacherRole()) return renderMyStudents();
     if (location.hash === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return renderGrades();
     if (location.hash === '#/gradecfg' && isAdmin()) return renderGradeCfg();
@@ -10355,6 +10383,43 @@
         : '<div class="empty">' + (c.list.length ? 'لا طلبيات مطابقة.' : 'لا توجد طلبيات بعد' + (edit ? '؛ اضغط «طلبية جديدة».' : '.')) + '</div>') + '</div>';
   }
 
+
+
+  /* ---------- الرئيسية للمعلم ----------
+     على تصميم صفحة ولي الأمر: شريط باسمه، وبطاقات (شعبي، طلابي، حصص اليوم، حصص الأسبوع)، وجدول اليوم بحصصه وشعبها وأوقاتها */
+  var TD_SV = {
+    cls: '<path d="M4 5h16v12H4zM8 21h8M12 17v4"/>', users: '<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0112 0M16 5a3 3 0 010 6M17.5 14a5 5 0 013.5 6"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>', cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'
+  };
+  function tdSv(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + TD_SV[k] + '</svg>'; }
+  function renderTeacherHome() {
+    if (!S.ttLoaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; S.ttLoaded = true; Promise.all([loadTimetable(), TG.loaded ? null : tgLoad()]).then(render); return; }
+    var tid = (S.profile && S.profile.teacher_id) || (S.myStaff && S.myStaff.id), t = tid && find(tid);
+    var name = (t && t.name) || (S.myStaff && S.myStaff.name) || (S.profile && S.profile.full_name) || displayName(S.email);
+    var mine = ttLive().filter(function (x) { return x.teacher_id === tid; });
+    var days = ttCfg().days, wd = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'][new Date().getDay()], di = days.indexOf(wd);
+    var today = di < 0 ? [] : mine.filter(function (x) { return x.day === di; }).sort(function (a, b) { return a.period - b.period; });
+    var classes = {}; mine.forEach(function (x) { classes[x.class_name] = 1; });
+    var nCls = Object.keys(classes).length, nSt = Array.isArray(TG.students) ? TG.students.length : 0;
+    var w = String(name).trim().split(/\s+/).map(function (x) { return x.replace(/^ال(?=..)/, ''); }), ini = (w[0] || '').charAt(0) + ' ' + (w.length > 1 ? w[w.length - 1].charAt(0) : '');
+    var nowM = new Date().getHours() * 60 + new Date().getMinutes();
+    var card = function (c, ic, v, l, sub, href) { return '<a class="td-st ' + c + '" href="' + href + '"><span class="ico">' + tdSv(ic) + '</span><span class="go">←</span><span class="l">' + l + '</span><span class="n">' + v + '</span><span class="s">' + sub + '</span></a>'; };
+    var rows = today.map(function (x) {
+      var tm = ttTimeFor(x.class_name, x.period), now = tm && nowM >= ttMins(tm[0]) && nowM < ttMins(tm[1]);
+      return '<div class="td-row' + (now ? ' now' : '') + '"><span class="no">' + x.period + '</span><div class="pn"><b>الحصة ' + (TT_ORD[x.period - 1] || x.period) + '</b>' + (tm ? '<small>' + ttRange(tm[0], tm[1]) + '</small>' : '') + '</div>' +
+        '<div class="sj">' + esc(x.subject || '—') + '</div><div class="tc">' + esc(x.class_name) + (now ? ' · الآن' : '') + '</div></div>';
+    }).join('');
+    app.innerHTML = '<div class="td-banner"><span class="av">' + esc(ini) + '</span><div class="who"><small>' + esc((t && t.job_title) || 'المعلم') + '</small><b>' + esc(name) + '</b><span>' + (nCls ? Object.keys(classes).sort().map(esc).join(' · ') : 'لا شعب في جدول الحصص بعد') + '</span></div>' +
+        '<div class="yr">العام الدراسي<b>' + esc(academicYear().replace('/', ' / ')) + '</b></div></div>' +
+      '<div class="td-hello"><div><h2>مرحبًا بك</h2><p>ملخص يومك وصفوفك</p></div><span class="td-chip">' + esc(new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></div>' +
+      '<div class="td-stats">' +
+        card('c3', 'clock', today.length, 'حصص اليوم', today.length ? 'أولها الحصة ' + (TT_ORD[today[0].period - 1] || today[0].period) : 'لا حصص اليوم', '#/timetable') +
+        card('c4', 'cal', mine.length, 'حصص الأسبوع', 'في ' + days.length + ' أيام', '#/timetable') +
+        card('c2', 'cls', nCls, 'شعبي', 'من جدول الحصص', '#/mystudents') +
+        card('c1', 'users', TG.missing ? '—' : nSt, 'طلابي', 'في شعبي', '#/mystudents') + '</div>' +
+      '<div class="td-today"><div class="th"><span class="ic">' + tdSv('clock') + '</span><div><b>جدول اليوم' + (di > -1 ? ' — ' + esc(days[di]) : '') + '</b><small>' + (today.length ? today.length + ' حصص' : 'لا حصص اليوم') + '</small></div><a href="#/timetable">عرض الجدول الأسبوعي ←</a></div>' +
+        (rows || '<p class="hint" style="margin:0;padding:14px 18px">لا حصص لك اليوم.</p>') + '</div>';
+  }
 
   /* ---------- صفوفي (للمعلم) والدرجات ----------
      طلابي: يرى المعلم بحسابه بيانات طلاب الشعب التي يدرّسها (my_students في supabase/teacher_grades.sql)، ويصدّرها PDF بلا توقيع وعليها اسمه علامة مائية، أو Excel.
