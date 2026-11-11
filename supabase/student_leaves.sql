@@ -62,7 +62,7 @@ create trigger student_leave_backfill after insert or update on public.student_l
 create or replace function public.api_att_roll(p_class text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
-  perform public.api_need('teacher', 'superadmin');
+  perform public.api_need('teacher', 'superadmin', 'attclerk');
   return jsonb_build_object('day', att_today(), 'recorded', exists (select 1 from attendance a where a.day = att_today() and a.class_name = p_class),
     'students', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.full_name,
       'absent', exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused'))

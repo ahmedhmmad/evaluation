@@ -155,10 +155,12 @@ Deno.serve(async (req) => {
     students.push(...(data as St[]));
   }
   const day = dmy(cairoToday()), school = String(body.school ?? "").slice(0, 120);
+  // الرقم: واتساب ولي الأمر ثم جواله؛ وعند إعادة الإرسال (use: "phone") جوال ولي الأمر أولًا
+  const pick = (s: St) => (body.use === "phone" ? (s.phone || s.whatsapp || "") : (s.whatsapp || s.phone || "")).trim();
   const groups = new Map<string, St[]>();
   const noPhone: Out[] = [];
   for (const s of students.sort((a, b) => a.full_name.localeCompare(b.full_name, "ar"))) {
-    const ph = (s.whatsapp || s.phone || "").trim();
+    const ph = pick(s);
     if (!ph) { noPhone.push({ externalId: s.id, phone: "", text: "", studentIds: [s.id], names: s.full_name }); continue; }
     const k = body.per === "student" ? s.id : "tel" + digits(ph);
     groups.set(k, [...(groups.get(k) ?? []), s]);
@@ -172,7 +174,7 @@ Deno.serve(async (req) => {
       "التاريخ": day,
       "الأكاديمية": school,
     });
-    return { externalId: k, phone: (kids[0].whatsapp || kids[0].phone)!.trim(), text: t, studentIds: kids.map((s) => s.id), names: kids.map((s) => s.full_name).join("، ") };
+    return { externalId: k, phone: pick(kids[0]), text: t, studentIds: kids.map((s) => s.id), names: kids.map((s) => s.full_name).join("، ") };
   });
   noPhone.forEach((m) => (m.text = fill(text, { "الاسم": m.names, "التاريخ": day, "الأكاديمية": school })));
   if (!msgs.length) {

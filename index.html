@@ -1329,7 +1329,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '11/11 — 2';
+  var APP_BUILD = '11/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9531,10 +9531,96 @@
     if (!u.from) { u.from = afYearStart(); u.to = todayISO(); }
     if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
     if (location.hash === '#/affairs/lists') { app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب — قوائم الطلاب</h1>' + slScreen(); return; }
+    if (S.stLeaves == null && !S.stLeavesLoading) { S.stLeavesLoading = true; loadStLeaves().then(function () { S.stLeavesLoading = false; if (/^#\/affairs/.test(location.hash)) render(); }); }
+    if (location.hash === '#/affairs/suspend') { app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب — الفصل المؤقت التأديبي</h1>' + spScreen(); return; }
     var cur = afCurrent();
     if (location.hash !== '#/affairs' && !cur) return go('#/affairs');
     app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب</h1>' + (cur ? (afView() === 'file' ? afFileScreen(cur) : afView() === 'warning' ? afWarnScreen(cur) : afView() === 'consent' ? afConsentScreen(cur) : afAbsenceScreen(cur)) : afListHtml());
   }
+
+  /* ----- الفصل المؤقت التأديبي -----
+     فترة فصل لطالب أو أكثر (supabase/student_suspensions.sql): سجل في student_leaves نوعه suspension.
+     أيامه تُحفظ «مأذون» تلقائيًا كالإجازة فلا تُحتسب غيابًا، وتظهر في الكشوف «ف». يضيفه ويحذفه المدير العام والمسجِّل */
+  function spUi() { return ui.sp || (ui.sp = { q: '', sids: [], from: '', to: '', reason: '', all: false }); }
+  function spActive() { var t = todayISO(); return (S.stLeaves || []).filter(function (l) { return l.kind === 'suspension' && l.from_day <= t && t <= l.to_day; }).length; }
+  function spMatches() {
+    var u = spUi(), words = norm(u.q).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    return S.students.filter(function (x) {
+      if (!enrolled(x) || u.sids.indexOf(x.id) > -1) return false;
+      var n = norm(x.full_name);
+      return words.every(function (w) { return n.indexOf(w) > -1; });
+    }).slice(0, 12);
+  }
+  function spScreen() {
+    var back = '<div class="toolbar"><a class="btn" href="#/affairs">→ رجوع إلى شئون الطلاب</a></div>';
+    if (S.stLeaves == null) return back + '<div class="card empty">جارٍ التحميل…</div>';
+    if (S.stSuspMissing) return back + '<div class="card empty">الفصل المؤقت يحتاج تحديثًا في قاعدة البيانات.<br>' + (isAdmin() ? 'شغّل الملف <code dir="ltr">supabase/student_suspensions.sql</code> في محرر SQL، ثم حدّث الصفحة.' : 'يشغّل المدير العام الملف <code dir="ltr">supabase/student_suspensions.sql</code>.') + '</div>';
+    var u = spUi(), edit = canEditDisc(), today = todayISO(), m = spMatches();
+    var list = S.stLeaves.filter(function (l) { return l.kind === 'suspension' && (u.all || l.to_day >= today); });
+    return back + '<div class="card"><h2>فصل مؤقت تأديبي</h2>' +
+      '<p class="hint" style="margin:0">الطالب المفصول يُسجَّل تلقائيًا في كل أيام فصله، في الموقع وتطبيق الموبايل، ويظهر في كشوف الحضور بعلامة «ف»، ولا يُحتسب ضمن أيام الغياب ولا في إنذارات الغياب.</p>' +
+      (edit ? '<div class="toolbar" style="align-items:flex-end;margin-top:10px">' +
+        '<div style="flex:2;min-width:240px"><label class="field" for="sp-q">الطلاب (اختر واحدًا أو أكثر)</label>' +
+          (u.sids.length ? '<div class="toolbar" style="margin:0 0 6px;gap:6px">' + u.sids.map(function (id) { var x = findStudent(id) || {}; return '<span class="badge unpaid" style="display:inline-flex;gap:6px;align-items:center">' + esc(x.full_name || '') + ' <button type="button" data-spun="' + id + '" title="إزالة" style="border:0;background:none;cursor:pointer;font-weight:700">×</button></span>'; }).join('') + '</div>' : '') +
+          '<input type="search" id="sp-q" autocomplete="off" placeholder="اكتب جزءًا من الاسم (الأول أو الأخير…)" value="' + esc(u.q) + '">' +
+          (u.q.trim() ? '<div style="border:1px solid var(--line);border-radius:8px;margin-top:4px;max-height:240px;overflow:auto;background:var(--surface)">' + (m.length ? m.map(function (x) { return '<button type="button" class="btn" style="display:block;width:100%;text-align:right;border:0;border-radius:0" data-sppick="' + x.id + '">' + esc(x.full_name) + ' <span class="meta">— ' + esc(x.class_name || '') + '</span></button>'; }).join('') : '<div class="hint" style="padding:8px;margin:0">لا أسماء مطابقة.</div>') + '</div>' : '') + '</div>' +
+        '<div><label class="field" for="sp-from">من</label><input type="date" id="sp-from" value="' + esc(u.from || today) + '"></div>' +
+        '<div><label class="field" for="sp-to">إلى</label><input type="date" id="sp-to" value="' + esc(u.to || u.from || today) + '"></div>' +
+        '<div style="flex:2;min-width:200px"><label class="field" for="sp-reason">سبب الفصل <span class="req">*</span></label><input type="text" id="sp-reason" value="' + esc(u.reason) + '" placeholder="مثال: مشاجرة داخل الصف"></div></div>' +
+        '<div class="actions" style="margin-top:8px"><button type="button" class="btn primary" data-spadd>تسجيل الفصل المؤقت</button></div>' : '') +
+      '<div class="toolbar" style="margin:12px 0 0;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="sp-all" data-ro-ok' + (u.all ? ' checked' : '') + '> عرض الفصل المنتهي أيضًا</label></div>' +
+      (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>الشعبة</th><th>من</th><th>إلى</th><th>الأيام</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' +
+        list.map(function (l) {
+          var x = findStudent(l.student_id), n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1;
+          return '<tr><td><b>' + esc(x ? x.full_name : '—') + '</b>' + (l.from_day <= today && today <= l.to_day ? ' <span class="badge unpaid">مفصول اليوم</span>' : l.from_day > today ? ' <span class="badge pending">لم يبدأ</span>' : '') + '</td><td>' + esc(x ? x.class_name || '' : '') + '</td><td>' + dmy(l.from_day) + '</td><td>' + dmy(l.to_day) + '</td><td>' + n + '</td><td>' + esc(l.reason) + '</td><td>' + esc(l.created_by || '') + '</td>' +
+            '<td>' + (edit ? '<button type="button" class="btn danger" data-spdel="' + l.id + '">حذف</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty" style="margin-top:8px">لا فصل مؤقت ' + (u.all ? 'مسجَّل' : 'حالي أو قادم') + '.</div>') + '</div>';
+  }
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/affairs/suspend' || !canEditDisc()) return;
+    var el, u = spUi();
+    if ((el = e.target.closest('[data-sppick]'))) { u.sids.push(el.getAttribute('data-sppick')); u.q = ''; render(); var qf = document.getElementById('sp-q'); if (qf) qf.focus(); return; }
+    if ((el = e.target.closest('[data-spun]'))) { u.sids = u.sids.filter(function (id) { return id !== el.getAttribute('data-spun'); }); return render(); }
+    if (e.target.closest('[data-spadd]')) {
+      var sids = u.sids.slice(), from = document.getElementById('sp-from').value, to = document.getElementById('sp-to').value, reason = u.reason.trim();
+      if (!sids.length) return toast('اختر طالبًا واحدًا على الأقل', true);
+      if (!from || !to || to < from) return toast('اختر فترة صحيحة', true);
+      if (!reason) return toast('اكتب سبب الفصل', true);
+      var nm = sids.length === 1 ? (findStudent(sids[0]) || {}).full_name : sids.length + ' طلاب';
+      if (!confirm('تسجيل فصل مؤقت لـ' + nm + ' من ' + dmy(from) + ' إلى ' + dmy(to) + '؟')) return;
+      var by = (S.profile && S.profile.full_name) || displayName(S.email);
+      var r = await sb.from('student_leaves').insert(sids.map(function (sid) { return { student_id: sid, from_day: from, to_day: to, reason: reason, kind: 'suspension', created_by: by }; })).select();
+      if (r.error) return fail(r.error);
+      S.stLeaves = (r.data || []).concat(S.stLeaves);
+      S.attDay = {}; // الأيام المسجَّلة داخل الفصل صارت «مأذون» في القاعدة
+      if (ui.af) ui.af.rows = null;
+      ui.sp = null;
+      render();
+      return toast('سُجِّل الفصل المؤقت لـ' + nm);
+    }
+    if ((el = e.target.closest('[data-spdel]'))) {
+      var id = el.getAttribute('data-spdel'), l = S.stLeaves.filter(function (q) { return q.id === id; })[0];
+      if (!l || !confirm('حذف فصل ' + ((findStudent(l.student_id) || {}).full_name || '') + '؟ (ما سُجِّل في أيامه يبقى «مأذون» كما هو، ويُعدَّل يدويًا من الحضور إن لزم)')) return;
+      var d = await sb.from('student_leaves').delete().eq('id', id);
+      if (d.error) return fail(d.error);
+      S.stLeaves = S.stLeaves.filter(function (q) { return q.id !== id; });
+      render();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/affairs/suspend') return;
+    var u = spUi(), id = e.target.id;
+    if (id === 'sp-all') { u.all = e.target.checked; return render(); }
+    if (id === 'sp-from') { u.from = e.target.value; if (!u.to || u.to < u.from) u.to = u.from; return render(); }
+    if (id === 'sp-to') u.to = e.target.value;
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/affairs/suspend') return;
+    var u = spUi(), id = e.target.id;
+    if (id === 'sp-reason') { u.reason = e.target.value; return; }
+    if (id === 'sp-q') { var pos = e.target.selectionStart; u.q = e.target.value; render(); var q = document.getElementById('sp-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } }
+  });
 
   /* ----- قوائم الطلاب (عامة) -----
      قائمة بعنوان (مثل «تطعيم الحصبة») يُختار فيها الطلاب (من وافق)، وتُطبع كشفًا حسب الشعبة للمختارين أو لغير المختارين.
@@ -9935,7 +10021,7 @@
       '<div class="toolbar" style="align-items:center;margin:8px 0 0"><b style="font-size:.95rem">العمر:</b>' +
         '<label class="field" for="af-a1" style="margin:0">من</label><input type="number" id="af-a1" min="0" max="30" step="1" placeholder="سنة" style="width:6em" value="' + esc(u.ageFrom == null ? '' : u.ageFrom) + '">' +
         '<label class="field" for="af-a2" style="margin:0">إلى</label><input type="number" id="af-a2" min="0" max="30" step="1" placeholder="سنة" style="width:6em" value="' + esc(u.ageTo == null ? '' : u.ageTo) + '">' +
-        '<span style="flex:1"></span><a class="btn" href="#/affairs/lists" title="قوائم بعنوان يُختار فيها الطلاب (مثل الموافقين على التطعيم) وتُطبع حسب الشعبة">قوائم الطلاب (موافقات وغيرها)</a><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
+        '<span style="flex:1"></span><a class="btn" href="#/affairs/suspend" title="فصل تأديبي لفترة: يُسجَّل الطالب «ف» في أيامه ولا يُحتسب غيابًا">الفصل المؤقت' + (spActive() ? ' <b>(' + spActive() + ')</b>' : '') + '</a><a class="btn" href="#/affairs/lists" title="قوائم بعنوان يُختار فيها الطلاب (مثل الموافقين على التطعيم) وتُطبع حسب الشعبة">قوائم الطلاب (موافقات وغيرها)</a><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
       '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
         ' مرّر الفأرة على «سجل الغياب» لترى ملخصه، واضغط عليه أو على «ملف الطالب» للانتقال إلى شاشته.' + (shown ? ' الطلاب: <b id="af-n">' + list.length + '</b>' : '<span id="af-n"></span>') + '</p></div>' +
       '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>' + afConsentCardHtml(list.length);
@@ -10024,7 +10110,7 @@
   function afAbsenceScreen(x) {
     var u = afUi(), D = afStudentData(x);
     var rows = D.rows.map(function (r, i) {
-      return '<tr><td>' + (i + 1) + '</td><td>' + dmy(r.day) + '</td><td>' + esc(dayName(r.day)) + '</td><td><span class="badge ' + ATT_BADGE[r.status] + '">' + ATT[r.status] + '</span></td><td>' + esc(r.note || '') + '</td></tr>';
+      return '<tr><td>' + (i + 1) + '</td><td>' + dmy(r.day) + '</td><td>' + esc(dayName(r.day)) + '</td><td><span class="badge ' + ATT_BADGE[r.status] + '">' + attWord(r.status, r.student_id, r.day) + '</span></td><td>' + esc(r.note || '') + '</td></tr>';
     }).join('');
     return afHead(x, 'سجل الغياب') +
       '<div class="card"><h2>سجل الحضور والغياب</h2><div class="toolbar" style="align-items:center">' +
@@ -14339,7 +14425,7 @@
     var tb = plan.classes.length ? ttBrkTables(plan, 'grid') : null;
     var wrap = function (t) { return '<div class="table-wrap">' + t + '</div>'; };
     return '<div class="card no-print"><h2>مقترح ضم صفوف إلى استراحة أخرى</h2>' +
-        '<p class="hint">اختر الاستراحة ثم الصفوف التي تُضم إليها؛ يظهر أثر ذلك على الأوقات، وهل يتعارض مع حصص المعلمين. هذه الشاشة للعرض والطباعة فقط ولا تغيّر المواعيد؛ الاعتماد من «مواعيد الدوام».</p>' +
+        '<p class="hint">اختر الاستراحة ثم الصفوف التي تُضم إليها؛ يظهر أثر ذلك على الأوقات، وهل يتعارض مع حصص المعلمين. لا تتغير المواعيد إلا بالضغط على «اعتماد المقترح».</p>' +
         '<div class="toolbar" style="align-items:center"><label class="field" for="brk-target" style="margin:0">الاستراحة المستهدفة</label>' +
         '<select id="brk-target" data-ro-ok style="width:auto;max-width:100%">' + bells.stages.map(function (st) {
           return '<option value="' + esc(st.id) + '"' + (st.id === b.target ? ' selected' : '') + '>' + esc(ttBrkBreaks(st)) + ' — ' + esc(st.name) + '</option>';
@@ -14350,6 +14436,7 @@
           return '<button type="button" data-ro-ok data-brkcls="' + esc(c) + '" aria-pressed="' + on + '"' + (on ? ' class="on"' : '') + '>' + esc(c) + '</button>';
         }).join('') + '</div>' : '<p class="hint" style="margin:0">كل الصفوف في هذه المرحلة أصلًا.</p>') +
         '<div class="toolbar" style="margin:14px 0 0;align-items:center"><button type="button" class="btn primary" data-ttprint="brk|" data-ro-ok' + (plan.classes.length ? '' : ' disabled') + '>طباعة المقترح / PDF</button>' +
+        (plan.classes.length && canEditTT() ? '<button type="button" class="btn" data-brkapply>اعتماد المقترح</button>' : '') +
         (plan.classes.length ? '<button type="button" class="btn link" data-brkclear data-ro-ok>إلغاء الاختيار</button>' : '') + '</div></div>' +
       (!tb ? '<div class="card empty">اختر صفًا واحدًا على الأقل ليظهر المقترح وفحص التعارض.</div>' :
         '<div class="card"><h2>هل يتعارض مع حصص المعلمين؟</h2><div class="brk-verdict ' + (plan.conflicts.length ? 'bad' : 'ok') + '"><b>' + (plan.conflicts.length ? '✕' : '✓') + '</b><span>' + esc(ttBrkVerdict(plan)) + '</span></div>' +
@@ -14377,8 +14464,27 @@
     if (location.hash !== '#/timetable/breaks') return;
     var el = e.target.closest('[data-brkcls]');
     if (el) { var b = ttBrkState(), c = el.getAttribute('data-brkcls'); if (b.pick[c]) delete b.pick[c]; else b.pick[c] = true; return render(); }
-    if (e.target.closest('[data-brkclear]')) { ttBrkState().pick = {}; render(); }
+    if (e.target.closest('[data-brkclear]')) { ttBrkState().pick = {}; return render(); }
+    if (e.target.closest('[data-brkapply]')) return ttBrkApply();
   });
+  // اعتماد المقترح: تنتقل الصفوف المختارة إلى مرحلة الاستراحة المستهدفة في «مواعيد الدوام»
+  async function ttBrkApply() {
+    if (!canEditTT()) return;
+    var plan = ttBrkPlan(), names = plan.classes.map(function (c) { return c.name; });
+    if (!plan.target || !names.length) return;
+    if (ui.ttBell) return toast('في «مواعيد الدوام» تعديل لم يُحفظ؛ احفظه أو ألغه أولًا', true);
+    if (!confirm((plan.conflicts.length ? 'تنبيه: في المقترح ' + plan.conflicts.length + ' تعارض في حصص المعلمين.\n\n' : '') +
+      'اعتماد المقترح؟\nتنتقل ' + names.join('، ') + ' إلى مواعيد «' + plan.target.name + '» (الاستراحة ' + ttBrkBreaks(plan.target) + ')، وتتغير أوقات حصصها في كل الجداول المطبوعة وشاشة الممر.')) return;
+    var bells = JSON.parse(JSON.stringify(ttCfg().bells)), ti = ttBrkState().target, order = ttClasses();
+    bells.stages.forEach(function (st, i) { if (i !== ti) st.classes = st.classes.filter(function (c) { return names.indexOf(c) < 0; }); });
+    names.forEach(function (c) { if (bells.stages[ti].classes.indexOf(c) < 0) bells.stages[ti].classes.push(c); });
+    bells.stages[ti].classes.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+    if (await ttSaveConfig({ bells: bells })) {
+      ttBrkState().pick = {};
+      render();
+      toast('اعتُمد المقترح: ' + names.join('، ') + ' على مواعيد «' + plan.target.name + '». عدّل اسمي المرحلتين من «مواعيد الدوام» إن لزم.');
+    }
+  }
   document.addEventListener('change', function (e) {
     if (location.hash !== '#/timetable/breaks' || e.target.id !== 'brk-target') return;
     var b = ttBrkState();
@@ -15977,7 +16083,17 @@
     var r = await sb.from('student_leaves').select('*').order('from_day', { ascending: false }).limit(2000);
     S.stLeavesMissing = !!r.error;
     S.stLeaves = r.data || [];
+    // الفصل المؤقت يحتاج العمود kind (supabase/student_suspensions.sql)
+    if (r.error) S.stSuspMissing = true;
+    else if (S.stLeaves.length) S.stSuspMissing = !('kind' in S.stLeaves[0]);
+    else { var k = await sb.from('student_leaves').select('kind').limit(1); S.stSuspMissing = !!k.error; }
   }
+  function stSuspOn(sid, day) {
+    return (S.stLeaves || []).filter(function (l) { return l.kind === 'suspension' && l.student_id === sid && day >= l.from_day && day <= l.to_day; })[0] || null;
+  }
+  // علامة الكشف وكلمة الحالة: المأذون داخل فصل مؤقت يظهر «ف» / «مفصول»
+  function attMark(st, sid, day) { return st === 'excused' && stSuspOn(sid, day) ? 'ف' : ATT_MARK[st]; }
+  function attWord(st, sid, day) { return st === 'excused' && stSuspOn(sid, day) ? 'مفصول' : ATT[st]; }
   function stLeaveOn(sid, day) {
     return (S.stLeaves || []).filter(function (l) { return l.student_id === sid && day >= l.from_day && day <= l.to_day; })[0] || null;
   }
@@ -16011,7 +16127,7 @@
     if (S.stLeaves == null) return '';
     var a = attState(), edit = isAdmin() || isRegistrar(), today = todayISO();
     if (S.stLeavesMissing) return '<div class="card"><h2>إجازات الطلاب</h2><p class="hint" style="margin:0">تحتاج جدولًا جديدًا: شغّل الملف <code dir="ltr">supabase/student_leaves.sql</code> في محرر SQL، ثم حدّث الصفحة.</p></div>';
-    var list = S.stLeaves.filter(function (l) { var x = findStudent(l.student_id); return l.to_day >= (a.leaveAll ? '0000' : today) && (!a.cls || (x && x.class_name === a.cls)); });
+    var list = S.stLeaves.filter(function (l) { var x = findStudent(l.student_id); return l.kind !== 'suspension' && l.to_day >= (a.leaveAll ? '0000' : today) && (!a.cls || (x && x.class_name === a.cls)); });
     var pool = S.students.filter(function (x) { return enrolled(x) && (!a.cls || x.class_name === a.cls); }).sort(function (p, q) { return (p.class_name || '').localeCompare(q.class_name || '', 'ar') || p.full_name.localeCompare(q.full_name, 'ar'); });
     return '<div class="card"><h2>إجازات الطلاب (عذر لفترة)</h2><p class="hint" style="margin:0">الطالب المجاز يُسجَّل «مأذون» تلقائيًا في كل أيام إجازته، في الموقع وتطبيق الموبايل، فلا حاجة لإدخاله يوميًا. لإلغاء ذلك احذف الإجازة أو قصّرها.</p>' +
       (edit ? '<div class="toolbar" style="align-items:flex-end;margin-top:10px">' +
@@ -16117,7 +16233,7 @@
   // حالة الطالب في اليوم المعروض: ما عُدِّل ولم يُحفظ، ثم المحفوظ، وإلا حاضر
   function attOf(sid) {
     var a = attState(), d = a.draft[sid], saved = (S.attDay[a.day] || {})[sid], lv = !d && !saved ? stLeaveOn(sid, a.day) : null;
-    if (lv) return { status: 'excused', note: 'إجازة' + (lv.reason ? ': ' + lv.reason : ''), saved: saved, leave: lv };
+    if (lv) return { status: 'excused', note: (lv.kind === 'suspension' ? 'فصل مؤقت' : 'إجازة') + (lv.reason ? ': ' + lv.reason : ''), saved: saved, leave: lv };
     return { status: d ? d.status : saved ? saved.status : 'present', note: d && d.note != null ? d.note : saved ? saved.note || '' : '', saved: saved };
   }
 
@@ -16152,7 +16268,7 @@
         '<div class="table-wrap"><table class="grid pay"><thead><tr><th>م</th><th>الطالب</th><th>الحالة</th><th>ملاحظة</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' +
         roll.map(function (x, i) {
           var st = attOf(x.id);
-          return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + (st.saved ? '<span class="badge ' + ATT_BADGE[st.status] + '">' + ATT[st.status] + '</span>' : '<span class="badge new">لم يُسجَّل</span>') + '</td>' +
+          return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td>' + (st.saved ? '<span class="badge ' + ATT_BADGE[st.status] + '">' + attWord(st.status, x.id, attState().day) + '</span>' : '<span class="badge new">لم يُسجَّل</span>') + '</td>' +
             '<td>' + esc(st.note) + '</td><td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.whatsapp || x.phone) || '—') + '</td></tr>';
         }).join('') + '</tbody></table></div></div>';
     }
@@ -16525,12 +16641,12 @@
           var head = ['م', 'اسم الطالب'].concat(days.map(function (dd) { return Number(dd.slice(8)) + (attOff(dd) ? ' (' + (attHoliday(dd) ? 'عطلة' : WEEKDAYS[new Date(dd + 'T00:00').getDay()]) + ')' : ''); }), ['أيام الحضور', 'أيام الغياب']);
           var body = roll.map(function (x, i) {
             var p = d.per[x.id] || { present: 0, absent: 0, days: {} };
-            var cells = days.map(function (dd, j) { var st = p.days[dd]; if (st === 'absent') absentPerDay[j]++; return st ? ATT_MARK[st] : ''; });
+            var cells = days.map(function (dd, j) { var st = p.days[dd]; if (st === 'absent') absentPerDay[j]++; return st ? attMark(st, x.id, dd) : ''; });
             return [i + 1, x.full_name + rsvText(x)].concat(cells, [p.present, p.absent]);
           });
           var foot = ['', 'عدد الغائبين في اليوم'].concat(absentPerDay.map(function (v, j) { return recorded[j] ? v : ''; }));
           xlsxSheet(wb, used, cls, [[schoolName()], ['كشف الحضور والغياب — ' + monthLabel(month)], ['الصف: ' + cls, '', 'مربي الصف: ' + (classTeacher(cls) || ''), '', '', '', '', '', 'عدد الطلاب: ' + roll.length], [], head].concat(body, [foot, [],
-            ['', 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
+            ['', 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · ف مفصول مؤقتًا · الجمعة والسبت والعطل مذكورة في رأس عمودها · فارغ: لم يُسجَّل حضور الشعبة ذلك اليوم']]),
             [4, 30].concat(days.map(function (dd) { return attOff(dd) ? 9 : 5; }), [10, 10]));
         });
         XLSX.writeFile(wb, ('كشف-الحضور-' + (a.cls || 'كل-الشعب') + '-' + month).replace(/\s+/g, '-') + '.xlsx');
@@ -16639,12 +16755,12 @@
         var q = d.per[x.id] || { present: 0, absent: 0, days: {} };
         if (p.teacher) return '<tr class="tc"><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
           var st = q.days[dd];
-          return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? ATT_MARK[st] : '') + '</td>';
+          return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? attMark(st, x.id, dd) : '') + '</td>';
         }).join('') + '</tr>';
         return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(x.full_name) + rsvMark(x) + '</td>' + days.map(function (dd) {
           var st = q.days[dd];
           if (st === 'absent') absentPerDay[dd]++;
-          return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? ATT_MARK[st] : '') + '</td>';
+          return '<td class="c' + (fri(dd) ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + (st ? attMark(st, x.id, dd) : '') + '</td>';
         }).join('') + '<td class="c">' + q.present + '</td><td class="c"><b>' + q.absent + '</b></td></tr>';
       }).join('');
       return '<section class="att-page">' +
@@ -16653,7 +16769,7 @@
         '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الطالب</th>' + days.map(function (dd) { return '<th class="' + (fri(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
           (p.teacher ? '' : '<th class="tot">حضور</th><th class="tot">غياب</th>') + '</tr></thead>' +
         '<tbody>' + body + (p.teacher ? '</tbody></table>' : '<tr class="total"><td colspan="2">عدد الغائبين في اليوم</td>' + days.map(function (dd) { return '<td class="c' + (fri(dd) ? ' fr' : '') + '">' + (recorded[dd] ? absentPerDay[dd] : attHoliday(dd) ? 'ع' : '') + '</td>'; }).join('') + '<td colspan="2"></td></tr></tbody></table>') +
-        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
+        '<p class="att-key">' + (roll.some(isReserve) ? '* احتياط · ' : '') + (p.teacher ? 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · ف مفصول مؤقتًا · الأعمدة المظلّلة: الجمعة والسبت والعطل · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم' : 'المفتاح: ✓ حاضر · غـ غائب · م مأذون · ف مفصول مؤقتًا · الأعمدة المظلّلة: الجمعة والسبت والعطل' + (days.some(attHoliday) ? ' (ع: عطلة)' : '') + ' · الخانة الفارغة: لم يُسجَّل حضور الشعبة ذلك اليوم') + ' · تاريخ الإصدار: ' + dmy(todayISO()) + '</p></section>';
     }).join('');
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
@@ -16991,6 +17107,24 @@
     S.waMsgs = r.data || [];
     render();
   }
+  // رسالة فشلت ولولي الأمر رقم جوال آخر غير الذي أُرسلت إليه: زر لإعادة إرسالها إليه
+  function waRetryBtn(m) {
+    if (['failed', 'rejected', 'cancelled'].indexOf(m.status) < 0 || !(m.student_ids || []).length) return '';
+    var alt = (m.student_ids || []).map(findStudent).filter(function (x) { return x && x.phone && waNumber(x.phone) !== waNumber(m.phone || ''); })[0];
+    return alt ? '<div style="margin-top:4px"><button type="button" class="btn" data-waretry="' + m.id + '" title="' + esc(alt.phone) + '">إعادة الإرسال إلى جوال ولي الأمر</button></div>' : '';
+  }
+  async function waRetry(id) {
+    var m = (S.waMsgs || []).filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!m) return;
+    var x = findStudent(m.student_ids[0]);
+    if (!confirm('إعادة إرسال الرسالة إلى جوال ولي الأمر' + (x ? ' (' + x.phone + ')' : '') + '؟')) return;
+    // النص المحفوظ مكتمل (الاسم والتاريخ فيه)، فيُرسل كما هو لكل طالب في الرسالة
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'retry-' + m.id + '-' + Date.now().toString(36), kind: m.kind, title: m.title || '', text: m.body, student_ids: m.student_ids, per: 'family', use: 'phone', school: schoolName() } });
+    var d = r.data || {};
+    if (r.error || d.error) return toast('تعذّرت إعادة الإرسال: ' + (d.error || r.error.message), true);
+    toast('أُضيفت الرسالة إلى قائمة الإرسال إلى جوال ولي الأمر');
+    loadWaArchive();
+  }
   function waTpl(key) { return (S.waTpl || []).filter(function (t) { return t.key === key; })[0]; }
 
   // معاينة الرسالة لأول طالب مختار (أو أول طالب في القائمة)
@@ -17104,7 +17238,7 @@
       return '<tr><td style="white-space:nowrap">' + waTime(m.created_at) + '</td><td>' + esc(m.title || waKindLabel(m.kind)) + '</td><td>' + esc(m.names || '') + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(m.phone || '—') + '</td>' +
         '<td><details><summary style="cursor:pointer">' + esc(m.body.slice(0, 50)) + (m.body.length > 50 ? '…' : '') + '</summary><div style="white-space:pre-wrap">' + esc(m.body) + '</div></details></td>' +
-        '<td><span class="badge ' + s[0] + '">' + s[1] + '</span>' + (m.error ? '<div class="hint" style="margin:2px 0 0">' + esc(m.error) + '</div>' : '') + '</td></tr>';
+        '<td><span class="badge ' + s[0] + '">' + s[1] + '</span>' + (m.error ? '<div class="hint" style="margin:2px 0 0">' + esc(m.error) + '</div>' : '') + waRetryBtn(m) + '</td></tr>';
     }).join('');
     return '<div class="stats"><div class="card stat"><span class="lbl">الرسائل</span><span class="num">' + list.length + '</span><span class="sub">في ' + order.length + ' دفعة</span></div>' +
         '<div class="card stat"><span class="lbl">أُرسلت</span><span class="num">' + ok + '</span><span class="sub">منها وصلت: ' + ((cnt.delivered || 0) + (cnt.read || 0)) + '</span></div>' +
@@ -17244,6 +17378,7 @@
       return render();
     }
     if (e.target.closest('[data-warefresh]')) return waRefresh();
+    var wr = e.target.closest('[data-waretry]'); if (wr) return waRetry(wr.getAttribute('data-waretry'));
     if (e.target.closest('[data-waxlsx]')) return waExport();
     if ((el = e.target.closest('[data-watplsave]'))) {
       var card = el.closest('[data-watplcard]');
