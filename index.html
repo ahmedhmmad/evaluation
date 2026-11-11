@@ -9700,14 +9700,23 @@
     var head = reportHead(L.title, [['الكشف', label], ['العدد', rows.length]].concat(c.cls ? [['الشعبة', c.cls]] : [])).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th style="width:3em">م</th><th>اسم الطالب</th>' + (mode === 'all' ? '<th style="width:8em">الحالة</th>' : '') + '<th style="width:30%">ملاحظات</th></tr></thead>' +
-      groups.map(function (g, gi) {
-        return '<tbody' + (c.perPage && gi ? ' style="break-before:page;page-break-before:always"' : '') + '><tr class="total"><td colspan="' + n + '">الشعبة: ' + esc(g) + ' — العدد: ' + by[g].length + '</td></tr>' +
-          by[g].map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td>' + (mode === 'all' ? '<td class="c">' + esc(c.sel[x.id] ? L.yes_label : L.no_label) + '</td>' : '') + '<td></td></tr>'; }).join('') + '</tbody>';
-      }).join('') +
-      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['شئون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+    var thHead = function (h) {
+      return '<thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + h + '</td></tr>' +
+        '<tr><th style="width:3em">م</th><th>اسم الطالب</th>' + (mode === 'all' ? '<th style="width:8em">الحالة</th>' : '') + '<th style="width:30%">ملاحظات</th></tr></thead>';
+    };
+    var body = function (g) {
+      return '<tr class="total"><td colspan="' + n + '">الشعبة: ' + esc(g) + ' — العدد: ' + by[g].length + '</td></tr>' +
+        by[g].map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td>' + (mode === 'all' ? '<td class="c">' + esc(c.sel[x.id] ? L.yes_label : L.no_label) + '</td>' : '') + '<td></td></tr>'; }).join('');
+    };
+    var foot = '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot>';
+    var signs = reportSigns([['شئون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + (c.perPage && groups.length > 1
+      // كل شعبة جدول مستقل يبدأ صفحة جديدة: ترويسته باسم الشعبة وعددها، وتوقيعاته تحته
+      ? groups.map(function (g, gi) {
+          var h = reportHead(L.title, [['الكشف', label], ['الشعبة', g], ['العدد', by[g].length]]).replace(/^<img class="wm"[^>]*>/, '');
+          return '<div' + (gi ? ' style="break-before:page;page-break-before:always"' : '') + '><table class="rz">' + thHead(h) + '<tbody>' + body(g) + '</tbody>' + foot + '</table>' + signs + '</div>';
+        }).join('')
+      : '<table class="rz">' + thHead(head) + '<tbody>' + groups.map(body).join('') + '</tbody>' + foot + '</table>' + signs);
   }
 
   document.addEventListener('click', async function (e) {
@@ -17888,6 +17897,11 @@
 
   // جدول الإحصائية: صفوف المتغير الأول، وأعمدة الثاني (أو العدد والنسبة)
   function repStatsAoa(res) {
+    var a = repStatsAoa0(res), i = a.length ? a[0].indexOf('النسبة') : -1;
+    if (repState().noPct && i > -1) a = a.map(function (row) { return row.filter(function (v, j) { return j !== i; }); });
+    return a;
+  }
+  function repStatsAoa0(res) {
     var s = res.stats, total = res.list.length, show = function (v) { return v === '' ? '(فارغ)' : v; };
     if (!s) return [];
     if (!s.g2) {
@@ -17944,7 +17958,8 @@
         '<h3 style="margin:14px 0 4px">الشروط</h3>' + (filters || '<p class="hint" style="margin:0">بلا شروط: كل من يشملهم التقرير.</p>') +
         '<button type="button" class="btn" data-repaddf data-ro-ok>+ إضافة شرط</button>' +
         '<h3 style="margin:14px 0 4px">الإحصائية</h3>' +
-        '<div class="toolbar" style="align-items:center"><span>حسب</span>' + fieldSel('rep-g1', r.g1, 'بلا إحصائية') + '<span>ثم حسب</span>' + fieldSel('rep-g2', r.g2, '— متغير واحد —') + '</div>' +
+        '<div class="toolbar" style="align-items:center"><span>حسب</span>' + fieldSel('rep-g1', r.g1, 'بلا إحصائية') + '<span>ثم حسب</span>' + fieldSel('rep-g2', r.g2, '— متغير واحد —') +
+          '<label class="check" style="margin:0"><input type="checkbox" id="rep-pct" data-ro-ok' + (r.noPct ? '' : ' checked') + '> إظهار النسبة</label></div>' +
         '<details class="bank" style="margin-top:10px"><summary>أعمدة الكشف (' + cols.length + ')</summary><div class="classes-pick" style="margin-top:8px">' + res.fields.map(function (fd) {
           return '<label class="check"><input type="checkbox" data-repcol="' + fd.k + '" data-ro-ok' + (r.cols.indexOf(fd.k) > -1 ? ' checked' : '') + '>' + esc(fd.label) + '</label>';
         }).join('') + '</div></details>' +
@@ -18075,6 +18090,7 @@
     else if (el.id === 'rep-month') { if (!/^\d{4}-\d{2}$/.test(el.value)) return; ui.tMonth = el.value; }
     else if (el.id === 'rep-title') { r.title = el.value.trim(); return; }
     else if (el.id === 'rep-g1') r.g1 = el.value;
+    else if (el.id === 'rep-pct') r.noPct = !el.checked;
     else if (el.id === 'rep-g2') r.g2 = el.value;
     else if (el.id === 'rep-regfrom' || el.id === 'rep-regto') { r[el.id === 'rep-regfrom' ? 'regFrom' : 'regTo'] = el.value; }
     else if (el.hasAttribute('data-repfk')) { var f = r.filters[Number(el.getAttribute('data-repfk'))]; f.k = el.value; f.v = null; }
