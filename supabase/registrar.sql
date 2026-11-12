@@ -90,6 +90,11 @@ $$;
 -- ---------- Accounts created by the superadmin (registrars, supervisors, viewers) ----------
 
 -- Creates a ready-to-use login with the given role. The person must choose a new password at first sign-in.
+-- النسخة المعتمدة من create_user_account في attendance_clerk.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'create_user_account' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.create_user_account(p_name text, p_login text, p_password text, p_role text)
 returns uuid
 language plpgsql
@@ -143,7 +148,10 @@ begin
    where id = v_uid;
   return v_uid;
 end;
-$$;
+$$
+    $fn$;
+  end if;
+end $guard$;
 
 -- Sets a new temporary password for an account (not the superadmin's own); it must be changed at next sign-in.
 create or replace function public.reset_user_password(p_user uuid, p_password text)

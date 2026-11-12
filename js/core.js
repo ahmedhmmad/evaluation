@@ -906,6 +906,12 @@
       d.recs = got ? got.list : null;
       if (!S.tPay[month]) await loadPayments(month);
     }
+    // رسائل واتساب التي فشل إرسالها اليوم (يقرؤها مدير النظام ومسجِّل الطلاب)
+    d.waFailed = null;
+    if (isAdmin()) {
+      var wf = await sb.from('wa_messages').select('id', { count: 'exact', head: true }).eq('status', 'failed').gte('created_at', new Date(today + 'T00:00').toISOString());
+      if (!wf.error) d.waFailed = wf.count || 0;
+    }
     S.dash = d;
     loadingDash = false;
     render();
@@ -926,14 +932,26 @@
       roll.forEach(function (x) { byCls[x.class_name] = (byCls[x.class_name] || 0) + 1; });
       var absent = 0;
       d.att.forEach(function (r) { done[r.class_name] = 1; if (r.status === 'absent') absent++; });
-      var left = Object.keys(byCls).filter(function (c) { return !done[c]; }).length, taken = d.att.length;
+      var leftNames = Object.keys(byCls).filter(function (c) { return !done[c]; }).sort(), left = leftNames.length, taken = d.att.length;
       cards += off && !taken
         ? stat('#/attendance', 'الغياب اليوم', '—', 'لا دراسة اليوم (' + dayName(d.day) + ')')
         : !taken
           ? stat('#/attendance', 'الغياب اليوم', '—', 'لم يُسجَّل الغياب اليوم بعد', 'var(--muted)')
           : stat('#/attendance', 'الغياب اليوم', absent + ' <small>(' + Math.round(absent * 100 / taken) + '%)</small>',
-              'من ' + taken + ' طالبًا سُجّل حضورهم' + (left ? ' · شعب لم تُسجَّل: ' + left : ' · سُجّلت كل الشعب'), absent ? 'var(--red)' : '');
+              'من ' + taken + ' طالبًا سُجّل حضورهم' + (left ? ' · شعب لم تُسجَّل: ' + left + ' (' + leftNames.slice(0, 5).map(esc).join('، ') + (left > 5 ? '…' : '') + ')' : ' · سُجّلت كل الشعب'), absent ? 'var(--red)' : '');
     }
+
+    // المجازون والمفصولون مؤقتًا اليوم
+    var onLeave = 0, onSusp = 0, seenLv = {};
+    (S.stLeaves || []).forEach(function (l) {
+      if (d.day < l.from_day || d.day > l.to_day || seenLv[l.student_id + l.kind] || !findStudent(l.student_id)) return;
+      seenLv[l.student_id + l.kind] = 1;
+      if (l.kind === 'suspension') onSusp++; else onLeave++;
+    });
+    if (onLeave || onSusp) cards += stat(onSusp && !onLeave ? '#/affairs/suspend' : '#/attendance', 'مجازون ومفصولون اليوم', onLeave + onSusp,
+      'في إجازة: ' + onLeave + ' · مفصولون مؤقتًا: ' + onSusp, onSusp ? 'var(--red)' : '');
+    if (d.waFailed != null) cards += stat('#/messages', 'رسائل واتساب فشلت اليوم', d.waFailed,
+      d.waFailed ? 'افتح الأرشيف لإعادة إرسالها' : 'لا رسائل فاشلة اليوم', d.waFailed ? 'var(--red)' : '');
 
     if (canView()) {
       // حصيلة المواصلات بتاريخ السداد، كما في «سجل الدفعات»

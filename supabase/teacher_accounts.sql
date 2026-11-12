@@ -191,6 +191,11 @@ grant execute on function public.finish_password_change() to authenticated;
 
 -- ---------- Results: a teacher sees only their own published evaluation ----------
 
+-- النسخة المعتمدة من get_results في registrar.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'get_results' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.get_results()
 returns jsonb
 language plpgsql
@@ -233,4 +238,7 @@ begin
     ), '[]'::jsonb)
   );
 end;
-$$;
+$$
+    $fn$;
+  end if;
+end $guard$;

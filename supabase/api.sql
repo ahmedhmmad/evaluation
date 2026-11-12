@@ -492,6 +492,11 @@ begin
     from att_classes() c), '[]'::jsonb));
 end $$;
 
+-- النسخة المعتمدة من api_att_roll في student_suspensions.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'api_att_roll' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.api_att_roll(p_class text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
@@ -500,7 +505,10 @@ begin
     'students', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.full_name,
       'absent', exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused'))) order by r.pos)
     from att_roll(p_class) r), '[]'::jsonb));
-end $$;
+end $$
+    $fn$;
+  end if;
+end $guard$;
 
 create or replace function public.api_att_submit(p_class text, p_absent uuid[]) returns jsonb
 language plpgsql security definer set search_path = public as $$

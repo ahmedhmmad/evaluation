@@ -62,6 +62,11 @@ begin
 end;
 $$;
 
+-- النسخة المعتمدة من api_att_classes في api.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'api_att_classes' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.api_att_classes() returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
@@ -70,8 +75,16 @@ begin
     select jsonb_agg(jsonb_build_object('name', c.class_name, 'students', c.students,
       'recorded', exists (select 1 from attendance a where a.day = att_today() and a.class_name = c.class_name)) order by c.pos)
     from att_classes() c), '[]'::jsonb));
-end $$;
+end $$
+    $fn$;
+  end if;
+end $guard$;
 
+-- النسخة المعتمدة من api_att_roll في student_suspensions.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'api_att_roll' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.api_att_roll(p_class text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
@@ -80,8 +93,16 @@ begin
     'students', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'name', r.full_name,
       'absent', exists (select 1 from attendance a where a.student_id = r.id and a.day = att_today() and a.status in ('absent', 'excused'))) order by r.pos)
     from att_roll(p_class) r), '[]'::jsonb));
-end $$;
+end $$
+    $fn$;
+  end if;
+end $guard$;
 
+-- النسخة المعتمدة من api_att_submit في api.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'api_att_submit' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.api_att_submit(p_class text, p_absent uuid[]) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare n int;
@@ -91,7 +112,10 @@ begin
   n := att_save(p_class, p_absent, public.api_att_who());
   return jsonb_build_object('saved', n, 'absent', coalesce((
     select jsonb_agg(r.full_name order by r.pos) from att_roll(p_class) r where r.id = any (coalesce(p_absent, '{}'))), '[]'::jsonb));
-end $$;
+end $$
+    $fn$;
+  end if;
+end $guard$;
 
 revoke execute on function public.create_user_account(text, text, text, text) from public, anon;
 grant execute on function public.create_user_account(text, text, text, text) to authenticated;

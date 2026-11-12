@@ -29,6 +29,11 @@ create policy student_leaves_read on public.student_leaves
   for select to authenticated using (coalesce(public.my_role(), 'pending') <> 'pending');
 
 -- الحضور في يوم إجازة يُحفظ «مأذون»، وملاحظته سبب الإجازة إن لم تُكتب ملاحظة
+-- النسخة المعتمدة من attendance_apply_leave في student_suspensions.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'attendance_apply_leave' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.attendance_apply_leave() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare l record;
@@ -41,7 +46,10 @@ begin
     if coalesce(new.note, '') = '' then new.note := 'إجازة' || case when l.reason <> '' then ': ' || l.reason else '' end; end if;
   end if;
   return new;
-end $$;
+end $$
+    $fn$;
+  end if;
+end $guard$;
 drop trigger if exists attendance_apply_leave on public.attendance;
 create trigger attendance_apply_leave before insert or update on public.attendance
   for each row execute function public.attendance_apply_leave();
@@ -59,6 +67,11 @@ create trigger student_leave_backfill after insert or update on public.student_l
   for each row execute function public.student_leave_backfill();
 
 -- كشف الشعبة في تطبيق الموبايل: الطالب المجاز اليوم يظهر مُعلَّمًا (غائبًا بعذر) من البداية
+-- النسخة المعتمدة من api_att_roll في student_suspensions.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'api_att_roll' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.api_att_roll(p_class text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 begin
@@ -69,7 +82,10 @@ begin
              or exists (select 1 from student_leaves l where l.student_id = r.id and att_today() between l.from_day and l.to_day),
       'leave', (select l.reason from student_leaves l where l.student_id = r.id and att_today() between l.from_day and l.to_day order by l.created_at desc limit 1)) order by r.pos)
     from att_roll(p_class) r), '[]'::jsonb));
-end $$;
+end $$
+    $fn$;
+  end if;
+end $guard$;
 
 -- قالب رسالة الإجازة لولي الأمر: يُعدَّل من «رسائل واتساب» ← «القوالب».
 -- {الاسم} {من} {إلى} {السبب} {التمني} {الأكاديمية} تُستبدل عند الإرسال (التمني بحسب نوع الإجازة: مرض، سفر…)

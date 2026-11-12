@@ -41,6 +41,11 @@ insert into public.settings (id) values (1) on conflict (id) do nothing;
 
 -- ---------- Helpers ----------
 
+-- النسخة المعتمدة من my_role في extra_roles.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'my_role' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.my_role()
 returns text
 language sql
@@ -49,7 +54,10 @@ security definer
 set search_path = public
 as $$
   select role from public.profiles where id = auth.uid();
-$$;
+$$
+    $fn$;
+  end if;
+end $guard$;
 
 -- Every new sign-up gets a profile with role 'pending' (no access until a superadmin assigns a role).
 create or replace function public.handle_new_user()
@@ -112,6 +120,11 @@ create trigger teachers_guard_visibility
   for each row execute function public.guard_teacher_visibility();
 
 -- What viewers get: published + visible evaluations, with hidden parts removed on the server.
+-- النسخة المعتمدة من get_results في registrar.sql. هنا تُنشأ فقط إن لم تكن موجودة (تثبيت جديد)،
+-- حتى لا تُرجِع إعادة تشغيل هذا الملف نسخة أقدم منها
+do $guard$ begin
+  if not exists (select 1 from pg_proc where proname = 'get_results' and pronamespace = 'public'::regnamespace) then
+    execute $fn$
 create or replace function public.get_results()
 returns jsonb
 language plpgsql
@@ -149,7 +162,10 @@ begin
     ), '[]'::jsonb)
   );
 end;
-$$;
+$$
+    $fn$;
+  end if;
+end $guard$;
 
 -- ---------- Permissions ----------
 
