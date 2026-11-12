@@ -2,7 +2,8 @@
 -- يكتبه القاعدة نفسها (triggers) عند كل تغيير، سواء من البرنامج أو من محرر SQL، فلا يمكن تجاوزه من الصفحة.
 -- يقرؤه المدير العام وحده، ولا يملك أحد تعديله أو حذفه من البرنامج.
 -- لا يُسجَّل فيه ما فيه أسرار (كلمة المرور الافتراضية، روابط الغياب السرية، مفتاح البوت).
--- شغّل هذا الملف مرة في محرر SQL في Supabase. لا يغيّر أي بيانات موجودة، ويبدأ التسجيل من لحظة تشغيله.
+-- شغّل هذا الملف في محرر SQL في Supabase. لا يغيّر أي بيانات موجودة، ويبدأ التسجيل من لحظة تشغيله.
+-- يُعاد تشغيله بأمان متى أُضيفت جداول إلى قائمته (آخر إضافة: الدرجات، شئون الطلاب، سندات الصرف، الطلبيات، العهد، اللجان، الزيارات).
 
 create table if not exists public.audit_log (
   id bigint generated always as identity primary key,
@@ -107,6 +108,43 @@ begin
   return null;
 end $$;
 
+-- الدرجات: سطر واحد لكل اختبار ومادة وشعبة في كل عملية حفظ، لا سطر لكل طالب. في التعديل: من تغيّرت درجته، من كم إلى كم
+create or replace function public.audit_grades() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  who text := public.audit_who();
+  g record;
+begin
+  if tg_op = 'INSERT' then
+    for g in select i.name as item, n.subject, coalesce(x.class_name, '') as class_name, count(*) as n, max(n.updated_by) as ub
+             from new_rows n left join grade_items i on i.id = n.item_id left join students x on x.id = n.student_id
+             where n.score is not null group by i.name, n.subject, x.class_name loop
+      insert into audit_log (user_id, user_name, tbl, action, row_key, new)
+      values (auth.uid(), coalesce(nullif(who, ''), nullif(g.ub, ''), 'محرر SQL / النظام'), 'grades', 'insert', concat_ws(' | ', g.item, g.subject, g.class_name),
+        jsonb_build_object('item', g.item, 'subject', g.subject, 'class_name', g.class_name, 'students', g.n));
+    end loop;
+  elsif tg_op = 'UPDATE' then
+    for g in select i.name as item, n.subject, coalesce(x.class_name, '') as class_name, max(n.updated_by) as ub,
+               jsonb_agg(jsonb_build_object('student_id', n.student_id, 'from', o.score, 'to', n.score)) as ch
+             from new_rows n join old_rows o on o.student_id = n.student_id and o.item_id = n.item_id and o.subject = n.subject
+             left join grade_items i on i.id = n.item_id left join students x on x.id = n.student_id
+             where o.score is distinct from n.score group by i.name, n.subject, x.class_name loop
+      insert into audit_log (user_id, user_name, tbl, action, row_key, new)
+      values (auth.uid(), coalesce(nullif(who, ''), nullif(g.ub, ''), 'محرر SQL / النظام'), 'grades', 'update', concat_ws(' | ', g.item, g.subject, g.class_name),
+        jsonb_build_object('item', g.item, 'subject', g.subject, 'class_name', g.class_name, 'changes', g.ch));
+    end loop;
+  else
+    for g in select i.name as item, o.subject, coalesce(x.class_name, '') as class_name, count(*) as n
+             from old_rows o left join grade_items i on i.id = o.item_id left join students x on x.id = o.student_id
+             group by i.name, o.subject, x.class_name loop
+      insert into audit_log (user_id, user_name, tbl, action, row_key, old)
+      values (auth.uid(), coalesce(nullif(who, ''), 'محرر SQL / النظام'), 'grades', 'delete', concat_ws(' | ', g.item, g.subject, g.class_name),
+        jsonb_build_object('item', g.item, 'subject', g.subject, 'class_name', g.class_name, 'students', g.n));
+    end loop;
+  end if;
+  return null;
+end $$;
+
 -- ربط الجداول. كل جدول غير موجود بعد يُتخطّى، فيمكن تشغيل الملف مرة أخرى بعد إضافة جداول جديدة
 do $$
 declare
@@ -116,7 +154,10 @@ begin
       ('students', 'id'), ('teachers', 'id'), ('profiles', 'id'), ('settings', 'id'),
       ('transport_groups', 'id'), ('transport_members', 'student_id'), ('transport_payments', 'student_id, month'),
       ('transport_topups', 'receipt_no'), ('transport_refunds', 'refund_no'), ('transport_voided', 'receipt_no'),
-      ('timetable_sessions', 'id'), ('timetable_config', 'id'), ('timetable_proposals', 'id')
+      ('timetable_sessions', 'id'), ('timetable_config', 'id'), ('timetable_proposals', 'id'),
+      ('grade_items', 'id'), ('student_leaves', 'id'), ('discipline_records', 'id'), ('student_exits', 'id'),
+      ('payment_claims', 'no'), ('orders', 'no'), ('custody_items', 'id'), ('committees', 'id'), ('committee_members', 'id'),
+      ('student_lists', 'id'), ('visits', 'id'), ('statements', 'id')
     ) as v(name, keys)
   loop
     if to_regclass('public.' || t.name) is null then continue; end if;
@@ -135,5 +176,17 @@ begin
       for each statement execute function public.audit_attendance();
     create trigger audit_att_del after delete on public.attendance referencing old table as old_rows
       for each statement execute function public.audit_attendance();
+  end if;
+
+  if to_regclass('public.grades') is not null then
+    drop trigger if exists audit_grd_ins on public.grades;
+    drop trigger if exists audit_grd_upd on public.grades;
+    drop trigger if exists audit_grd_del on public.grades;
+    create trigger audit_grd_ins after insert on public.grades referencing new table as new_rows
+      for each statement execute function public.audit_grades();
+    create trigger audit_grd_upd after update on public.grades referencing old table as old_rows new table as new_rows
+      for each statement execute function public.audit_grades();
+    create trigger audit_grd_del after delete on public.grades referencing old table as old_rows
+      for each statement execute function public.audit_grades();
   end if;
 end $$;
