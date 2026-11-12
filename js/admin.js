@@ -193,8 +193,11 @@
       var opts = Object.keys(ROLES).filter(function (k) { return (isTeacher || k !== 'teacher') && (k !== 'observer' || roColumn()) && (k !== 'gensup' || titleColumn()); }).map(function (k) {
         return '<option value="' + k + '"' + (roleKey(u) === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
       }).join('');
+      var xr = !xrolesColumn() ? '' : '<td>' + (self || u.role === 'pending' || u.role === 'superadmin' ? '' : XROLES.filter(function (k) { return k !== u.role; }).map(function (k) {
+        return '<label class="check" style="display:inline-flex;margin-inline-end:10px"><input type="checkbox" data-xrole="' + u.id + ':' + k + '"' + ((u.extra_roles || []).indexOf(k) > -1 ? ' checked' : '') + '>' + String(ROLES[k]).replace(/\s*\(.*\)$/, '') + '</label>';
+      }).join('')) + '</td>';
       return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
-        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td>' +
+        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td>' + xr +
         '<td>' + (self || isTeacher ? '' : '<button type="button" class="btn" data-resetpw="' + u.id + '">كلمة مرور جديدة</button>') + '</td></tr>';
     }).join('');
 
@@ -229,7 +232,9 @@
         '<p class="hint">أزل العلامة لإخفاء تقييم منشور عن المشاهدين.</p>' + vis + '</div>') +
       (adTab !== 'users' ? '' : '<div class="card"><h2>المستخدمون والصلاحيات</h2>' +
         '<p class="hint">الحسابات الجديدة تبقى «بانتظار التفعيل» إلى أن تحدد صلاحيتها.</p>' +
-        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th><th></th></tr></thead><tbody>' + users + '</tbody></table></div>' +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th>' + (xrolesColumn() ? '<th>صلاحيات إضافية</th>' : '') + '<th></th></tr></thead><tbody>' + users + '</tbody></table></div>' +
+        (xrolesColumn() ? '<p class="hint" style="margin:8px 0 0">الصلاحيات الإضافية: يبقى للحساب صلاحيته الأساسية، ويظهر لصاحبه في أسفل القائمة الجانبية اختيار «أعمل الآن بصلاحية» ليبدّل بينها، فلا يحتاج إلى حساب ثانٍ. «مسجِّل طلاب» تشمل تسجيل الطلاب والمواصلات.</p>'
+          : '<p class="hint" style="margin:8px 0 0">لمنح حساب واحد أكثر من صلاحية (معلم ومسجِّل طلاب مثلًا) شغّل الملف <code dir="ltr">supabase/extra_roles.sql</code> ثم حدّث الصفحة.</p>') +
         // إنشاء حساب جاهز (يحتاج supabase/registrar.sql)
         '<form id="user-form" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)"><h3 style="margin:0 0 4px">إنشاء حساب جديد</h3>' +
           '<p class="hint">للمسجِّلين والمشرفين والمشاهدين. يدخل صاحب الحساب باسم المستخدم وكلمة المرور المؤقتة، ويُطلب منه اختيار كلمة مرور خاصة به عند أول دخول. حسابات المعلمين تُنشأ من «بيانات المعلمين».</p>' +

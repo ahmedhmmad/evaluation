@@ -60,6 +60,14 @@
     }
   });
 
+  // تبديل الصلاحية التي يعمل بها الحساب: تُحفظ في هذا المتصفح، ثم تُحمَّل البيانات من جديد بالصلاحية المختارة
+  userbar.addEventListener('change', function (e) {
+    if (e.target.id !== 'act-role') return;
+    try { if (e.target.value === S.mainRole) localStorage.removeItem(actKey()); else localStorage.setItem(actKey(), e.target.value); } catch (err) {}
+    if (location.hash && location.hash !== '#/') location.hash = '#/';
+    loadAll();
+  });
+
   app.addEventListener('change', async function (e) {
     var el = e.target, r;
 
@@ -83,6 +91,15 @@
       if (r.error) { el.checked = !el.checked; return fail(r.error); }
       vt.visible = el.checked;
       toast('تم الحفظ');
+    } else if (el.hasAttribute('data-xrole') && isAdmin()) {
+      var xp = el.getAttribute('data-xrole').split(':'), xu = S.users.filter(function (x) { return x.id === xp[0]; })[0];
+      if (!xu) return;
+      var xl = (xu.extra_roles || []).filter(function (k) { return k !== xp[1]; });
+      if (el.checked) xl.push(xp[1]);
+      r = await sb.from('profiles').update({ extra_roles: xl }).eq('id', xu.id);
+      if (r.error) { el.checked = !el.checked; return fail(r.error); }
+      xu.extra_roles = xl;
+      toast('تم الحفظ — تظهر لصاحب الحساب عند دخوله التالي أو بعد «مزامنة البيانات»');
     } else if (el.hasAttribute('data-role') && isAdmin()) {
       var u = null, uidAttr = el.getAttribute('data-role');
       S.users.forEach(function (x) { if (x.id === uidAttr) u = x; });

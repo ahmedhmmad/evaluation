@@ -217,6 +217,27 @@
     toast('تعذر تنفيذ العملية: ' + (error && error.message ? error.message : 'خطأ غير معروف'), true);
   }
 
+  /* صلاحيات إضافية (supabase/extra_roles.sql): الحساب له صلاحية أساسية، ويمنحه مدير النظام صلاحيات أخرى يبدّل بينها من شريط المستخدم.
+     ACT_ROLE هي الصلاحية الإضافية التي يعمل بها الآن (فارغ = الأساسية)، وتُرسل مع كل طلب إلى القاعدة فتطبّق القاعدة قواعدها */
+  var ACT_ROLE = '';
+  var XROLES = ['registrar', 'supervisor', 'manager'];
+  function xrolesColumn() { return !!S.profile && 'extra_roles' in S.profile; }
+  function myRoleChoices() { return S.mainRole && S.myExtra && S.myExtra.length ? [S.mainRole].concat(S.myExtra.filter(function (r) { return r !== S.mainRole; })) : []; }
+  function actKey() { return 'tpa-act-role:' + S.uid; }
+  function applyActRole() {
+    ACT_ROLE = '';
+    S.mainRole = S.profile ? S.profile.role : null;
+    S.mainKey = S.profile ? roleKey(S.profile) : null;
+    S.myExtra = ((S.profile && S.profile.extra_roles) || []).filter(function (r) { return XROLES.indexOf(r) > -1; });
+    var want = '';
+    try { want = localStorage.getItem(actKey()) || ''; } catch (e) {}
+    if (!S.profile || S.profile.role === 'pending' || !want || want === S.mainRole || S.myExtra.indexOf(want) < 0) return;
+    ACT_ROLE = want;
+    var p = Object.assign({}, S.profile, { role: want });
+    if ('read_only' in p) p.read_only = false;
+    if ('role_title' in p) p.role_title = '';
+    S.profile = p;
+  }
   function role() { return S.profile ? S.profile.role : 'pending'; }
   function isAdmin() { return role() === 'superadmin'; }
   // مدير المدرسة: يرى كل الشاشات ولا يعدّل (القاعدة تمنحه القراءة فقط: supabase/manager.sql)
@@ -303,6 +324,7 @@
     var p = await sb.from('profiles').select('*').eq('id', S.uid).maybeSingle();
     if (p.error) fail(p.error);
     S.profile = p.data || null;
+    applyActRole();
     S.myStaff = null; S.mine = null;
     if (S.profile && S.profile.role !== 'pending') {
       var ms = await sb.rpc('my_staff_month', { p_month: null });
@@ -837,7 +859,10 @@
     document.getElementById('brand-name').textContent = schoolName();
     userbar.innerHTML =
       '<div class="who">' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</div>' +
-      '<div class="role">' + String(ROLES[roleKey(S.profile)] || '').replace(/\s*\(.*\)$/, '') + '</div>' +
+      (myRoleChoices().length
+        ? '<label class="role" for="act-role" style="display:block;margin-bottom:2px">أعمل الآن بصلاحية</label><select id="act-role" style="width:100%;margin-bottom:6px">' +
+          myRoleChoices().map(function (r, i) { return '<option value="' + r + '"' + ((ACT_ROLE || S.mainRole) === r ? ' selected' : '') + '>' + String(ROLES[i ? r : S.mainKey] || r).replace(/\s*\(.*\)$/, '') + '</option>'; }).join('') + '</select>'
+        : '<div class="role">' + String(ROLES[roleKey(S.profile)] || '').replace(/\s*\(.*\)$/, '') + '</div>') +
       '<button type="button" class="btn" data-act="sync" title="إعادة جلب البيانات من القاعدة">مزامنة البيانات</button>' +
       '<div class="role" title="رقم نسخة البرنامج المفتوحة في هذا المتصفح">نسخة البرنامج: ' + APP_BUILD + '</div>' +
       (S.syncedAt ? '<div class="role">آخر مزامنة: ' + S.syncedAt.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '</div>' : '') +
