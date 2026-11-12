@@ -1354,7 +1354,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '12/11 — 2';
+  var APP_BUILD = '12/11 — 3';
 
   var syncing = null;
   function syncData(quiet) {
@@ -9582,7 +9582,30 @@
   /* ----- الفصل المؤقت التأديبي -----
      فترة فصل لطالب أو أكثر (supabase/student_suspensions.sql): سجل في student_leaves نوعه suspension.
      أيامه تُحفظ «مأذون» تلقائيًا كالإجازة فلا تُحتسب غيابًا، وتظهر في الكشوف «ف». يضيفه ويحذفه المدير العام والمسجِّل */
-  function spUi() { return ui.sp || (ui.sp = { q: '', sids: [], from: '', to: '', reason: '', all: false }); }
+  function spUi() { return ui.sp || (ui.sp = { q: '', sids: [], from: '', to: '', reason: '', all: false, send: false, text: '' }); }
+  var SP_TPL = 'السلام عليكم ورحمة الله وبركاته،\nولي أمر الطالب/ة {الاسم} المحترم،\nنحيطكم علمًا بأنه تقرر فصل ابنكم/ابنتكم فصلًا مؤقتًا من {من} إلى {إلى} بسبب {السبب}.\nيُرجى مراجعة إدارة الأكاديمية.\n{الأكاديمية}';
+  function spMsg(u, from, to) {
+    var t = (typeof waTpl === 'function' && waTpl('suspension')) || null;
+    return (t ? t.body : SP_TPL).replace(/\{من\}/g, dmy(from)).replace(/\{إلى\}/g, dmy(to)).replace(/\{السبب\}/g, u.reason.trim() || '…');
+  }
+  // كتاب قرار الفصل المؤقت لولي الأمر
+  var pendingSp = null;
+  function addDaysISO(d, n) { var t = new Date(d + 'T12:00:00'); t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); }
+  function buildSpSheet(id) {
+    var l = (S.stLeaves || []).filter(function (q) { return q.id === id; })[0], x = l && findStudent(l.student_id);
+    if (!l || !x) { sheet.className = 'ps'; sheet.innerHTML = '<p>لا بيانات.</p>'; return; }
+    var n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1, g = x.guardian_name || (x.details && x.details.guardian_name) || '';
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = reportHead('قرار فصل مؤقت', [['التاريخ', dmy(todayISO())], ['الموضوع', 'فصل مؤقت تأديبي']], { noIssueDate: true }) +
+      '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ولي أمر الطالب/ة ' + esc(x.full_name) + '</b>' + (x.class_name ? ' — ' + esc(x.class_name) : '') + '</p>' +
+      '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
+      '<p style="margin:0 0 .6em;line-height:1.9">نحيطكم علمًا بأنه تقرر فصل ابنكم/ابنتكم المذكور/ة أعلاه فصلًا مؤقتًا لمدة ' + (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n + (n <= 10 ? ' أيام' : ' يومًا')) + '، من يوم ' + esc(dayName(l.from_day)) + ' ' + dmy(l.from_day) + ' إلى يوم ' + esc(dayName(l.to_day)) + ' ' + dmy(l.to_day) + '، وذلك بسبب: <b>' + esc(l.reason) + '</b>.</p>' +
+      '<p style="margin:0 0 .6em;line-height:1.9">ويعود الطالب/ة إلى الدوام بعد انتهاء مدة الفصل، ونرجو مراجعة إدارة الأكاديمية ومتابعة سلوك ابنكم/ابنتكم حرصًا على مصلحته/ا.</p>' +
+      '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
+      reportSigns([['مدير/ة الأكاديمية', principalName()], ['ولي الأمر (إقرار بالاستلام)', g]]);
+    fitSheet();
+  }
   function spActive() { var t = todayISO(); return (S.stLeaves || []).filter(function (l) { return l.kind === 'suspension' && l.from_day <= t && t <= l.to_day; }).length; }
   function spMatches() {
     var u = spUi(), words = norm(u.q).split(/\s+/).filter(Boolean);
@@ -9609,18 +9632,33 @@
         '<div><label class="field" for="sp-from">من</label><input type="date" id="sp-from" value="' + esc(u.from || today) + '"></div>' +
         '<div><label class="field" for="sp-to">إلى</label><input type="date" id="sp-to" value="' + esc(u.to || u.from || today) + '"></div>' +
         '<div style="flex:2;min-width:200px"><label class="field" for="sp-reason">سبب الفصل <span class="req">*</span></label><input type="text" id="sp-reason" value="' + esc(u.reason) + '" placeholder="مثال: مشاجرة داخل الصف"></div></div>' +
+        '<div style="margin-top:10px"><label class="check" style="margin:0"><input type="checkbox" id="sp-send"' + (u.send ? ' checked' : '') + '> إرسال رسالة واتساب لولي الأمر (على جوال ولي الأمر)</label>' +
+          (u.send ? '<textarea id="sp-text" rows="6" style="margin-top:6px">' + esc(u.text || spMsg(u, u.from || today, u.to || u.from || today)) + '</textarea><p class="hint" style="margin:4px 0 0">النص من قالب «فصل طالب» في «رسائل واتساب ← القوالب». {الاسم} و{الأكاديمية} تُستبدل عند الإرسال.</p>' : '') + '</div>' +
         '<div class="actions" style="margin-top:8px"><button type="button" class="btn primary" data-spadd>تسجيل الفصل المؤقت</button></div>' : '') +
       '<div class="toolbar" style="margin:12px 0 0;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="sp-all" data-ro-ok' + (u.all ? ' checked' : '') + '> عرض الفصل المنتهي أيضًا</label></div>' +
       (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>الشعبة</th><th>من</th><th>إلى</th><th>الأيام</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' +
         list.map(function (l) {
           var x = findStudent(l.student_id), n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1;
           return '<tr><td><b>' + esc(x ? x.full_name : '—') + '</b>' + (l.from_day <= today && today <= l.to_day ? ' <span class="badge unpaid">مفصول اليوم</span>' : l.from_day > today ? ' <span class="badge pending">لم يبدأ</span>' : '') + '</td><td>' + esc(x ? x.class_name || '' : '') + '</td><td>' + dmy(l.from_day) + '</td><td>' + dmy(l.to_day) + '</td><td>' + n + '</td><td>' + esc(l.reason) + '</td><td>' + esc(l.created_by || '') + '</td>' +
-            '<td>' + (edit ? '<button type="button" class="btn danger" data-spdel="' + l.id + '">حذف</button>' : '') + '</td></tr>';
+            '<td style="white-space:nowrap"><button type="button" class="btn" data-ro-ok data-spprint="' + l.id + '">كتاب الفصل</button> ' +
+              (edit && l.from_day < today && l.to_day >= today ? '<button type="button" class="btn" data-spend="' + l.id + '">إنهاء اليوم</button> ' : '') +
+              (edit ? '<button type="button" class="btn danger" data-spdel="' + l.id + '">حذف</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty" style="margin-top:8px">لا فصل مؤقت ' + (u.all ? 'مسجَّل' : 'حالي أو قادم') + '.</div>') + '</div>';
   }
   document.addEventListener('click', async function (e) {
-    if (location.hash !== '#/affairs/suspend' || !canEditDisc()) return;
+    if (location.hash !== '#/affairs/suspend') return;
     var el, u = spUi();
+    if ((el = e.target.closest('[data-spprint]'))) { pendingSp = el.getAttribute('data-spprint'); return printNow(); }
+    if (!canEditDisc()) return;
+    if ((el = e.target.closest('[data-spend]'))) {
+      var eid = el.getAttribute('data-spend'), el2 = S.stLeaves.filter(function (q) { return q.id === eid; })[0], y = addDaysISO(todayISO(), -1);
+      if (!el2 || !confirm('إنهاء فصل ' + ((findStudent(el2.student_id) || {}).full_name || '') + ' اليوم؟ يعود الطالب إلى الدوام من اليوم، ويبقى الفصل مسجَّلًا حتى ' + dmy(y) + '.')) return;
+      var ur = await sb.from('student_leaves').update({ to_day: y }).eq('id', eid).select();
+      if (ur.error) return fail(ur.error);
+      el2.to_day = y; S.attDay = {};
+      render();
+      return toast('انتهى الفصل. يُسجَّل الطالب في الحضور من اليوم كالمعتاد.');
+    }
     if ((el = e.target.closest('[data-sppick]'))) { u.sids.push(el.getAttribute('data-sppick')); u.q = ''; render(); var qf = document.getElementById('sp-q'); if (qf) qf.focus(); return; }
     if ((el = e.target.closest('[data-spun]'))) { u.sids = u.sids.filter(function (id) { return id !== el.getAttribute('data-spun'); }); return render(); }
     if (e.target.closest('[data-spadd]')) {
@@ -9636,9 +9674,17 @@
       S.stLeaves = (r.data || []).concat(S.stLeaves);
       S.attDay = {}; // الأيام المسجَّلة داخل الفصل صارت «مأذون» في القاعدة
       if (ui.af) ui.af.rows = null;
+      var text = u.send ? (u.text || spMsg(u, from, to)) : '';
       ui.sp = null;
       render();
-      return toast('سُجِّل الفصل المؤقت لـ' + nm);
+      toast('سُجِّل الفصل المؤقت لـ' + nm);
+      if (text) {
+        var w = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'susp-' + r.data[0].id, kind: 'suspension', title: 'فصل مؤقت', text: text, student_ids: sids, per: 'student', school: schoolName() } });
+        var wd = w.data || {};
+        if (w.error || wd.error) return toast('حُفظ الفصل، لكن تعذّر إرسال الرسالة: ' + (wd.error || w.error.message), true);
+        toast('أُضيفت رسالة الفصل إلى قائمة الإرسال. تابعها في «رسائل واتساب».');
+      }
+      return;
     }
     if ((el = e.target.closest('[data-spdel]'))) {
       var id = el.getAttribute('data-spdel'), l = S.stLeaves.filter(function (q) { return q.id === id; })[0];
@@ -9653,6 +9699,7 @@
     if (location.hash !== '#/affairs/suspend') return;
     var u = spUi(), id = e.target.id;
     if (id === 'sp-all') { u.all = e.target.checked; return render(); }
+    if (id === 'sp-send') { u.send = e.target.checked; return render(); }
     if (id === 'sp-from') { u.from = e.target.value; if (!u.to || u.to < u.from) u.to = u.from; return render(); }
     if (id === 'sp-to') u.to = e.target.value;
   });
@@ -9660,6 +9707,7 @@
     if (location.hash !== '#/affairs/suspend') return;
     var u = spUi(), id = e.target.id;
     if (id === 'sp-reason') { u.reason = e.target.value; return; }
+    if (id === 'sp-text') { u.text = e.target.value; return; }
     if (id === 'sp-q') { var pos = e.target.selectionStart; u.q = e.target.value; render(); var q = document.getElementById('sp-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } }
   });
 
@@ -19581,6 +19629,7 @@
     else if (pendingAfList) buildAffairsListSheet();
     else if (pendingLt) buildLateLetterSheet(pendingLt);
     else if (pendingLa) buildAbsLetterSheet(pendingLa);
+    else if (pendingSp) buildSpSheet(pendingSp);
     else if (pendingDm) buildDismissSheet(pendingDm);
     else if (pendingTs) buildTransportStatusSheet();
     else if (pendingLedRef) buildLedRefSheet();
@@ -19618,6 +19667,7 @@
     pendingTg = false;
     pendingSl = null;
     pendingLa = null;
+    pendingSp = null;
     pendingWarn = null;
     pendingDc = false;
     pendingEx = null;

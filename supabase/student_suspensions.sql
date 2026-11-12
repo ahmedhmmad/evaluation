@@ -45,3 +45,9 @@ begin
     from att_roll(p_class) r), '[]'::jsonb));
 end $$;
 grant execute on function public.api_att_roll(text) to authenticated;
+
+-- قالب رسالة الفصل المؤقت لولي الأمر: يُعدَّل من «رسائل واتساب» ← «القوالب».
+-- {الاسم} {من} {إلى} {السبب} {الأكاديمية} تُستبدل عند الإرسال
+insert into public.wa_templates (key, title, body, sort) values
+  ('suspension', 'فصل طالب', E'السلام عليكم ورحمة الله وبركاته،\nولي أمر الطالب/ة {الاسم} المحترم،\nنحيطكم علمًا بأنه تقرر فصل ابنكم/ابنتكم فصلًا مؤقتًا من {من} إلى {إلى} بسبب {السبب}.\nيُرجى مراجعة إدارة الأكاديمية.\n{الأكاديمية}', 7)
+on conflict (key) do nothing;
