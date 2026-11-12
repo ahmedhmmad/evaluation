@@ -1354,7 +1354,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '12/11 — 5';
+  var APP_BUILD = '12/11 — 6';
 
   var syncing = null;
   function syncData(quiet) {
@@ -10750,10 +10750,11 @@
     var q = norm(c.q), list = c.list.filter(function (x) { return !q || norm(x.payee + ' ' + x.description + ' ' + (x.items || []).map(function (i) { return i.item; }).join(' ')).indexOf(q) > -1; });
     var sum = list.reduce(function (t, x) { return t + clTotal(x); }, 0);
     app.innerHTML = head + '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0;flex:1">عدد المطالبات: ' + list.length + ' — المجموع: ' + clMoney(sum) + '</h2>' +
+      (function () { var n = Object.keys(c.sel || {}).filter(function (k) { return c.sel[k]; }).length; return '<button type="button" class="btn primary" data-clprintsel data-ro-ok' + (n ? '' : ' disabled') + '>طباعة المحدد' + (n ? ' (' + n + ')' : '') + ' — 6 في الصفحة</button>'; })() +
       '<input type="search" id="cl-q" placeholder="بحث بالاسم أو البيان" aria-label="بحث" style="max-width:260px" value="' + esc(c.q) + '"></div>' +
       (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم</th><th>التاريخ</th><th>المستفيد</th><th>النوع</th><th>البيان</th><th>المبلغ</th><th>الحالة</th><th></th></tr></thead><tbody>' +
         list.map(function (x) {
-          return '<tr><td>' + esc(x.no) + '</td><td>' + dmy(x.claim_date) + '</td><td><b>' + esc(x.payee) + '</b></td><td>' + esc(CL_KIND[x.kind] || '') + '</td><td>' + esc(x.description || (x.items || []).map(function (i) { return i.item; }).join('، ')) + '</td>' +
+          return '<tr><td><label class="check" style="margin:0"><input type="checkbox" data-clsel="' + x.id + '" data-ro-ok' + (c.sel && c.sel[x.id] ? ' checked' : '') + '> ' + esc(x.no) + '</label></td><td>' + dmy(x.claim_date) + '</td><td><b>' + esc(x.payee) + '</b></td><td>' + esc(CL_KIND[x.kind] || '') + '</td><td>' + esc(x.description || (x.items || []).map(function (i) { return i.item; }).join('، ')) + '</td>' +
             '<td><b>' + clMoney(clTotal(x)) + '</b></td><td>' + (x.status === 'paid' ? '<span class="badge paid">صُرف</span>' : '<span class="badge pending">لم يُصرف</span>') + '</td>' +
             '<td style="white-space:nowrap"><button type="button" class="btn" data-clprint="' + x.id + '" data-ro-ok>طباعة / PDF</button>' +
             (edit ? ' <button type="button" class="btn" data-clopen="' + x.id + '">تعديل</button> <button type="button" class="btn danger" data-cldel="' + x.id + '">حذف</button>' : '') + '</td></tr>';
@@ -10787,24 +10788,38 @@
 
   var pendingCl = null;
   // سند المطالبة: البيانات، جدول البنود والإجمالي، إقرار المستلم، ثم التوقيعات (المستلم، مسلِّم المبلغ، المدير)
-  function buildClaimSheet(o) {
+  // سند الصرف: سند صغير بترويسة سطر واحد، 6 سندات في صفحة A4 (عمودان × 3 صفوف) بخطوط قص.
+  // سند واحد ← أصل ونسخة؛ «طباعة المحدد» ← كل سند مرة، 6 في كل صفحة
+  function clVoucher(o, tag) {
     var items = (o.items || []).filter(function (i) { return String(i.item || '').trim(); }), total = clTotal(o);
+    var lines = items.map(function (it) { return esc(it.item) + (it.qty ? ' (' + esc(it.qty) + ')' : '') + (items.length > 1 && it.amount ? ' — ' + clMoney(Number(latinDigits(String(it.amount)).replace(/[^\d.]/g, '')) || 0) : ''); }).join('، ');
+    if (o.kind !== 'purchase' && o.description) lines = esc(o.description) + (lines ? ' — ' + lines : '');
+    var sg = function (t, n) { return '<div style="flex:1;text-align:center"><b style="font-size:8.5pt">' + t + '</b><div style="font-size:8.5pt;min-height:1.3em">' + esc(n || '') + '</div><div style="border-bottom:1px dotted #555;margin:5mm 2mm 0"></div></div>'; };
+    return '<div style="position:relative;box-sizing:border-box;height:100%;padding:3mm 3.5mm;display:flex;flex-direction:column;font-size:9.5pt;line-height:1.55;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:2mm;border-bottom:1.5px solid #13306B;padding-bottom:1.5mm">' +
+        '<img src="' + REPORT.logo + '" alt="" style="width:10mm;height:10mm;object-fit:contain">' +
+        '<div style="flex:1;line-height:1.3"><div style="font-weight:700;color:#13306B;font-size:9.5pt">' + esc(schoolName()) + '</div><div style="font-size:12pt;font-weight:700">سند صرف</div></div>' +
+        '<div style="text-align:left;font-size:8.5pt;line-height:1.4"><span style="border:1.2px solid #13306B;color:#13306B;font-weight:700;padding:0 6px;border-radius:3px">' + tag + '</span><div>رقم: <b>' + esc(o.no || '') + '</b></div><div>' + dmy(o.claim_date) + '</div></div></div>' +
+      '<div style="margin-top:1.5mm">اسم المستفيد: <b>' + esc(o.payee) + '</b></div>' +
+      (o.payee_id ? '<div>رقم الموبايل: <span dir="ltr">' + esc(o.payee_id) + '</span></div>' : '') +
+      '<div style="margin:1mm 0;padding:1mm 2mm;background:#F4F1EA;border-radius:2mm">المبلغ: <b style="font-size:11pt">' + clMoney(total) + '</b><div style="font-size:8.5pt">فقط ' + esc(arMoneyWords(total)) + ' لا غير</div></div>' +
+      (lines ? '<div style="font-size:8.5pt;max-height:3.2em;overflow:hidden">وذلك مقابل: ' + lines + '</div>' : '') +
+      '<div style="font-size:8pt;color:#333;margin-top:1mm">أقر بأنني استلمت المبلغ المذكور أعلاه، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</div>' +
+      '<div style="display:flex;gap:2mm;margin-top:auto">' + sg('المستلم', o.payee) + sg('مسلِّم المبلغ', o.payer) + sg('المدير/ة', principalName()) + '</div></div>';
+  }
+  function buildClaimSheet(o) {
+    var cells = Array.isArray(o) ? o.map(function (x) { return [x, 'أصل']; }) : [[o, 'أصل'], [o, 'نسخة']], pages = [];
+    for (var k = 0; k < cells.length; k += 6) pages.push(cells.slice(k, k + 6));
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
-    var one = function (copy) { return '<div style="position:relative;' + (copy ? 'border-top:1px dashed #999;margin-top:5mm;padding-top:4mm' : '') + '"><span style="position:absolute;top:' + (copy ? '4mm' : '0') + ';left:0;border:1.5px solid #13306B;color:#13306B;font-weight:700;padding:1px 10px;border-radius:4px;z-index:3">' + (copy ? 'نسخة' : 'أصل') + '</span>' + reportHead('سند صرف', [['رقم السند', o.no || ''], ['التاريخ', dmy(o.claim_date)], ['النوع', CL_KIND[o.kind] || '']], { noIssueDate: true }).replace(copy ? /^<img class="wm"[^>]*>/ : /^$/, '') +
-      '<table class="rz" style="margin:.9em 0 .6em"><tbody>' +
-        '<tr><th style="width:28%;text-align:right">اسم المستفيد</th><td><b>' + esc(o.payee) + '</b></td></tr>' +
-        (o.payee_id ? '<tr><th style="text-align:right">رقم الموبايل</th><td dir="ltr" style="text-align:right">' + esc(o.payee_id) + '</td></tr>' : '') +
-        (o.description && o.kind !== 'purchase' ? '<tr><th style="text-align:right">العمل المنجز</th><td style="white-space:pre-wrap">' + esc(o.description) + '</td></tr>' : '') +
-      '</tbody></table>' +
-      (items.length ? '<table class="rz" style="margin:.4em 0 .6em"><thead><tr><th style="width:3em">م</th><th>' + (o.kind === 'purchase' ? 'الصنف' : 'البند') + '</th><th style="width:7em">الكمية</th><th style="width:9em">المبلغ</th></tr></thead><tbody>' +
-        items.map(function (it, i) { return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(it.item) + '</td><td class="c">' + esc(it.qty || '-') + '</td><td class="c">' + esc(it.amount ? clMoney(Number(latinDigits(String(it.amount)).replace(/[^\d.]/g, '')) || 0) : '-') + '</td></tr>'; }).join('') +
-        '<tr class="total"><td colspan="3">الإجمالي</td><td class="c"><b>' + clMoney(total) + '</b></td></tr></tbody></table>' : '') +
-      '<p style="margin:.8em 0 .4em;line-height:2">أقر أنا الموقّع أدناه <b>' + esc(o.payee) + '</b> بأنني استلمت من إدارة ' + esc(schoolName()) + ' مبلغًا وقدره <b>' + clMoney(total) + '</b>' +
-        ' (فقط ' + esc(arMoneyWords(total)) + ' لا غير)، وذلك مقابل ' + (o.kind === 'purchase' ? 'الأصناف المبيّنة أعلاه' : 'العمل المبيّن أعلاه') + '، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</p>' +
-      reportSigns([['المستلم (المستفيد)', o.payee], ['مسلِّم المبلغ', o.payer], ['مدير/ة الأكاديمية', principalName()]]) + '</div>'; };
-    sheet.innerHTML = one(false) + one(true);
-    fitSheet();
+    sheet.setAttribute('data-nosign', '1');
+    sheet.innerHTML = pages.map(function (pg, pi) {
+      return '<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,86mm);border:1px dashed #999;' + (pi < pages.length - 1 ? 'break-after:page;page-break-after:always;' : '') + '">' +
+        [0, 1, 2, 3, 4, 5].map(function (n) {
+          var c = pg[n];
+          return '<div style="border-' + (n % 2 ? 'right' : 'left') + ':1px dashed #999;' + (n < 4 ? 'border-bottom:1px dashed #999;' : '') + 'overflow:hidden">' + (c ? clVoucher(c[0], c[1]) : '') + '</div>';
+        }).join('') + '</div>';
+    }).join('');
   }
   function clPick(id) { return clState().list.filter(function (x) { return x.id === id; })[0]; }
   async function clSave(andPrint) {
@@ -10826,6 +10841,7 @@
   document.addEventListener('click', async function (e) {
     if (location.hash !== '#/claims' || !canView()) return;
     var el, c = clState(), o = c.edit;
+    if (e.target.closest('[data-clprintsel]')) { var ps = c.list.filter(function (x) { return c.sel && c.sel[x.id]; }); if (ps.length) { pendingCl = ps; printNow(); } return; }
     if ((el = e.target.closest('[data-clprint]'))) { var p = clPick(el.getAttribute('data-clprint')); if (p) { pendingCl = p; printNow(); } return; }
     if (!isAdmin()) return;
     if (e.target.closest('[data-clnew]')) { c.edit = clNew(); scrollTo(0, 0); return render(); }
@@ -10847,6 +10863,7 @@
   });
   function clInput(e) {
     if (location.hash !== '#/claims') return;
+    if (e.target.matches && e.target.matches('[data-clsel]')) { var cs = clState(); cs.sel = cs.sel || {}; cs.sel[e.target.getAttribute('data-clsel')] = e.target.checked; return render(); }
     var c = clState(), o = c.edit, el = e.target, a;
     if (el.id === 'cl-q') { var pos = el.selectionStart; c.q = el.value; render(); var q = document.getElementById('cl-q'); if (q) { q.focus(); try { q.setSelectionRange(pos, pos); } catch (x) {} } return; }
     if (!o) return;
