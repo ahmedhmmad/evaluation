@@ -1354,7 +1354,7 @@
      لا ما كان عند فتح الصفحة (ما أضافه مسجِّل آخر مثلًا). تُستدعى من زر «مزامنة البيانات» وقبل كل تصدير Excel.
      إن تعذّر الجلب أو لم يكتمل تبقى البيانات السابقة كما هي وتعيد false. quiet: بلا رسائل نجاح */
   // يُزاد مع كل نشر: به يُعرف هل الصفحة المفتوحة هي الأحدث أم نسخة قديمة من ذاكرة المتصفح
-  var APP_BUILD = '12/11 — 3';
+  var APP_BUILD = '12/11 — 4';
 
   var syncing = null;
   function syncData(quiet) {
@@ -1835,7 +1835,8 @@
     // «الشهر» في المواصلات هو الدورة الجارية (من بدايتها إلى اليوم)
     var today = todayISO(), month = canView() ? currentCycle(today) : today.slice(0, 7), d = { day: today, month: month, at: new Date() };
     var att = await fetchAll(function () { return sb.from('attendance').select('student_id, status, class_name').eq('day', today).order('student_id'); });
-    d.att = att ? attNormRows(att) : null;
+    if (S.stLeaves == null) await loadStLeaves();
+    d.att = att ? attNormRows(att, today) : null;
     if (canView() && !S.transportMissing) {
       var got = await receiptsBetween(cycleOf(month).from, today);
       d.recs = got ? got.list : null;
@@ -9560,7 +9561,7 @@
   function afAgg() {
     var u = afUi(), per = {};
     (u.rows || []).forEach(function (r) {
-      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, abs: [] });
+      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, suspended: 0, abs: [] });
       p[r.status]++;
       if (r.status === 'absent') p.abs.push({ day: r.day, note: r.note || '' });
     });
@@ -10099,12 +10100,12 @@
   function afRowsHtml(list, per) {
     var LIMIT = 150;
     var body = list.slice(0, LIMIT).map(function (x, i) {
-      var p = per[x.id] || { present: 0, absent: 0, excused: 0 };
+      var p = per[x.id] || { present: 0, absent: 0, excused: 0, suspended: 0 };
       return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '<br><span style="font-size:.88rem"><a href="#/affairs/' + x.id + '/absence" data-afhover="' + x.id + '">سجل الغياب</a> · <a href="#/affairs/' + x.id + '/file">ملف الطالب</a> · <a href="#/affairs/' + x.id + '/warning">إنذار</a> · <a href="#/affairs/' + x.id + '/consent">موافقة ولي الأمر</a></span></td><td>' + esc(x.class_name || '—') + '</td>' +
-        '<td>' + afAgeText(x) + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + attPct(p) + '</td>' +
+        '<td>' + afAgeText(x) + '</td><td>' + (p.absent ? '<b style="color:var(--red)">' + p.absent + '</b>' : 0) + '</td><td>' + (p.excused || 0) + '</td><td>' + (p.suspended ? '<b style="color:var(--red)">' + p.suspended + '</b>' : 0) + '</td><td>' + attPct(p) + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(plainPhone(x.phone) || '—') + '</td></tr>';
     }).join('');
-    return (body ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>العمر</th><th>أيام الغياب</th><th>مأذون</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + body + '</tbody></table></div>'
+    return (body ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>العمر</th><th>أيام الغياب</th><th>مأذون</th><th>مفصول</th><th>نسبة الحضور</th><th>واتساب ولي الأمر</th></tr></thead><tbody>' + body + '</tbody></table></div>'
       : '<div class="empty">لا يوجد طلاب مطابقون.</div>') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ ضيّق البحث أو اختر شعبة.</p>' : '');
   }
 
@@ -10128,7 +10129,7 @@
   function afStudentData(x) {
     var u = afUi(), from = u.from, to = u.to;
     var rows = (u.rows || []).filter(function (r) { return r.student_id === x.id && r.day >= from && r.day <= to; }).sort(function (p, q) { return p.day.localeCompare(q.day); });
-    var n = { present: 0, absent: 0, excused: 0 };
+    var n = { present: 0, absent: 0, excused: 0, suspended: 0 };
     rows.forEach(function (r) { n[r.status]++; });
     return { x: x, rows: rows, n: n, from: from, to: to };
   }
@@ -10216,7 +10217,7 @@
         '<span class="monthpick"><label class="field" for="af-to">إلى</label><input type="date" id="af-to" data-ro-ok value="' + u.to + '"></span>' +
         '<button type="button" class="btn" data-afprint="pdf" data-ro-ok>طباعة / PDF</button><button type="button" class="btn" data-afprint="xlsx" data-ro-ok>Excel</button></div>' +
         (u.loading ? '<p class="hint">جارٍ جلب السجلات…</p>' : u.attErr ? '<p class="formhint">تعذّر جلب سجلات الحضور.</p>' :
-          '<div class="stats">' + [['حاضر', D.n.present], ['غائب', D.n.absent, D.n.absent ? 'var(--red)' : ''], ['مأذون', D.n.excused], ['نسبة الحضور', attPct(D.n)]].map(function (c) {
+          '<div class="stats">' + [['حاضر', D.n.present], ['غائب', D.n.absent, D.n.absent ? 'var(--red)' : ''], ['مأذون', D.n.excused]].concat(D.n.suspended ? [['مفصول', D.n.suspended, 'var(--red)']] : [], [['نسبة الحضور', attPct(D.n)]]).map(function (c) {
             return '<div class="card stat"><span class="lbl">' + c[0] + '</span><span class="num"' + (c[2] ? ' style="color:' + c[2] + '"' : '') + '>' + c[1] + '</span></div>';
           }).join('') + '</div>' +
           (rows ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>الحالة</th><th>ملاحظة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -10239,9 +10240,9 @@
     if (!el || !/^#\/affairs/.test(location.hash)) return;
     var x = findStudent(el.getAttribute('data-afhover'));
     if (!x) return;
-    var u = afUi(), p = (afAgg()[x.id]) || { present: 0, absent: 0, excused: 0, abs: [] }, pop = afPop();
+    var u = afUi(), p = (afAgg()[x.id]) || { present: 0, absent: 0, excused: 0, suspended: 0, abs: [] }, pop = afPop();
     var last = p.abs.slice(-5).reverse();
-    pop.innerHTML = '<b>' + esc(x.full_name) + '</b><br>' + (u.rows ? 'منذ ' + dmy(u.loadedFrom || u.from) + ': غائب <b style="color:var(--red)">' + p.absent + '</b> · مأذون ' + p.excused + ' · حاضر ' + p.present + ' · نسبة الحضور <b>' + attPct(p) + '</b>' +
+    pop.innerHTML = '<b>' + esc(x.full_name) + '</b><br>' + (u.rows ? 'منذ ' + dmy(u.loadedFrom || u.from) + ': غائب <b style="color:var(--red)">' + p.absent + '</b> · مأذون ' + p.excused + (p.suspended ? ' · مفصول ' + p.suspended : '') + ' · حاضر ' + p.present + ' · نسبة الحضور <b>' + attPct(p) + '</b>' +
       (last.length ? '<br><span style="color:#5e6b80">آخر غياب:</span><br>' + last.map(function (a) { return dmy(a.day) + (a.note ? ' — ' + esc(a.note) : ''); }).join('<br>') : '<br>لا غياب مسجَّل.') : 'جارٍ جلب السجلات…') +
       '<br><span style="color:#5e6b80;font-size:.8rem">اضغط لفتح الصفحة</span>';
     pop.style.display = 'block';
@@ -16416,13 +16417,13 @@
      ثلاث حالات: حاضر وغائب ومأذون (المأذون لا يُعدّ حاضرًا ولا غائبًا: لا يظهر اسمه بين الغائبين ولا يدخل في النسبة؛ «متأخر» القديمة تُعدّ حاضرًا).
      اليوم: تسجيل شعبة، أو ملخص المدرسة مع الغائبين. الفترة: نسب الحضور لكل طالب ولكل شعبة */
 
-  var ATT = { present: 'حاضر', absent: 'غائب', excused: 'مأذون' };
-  var ATT_BADGE = { present: 'paid', absent: 'unpaid', excused: 'part' };
+  var ATT = { present: 'حاضر', absent: 'غائب', excused: 'مأذون', suspended: 'مفصول' };
+  var ATT_BADGE = { present: 'paid', absent: 'unpaid', excused: 'part', suspended: 'unpaid' };
   S.attDay = {};          // { 'YYYY-MM-DD': { studentId: صف } }
   S.attMissing = false;
 
-  function attNorm(status) { return status === 'excused' ? 'excused' : status === 'absent' ? 'absent' : 'present'; }
-  function attNormRows(rows) { (rows || []).forEach(function (r) { r.status = attNorm(r.status); }); return rows; }
+  function attNorm(status, sid, day) { return status === 'suspended' ? 'suspended' : status === 'excused' ? (sid && day && stSuspOn(sid, day) ? 'suspended' : 'excused') : status === 'absent' ? 'absent' : 'present'; }
+  function attNormRows(rows, day) { (rows || []).forEach(function (r) { r.status = attNorm(r.status, r.student_id, r.day || day); }); return rows; }
 
   function attState() {
     if (!ui.att) ui.att = { view: 'day', day: todayISO(), cls: '', draft: {}, busy: false, from: todayISO().slice(0, 8) + '01', to: todayISO(), report: null, loading: false, dayNote: '' };
@@ -16583,7 +16584,7 @@
     var rows = await fetchAll(function () { return sb.from('attendance').select('*').eq('day', day).order('student_id'); });
     if (!rows) { S.attMissing = true; render(); return; }
     var map = {};
-    attNormRows(rows).forEach(function (r) { map[r.student_id] = r; });
+    attNormRows(rows, day).forEach(function (r) { map[r.student_id] = r; });
     S.attDay[day] = map;
     render();
   }
@@ -16603,13 +16604,13 @@
   // حالة الطالب في اليوم المعروض: ما عُدِّل ولم يُحفظ، ثم المحفوظ، وإلا حاضر
   function attOf(sid) {
     var a = attState(), d = a.draft[sid], saved = (S.attDay[a.day] || {})[sid], lv = !d && !saved ? stLeaveOn(sid, a.day) : null;
-    if (lv) return { status: 'excused', note: (lv.kind === 'suspension' ? 'فصل مؤقت' : 'إجازة') + (lv.reason ? ': ' + lv.reason : ''), saved: saved, leave: lv };
+    if (lv) return { status: lv.kind === 'suspension' ? 'suspended' : 'excused', note: (lv.kind === 'suspension' ? 'فصل مؤقت' : 'إجازة') + (lv.reason ? ': ' + lv.reason : ''), saved: saved, leave: lv };
     return { status: d ? d.status : saved ? saved.status : 'present', note: d && d.note != null ? d.note : saved ? saved.note || '' : '', saved: saved };
   }
 
   function attCounts(list, get) {
-    var n = { present: 0, absent: 0, excused: 0 };
-    list.forEach(function (x) { n[attNorm(get(x))]++; });
+    var n = { present: 0, absent: 0, excused: 0, suspended: 0 };
+    list.forEach(function (x) { n[attNorm(get(x), x && x.id, attState().day)]++; });
     return n;
   }
 
@@ -16620,7 +16621,7 @@
 
   function attStatsHtml(n, sub) {
     var card = function (lbl, num, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
-    return '<div class="stats">' + card('حاضر', n.present) + card('غائب', n.absent, n.absent ? 'var(--red)' : '') + (n.excused ? card('مأذون', n.excused) : '') + card('نسبة الحضور', attPct(n)) + '</div>';
+    return '<div class="stats">' + card('حاضر', n.present) + card('غائب', n.absent, n.absent ? 'var(--red)' : '') + (n.excused ? card('مأذون', n.excused) : '') + (n.suspended ? card('مفصول', n.suspended, 'var(--red)') : '') + card('نسبة الحضور', attPct(n)) + '</div>';
   }
 
   function attClassHtml(cls) {
@@ -16644,7 +16645,7 @@
     }
     var rows = roll.map(function (x, i) {
       var st = attOf(x.id);
-      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td><div class="acts">' + Object.keys(ATT).map(function (k) {
+      return '<tr><td>' + (i + 1) + '</td><td class="who"><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td><td><div class="acts">' + (stSuspOn(x.id, attState().day) ? ['suspended'] : ['present', 'absent', 'excused']).map(function (k) {
           return '<button type="button" class="btn' + (st.status === k ? ' primary' : '') + '" data-attset="' + x.id + '" data-attv="' + k + '"' + (st.status === k ? ' aria-pressed="true"' : ' aria-pressed="false"') +
             (st.status === k && k === 'absent' ? ' style="background:var(--red);border-color:transparent"' : '') + '>' + ATT[k] + '</button>';
         }).join('') + '</div></td>' +
@@ -16664,14 +16665,14 @@
   }
 
   function attSchoolHtml() {
-    var a = attState(), saved = S.attDay[a.day] || {}, all = { present: 0, absent: 0, excused: 0 }, missing = [], absentees = [];
+    var a = attState(), saved = S.attDay[a.day] || {}, all = { present: 0, absent: 0, excused: 0, suspended: 0 }, missing = [], absentees = [];
     var rows = attClasses().map(function (cls) {
       var roll = classRoll(cls);
       if (!roll.length) return '';
       var taken = roll.filter(function (x) { return saved[x.id]; });
       if (!taken.length) missing.push(cls);
       var n = attCounts(taken, function (x) { return saved[x.id].status; });
-      all.present += n.present; all.absent += n.absent; all.excused += n.excused;
+      all.present += n.present; all.absent += n.absent; all.excused += n.excused; all.suspended += n.suspended;
       var gone = taken.filter(function (x) { return saved[x.id].status === 'absent'; });
       gone.forEach(function (x) { absentees.push({ x: x, r: saved[x.id] }); });
       return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>' + roll.length + '</td>' +
@@ -16703,11 +16704,11 @@
   function attCollect(rows) {
     var per = {}, byClass = {}, cell = {};
     rows.forEach(function (r) {
-      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, notes: [], days: {} });
+      var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, suspended: 0, notes: [], days: {} });
       p[r.status]++;
       p.days[r.day] = r.status;
       if (r.note && r.status === 'absent' && p.notes.indexOf(r.note) < 0) p.notes.push(r.note);
-      var c = byClass[r.class_name] || (byClass[r.class_name] = { days: {}, n: { present: 0, absent: 0, excused: 0 } });
+      var c = byClass[r.class_name] || (byClass[r.class_name] = { days: {}, n: { present: 0, absent: 0, excused: 0, suspended: 0 } });
       c.days[r.day] = 1;
       c.n[r.status]++;
       var key = r.class_name + '|' + r.day, v = cell[key] || (cell[key] = { absent: 0, all: 0 });
@@ -16843,7 +16844,7 @@
     var a = attState(), x = findStudent(sid);
     if (!a.report || !x) return null;
     var rows = a.report.rows.filter(function (r) { return r.student_id === sid; }).sort(function (p, q) { return p.day.localeCompare(q.day); });
-    var n = { present: 0, absent: 0, excused: 0 };
+    var n = { present: 0, absent: 0, excused: 0, suspended: 0 };
     rows.forEach(function (r) { n[r.status]++; });
     return { x: x, rows: rows, n: n, from: a.report.from, to: a.report.to };
   }
@@ -16862,7 +16863,7 @@
       var wb = XLSX.utils.book_new(), used = {};
       wb.Workbook = { Views: [{ RTL: true }] };
       xlsxSheet(wb, used, 'سجل الطالب', [[schoolName()], ['سجل الحضور والغياب — ' + D.x.full_name + rsvText(D.x)], ['الشعبة: ' + (D.x.class_name || '—') + ' · من ' + dmy(D.from) + ' إلى ' + dmy(D.to)],
-        ['حاضر: ' + D.n.present + ' · غائب: ' + D.n.absent + (D.n.excused ? ' · مأذون: ' + D.n.excused : '') + ' · نسبة الحضور: ' + attPct(D.n)], [],
+        ['حاضر: ' + D.n.present + ' · غائب: ' + D.n.absent + (D.n.excused ? ' · مأذون: ' + D.n.excused : '') + (D.n.suspended ? ' · مفصول: ' + D.n.suspended : '') + ' · نسبة الحضور: ' + attPct(D.n)], [],
         ['م', 'التاريخ', 'اليوم', 'الحالة', 'ملاحظة']].concat(D.rows.map(function (r, i) { return [i + 1, dmy(r.day), dayName(r.day), ATT[r.status], r.note || '']; })), [5, 13, 12, 10, 40]);
       XLSX.writeFile(wb, ('سجل-حضور-' + D.x.full_name + '-' + D.from + '-' + D.to).replace(/s+/g, '-') + '.xlsx');
     } catch (err) {
@@ -16872,7 +16873,7 @@
 
   function buildAttStudentSheet(D) {
     var head = reportHead('سجل الحضور والغياب', [['الفترة', 'من ' + dmy(D.from) + ' إلى ' + dmy(D.to)], ['الشعبة', D.x.class_name || ''],
-      ['حاضر', D.n.present], ['غائب', D.n.absent]].concat(D.n.excused ? [['مأذون', D.n.excused]] : [], [['نسبة الحضور', attPct(D.n)]]), { lead: D.x.full_name }).replace(/^<img class="wm"[^>]*>/, '');
+      ['حاضر', D.n.present], ['غائب', D.n.absent]].concat(D.n.excused ? [['مأذون', D.n.excused]] : [], D.n.suspended ? [['مفصول', D.n.suspended]] : [], [['نسبة الحضور', attPct(D.n)]]), { lead: D.x.full_name }).replace(/^<img class="wm"[^>]*>/, '');
     var body = D.rows.map(function (r, i) {
       return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(r.day) + '</td><td class="c">' + esc(dayName(r.day)) + '</td><td class="c">' + (r.status === 'absent' ? '<b>' + ATT[r.status] + '</b>' : ATT[r.status]) + '</td><td>' + esc(r.note || '') + '</td></tr>';
     }).join('');
@@ -16914,7 +16915,7 @@
   /* ----- كشوف الحضور: Excel و PDF -----
      كشف شهري لكل شعبة بالأسماء وأيام الشهر، وتقارير المدرسة: يومي وأسبوعي (السبت إلى الجمعة) وشهري */
 
-  var ATT_MARK = { present: '✓', absent: 'غـ', excused: 'م' };
+  var ATT_MARK = { present: '✓', absent: 'غـ', excused: 'م', suspended: 'ف' };
 
   // يوم لا دراسة فيه: الجمعة والسبت، وما أُضيف عطلةً
   function attOff(day) {
@@ -16958,6 +16959,7 @@
   }
 
   async function fetchAttRange(from, to) {
+    if (S.stLeaves == null) await loadStLeaves();
     return attNormRows(await fetchAll(function () { return sb.from('attendance').select('student_id, day, status, note, class_name').gte('day', from).lte('day', to).order('day').order('student_id'); }));
   }
 
@@ -17091,13 +17093,13 @@
     if (p.kind === 'register') return buildAttRegisterSheet(p);
     if (p.kind === 'detail') return buildAttDetailSheet(p.D);
     if (p.kind === 'student') return buildAttStudentSheet(p.D);
-    var d = p.d, all = { present: 0, absent: 0, excused: 0 }, total = 0;
+    var d = p.d, all = { present: 0, absent: 0, excused: 0, suspended: 0 }, total = 0;
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
     var rows = attClasses().filter(function (cls) { return classRoll(cls).length; }).map(function (cls, i) {
       var k = d.byClass[cls], n = classRoll(cls).length;
       total += n;
       if (!k) return '<tr>' + c(i + 1) + '<td><b>' + esc(cls) + '</b></td>' + c(n) + '<td class="c" colspan="3" style="color:#7d8597">لم يُسجَّل</td><td></td></tr>';
-      all.present += k.n.present; all.absent += k.n.absent; all.excused += k.n.excused;
+      all.present += k.n.present; all.absent += k.n.absent; all.excused += k.n.excused; all.suspended += k.n.suspended;
       return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(cls) + '</b></td>' + c(n) + c(k.n.present) + c(k.n.absent ? '<b>' + k.n.absent + '</b>' : 0) + c(attPct(k.n)) +
         '<td style="font-size:.88em">' + esc(absentNames(cls, d.per, p.kind).join('، ') || '—') + '</td></tr>';
     }).join('');
@@ -17959,7 +17961,7 @@
     if (!roll.length || a.day > todayISO()) return;
     var rows = roll.map(function (x) {
       var st = attOf(x.id);
-      return { student_id: x.id, day: a.day, status: st.status, note: st.note.trim(), class_name: a.cls, recorded_by: who, updated_at: now };
+      return { student_id: x.id, day: a.day, status: st.status === 'suspended' ? 'excused' : st.status, note: st.note.trim(), class_name: a.cls, recorded_by: who, updated_at: now };
     });
     a.busy = true;
     render();
@@ -17971,7 +17973,7 @@
     a.draft = {};
     render();
     var n = attCounts(rows, function (row) { return row.status; });
-    toast('حُفظ حضور ' + a.cls + ' — حاضر: ' + n.present + ' · غائب: ' + n.absent + (n.excused ? ' · مأذون: ' + n.excused : ''));
+    toast('حُفظ حضور ' + a.cls + ' — حاضر: ' + n.present + ' · غائب: ' + n.absent + (n.excused ? ' · مأذون: ' + n.excused : '') + (n.suspended ? ' · مفصول: ' + n.suspended : ''));
   }
 
   function leaveAttDraft() {
