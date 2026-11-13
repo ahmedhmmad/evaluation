@@ -105,6 +105,8 @@ function pickJson(s) {
 }
 const errors = [];
 let limited = 0, paidCost = null;
+// نماذج توقفت قراءتها عند حد الرموز قبل آخر الورقة (نسختها ناقصة)
+const cut = new Set();
 // نموذج واحد: نص الرد، أو null مع تسجيل السبب. ms مهلة حقيقية لهذا الطلب
 async function callModel(model, system, content, plugins, ms, maxTokens) {
   let res;
@@ -120,7 +122,8 @@ async function callModel(model, system, content, plugins, ms, maxTokens) {
   if (res.statusCode === 429 || (body.error && body.error.code === 429)) { limited++; errors.push(model + ': 429'); return null; }
   if (res.statusCode >= 400 || body.error) { errors.push(model + ': ' + res.statusCode + ' ' + JSON.stringify(body.error || body).slice(0, 150)); return null; }
   if (body.usage && body.usage.cost != null && !/:free$/.test(model)) paidCost = (paidCost || 0) + (+body.usage.cost || 0);
-  const msg = ((body.choices || [])[0] || {}).message || {};
+  const ch0 = (body.choices || [])[0] || {}, msg = ch0.message || {};
+  if (ch0.finish_reason === 'length' || ch0.native_finish_reason === 'MAX_TOKENS') cut.add(model); else cut.delete(model);
   return String(msg.content || '').replace(/<think>[\s\S]*?<\/think>/g, '');
 }
 // ترتيب الأسطر: يجرّب النماذج المجانية بالترتيب حتى يقبل check الرد، ضمن الوقت المتاح (بعده يُرتَّب الملف دون نموذج)
@@ -155,13 +158,16 @@ if (input.kind !== 'word') {
   const clean = (t) => String(t || '').replace(/```[a-z]*\n?|```/gi, '').replace(/^\s*#+\s*/gm, '').replace(/\*\*/g, '').trim();
   const readable = (t) => t && !/NO_IMAGE/.test(t) && (t.match(/[؀-ۿA-Za-z]/g) || []).length >= 15;
   // أ) القراءات المجانية معاً في وقت واحد (لا واحدة بعد أخرى)
-  const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, 60000, 4000)));
+  const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, 75000, 16000)));
   const reads = [];
-  pool.forEach((model, i) => { const t = clean(texts[i]); if (texts[i] == null) return; if (!readable(t)) { errors.push(model + ': لم يقرأ الملف'); return; } reads.push({ model, text: t, fam: model.split('/')[0] }); });
+  pool.forEach((model, i) => { const t = clean(texts[i]); if (texts[i] == null) return; if (!readable(t)) { errors.push(model + ': لم يقرأ الملف'); return; }
+    // نسخة مقطوعة لا تُعتمد: تطابقها مع غيرها في أولها يخفي أن آخر الورقة سقط
+    if (cut.has(model)) { errors.push(model + ': توقفت القراءة قبل آخر الورقة (' + t.length + ' حرفاً)'); return; }
+    reads.push({ model, text: t, fam: model.split('/')[0] }); });
   let agreed = null;
   for (let i = 0; i < reads.length && !agreed; i++) for (let j = i + 1; j < reads.length; j++) {
     const sc = sim(reads[i].text, reads[j].text);
-    if (reads[i].fam !== reads[j].fam && sc >= 0.5) { agreed = reads[i]; readBy = [reads[i].model, reads[j].model]; break; }
+    if (reads[i].fam !== reads[j].fam && sc >= 0.5) { agreed = reads[j].text.length > reads[i].text.length * 1.1 ? reads[j] : reads[i]; readBy = [agreed.model, (agreed === reads[i] ? reads[j] : reads[i]).model]; break; }
     errors.push(reads[j].model + ': نسخته تختلف عن ' + reads[i].model + ' (' + Math.round(sc * 100) + '%)');
   }
   // ب) لم تتفق قراءتان مجانيتان (خط يد أو صورة صعبة): قراءة واحدة بنموذج مدفوع، ضمن الحد اليومي
@@ -173,11 +179,12 @@ if (input.kind !== 'word') {
     if (sd.paid.n >= PAID_PER_DAY) paidNote = 'بلغ اليوم حد القراءة المتقدمة (' + PAID_PER_DAY + ' صورة).';
     else for (const model of paidModels) {
       if (elapsed() > 130000) break;
-      const raw = await callModel(model, SYSTEM_OCR, content, plugins, 70000, 3000);
+      const raw = await callModel(model, SYSTEM_OCR, content, plugins, 80000, 16000);
       if (raw == null) continue;
       sd.paid.n++;                                  // كل طلب مدفوع ناجح يُحسب، حتى لو لم يُقرأ النص
       const t = clean(raw);
       if (!readable(t)) { errors.push(model + ': لم يقرأ الملف'); break; }
+      if (cut.has(model)) doubt += '\n⚠️ قد يكون آخر الورقة لم يُقرأ كاملاً: قارن الملف بالورقة الأصلية.';
       agreed = { model, text: t, paid: true }; readBy = [model + ' (مدفوع، ' + sd.paid.n + '/' + PAID_PER_DAY + ' اليوم)'];
       break;
     }
