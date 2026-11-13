@@ -15,6 +15,8 @@
     if (!sb) return renderSetup();
     if (!S.uid) return renderAuth();
     if (!S.ready) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; return; }
+    // دخول شاشة ممنوحة أو الخروج منها: تُحمَّل البيانات من جديد بالصلاحية المناسبة
+    if (S.baseProfile && permAreaFor(location.hash) !== ACT_AREA) { loadAll(); return; }
     if (role() === 'pending') return renderPending();
     if (S.profile && S.profile.must_change_password) return renderChangePw();
     if (location.hash === '#/mine' && S.myStaff) return renderMine();

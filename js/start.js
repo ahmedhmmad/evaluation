@@ -2,12 +2,12 @@
   /* ---------- البدء ---------- */
 
   if (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase) {
-    // طلبات القاعدة تحمل الصلاحية الإضافية التي يعمل بها الحساب الآن (إن وُجدت)؛ القاعدة تقبلها فقط إن كان مدير النظام منحها له
+    // طلبات القاعدة تحمل مفتاح الشاشة الممنوحة التي يعمل فيها الموظف الآن (إن وُجدت)؛ القاعدة تقبله فقط إن كان مدير النظام منحها له
     sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { global: { fetch: function (input, init) {
-      if (ACT_ROLE && String(typeof input === 'string' ? input : (input && input.url) || '').indexOf('/rest/v1/') > -1) {
+      if (ACT_AREA && String(typeof input === 'string' ? input : (input && input.url) || '').indexOf('/rest/v1/') > -1) {
         init = Object.assign({}, init);
         var h = new Headers(init.headers || {});
-        h.set('x-act-role', ACT_ROLE);
+        h.set('x-act-area', ACT_AREA);
         init.headers = h;
       }
       return fetch(input, init);

@@ -193,16 +193,14 @@
       var opts = Object.keys(ROLES).filter(function (k) { return (isTeacher || k !== 'teacher') && (k !== 'observer' || roColumn()) && (k !== 'gensup' || titleColumn()); }).map(function (k) {
         return '<option value="' + k + '"' + (roleKey(u) === k ? ' selected' : '') + '>' + ROLES[k] + '</option>';
       }).join('');
-      var xr = !xrolesColumn() ? '' : '<td>' + (self || u.role === 'pending' || u.role === 'superadmin' ? '' : XROLES.filter(function (k) { return k !== u.role; }).map(function (k) {
-        return '<label class="check" style="display:inline-flex;margin-inline-end:10px"><input type="checkbox" data-xrole="' + u.id + ':' + k + '"' + ((u.extra_roles || []).indexOf(k) > -1 ? ' checked' : '') + '>' + String(ROLES[k]).replace(/\s*\(.*\)$/, '') + '</label>';
-      }).join('')) + '</td>';
       return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
-        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td>' + xr +
+        '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td>' +
         '<td>' + (self || isTeacher ? '' : '<button type="button" class="btn" data-resetpw="' + u.id + '">كلمة مرور جديدة</button>') + '</td></tr>';
     }).join('');
 
     var adTab = vtab('admin', 'users');
-    app.innerHTML = tabs('admin') + vtabsHtml('admin', 'users', [['users', 'المستخدمون والصلاحيات'], ['school', 'بيانات المدرسة'], ['viewers', 'ما يراه المشاهدون'], ['backup', 'النسخ الاحتياطي والربط']]) +
+    app.innerHTML = tabs('admin') + vtabsHtml('admin', 'users', [['users', 'المستخدمون والصلاحيات'], ['perms', 'صلاحيات الموظفين'], ['school', 'بيانات المدرسة'], ['viewers', 'ما يراه المشاهدون'], ['backup', 'النسخ الاحتياطي والربط']]) +
+      (adTab === 'perms' ? permsCardHtml() : '') +
       (adTab === 'backup' ? backupCardHtml() + botKeyCardHtml() : '') +
       (adTab !== 'school' ? '' : '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
@@ -232,9 +230,7 @@
         '<p class="hint">أزل العلامة لإخفاء تقييم منشور عن المشاهدين.</p>' + vis + '</div>') +
       (adTab !== 'users' ? '' : '<div class="card"><h2>المستخدمون والصلاحيات</h2>' +
         '<p class="hint">الحسابات الجديدة تبقى «بانتظار التفعيل» إلى أن تحدد صلاحيتها.</p>' +
-        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th>' + (xrolesColumn() ? '<th>صلاحيات إضافية</th>' : '') + '<th></th></tr></thead><tbody>' + users + '</tbody></table></div>' +
-        (xrolesColumn() ? '<p class="hint" style="margin:8px 0 0">الصلاحيات الإضافية: يبقى للحساب صلاحيته الأساسية، ويظهر لصاحبه في أسفل القائمة الجانبية اختيار «أعمل الآن بصلاحية» ليبدّل بينها، فلا يحتاج إلى حساب ثانٍ. «مسجِّل طلاب» تشمل تسجيل الطلاب والمواصلات.</p>'
-          : '<p class="hint" style="margin:8px 0 0">لمنح حساب واحد أكثر من صلاحية (معلم ومسجِّل طلاب مثلًا) شغّل الملف <code dir="ltr">supabase/extra_roles.sql</code> ثم حدّث الصفحة.</p>') +
+        '<div class="table-wrap"><table class="grid"><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الصلاحية</th><th></th></tr></thead><tbody>' + users + '</tbody></table></div>' +
         // إنشاء حساب جاهز (يحتاج supabase/registrar.sql)
         '<form id="user-form" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)"><h3 style="margin:0 0 4px">إنشاء حساب جديد</h3>' +
           '<p class="hint">للمسجِّلين والمشرفين والمشاهدين. يدخل صاحب الحساب باسم المستخدم وكلمة المرور المؤقتة، ويُطلب منه اختيار كلمة مرور خاصة به عند أول دخول. حسابات المعلمين تُنشأ من «بيانات المعلمين».</p>' +
@@ -245,6 +241,44 @@
             '<div><label class="field" for="nu-role">الصلاحية</label><select id="nu-role"><option value="registrar">' + ROLES.registrar + '</option><option value="attclerk">' + ROLES.attclerk + '</option><option value="supervisor">' + ROLES.supervisor + '</option><option value="viewer">' + ROLES.viewer + '</option><option value="manager">' + ROLES.manager + '</option>' +
               (roColumn() ? '<option value="observer">' + ROLES.observer + '</option>' : '') + '</select></div>' +
           '</div><div class="actions"><button type="submit" class="btn primary">إنشاء الحساب</button></div></form></div>');
+  }
+
+  /* ----- صلاحيات الموظفين: اختيار موظف ثم الشاشات التي تظهر عنده ويتحكم بها ----- */
+  function permAccounts() {
+    return S.users.filter(function (u) { return u.role !== 'superadmin' && u.role !== 'pending'; })
+      .sort(function (a, b) { return String(a.full_name || a.email).localeCompare(String(b.full_name || b.email), 'ar'); });
+  }
+  function permsCardHtml() {
+    if (!permsColumn()) return '<div class="card empty">صلاحيات الموظفين تحتاج تحديثًا في قاعدة البيانات.<br>شغّل الملف <code dir="ltr">supabase/staff_perms.sql</code> في محرر SQL في Supabase ثم حدّث الصفحة.</div>';
+    var list = permAccounts(), u = list.filter(function (x) { return x.id === ui.pmUser; })[0] || null;
+    var pick = '<label class="field" for="pm-user">الموظف</label><select id="pm-user" style="max-width:420px"><option value="">اختر الموظف…</option>' +
+      list.map(function (x) {
+        var n = (x.perms || []).length;
+        return '<option value="' + x.id + '"' + (u && u.id === x.id ? ' selected' : '') + '>' + esc(x.full_name || displayName(x.email)) + ' — ' +
+          String(ROLES[roleKey(x)] || '').replace(/\s*\(.*\)$/, '') + (n ? ' (' + n + ')' : '') + '</option>';
+      }).join('') + '</select>';
+    var body = '';
+    if (u) {
+      var own = {}, groups = {}, order = [];
+      withProfile(u, function () { navModelRole().forEach(function (g) { g.items.forEach(function (it) { own[it[0]] = 1; }); }); });
+      permScreens().forEach(function (s) { if (!groups[s[3]]) { groups[s[3]] = []; order.push(s[3]); } groups[s[3]].push(s); });
+      body = order.map(function (t) {
+        return '<h3 style="margin:14px 0 6px">' + esc(t || 'عام') + '</h3><div class="checks">' + groups[t].map(function (s) {
+          return '<label class="check"><input type="checkbox" data-perm="' + s[1] + '"' + ((u.perms || []).indexOf(s[1]) > -1 ? ' checked' : '') + '>' + esc(s[2]) +
+            (own[s[0]] ? ' <span style="color:var(--muted)">— عنده بصلاحيته، وبالمنح يتحكم بها كالمدير</span>' : '') + '</label>';
+        }).join('') + '</div>';
+      }).join('');
+    }
+    var given = list.filter(function (x) { return (x.perms || []).length; });
+    var names = {};
+    permScreens().forEach(function (s) { names[s[1]] = s[2]; });
+    return '<div class="card"><h2>صلاحيات الموظفين</h2>' +
+      '<p class="hint" style="margin:6px 0 10px">اختر الموظف ثم علّم الشاشات التي تظهر عنده. تظهر له في قائمته تحت «مهام إضافية»، ويتحكم بكل شاشة منها كما يتحكم بها مدير النظام، ويبقى له ما في حسابه كما هو. يُحفظ كل اختيار فورًا، ويظهر للموظف عند دخوله التالي أو بعد «مزامنة البيانات».</p>' +
+      pick + body + '</div>' +
+      (given.length ? '<div class="card"><h2>من مُنح صلاحيات</h2><div class="table-wrap"><table class="grid"><thead><tr><th>الموظف</th><th>الشاشات الممنوحة</th></tr></thead><tbody>' +
+        given.map(function (x) {
+          return '<tr><td>' + esc(x.full_name || displayName(x.email)) + '</td><td>' + (x.perms || []).map(function (k) { return esc(names[k] || k); }).join('، ') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>' : '');
   }
 
   /* ---------- إعداد الفصول الدراسية (مدير النظام) ----------
