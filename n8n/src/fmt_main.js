@@ -326,7 +326,7 @@ if (src.hint) exam.kind = src.hint;
 // ---------- 3) ملف Word بالقالب ----------
 const built = buildDocx(exam);
 const fname = [built.kind, built.subject, (/\.{2,}/.test(built.grade) ? '' : built.grade)].filter((x) => x && !/^[\s.]*$/.test(x)).join('_').replace(/[\s.\/\\:*?"<>|]+/g, '_').slice(0, 80) + '.docx';
-// نسخة PDF من المحوِّل. «اقلب الصفحة» في PDF بعدد صفحاته الفعلي: إن خالف التقدير يُعاد بناء نسخة PDF بالعدد الصحيح
+// نسخة PDF من المحوِّل. «اقلب الصفحة» فيها نص ثابت (المحوِّل لا يحسب حقل Word) بعدد صفحاتها الفعلي: إن خالف التقدير يُعاد بناؤها بالعدد الصحيح
 let pdf = null, pdfNote = '';
 if (PDF_URL && (PDF_AUTO.includes(built.kind) || src.pdf)) {
   const toPdf = async (docx) => {
@@ -335,8 +335,8 @@ if (PDF_URL && (PDF_AUTO.includes(built.kind) || src.pdf)) {
     return r;
   };
   try {
-    pdf = await toPdf(built.docx);
-    if (pdf.pages && (pdf.pages > 1) !== (built.pages > 1) && elapsed() < 200000) pdf = await toPdf(buildDocx(Object.assign({}, exam, { forcePages: pdf.pages })).docx);
+    pdf = await toPdf(buildDocx(Object.assign({}, exam, { staticTurn: true })).docx);
+    if (pdf.pages && (pdf.pages > 1) !== (built.pages > 1) && elapsed() < 200000) pdf = await toPdf(buildDocx(Object.assign({}, exam, { staticTurn: true, forcePages: pdf.pages })).docx);
   } catch (e) { pdf = null; errors.push('PDF: ' + String(e.message || e).slice(0, 150)); pdfNote = '\nℹ️ تعذر تجهيز نسخة PDF الآن، فأُرسل ملف Word وحده.'; }
 }
 let caption = '✅ تم التنسيق بقالب الأكاديمية.\nراجع الملف قبل اعتماده، خاصة الجداول والأشكال.' + (pdf ? '' : '\nلنسخة PDF: افتحه في Word ← حفظ باسم ← PDF.');
@@ -753,6 +753,7 @@ function buildDocx(exIn) {
   const header = X + '<w:hdr ' + NS + '>' + P(pic('rImg', HDR_CM, 0), { ltr: true }) + '</w:hdr>';
   const footer = X + '<w:ftr ' + NS + '>' + P(pic('rImg', FTR_CM, 29.7 - FTR_CM), { ltr: true }) + '</w:ftr>';
   const footerFirst = X + '<w:ftr ' + NS + '>' + P(pic('rImg', FTR_CM, 29.7 - FTR_CM) + (() => {
+    if (exIn.staticTurn) return pages > 1 ? R('اقلب الصفحة  ⟵', { size: 22, bold: true }) : '';
     const o = { size: 22, bold: true }, rp = (/<w:rPr>[\s\S]*?<\/w:rPr>/.exec(R('', o)) || [''])[0], run = (x) => '<w:r>' + rp + x + '</w:r>';
     const ch = (t) => run('<w:fldChar w:fldCharType="' + t + '"/>'), code = (t) => run('<w:instrText xml:space="preserve">' + t + '</w:instrText>');
     return ch('begin') + code(' IF ') + ch('begin') + code(' NUMPAGES ') + ch('separate') + run('<w:t>' + pages + '</w:t>') + ch('end') +
