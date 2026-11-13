@@ -37,7 +37,15 @@ wf.nodes.push(
   { parameters: { content: '## تنسيق الاختبارات (OpenRouter مجاني)\nالمعلم يرسل «تنسيق» ثم الملف (Word أو PDF أو صورة)، فيعود إليه ملف Word بقالب الأكاديمية.\n1. ضع مفتاح openrouter.ai في عقدة «المفاتيح» مكان PUT_OPENROUTER_KEY.\n2. في openrouter.ai ← Settings ← Privacy: اسمح بالنماذج المجانية.\n3. اختياري: أرقام المعلمين المسموح لهم في أول عقدة «موجّه التنسيق».\n4. الصور الصعبة (خط اليد): إن لم تتفق قراءتان مجانيتان تُقرأ الصورة مرة واحدة بنموذج مدفوع رخيص من رصيدك. الحد اليومي PAID_PER_DAY في أول عقدة «تنسيق الملف» (0 = إيقاف المدفوع).', height: 340, width: 480 },
     id: 'b1a1c0de-0016-4000-8000-000000000016', name: 'تنسيق الاختبارات', type: 'n8n-nodes-base.stickyNote', typeVersion: 1, position: [-940, -360] },
 );
+// الصفحات المصوّرة: بعد كل صفحة تنتظر العملية دقيقة ثم تعود إلى عقدة التنسيق، فتبدأ القراءة إن لم تصل صفحة جديدة
+wf.nodes.push(
+  { parameters: { conditions: { boolean: [{ value1: '={{ $json.wait === true }}', value2: true }] } }, id: 'b1a1c0de-0017-4000-8000-000000000017', name: 'ينتظر صفحات؟', type: 'n8n-nodes-base.if', typeVersion: 1, position: [-220, -80] },
+  { parameters: { amount: 60, unit: 'seconds' }, id: 'b1a1c0de-0018-4000-8000-000000000018', name: 'انتظار الصفحات', type: 'n8n-nodes-base.wait', typeVersion: 1, position: [0, -200], webhookId: 'b1a1c0de-0019-4000-8000-000000000019' },
+);
 const to = (n) => [{ node: n, type: 'main', index: 0 }];
+wf.connections['تنسيق الملف بقالب الأكاديمية'] = { main: [to('ينتظر صفحات؟')] };
+wf.connections['ينتظر صفحات؟'] = { main: [to('انتظار الصفحات'), []] };
+wf.connections['انتظار الصفحات'] = { main: [to('تنسيق الملف بقالب الأكاديمية')] };
 wf.connections['المفاتيح'] = { main: [to('موجّه التنسيق')] };
 wf.connections['موجّه التنسيق'] = { main: [to('تنسيق؟')] };
 wf.connections['تنسيق؟'] = { main: [to('تنسيق الملف بقالب الأكاديمية'), to('استخراج الرقم والنص')] };

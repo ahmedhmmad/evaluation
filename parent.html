@@ -398,7 +398,7 @@
   });
 
   var view = 'home';
-  var VIEWS = [['home', 'الرئيسية', 'home'], ['abs', 'الحضور والغياب', 'cal'], ['grades', 'الدرجات', 'bars'], ['tt', 'جدول الحصص', 'clock'], ['bus', 'المواصلات', 'bus2'], ['msgs', 'الرسائل', 'chat']];
+  var VIEWS = [['home', 'الرئيسية', 'home'], ['abs', 'الحضور والغياب', 'cal'], ['grades', 'الدرجات', 'bars'], ['tt', 'جدول الحصص', 'clock'], ['bus', 'المواصلات', 'bus2'], ['papers', 'أوراق العمل', 'doc'], ['msgs', 'الرسائل', 'chat']];
   var SV = {
     home: '<path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/>',
     cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01"/>',
@@ -408,7 +408,8 @@
     chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
     check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     out: '<path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/>',
-    info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/>'
+    info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v5M12 16h.01"/>',
+    doc: '<path d="M7 3.5h7l4 4V20a.5.5 0 01-.5.5h-10A.5.5 0 016 20V4a.5.5 0 01.5-.5z"/><path d="M14 3.5V8h4M9 12h6M9 15.5h6"/>'
   };
   function sv(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + SV[k] + '</svg>'; }
   function initials(n) { var w = String(n || '').trim().split(/\s+/).map(function (x) { return x.replace(/^ال(?=..)/, ''); }); return (w[0] || '').charAt(0) + ' ' + (w.length > 1 ? w[w.length - 1].charAt(0) : ''); }
@@ -443,17 +444,42 @@
       card(left ? 'c-red' : 'c-bus c-green', 'bus2', k.bus ? (left ? money(left) : 'مسدَّد') : '—', 'المواصلات', k.bus ? (mo ? cycleLabel(mo) : 'لا إيصالات بعد') : 'غير مشترك', 'bus') + '</div>';
   }
 
+  // أوراق العمل المعتمدة لصف الطالب، مصنَّفة حسب الفصل الدراسي (supabase/paper_files.sql)
+  var papers = null;
+  function papersOf(k) { return (papers || []).filter(function (p) { return p.grade && String(k.class_name || '').indexOf(p.grade) > -1; }); }
+  function papersHtml(k) {
+    var list = papersOf(k), terms = {};
+    if (!list.length) return '<div class="card"><p class="muted" style="margin:0">لا أوراق عمل منشورة لصف ' + esc(k.class_name || '') + ' بعد.</p></div>';
+    list.forEach(function (p) { var t = p.term || 'أوراق العمل'; (terms[t] = terms[t] || []).push(p); });
+    return Object.keys(terms).sort().map(function (t) {
+      return '<div class="card"><h3 style="margin:0 0 10px">' + esc(t) + '</h3>' + terms[t].map(function (p) {
+        return '<div class="lrow" style="cursor:pointer" data-paper="' + esc(p.id) + '"><span class="no">' + sv('doc') + '</span><div class="pn"><b>' + esc(p.subject || 'ورقة عمل') + '</b>' +
+          '<small>' + esc(p.teacher || '') + ' · ' + new Date(p.at).toLocaleDateString('ar-u-nu-latn', { day: 'numeric', month: 'long' }) + '</small></div><div class="sj">فتح ←</div></div>';
+      }).join('') + '</div>';
+    }).join('');
+  }
+  async function openPaper(id) {
+    var r = await sb.rpc('parent_paper_file', { p_token: token, p_id: id });
+    if (r.error || !r.data || r.data.error) { alert('تعذر فتح الملف. حاول مرة أخرى.'); return; }
+    var bin = atob(r.data.data), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([arr], { type: r.data.mime || 'application/octet-stream' })), a = document.createElement('a');
+    a.href = url; a.download = r.data.name || 'ورقة عمل'; if (/pdf/.test(r.data.mime)) a.target = '_blank';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+
   function draw() {
     var kids = data.children || [];
     if (!kids.length) { main.innerHTML = '<div class="msg">لا يوجد أبناء مسجلون مرتبطون بهذا الحساب حاليًا.</div>'; return; }
     var k = kids[cur] || kids[0], first = String(k.name).split(/\s+/)[0];
-    var nav = VIEWS.filter(function (v) { return v[0] !== 'msgs' || (more && (more.messages || []).length); }).map(function (v) {
+    var nav = VIEWS.filter(function (v) { return (v[0] !== 'msgs' || (more && (more.messages || []).length)) && (v[0] !== 'papers' || papersOf(k).length); }).map(function (v) {
       return '<a data-go="' + v[0] + '"' + (view === v[0] ? ' class="on"' : '') + '>' + sv(v[2]) + v[1] + '</a>';
     }).join('');
-    var title = { abs: 'الحضور والغياب', grades: 'الدرجات', tt: 'جدول الحصص', bus: 'المواصلات', msgs: 'الرسائل' }[view];
+    var title = { papers: 'أوراق العمل', abs: 'الحضور والغياب', grades: 'الدرجات', tt: 'جدول الحصص', bus: 'المواصلات', msgs: 'الرسائل' }[view];
     var body = view === 'abs' ? absHtml(k) : view === 'grades' ? (gradesHtml(k) || '<div class="card"><p class="muted" style="margin:0">الدرجات غير متاحة بعد.</p></div>')
       : view === 'tt' ? ttHtml(k) : view === 'bus' ? (busHtml(k) || '<div class="card"><p class="muted" style="margin:0">غير مشترك في المواصلات.</p></div>')
-      : view === 'msgs' ? msgsHtml() : statsHtml(k) + todayHtml(k);
+      : view === 'msgs' ? msgsHtml() : view === 'papers' ? papersHtml(k) : statsHtml(k) + todayHtml(k);
     var now = new Date(), dateTxt = now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
     main.innerHTML = '<div class="layout"><aside class="side"><h3>' + (kids.length > 1 ? 'الأبناء' : 'الابن/الابنة') + '</h3>' +
         kids.map(function (x, i) {
@@ -474,6 +500,8 @@
     if (g) { view = g.getAttribute('data-go'); draw(); window.scrollTo(0, 0); return; }
     if (e.target.closest('[data-allabs]')) { allAbs = !allAbs; draw(); }
     if (e.target.closest('[data-allmsgs]')) { allMsgs = !allMsgs; draw(); }
+    var pp = e.target.closest('[data-paper]');
+    if (pp) openPaper(pp.getAttribute('data-paper'));
   });
 
   async function load() {
@@ -486,6 +514,8 @@
     data = r.data;
     var mo = await sb.rpc('parent_more', { p_token: token });
     more = mo.error || (mo.data && mo.data.error) ? null : mo.data; // قبل تشغيل parent_accounts.sql تبقى الشاشة كما كانت
+    var pr = await sb.rpc('parent_papers', { p_token: token });
+    papers = pr.error || !pr.data || pr.data.error ? [] : pr.data.papers || []; // قبل تشغيل paper_files.sql لا يظهر تبويب أوراق العمل
     if (viaLogin && !document.querySelector('[data-logout]')) document.querySelector('header').insertAdjacentHTML('beforeend', '<button type="button" class="out" data-logout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4M10 16l-4-4 4-4M6 12h10"/></svg>خروج</button>');
     document.getElementById('title').textContent = data.school || 'متابعة ولي الأمر';
     document.title = 'متابعة ولي الأمر — ' + (data.school || '');

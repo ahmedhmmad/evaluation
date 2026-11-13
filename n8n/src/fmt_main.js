@@ -28,6 +28,116 @@ const say = (text) => Promise.race([H.httpRequest({ method: 'POST', url: EVO + '
   headers: { apikey: K.EVO, 'Content-Type': 'application/json' }, body: { number: src.phone, text }, json: true, timeout: 20000 }),
   new Promise((_, rej) => setTimeout(() => rej(new Error('انتهت مهلة إرسال الرسالة')), 20000))]);
 
+// ---------- قاعدة البيانات (دوال البوت في supabase/paper_files.sql) ----------
+const SB = 'https://wvklhyjtzqomiyhzsfuf.supabase.co', PUB = 'sb_publishable_mQliqX3dKgwlKsm-u1X_gQ_8TINNIrr';
+const rpc = async (fn, args) => {
+  const r = await race(H.httpRequest({ method: 'POST', url: SB + '/rest/v1/rpc/' + fn, headers: { apikey: PUB, Authorization: 'Bearer ' + PUB, 'Content-Type': 'application/json' },
+    body: Object.assign({ p_key: K.BOT }, args), json: true, timeout: 30000, returnFullResponse: true, ignoreHttpStatusErrors: true }), 30000, fn);
+  if (r.statusCode >= 400) throw new Error(fn + ': ' + r.statusCode + ' ' + JSON.stringify(r.body).slice(0, 200) + (r.statusCode === 404 ? ' — شغّل supabase/paper_files.sql' : ''));
+  if (r.body && r.body.error) throw new Error(fn + ': ' + r.body.error);
+  return r.body;
+};
+const sendTo = (number, text) => race(H.httpRequest({ method: 'POST', url: EVO + '/message/sendText/' + encodeURIComponent(src.instance),
+  headers: { apikey: K.EVO, 'Content-Type': 'application/json' }, body: { number, text }, json: true, timeout: 20000 }), 20000, 'إرسال رسالة');
+const sendFile = (number, b64, mimetype, fileName, caption) => race(H.httpRequest({ method: 'POST', url: EVO + '/message/sendMedia/' + encodeURIComponent(src.instance),
+  headers: { apikey: K.EVO, 'Content-Type': 'application/json' }, json: true, timeout: 60000,
+  body: { number, mediatype: /^image\//.test(mimetype) ? 'image' : 'document', mimetype, fileName, caption, media: b64 } }), 60000, 'إرسال ملف');
+const mediaOf = async (msgId) => {
+  const media = await race(H.httpRequest({ method: 'POST', url: EVO + '/chat/getBase64FromMediaMessage/' + encodeURIComponent(src.instance),
+    headers: { apikey: K.EVO, 'Content-Type': 'application/json' }, body: { message: { key: { id: msgId } }, convertToMp4: false }, json: true, timeout: 30000 }), 30000, 'جلب الملف').catch(() => ({}));
+  return { b64: media.base64 || '', mime: media.mimetype ? String(media.mimetype).split(';')[0] : '' };
+};
+const ORDS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+const gradeWord = (t, bare) => { const m = new RegExp((bare ? '(?:الصف\\s+)?' : 'الصف\\s+') + '(' + ORDS.join('|') + '|الاول)(?!\\s*(?:من|ثانوي))').exec(String(t || '').replace(/الفصل\s+(?:الدراسي\s+)?\S+/g, ' ')); return m ? (m[1] === 'الاول' ? 'الأول' : m[1]) : ''; };
+const termOf = (t) => /الفصل\s+(?:الدراسي\s+)?الثاني/.test(t || '') ? 'الفصل الدراسي الثاني' : /الفصل\s+(?:الدراسي\s+)?الأول|الفصل\s+(?:الدراسي\s+)?الاول/.test(t || '') ? 'الفصل الدراسي الأول' : '';
+
+// ---------- مجموعة الطباعة: «مجموعة الطباعة» داخل المجموعة ----------
+if (src.fmt === 'group') {
+  const g = await rpc('bot_set_print_group', { p_phone: src.phone, p_jid: src.group });
+  if (g.ok) await sendTo(src.group, g.reply);
+  return [{ json: { group: src.group, saved: !!g.ok, note: g.note || '' } }];
+}
+
+// ---------- اعتماد ورقة عمل أو رفضها من المشرف ----------
+if (src.fmt === 'review') {
+  const m = /^(اعتماد|رفض)\s*([0-9٠-٩]+)?\s*[:،,-]?\s*([\s\S]*)$/.exec(src.text) || [];
+  const no = m[2] ? +String(m[2]).replace(/[٠-٩]/g, (x) => '٠١٢٣٤٥٦٧٨٩'.indexOf(x)) : null;
+  const r = await rpc('bot_paper_review', { p_phone: src.phone, p_ref: src.ref || '', p_no: no, p_approve: m[1] === 'اعتماد', p_reason: (m[3] || '').trim() });
+  if (r.silent) return [{ json: { skipped: r.note } }];
+  if (r.reply) await say(r.reply);
+  if (r.ok && r.teacher_phone && r.teacher_text) await sendTo(r.teacher_phone, r.teacher_text).catch(() => {});
+  return [{ json: { review: r } }];
+}
+
+// ---------- «نشر»: حفظ الملف، وإرساله لمجموعة الطباعة، وورقة العمل للمشرف ----------
+if (src.fmt === 'publish') {
+  let b64 = src.base64, mime = src.mimetype || '';
+  if (!b64) { const md = await mediaOf(src.msgId); b64 = md.b64; mime = md.mime || mime; }
+  if (!b64) { await say('تعذر استلام الملف. أرسله مرة أخرى مع كلمة «نشر».'); return [{ json: { skipped: 'لم يُجلب الملف' } }]; }
+  b64 = String(b64).replace(/^data:[^,]+,/, '');
+  const raw = Buffer.from(b64, 'base64'), ext = (String(src.fileName).split('.').pop() || '').toLowerCase();
+  const isPdf = mime === 'application/pdf' || ext === 'pdf', isDocx = ext === 'docx' || /wordprocessingml/.test(mime) || (raw[0] === 0x50 && raw[1] === 0x4b);
+  if (!isPdf && !isDocx) { await say('للنشر أرسل الملف بصيغة Word (docx) أو PDF مع كلمة «نشر».'); return [{ json: { skipped: 'صيغة غير مدعومة للنشر' } }]; }
+  const cap = String(src.caption || '');
+  // النوع والمادة والصف والفصل: من كلمة النشر، ثم من ترويسة ملف Word، ثم من آخر ملف نسّقه البوت لهذا المعلم
+  let head = '';
+  if (isDocx) { try { head = docxLines(raw).slice(0, 12).map((l) => l.text || (l.table ? l.table.map((r) => r.join(' ')).join(' ') : '')).join('\n'); } catch (e) {} }
+  const sdP = $getWorkflowStaticData('global'), last = ((sdP.lastFmt || {})[src.phone]) || {}, fresh = last.ts && Date.now() - last.ts < 14 * 864e5;
+  const kindIn = (t) => /ورقة\s*عمل/.test(t) ? 'ورقة عمل' : /(اختبار|امتحان)/.test(t) ? 'اختبار' : '';
+  const kind = kindIn(cap) || kindIn(head.split('\n').slice(0, 4).join(' ')) || (fresh ? last.kind : '') || '';
+  const grade = gradeWord(cap, true) || gradeWord(head) || (fresh ? gradeWord(last.grade) : '');
+  const subjM = /(?:ورقة\s*عمل|اختبار)\s*[:：]\s*([^\n–\-]+?)\s*[–\-]/.exec(head);
+  const real = (v) => v && !/^[\s.…_]*$/.test(v) ? v.trim() : '';
+  const subject = real(subjM ? subjM[1] : '') || (fresh ? real(last.subject) : '') || '';
+  const term = termOf(cap) || termOf(head) || (fresh ? last.term : '') || termOf(TERM);
+  const cm = /([0-9٠-٩]{1,4})\s*(?:نسخة|نسخ|ورقة)?\s*$/.exec(cap.replace(/^نشر/, ''));
+  const copies = cm ? +String(cm[1]).replace(/[٠-٩]/g, (x) => '٠١٢٣٤٥٦٧٨٩'.indexOf(x)) : null;
+  if (!kind) { await say('ما نوع الملف؟ أرسله مرة أخرى مع: «نشر ورقة عمل» أو «نشر اختبار».'); return [{ json: { skipped: 'نوع غير معروف' } }]; }
+  if (kind === 'ورقة عمل' && !grade) { await say('لأي صف ورقة العمل هذه؟ أرسلها مرة أخرى مع الصف، مثل: «نشر السادس».'); return [{ json: { skipped: 'صف غير معروف' } }]; }
+  const fileName = src.fileName || [kind, subject, grade ? 'الصف ' + grade : ''].filter(Boolean).join('_').replace(/\s+/g, '_') + (isPdf ? '.pdf' : '.docx');
+  const mt = isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const p = await rpc('bot_paper_publish', { p_phone: src.phone, p_kind: kind, p_subject: subject, p_grade: grade, p_term: term, p_file_name: fileName, p_mime: mt, p_data: b64, p_copies: copies });
+  if (!p.ok) { await say(p.reply || 'تعذر حفظ الملف.'); return [{ json: { skipped: p.reply } }]; }
+  const info = (kind + ' رقم ' + p.no) + '\nالمعلم: ' + p.teacher + (subject ? '\nالمادة: ' + subject : '') + (grade ? '\nالصف: ' + grade : '') + (term ? '\n' + term : '');
+  let printed = false, notes = [];
+  if (p.print_group) {
+    try { await sendFile(p.print_group, b64, mt, fileName, '🖨️ للطباعة — ' + info + (copies ? '\nعدد النسخ: ' + copies : '')); printed = true; }
+    catch (e) { notes.push('تعذر إرساله لمجموعة الطباعة الآن'); }
+  } else notes.push('مجموعة الطباعة لم تُحدَّد بعد (تُحدَّد بكتابة «مجموعة الطباعة» داخلها)');
+  const ids = [];
+  for (const rv of p.reviewers || []) {
+    try {
+      const res = await sendFile(rv.phone, b64, mt, fileName, '📝 ' + info + '\n\nللاعتماد ونشرها لأولياء الأمور رُدّ على هذه الرسالة بكلمة: اعتماد\nوللرفض: رفض ثم السبب');
+      const id = res && res.key && res.key.id; if (id) ids.push(id);
+    } catch (e) { notes.push('تعذر إرسالها للمشرف ' + rv.name); }
+  }
+  await rpc('bot_paper_sent', { p_id: p.id, p_printed: printed, p_msgs: ids }).catch(() => {});
+  await say('✅ وصل الملف (' + kind + ' رقم ' + p.no + ') وحُفظ في صفحتك في «أوراق العمل والاختبارات».' +
+    (printed ? '\n🖨️ أُرسل إلى مجموعة الطباعة' + (copies ? ' (' + copies + ' نسخة)' : '') + '.' : '') +
+    (kind === 'ورقة عمل' ? (ids.length ? '\n⏳ أُرسل للمشرف التربوي لاعتماد نشره لأولياء أمور الصف ' + grade + '، وسأخبرك بالنتيجة.' : '\n⏳ ينتظر اعتماد المشرف التربوي من الموقع لينشر لأولياء الأمور.') : '\nالاختبارات لا تُعرض على أولياء الأمور.') +
+    (notes.length ? '\nℹ️ ' + notes.join('، ') + '.' : ''));
+  return [{ json: { published: p.no, kind, grade, subject, term, printed, reviewers: ids.length, notes } }];
+}
+
+// ---------- صفحات الورقة المصوّرة: تُجمع، ثم تُقرأ معاً عند «تم» أو بعد دقيقة بلا صفحة جديدة ----------
+if (src.fmt === 'page') {
+  const r = await rpc('bot_fmt_page', { p_phone: src.phone, p_msg_id: src.msgId, p_hint: src.hint || '', p_pdf: !!src.pdf });
+  await say(r.n === 1 ? '📄 استلمت الصفحة 1.\nإن كانت للورقة صفحات أخرى فأرسلها الآن بالترتيب، ثم اكتب: تم\nوإن كانت صفحة واحدة فسأبدأ التنسيق بعد دقيقة.'
+    : '📄 استلمت الصفحة ' + r.n + '. أرسل التالية، أو اكتب: تم').catch(() => {});
+  // يُعاد إلى هذه العقدة بعد الانتظار (عقدة «انتظار الصفحات») ليبدأ إن لم تصل صفحة جديدة
+  return [{ json: Object.assign({}, src, { fmt: 'idle', wait: true }) }];
+}
+if (src.fmt === 'idle' || src.fmt === 'done') {
+  const t = await rpc('bot_fmt_take', { p_phone: src.phone, p_idle: src.fmt === 'idle' ? 50 : 0 });
+  const ids = t.ids || [];
+  if (!ids.length) {
+    if (src.fmt === 'done') await say('لا صفحات بانتظار التنسيق (ربما بدأ تنسيقها). أرسل «تنسيق» ثم الصور من جديد إن لزم.').catch(() => {});
+    return [{ json: { skipped: src.fmt === 'idle' ? 'وصلت صفحة بعد هذه أو بدأ التنسيق' : 'لا صفحات' } }];
+  }
+  const sdI = $getWorkflowStaticData('global'); if (sdI.fmt) delete sdI.fmt[src.phone];
+  src.pageIds = ids; src.hint = t.hint || src.hint || ''; src.pdf = !!t.pdf; src.fmt = 'process'; src.mimetype = 'image/jpeg'; src.base64 = '';
+}
+
 if (src.fmt === 'start') {
   await say('أهلاً بك 👋\nأرسل الآن ملف الاختبار أو ورقة العمل (Word أو PDF أو صورة) وسأنسقه بقالب أكاديمية الركيزة الثالثة.\nيمكنك كتابة: تنسيق اختبار  أو  تنسيق ورقة عمل  لتحديد النوع.\nورقة العمل تصلك PDF مع ملف Word. للاختبار اكتب: تنسيق اختبار pdf');
   return [{ json: { done: 'طُلب الملف من المعلم' } }];
@@ -41,7 +151,18 @@ const started = Date.now();
 await say('⏳ تم استلام الملف، جارٍ التنسيق... (قد يستغرق دقيقة أو اثنتين)').catch(() => {});
 
 // ---------- 1) الملف ----------
-let b64 = src.base64, mime = src.mimetype || '';
+let b64 = src.base64, mime = src.mimetype || '', pageUrls = null;
+if (src.pageIds && src.pageIds.length) {
+  // صفحات مصوّرة بالترتيب: كلها تُقرأ في طلب واحد
+  pageUrls = [];
+  for (const id of src.pageIds.slice(0, 6)) {
+    const md = await mediaOf(id);
+    if (md.b64) pageUrls.push('data:' + (/(jpeg|png|webp|gif)/.test(md.mime) ? md.mime : 'image/jpeg') + ';base64,' + String(md.b64).replace(/^data:[^,]+,/, ''));
+  }
+  if (!pageUrls.length) { await say('تعذر استلام الصور. أرسلها مرة أخرى.'); return [{ json: { skipped: 'لم تُجلب الصور' } }]; }
+  b64 = pageUrls[0].split(',')[1]; mime = 'image/jpeg';
+  if (src.pageIds.length > 6) await say('ℹ️ تُقرأ أول 6 صفحات فقط.').catch(() => {});
+}
 if (b64 && /^image\//.test(mime) && String(b64).length < 8000) b64 = '';
 if (!b64) {
   const media = await race(H.httpRequest({ method: 'POST', url: EVO + '/chat/getBase64FromMediaMessage/' + encodeURIComponent(src.instance),
@@ -55,6 +176,7 @@ const raw = Buffer.from(String(b64).replace(/^data:[^,]+,/, ''), 'base64');
 let input;   // { kind: 'text' | 'pdf' | 'image', ... }
 if (/^image\//.test(mime)) {
   input = { kind: 'image', url: 'data:' + (/(jpeg|png|webp|gif)/.test(mime) ? mime : 'image/jpeg') + ';base64,' + raw.toString('base64') };
+  if (pageUrls && pageUrls.length > 1) input.urls = pageUrls;
 } else if (mime === 'application/pdf' || ext === 'pdf') {
   input = { kind: 'pdf', url: 'data:application/pdf;base64,' + raw.toString('base64') };
 } else if (ext === 'docx' || /officedocument\.wordprocessingml/.test(mime) || (raw[0] === 0x50 && raw[1] === 0x4b)) {
@@ -152,8 +274,8 @@ if (input.kind !== 'word') {
     '- الفراغات التي يملؤها الطالب انسخها نقاطاً أو شرطات كما تظهر.\n' +
     '- علامة الصح وعلامة الخطأ انسخهما بالرمزين ✔ و ✖ ، والمربع الفارغ بالرمز □ ، والأقواس الفارغة ( ) كما هي.\n' +
     '- إن لم يصلك ملف أو صورة، أو كان غير مقروء، فاكتب فقط: NO_IMAGE';
-  const part = input.kind === 'image' ? { type: 'image_url', image_url: { url: input.url } } : { type: 'file', file: { filename: 'exam.pdf', file_data: input.url } };
-  const content = [{ type: 'text', text: 'انسخ نص هذا الملف حرفياً.' }, part];
+  const parts = input.kind === 'image' ? (input.urls || [input.url]).map((u) => ({ type: 'image_url', image_url: { url: u } })) : [{ type: 'file', file: { filename: 'exam.pdf', file_data: input.url } }];
+  const content = [{ type: 'text', text: parts.length > 1 ? 'هذه ' + parts.length + ' صور هي صفحات ورقة واحدة بالترتيب. انسخ نصها كلها حرفياً، الصفحة الأولى ثم الثانية وهكذا، دون فاصل بين الصفحات.' : 'انسخ نص هذا الملف حرفياً.' }].concat(parts);
   const plugins = input.kind === 'pdf' ? [{ id: 'file-parser', pdf: { engine: 'pdf-text' } }] : null;
   const pool = (input.kind === 'image' ? readers : readers.concat(candidates.filter((m) => !readers.includes(m)))).slice(0, 3);
   // تطابق نسختين: نسبة الكلمات المشتركة (بعد تبسيط الهمزات والتشكيل)
@@ -169,9 +291,9 @@ if (input.kind !== 'word') {
   let paidEarly = null;
   if (input.kind === 'image' && paidModels.length && PAID_PER_DAY > 0 && sdp.paid.n < PAID_PER_DAY) {
     const pm = paidModels[0];
-    paidEarly = callModel(pm, SYSTEM_OCR, content, plugins, 110000, 8000, OCR_EXTRA).then((t) => ({ model: pm, raw: t }));
+    paidEarly = callModel(pm, SYSTEM_OCR, content, plugins, 120000, parts.length > 1 ? 16000 : 8000, OCR_EXTRA).then((t) => ({ model: pm, raw: t }));
   }
-  const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, 90000, 12000, OCR_EXTRA)));
+  const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, parts.length > 1 ? 110000 : 90000, parts.length > 1 ? 20000 : 12000, OCR_EXTRA)));
   let paidRead = null;
   if (paidEarly) {
     const pr = await paidEarly;
@@ -373,6 +495,9 @@ if (src.hint) exam.kind = src.hint;
 
 // ---------- 3) ملف Word بالقالب ----------
 const built = buildDocx(exam);
+{ const sdL = $getWorkflowStaticData('global'); sdL.lastFmt = sdL.lastFmt || {};
+  for (const k of Object.keys(sdL.lastFmt)) if (Date.now() - sdL.lastFmt[k].ts > 14 * 864e5) delete sdL.lastFmt[k];
+  sdL.lastFmt[src.phone] = { ts: Date.now(), kind: built.kind, subject: built.subject, grade: built.grade, term: termOf(TERM) }; }
 const fname = [built.kind, built.subject, (/\.{2,}/.test(built.grade) ? '' : built.grade)].filter((x) => x && !/^[\s.]*$/.test(x)).join('_').replace(/[\s.\/\\:*?"<>|]+/g, '_').slice(0, 80) + '.docx';
 // نسخة PDF من المحوِّل. «اقلب الصفحة» فيها نص ثابت (المحوِّل لا يحسب حقل Word) بعدد صفحاتها الفعلي: إن خالف التقدير يُعاد بناؤها بالعدد الصحيح
 let pdf = null, pdfNote = '';

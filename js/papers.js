@@ -29,6 +29,10 @@
     // مباحث المعلم وشعبه من سجله في «بيانات العاملين»
     var me = S.myStaff ? await sb.from('teachers').select('id, name, subject, classes').eq('id', S.myStaff.id).maybeSingle() : { data: null };
     S.ppMe = me.data || null;
+    var pf = await sb.from('paper_files').select('id, no, teacher_id, teacher_name, kind, subject, grade, term, file_name, mime, size, copies, printed_sent, status, review_note, reviewed_by, reviewed_at, created_at')
+      .order('created_at', { ascending: false }).limit(1000);
+    S.pfMissing = !!pf.error;
+    S.paperFiles = pf.data || [];
     render();
   }
 
@@ -45,12 +49,87 @@
       'أوراقك خاصة بك، إلا ما تختار نشره لزملائك.</p></div></div>';
     if (S.papers == null) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadPapers(); return; }
     if (S.ppMissing) { app.innerHTML = head + '<div class="card empty">الأوراق تحتاج إلى جداول جديدة: شغّل الملف <code dir="ltr">supabase/teacher_papers.sql</code> في محرر SQL ثم حدّث الصفحة.</div>'; return; }
-    app.innerHTML = head + (u.edit ? ppEditorHtml(u.edit) : ppListHtml());
+    app.innerHTML = head + (u.edit ? ppEditorHtml(u.edit) : u.tab === 'wa' ? ppTabsHtml() + pfListHtml() : ppListHtml());
   }
+
+  function ppTabs() {
+    return (S.myStaff ? [['mine', 'أوراقي'], ['public', 'أوراق الزملاء المنشورة']] : []).concat(isAdmin() || isManager() || isSup() ? [['all', 'كل الأوراق']] : [])
+      .concat([['wa', 'المنشور عبر واتساب' + (pfPending().length && ppReviewer() ? ' (' + pfPending().length + ')' : '')]]);
+  }
+  function ppTabsHtml() {
+    var u = ppUi();
+    return '<div class="toolbar" style="align-items:center">' + ppTabs().map(function (t) { return '<button type="button" class="btn' + (u.tab === t[0] ? ' primary' : '') + '" data-pptab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+  }
+
+  /* ----- المنشور عبر واتساب (supabase/paper_files.sql) -----
+     المعلم يرسل ملفه المصحَّح إلى البوت مع كلمة «نشر»: يُحفظ هنا ويذهب لمجموعة الطباعة. ورقة العمل تُعرض لأولياء أمور صفها
+     بعد اعتماد المشرف التربوي (من واتساب أو من هنا). الاختبارات لا تُعرض لأولياء الأمور */
+  var PF_STATUS = { pending: ['part', 'بانتظار الاعتماد'], approved: ['paid', 'معتمدة · ظاهرة لأولياء الأمور'], rejected: ['unpaid', 'مرفوضة'], none: ['pending', 'اختبار · لا يُعرض لأولياء الأمور'] };
+  function pfPending() { return (S.paperFiles || []).filter(function (f) { return f.status === 'pending'; }); }
+  function pfListHtml() {
+    if (S.pfMissing) return '<div class="card empty">الأوراق المنشورة عبر واتساب تحتاج جدولًا جديدًا: شغّل الملف <code dir="ltr">supabase/paper_files.sql</code> في محرر SQL ثم حدّث الصفحة.</div>';
+    var list = S.paperFiles || [], terms = {};
+    list.forEach(function (f) { var k = f.term || 'بدون فصل دراسي'; (terms[k] = terms[k] || []).push(f); });
+    var how = '<p class="hint" style="margin:0 0 10px">يرسل المعلم ملفه المصحَّح (Word أو PDF) إلى بوت الأكاديمية مع كلمة «نشر» (مثل «نشر 30» لعدد النسخ)، فيصل لمجموعة الطباعة ويظهر هنا. ' +
+      'ورقة العمل تظهر لأولياء أمور صفها بعد اعتماد المشرف التربوي، والاختبارات لا تظهر لهم.</p>';
+    if (!list.length) return '<div class="card">' + how + '<div class="empty">لا أوراق منشورة بعد.</div></div>';
+    return Object.keys(terms).sort().map(function (t) {
+      return '<div class="card"><h2>' + esc(t) + '</h2>' + how + '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم</th><th>النوع</th><th>المادة</th><th>الصف</th><th>المعلم</th><th>التاريخ</th><th>الطباعة</th><th>الحالة</th><th></th></tr></thead><tbody>' +
+        terms[t].map(function (f) {
+          var st = PF_STATUS[f.status] || PF_STATUS.pending;
+          return '<tr><td>' + f.no + '</td><td><b>' + esc(f.kind) + '</b></td><td>' + esc(f.subject || '—') + '</td><td>' + esc(f.grade || '—') + '</td><td>' + esc(f.teacher_name || '') + '</td>' +
+            '<td style="white-space:nowrap">' + dmy(String(f.created_at).slice(0, 10)) + '</td>' +
+            '<td>' + (f.printed_sent ? 'أُرسلت' + (f.copies ? ' (' + f.copies + ')' : '') : '—') + '</td>' +
+            '<td><span class="badge ' + st[0] + '">' + st[1] + '</span>' + (f.reviewed_by ? '<div class="hint" style="margin:2px 0 0">' + esc(f.reviewed_by) + (f.reviewed_at ? ' · ' + dmy(String(f.reviewed_at).slice(0, 10)) : '') + '</div>' : '') +
+              (f.status === 'rejected' && f.review_note ? '<div class="hint" style="margin:2px 0 0">السبب: ' + esc(f.review_note) + '</div>' : '') + '</td>' +
+            '<td><div class="acts"><button type="button" class="btn" data-pfopen="' + f.id + '">فتح الملف</button>' +
+              (ppReviewer() && f.kind === 'ورقة عمل' && f.status !== 'approved' ? '<button type="button" class="btn primary" data-pfok="' + f.id + '">اعتماد</button>' : '') +
+              (ppReviewer() && f.kind === 'ورقة عمل' && f.status !== 'rejected' ? '<button type="button" class="btn" data-pfno="' + f.id + '">' + (f.status === 'approved' ? 'إيقاف الظهور' : 'رفض') + '</button>' : '') +
+              (isAdmin() ? '<button type="button" class="btn danger" data-pfdel="' + f.id + '">حذف</button>' : '') + '</div></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }).join('');
+  }
+  async function pfReview(id, ok) {
+    var f = (S.paperFiles || []).filter(function (x) { return x.id === id; })[0];
+    if (!f) return;
+    var note = '';
+    if (!ok) { note = prompt('سبب الرفض (يصل للمعلم في الموقع):', ''); if (note == null) return; note = note.trim(); if (!note) return toast('اكتب السبب', true); }
+    var p = { status: ok ? 'approved' : 'rejected', review_note: note, reviewed_by: (S.profile && S.profile.full_name) || displayName(S.email), reviewed_at: new Date().toISOString() };
+    var r = await sb.from('paper_files').update(p).eq('id', id);
+    if (r.error) return fail(r.error);
+    Object.assign(f, p);
+    toast(ok ? 'اعتُمدت، وتظهر الآن لأولياء أمور الصف ' + (f.grade || '') : 'سُجّل الرفض');
+    render();
+  }
+  async function pfOpen(id) {
+    var r = await sb.from('paper_files').select('file_name, mime, data').eq('id', id).maybeSingle();
+    if (r.error || !r.data) return fail(r.error || { message: 'الملف غير موجود' });
+    var bin = atob(r.data.data), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([arr], { type: r.data.mime || 'application/octet-stream' })), a = document.createElement('a');
+    a.href = url; a.download = r.data.file_name || 'ورقة'; if (/pdf/.test(r.data.mime)) a.target = '_blank';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/papers') return;
+    var b = e.target.closest('[data-pfopen],[data-pfok],[data-pfno],[data-pfdel]');
+    if (!b) return;
+    if (b.hasAttribute('data-pfopen')) return pfOpen(b.getAttribute('data-pfopen'));
+    if (b.hasAttribute('data-pfok')) return pfReview(b.getAttribute('data-pfok'), true);
+    if (b.hasAttribute('data-pfno')) return pfReview(b.getAttribute('data-pfno'), false);
+    var id = b.getAttribute('data-pfdel');
+    if (!confirm('حذف هذه الورقة من الموقع ومن صفحة أولياء الأمور؟ (لا يُحذف ما أُرسل لواتساب)')) return;
+    sb.from('paper_files').delete().eq('id', id).then(function (r) {
+      if (r.error) return fail(r.error);
+      S.paperFiles = S.paperFiles.filter(function (x) { return x.id !== id; });
+      toast('حُذفت'); render();
+    });
+  });
 
   function ppListHtml() {
     var u = ppUi(), rev = S.ppCfg && S.ppCfg.review_enabled;
-    var tabs = (S.myStaff ? [['mine', 'أوراقي'], ['public', 'أوراق الزملاء المنشورة']] : []).concat(isAdmin() || isManager() || isSup() ? [['all', 'كل الأوراق']] : []);
+    var tabs = ppTabs();
     var q = norm(u.q);
     var list = S.papers.filter(function (p) {
       if (u.tab === 'mine' && !ppMine(p)) return false;
