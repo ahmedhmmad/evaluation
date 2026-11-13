@@ -33,11 +33,13 @@ for (const k of Object.keys(sd.fmt)) if (now - sd.fmt[k].ts > 30 * 60000) delete
 
 const hintOf = (t) => /ورقة/.test(t) ? 'ورقة عمل' : /(اختبار|امتحان)/.test(t) ? 'اختبار' : '';
 const isCmd = /^تنسيق/.test(text);
+// «تنسيق اختبار pdf»: يُرسل مع ملف Word نسخة PDF (ورقة العمل تُرسل PDF دائماً)
+const wantPdf = (t) => /pdf|بي\s*دي\s*[إا]ف/i.test(t);
 const instance = body.instance || 'ThirdPillar';
 const base = { phone, instance, keys: item.keys, msgId: key.id || '', msgKey: key };
 
 if (isCmd && !file) {
-  sd.fmt[phone] = { ts: now, hint: hintOf(text) };
+  sd.fmt[phone] = { ts: now, hint: hintOf(text), pdf: wantPdf(text) };
   return [{ json: Object.assign(base, { fmt: 'start' }) }];
 }
 // أي رسالة نصية أخرى (دوام، غياب، إلغاء…) تعني أن صاحبها انتقل إلى أمر آخر: يُلغى انتظار ملف التنسيق،
@@ -47,9 +49,9 @@ if (!isCmd && text && (!file || /^دوام/.test(text))) {
   return pass();
 }
 if (file && (isCmd || sd.fmt[phone])) {
-  const hint = isCmd ? hintOf(text) : sd.fmt[phone].hint || '';
+  const hint = isCmd ? hintOf(text) : sd.fmt[phone].hint || '', pdf = isCmd ? wantPdf(text) : !!sd.fmt[phone].pdf;
   delete sd.fmt[phone];
-  return [{ json: Object.assign(base, { fmt: 'process', hint,
+  return [{ json: Object.assign(base, { fmt: 'process', hint, pdf,
     fileName: (doc && doc.fileName) || '', mimetype: String(file.mimetype || '').split(';')[0],
     base64: (d.message && d.message.base64) || m.base64 || '' }) }];
 }

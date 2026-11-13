@@ -10,6 +10,11 @@ const PAID_MODEL = '';
 const PAID_MAX_PRICE = 1;
 // سقف زمني: مهلة عقدة Code في n8n ٣٠٠ ثانية، فتُنهى الخطوات قبلها بهامش
 const STRUCT_UNTIL = 160000;
+// نسخة PDF (تُفتح صحيحة على الهاتف): محوِّل صغير على الخادم نفسه (n8n/pdf في المستودع). فارغ = لا PDF.
+// PDF_AUTO: الأنواع التي يُرسل معها PDF دائماً؛ غيرها يُرسل معه PDF إن كتب المعلم «تنسيق اختبار pdf».
+// إن لم يكن المحوِّل يعمل يُرسل ملف Word وحده كما كان.
+const PDF_URL = 'http://127.0.0.1:3920';
+const PDF_AUTO = ['ورقة عمل'];
 // السطر الذي يظهر أسفل عنوان الاختبار (غيّره مع كل فصل)
 const TERM = 'الفصل الدراسي الأول 2026/2027';
 
@@ -24,7 +29,7 @@ const say = (text) => Promise.race([H.httpRequest({ method: 'POST', url: EVO + '
   new Promise((_, rej) => setTimeout(() => rej(new Error('انتهت مهلة إرسال الرسالة')), 20000))]);
 
 if (src.fmt === 'start') {
-  await say('أهلاً بك 👋\nأرسل الآن ملف الاختبار أو ورقة العمل (Word أو PDF أو صورة) وسأنسقه بقالب أكاديمية الركيزة الثالثة.\nيمكنك كتابة: تنسيق اختبار  أو  تنسيق ورقة عمل  لتحديد النوع.');
+  await say('أهلاً بك 👋\nأرسل الآن ملف الاختبار أو ورقة العمل (Word أو PDF أو صورة) وسأنسقه بقالب أكاديمية الركيزة الثالثة.\nيمكنك كتابة: تنسيق اختبار  أو  تنسيق ورقة عمل  لتحديد النوع.\nورقة العمل تصلك PDF مع ملف Word. للاختبار اكتب: تنسيق اختبار pdf');
   return [{ json: { done: 'طُلب الملف من المعلم' } }];
 }
 const OR_KEY = String(K.OPENROUTER || '').trim();
@@ -321,13 +326,32 @@ if (src.hint) exam.kind = src.hint;
 // ---------- 3) ملف Word بالقالب ----------
 const built = buildDocx(exam);
 const fname = [built.kind, built.subject, (/\.{2,}/.test(built.grade) ? '' : built.grade)].filter((x) => x && !/^[\s.]*$/.test(x)).join('_').replace(/[\s.\/\\:*?"<>|]+/g, '_').slice(0, 80) + '.docx';
-let caption = '✅ تم التنسيق بقالب الأكاديمية.\nراجع الملف قبل اعتماده، خاصة الجداول والأشكال.\nلنسخة PDF: افتحه في Word ← حفظ باسم ← PDF.';
-if (built.pages > 2) caption += '\n⚠️ الملف طويل وقد يزيد عن صفحتين.';
-caption += doubt;
+// نسخة PDF من المحوِّل. «اقلب الصفحة» في PDF بعدد صفحاته الفعلي: إن خالف التقدير يُعاد بناء نسخة PDF بالعدد الصحيح
+let pdf = null, pdfNote = '';
+if (PDF_URL && (PDF_AUTO.includes(built.kind) || src.pdf)) {
+  const toPdf = async (docx) => {
+    const r = await race(H.httpRequest({ method: 'POST', url: PDF_URL + '/convert', headers: { 'Content-Type': 'application/json' }, body: { docx: docx.toString('base64') }, json: true, timeout: 100000 }), 100000, 'تحويل PDF');
+    if (!r || !r.pdf) throw new Error('رد المحوِّل بلا ملف');
+    return r;
+  };
+  try {
+    pdf = await toPdf(built.docx);
+    if (pdf.pages && (pdf.pages > 1) !== (built.pages > 1) && elapsed() < 200000) pdf = await toPdf(buildDocx(Object.assign({}, exam, { forcePages: pdf.pages })).docx);
+  } catch (e) { pdf = null; errors.push('PDF: ' + String(e.message || e).slice(0, 150)); pdfNote = '\nℹ️ تعذر تجهيز نسخة PDF الآن، فأُرسل ملف Word وحده.'; }
+}
+let caption = '✅ تم التنسيق بقالب الأكاديمية.\nراجع الملف قبل اعتماده، خاصة الجداول والأشكال.' + (pdf ? '' : '\nلنسخة PDF: افتحه في Word ← حفظ باسم ← PDF.');
+if ((pdf && pdf.pages ? pdf.pages : built.pages) > 2) caption += '\n⚠️ الملف طويل وقد يزيد عن صفحتين.';
+caption += doubt + pdfNote;
+if (pdf) {
+  await race(H.httpRequest({ method: 'POST', url: EVO + '/message/sendMedia/' + encodeURIComponent(src.instance),
+    headers: { apikey: K.EVO, 'Content-Type': 'application/json' }, json: true, timeout: 60000,
+    body: { number: src.phone, mediatype: 'document', mimetype: 'application/pdf', fileName: fname.replace(/\.docx$/, '.pdf'), caption, media: pdf.pdf } }), 60000, 'إرسال PDF');
+  caption = '📝 نسخة Word من الملف نفسه، للتعديل إن لزم.';
+}
 await race(H.httpRequest({ method: 'POST', url: EVO + '/message/sendMedia/' + encodeURIComponent(src.instance),
   headers: { apikey: K.EVO, 'Content-Type': 'application/json' }, json: true, timeout: 60000,
   body: { number: src.phone, mediatype: 'document', mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', fileName: fname, caption, media: built.docx.toString('base64') } }), 60000, 'إرسال الملف');
-return [{ json: { sent: fname, seconds: Math.round(elapsed() / 1000), model: usedModel, readBy, paidCostUSD: paidCost, estimatedPages: built.pages, tried: errors } }];
+return [{ json: { sent: fname, pdf: !!pdf, pdfPages: pdf ? pdf.pages : null, seconds: Math.round(elapsed() / 1000), model: usedModel, readBy, paidCostUSD: paidCost, estimatedPages: built.pages, tried: errors } }];
 
 // ======================================================================
 // قراءة نص docx: فك ضغط ZIP (inflate) ثم استخراج النص من word/document.xml
@@ -584,7 +608,7 @@ function buildDocx(exIn) {
   const estimate = (k) => 1.3 * (1500 + 700 + ex.pre.reduce((b, it) => b + estItem(it, k), 0) + ex.sections.reduce((a, s) => a + 850 + s.items.reduce((b, it) => b + estItem(it, k), 0), 0));
   let k = 1;
   if (estimate(1) > 2 * BODY_H) k = estimate(0.8) <= 2 * BODY_H ? 0.8 : 0.65;
-  const pages = Math.ceil(estimate(k) / BODY_H);
+  const pages = +exIn.forcePages || Math.ceil(estimate(k) / BODY_H);
   const sc = (v, d) => Math.round((v || d) * k);
 
   // عناصر WordprocessingML
