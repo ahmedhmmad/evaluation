@@ -83,8 +83,11 @@ try {
     const textual = free.filter((x) => !ins(x).includes('image')).sort((a, b) => (b.context_length || 0) - (a.context_length || 0)).map((x) => x.id);
     // قارئ واحد من كل عائلة: التطابق بين عائلتين مختلفتين هو التأكيد
     const seen = new Set();
-    readers = vision.filter((id) => { const f = id.split('/')[0]; if (seen.has(f)) return false; seen.add(f); return true; }).slice(0, 3);
-    candidates = textual.slice(0, 2).concat(vision.slice(0, 2));    // لترتيب الأسطر (نص فقط)
+    const sdb = $getWorkflowStaticData('global'), now0 = Date.now();
+    sdb.badModels = sdb.badModels || {};
+    for (const k of Object.keys(sdb.badModels)) if (now0 - sdb.badModels[k] > 7 * 864e5) delete sdb.badModels[k];
+    readers = vision.filter((id) => !sdb.badModels[id]).filter((id) => { const f = id.split('/')[0]; if (seen.has(f)) return false; seen.add(f); return true; }).slice(0, 3);
+    candidates = textual.filter((id) => !sdb.badModels[id]).slice(0, 2).concat(vision.filter((id) => !sdb.badModels[id]).slice(0, 2));    // لترتيب الأسطر (نص فقط)
   }
   if (!paidModels.length && PAID_PER_DAY > 0) {
     // نموذج مدفوع رخيص وقوي في قراءة الصور وخط اليد: الأحدث من عائلة مفضلة بسعر إدخال لا يتجاوز PAID_MAX_PRICE دولار لكل مليون
@@ -108,18 +111,20 @@ let limited = 0, paidCost = null;
 // نماذج توقفت قراءتها عند حد الرموز قبل آخر الورقة (نسختها ناقصة)
 const cut = new Set();
 // نموذج واحد: نص الرد، أو null مع تسجيل السبب. ms مهلة حقيقية لهذا الطلب
-async function callModel(model, system, content, plugins, ms, maxTokens) {
+async function callModel(model, system, content, plugins, ms, maxTokens, extra) {
   let res;
   try {
     res = await race(H.httpRequest({
       method: 'POST', url: 'https://openrouter.ai/api/v1/chat/completions', json: true,
       headers: { Authorization: 'Bearer ' + OR_KEY, 'Content-Type': 'application/json', 'X-Title': 'TPA Formatter' },
-      body: Object.assign({ model, temperature: 0, max_tokens: maxTokens || 6000, usage: { include: true }, messages: [{ role: 'system', content: system }, { role: 'user', content }] }, plugins ? { plugins } : {}),
+      body: Object.assign({ model, temperature: 0, max_tokens: maxTokens || 6000, usage: { include: true }, messages: [{ role: 'system', content: system }, { role: 'user', content }] }, plugins ? { plugins } : {}, extra || {}),
       timeout: ms, returnFullResponse: true, ignoreHttpStatusErrors: true,
     }), ms);
   } catch (e) { errors.push(model + ': ' + String(e.message || e).slice(0, 120)); return null; }
   const body = res.body || {};
   if (res.statusCode === 429 || (body.error && body.error.code === 429)) { limited++; errors.push(model + ': 429'); return null; }
+  const code = +(res.statusCode >= 400 ? res.statusCode : body.error && body.error.code) || 0;
+  if (code === 403 || code === 404) { const sdb = $getWorkflowStaticData('global'); (sdb.badModels = sdb.badModels || {})[model] = Date.now(); }
   if (res.statusCode >= 400 || body.error) { errors.push(model + ': ' + res.statusCode + ' ' + JSON.stringify(body.error || body).slice(0, 150)); return null; }
   if (body.usage && body.usage.cost != null && !/:free$/.test(model)) paidCost = (paidCost || 0) + (+body.usage.cost || 0);
   const ch0 = (body.choices || [])[0] || {}, msg = ch0.message || {};
@@ -158,12 +163,31 @@ if (input.kind !== 'word') {
   const clean = (t) => String(t || '').replace(/```[a-z]*\n?|```/gi, '').replace(/^\s*#+\s*/gm, '').replace(/\*\*/g, '').trim();
   const readable = (t) => t && !/NO_IMAGE/.test(t) && (t.match(/[؀-ۿA-Za-z]/g) || []).length >= 15;
   // أ) القراءات المجانية معاً في وقت واحد (لا واحدة بعد أخرى)
-  const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, 75000, 16000)));
+  const OCR_EXTRA = { reasoning: { effort: 'low', exclude: true } };
+  const sdp = $getWorkflowStaticData('global'), todayP = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+  if (!sdp.paid || sdp.paid.day !== todayP) sdp.paid = { day: todayP, n: 0 };
+  let paidEarly = null;
+  if (input.kind === 'image' && paidModels.length && PAID_PER_DAY > 0 && sdp.paid.n < PAID_PER_DAY) {
+    const pm = paidModels[0];
+    paidEarly = callModel(pm, SYSTEM_OCR, content, plugins, 110000, 8000, OCR_EXTRA).then((t) => ({ model: pm, raw: t }));
+  }
+  const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, 90000, 12000, OCR_EXTRA)));
+  let paidRead = null;
+  if (paidEarly) {
+    const pr = await paidEarly;
+    if (pr.raw != null) {
+      sdp.paid.n++;
+      const t = clean(pr.raw);
+      if (readable(t) && !cut.has(pr.model)) paidRead = { model: pr.model, text: t, fam: 'paid:' + pr.model.split('/')[0], paid: true };
+      else errors.push(pr.model + ': ' + (cut.has(pr.model) ? 'توقفت القراءة قبل آخر الورقة' : 'لم يقرأ الملف'));
+    }
+  }
   const reads = [], partial = [];
   pool.forEach((model, i) => { const t = clean(texts[i]); if (texts[i] == null) return; if (!readable(t)) { errors.push(model + ': لم يقرأ الملف'); return; }
     // نسخة مقطوعة لا تُعتمد وحدها (آخر الورقة سقط منها)، لكنها تؤكد أول قراءة كاملة إن طابقتها
     if (cut.has(model)) { errors.push(model + ': توقفت القراءة قبل آخر الورقة (' + t.length + ' حرفاً)'); partial.push({ model, text: t, fam: model.split('/')[0] }); return; }
     reads.push({ model, text: t, fam: model.split('/')[0] }); });
+  if (paidRead) reads.push(paidRead);
   let agreed = null;
   for (let i = 0; i < reads.length && !agreed; i++) for (let j = i + 1; j < reads.length; j++) {
     const sc = sim(reads[i].text, reads[j].text);
@@ -183,14 +207,16 @@ if (input.kind !== 'word') {
   }
   // ب) لم تتفق قراءتان مجانيتان (خط يد أو صورة صعبة): قراءة واحدة بنموذج مدفوع، ضمن الحد اليومي
   let paidNote = '';
-  if (!agreed && paidModels.length && PAID_PER_DAY > 0) {
+  if (!agreed && paidRead) {
+    agreed = paidRead; readBy = [paidRead.model + ' (مدفوع، ' + sdp.paid.n + '/' + PAID_PER_DAY + ' اليوم)'];
+  } else if (!agreed && !paidEarly && paidModels.length && PAID_PER_DAY > 0) {
     const sd = $getWorkflowStaticData('global');
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
     if (!sd.paid || sd.paid.day !== today) sd.paid = { day: today, n: 0 };
     if (sd.paid.n >= PAID_PER_DAY) paidNote = 'بلغ اليوم حد القراءة المتقدمة (' + PAID_PER_DAY + ' صورة).';
     else for (const model of paidModels) {
-      if (elapsed() > 130000) break;
-      const raw = await callModel(model, SYSTEM_OCR, content, plugins, 80000, 16000);
+      if (elapsed() > 120000) break;
+      const raw = await callModel(model, SYSTEM_OCR, content, plugins, 110000, 8000, OCR_EXTRA);
       if (raw == null) continue;
       sd.paid.n++;                                  // كل طلب مدفوع ناجح يُحسب، حتى لو لم يُقرأ النص
       const t = clean(raw);
@@ -200,6 +226,9 @@ if (input.kind !== 'word') {
       break;
     }
   }
+  if (!agreed && reads.length === 1) {
+    agreed = reads[0]; readBy = [reads[0].model + ' (قراءة واحدة)'];
+  }
   if (!agreed) {
     await say(limited && !reads.length
       ? '⏳ تم بلوغ حد الاستخدام المجاني لخدمة الذكاء الاصطناعي حالياً. أعد المحاولة بعد قليل بإرسال: تنسيق'
@@ -207,7 +236,8 @@ if (input.kind !== 'word') {
         'أرسل الملف بصيغة Word إن أمكن، أو صورة أوضح: الورقة كاملة ومستقيمة، بإضاءة جيدة، وبدون ظل.').catch(() => {});
     return [{ json: { failed: true, seconds: Math.round(elapsed() / 1000), errors, paidModels, pool, reads: reads.concat(partial).map((r) => ({ model: r.model, cut: partial.includes(r), chars: r.text.length, text: r.text.slice(0, 400) })) } }];
   }
-  if (agreed.paid) doubt += '\nℹ️ الصورة صعبة القراءة (خط يد أو تصوير غير واضح)، فقُرئت بقراءة واحدة متقدمة غير مؤكَّدة بقراءة ثانية: راجع كل كلمة قبل الاعتماد.';
+  // قراءة واحدة لم تؤكدها ثانية (مدفوعة أو مجانية)؛ إن طابقتها قراءة أخرى فهي مؤكَّدة
+  if (readBy.length < 2) doubt += '\nℹ️ الصورة صعبة القراءة (خط يد أو تصوير غير واضح)، فقُرئت بقراءة واحدة متقدمة غير مؤكَّدة بقراءة ثانية: راجع كل كلمة قبل الاعتماد.';
   // أسطر النص المتفق عليه؛ الأسطر المتتالية التي فيها | جدول
   const lines = [];
   for (const raw of agreed.text.split(/\r?\n/)) {
@@ -223,7 +253,7 @@ if (input.kind !== 'word') {
     lines.push({ id, text: t });
   }
   lines.forEach((l, i) => { l.id = i + 1; });
-  input = { kind: 'word', lines, from: input.kind, paid: !!agreed.paid };
+  input = { kind: 'word', lines, from: input.kind, paid: readBy.length < 2 };
 }
 if (input.kind === 'word') {
   // ===== ملف Word: النص يُنقل من الملف حرفياً، والنموذج يرتّب الأسطر بأرقامها فقط ولا يكتب نصاً =====
