@@ -159,16 +159,27 @@ if (input.kind !== 'word') {
   const readable = (t) => t && !/NO_IMAGE/.test(t) && (t.match(/[؀-ۿA-Za-z]/g) || []).length >= 15;
   // أ) القراءات المجانية معاً في وقت واحد (لا واحدة بعد أخرى)
   const texts = await Promise.all(pool.map((m) => callModel(m, SYSTEM_OCR, content, plugins, 75000, 16000)));
-  const reads = [];
+  const reads = [], partial = [];
   pool.forEach((model, i) => { const t = clean(texts[i]); if (texts[i] == null) return; if (!readable(t)) { errors.push(model + ': لم يقرأ الملف'); return; }
-    // نسخة مقطوعة لا تُعتمد: تطابقها مع غيرها في أولها يخفي أن آخر الورقة سقط
-    if (cut.has(model)) { errors.push(model + ': توقفت القراءة قبل آخر الورقة (' + t.length + ' حرفاً)'); return; }
+    // نسخة مقطوعة لا تُعتمد وحدها (آخر الورقة سقط منها)، لكنها تؤكد أول قراءة كاملة إن طابقتها
+    if (cut.has(model)) { errors.push(model + ': توقفت القراءة قبل آخر الورقة (' + t.length + ' حرفاً)'); partial.push({ model, text: t, fam: model.split('/')[0] }); return; }
     reads.push({ model, text: t, fam: model.split('/')[0] }); });
   let agreed = null;
   for (let i = 0; i < reads.length && !agreed; i++) for (let j = i + 1; j < reads.length; j++) {
     const sc = sim(reads[i].text, reads[j].text);
     if (reads[i].fam !== reads[j].fam && sc >= 0.5) { agreed = reads[j].text.length > reads[i].text.length * 1.1 ? reads[j] : reads[i]; readBy = [agreed.model, (agreed === reads[i] ? reads[j] : reads[i]).model]; break; }
     errors.push(reads[j].model + ': نسخته تختلف عن ' + reads[i].model + ' (' + Math.round(sc * 100) + '%)');
+  }
+  // أ٢) قراءة كاملة واحدة، وقراءة مقطوعة من عائلة أخرى تطابق أولها: تُعتمد الكاملة، وما بعد موضع القطع قرأه نموذج واحد
+  for (let i = 0; i < reads.length && !agreed; i++) for (const p of partial) {
+    if (p.fam === reads[i].fam || p.text.length < 120) continue;
+    const head = reads[i].text.slice(0, Math.round(p.text.length * 1.15)), sc = sim(p.text, head);
+    if (sc >= 0.5) {
+      agreed = reads[i]; readBy = [reads[i].model, p.model + ' (أول الورقة فقط)'];
+      doubt += '\nℹ️ أول الورقة تطابقت فيه قراءتان، وآخرها قرأه نموذج واحد: راجع الجزء الأخير جيداً.';
+      break;
+    }
+    errors.push(p.model + ': أول نسخته يختلف عن ' + reads[i].model + ' (' + Math.round(sc * 100) + '%)');
   }
   // ب) لم تتفق قراءتان مجانيتان (خط يد أو صورة صعبة): قراءة واحدة بنموذج مدفوع، ضمن الحد اليومي
   let paidNote = '';
@@ -194,7 +205,7 @@ if (input.kind !== 'word') {
       ? '⏳ تم بلوغ حد الاستخدام المجاني لخدمة الذكاء الاصطناعي حالياً. أعد المحاولة بعد قليل بإرسال: تنسيق'
       : '❌ لم أستطع قراءة ' + (input.kind === 'image' ? 'الصورة' : 'الملف') + ' بثقة' + (paidNote ? ' (' + paidNote + ')' : '') + '.\n' +
         'أرسل الملف بصيغة Word إن أمكن، أو صورة أوضح: الورقة كاملة ومستقيمة، بإضاءة جيدة، وبدون ظل.').catch(() => {});
-    return [{ json: { failed: true, seconds: Math.round(elapsed() / 1000), errors, paidModels, reads: reads.map((r) => ({ model: r.model, text: r.text.slice(0, 400) })) } }];
+    return [{ json: { failed: true, seconds: Math.round(elapsed() / 1000), errors, paidModels, pool, reads: reads.concat(partial).map((r) => ({ model: r.model, cut: partial.includes(r), chars: r.text.length, text: r.text.slice(0, 400) })) } }];
   }
   if (agreed.paid) doubt += '\nℹ️ الصورة صعبة القراءة (خط يد أو تصوير غير واضح)، فقُرئت بقراءة واحدة متقدمة غير مؤكَّدة بقراءة ثانية: راجع كل كلمة قبل الاعتماد.';
   // أسطر النص المتفق عليه؛ الأسطر المتتالية التي فيها | جدول
