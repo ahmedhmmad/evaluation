@@ -56,8 +56,9 @@ if (file && /^نشر/.test(text)) {
 if (!file && /^(اعتماد|رفض)(\s|$)/.test(text)) {
   return [{ json: Object.assign(base, { fmt: 'review', text, ref: ctx.stanzaId || '' }) }];
 }
-// «تم»: انتهت صفحات الورقة المصوّرة
-if (!file && /^(تم|انتهيت|خلص)[.!\s]*$/.test(text) && sd.fmt[phone] && sd.fmt[phone].pages) {
+// «تم»: انتهت صفحات الورقة المصوّرة. لا يُشترط عدد الصفحات في ذاكرة n8n: عملية الصورة تكون ما زالت تنتظر دقيقتها فلا تُحفظ ذاكرتها بعد؛
+// الصفحات نفسها محفوظة في قاعدة البيانات، وإن لم توجد يرد البوت بذلك
+if (!file && /^(تم|انتهيت|خلص)[.!\s]*$/.test(text) && sd.fmt[phone]) {
   delete sd.fmt[phone];
   return [{ json: Object.assign(base, { fmt: 'done' }) }];
 }
