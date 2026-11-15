@@ -274,6 +274,7 @@
       '<div class="card"><div class="toolbar" style="align-items:center"><h2 style="margin:0;flex:1">الشعب — ' + dmy(a.day) + '</h2>' +
         '<button type="button" class="btn" data-attschoolpdf="day">طباعة / PDF</button>' +
         '<button type="button" class="btn" data-attdayxlsx>تصدير Excel</button>' +
+        menuHtml('الغياب بأرقام التواصل', '<button type="button" class="btn" data-attcontacts="pdf">طباعة / PDF</button><button type="button" class="btn" data-attcontacts="xlsx">Excel</button>') +
         (canRecordAtt() && a.day === todayISO() && absentees.length ? '<button type="button" class="btn primary" data-attnotify="' + absentees.length + '" title="لا يتكرر الإرسال لمن أُرسل له اليوم، ولا يشمل الغياب بعذر">إرسال الغياب لأولياء الأمور</button>' : '') + '</div>' +
         (rows ?'<div class="table-wrap"><table class="grid"><thead><tr><th>الشعبة</th><th>الطلاب</th><th>التسجيل</th><th>حاضر</th><th>غائب</th><th>نسبة الحضور</th><th>أسماء الغائبين</th></tr></thead><tbody>' + rows +
           '</tbody><tfoot><tr><td colspan="3">المدرسة</td><td>' + all.present + '</td><td>' + all.absent + '</td><td>' + attPct(all) + '</td><td></td></tr></tfoot></table></div>'
@@ -473,6 +474,77 @@
   }
 
   // الطباعة: أفقية، رأس الجدول يتكرر إن امتد الكشف إلى أكثر من صفحة
+  /* ----- كشف الغياب اليومي بأرقام التواصل -----
+     لكل شعبة غائبوها في اليوم (غائب، مأذون، مفصول) مع ولي الأمر وجواله ورقم بديل، للاتصال بالأهالي.
+     جوال ولي الأمر هو students.phone (الواتساب رقم الطالب نفسه فلا يُستعمل هنا) */
+  function attContactsData(day, rows) {
+    var by = {}, recorded = {};
+    (rows || []).forEach(function (r) { if (r.day !== day) return; recorded[r.class_name] = 1; if (r.status !== 'present') by[r.student_id] = r; });
+    var classes = attClasses().filter(function (c) { return classRoll(c).length; }), list = [], sum = [];
+    classes.forEach(function (cls) {
+      var gone = classRoll(cls).filter(function (x) { return by[x.id]; }).sort(function (p, q) { return p.full_name.localeCompare(q.full_name, 'ar'); });
+      sum.push({ cls: cls, students: classRoll(cls).length, recorded: !!recorded[cls], absent: gone.length });
+      gone.forEach(function (x) {
+        var r = by[x.id];
+        list.push({ x: x, cls: cls, status: attWord(r.status, x.id, day), note: r.note || '', guardian: x.guardian_name || '',
+          phone: plainPhone(x.phone), alt: plainPhone((x.details || {}).alt_phone) });
+      });
+    });
+    return { day: day, rows: list, sum: sum };
+  }
+  function attContacts(fmt) {
+    var a = attState(), day = a.expDay || a.day;
+    return withAttRange({ from: day, to: day }, async function (rows) {
+      var D = attContactsData(day, rows);
+      if (!D.sum.some(function (c) { return c.recorded; })) return toast('لم يُسجَّل حضور أي شعبة يوم ' + dmy(day), true);
+      if (fmt === 'pdf') { pendingAtt = { kind: 'contacts', D: D }; return printNow(); }
+      try {
+        await loadXlsx();
+        var wb = XLSX.utils.book_new(), used = {};
+        wb.Workbook = { Views: [{ RTL: true }] };
+        var top = [[schoolName()], ['كشف الغياب بأرقام التواصل — ' + dayName(day) + ' ' + dmy(day)], []];
+        var hdr = ['م', 'الطالب', 'الشعبة', 'الحالة', 'ملاحظة', 'ولي الأمر', 'جوال ولي الأمر', 'جوال بديل'], W = [5, 32, 12, 10, 24, 26, 16, 16];
+        var line = function (r, i) { return [i + 1, r.x.full_name, r.cls, r.status, r.note, r.guardian, r.phone, r.alt]; };
+        xlsxSheet(wb, used, 'كل الشعب', top.concat([hdr], D.rows.map(line)), W);
+        D.sum.forEach(function (c) {
+          var mine = D.rows.filter(function (r) { return r.cls === c.cls; });
+          xlsxSheet(wb, used, c.cls, top.concat([['الشعبة: ' + c.cls + ' · الطلاب: ' + c.students + (c.recorded ? ' · الغائبون: ' + c.absent : ' · لم يُسجَّل حضورها')], [], [hdr]],
+            mine.length ? mine.map(line) : [[c.recorded ? 'لا غياب' : 'لم يُسجَّل']]), W);
+        });
+        XLSX.writeFile(wb, 'الغياب-بأرقام-التواصل-' + day + '.xlsx');
+      } catch (err) { toast(err.message, true); }
+    });
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash.indexOf('#/attendance') !== 0) return;
+    var b = e.target.closest('[data-attcontacts]');
+    if (b) attContacts(b.getAttribute('data-attcontacts'));
+  });
+  function buildAttContactsSheet(D) {
+    var head = reportHead('كشف الغياب بأرقام التواصل', [['اليوم', dayName(D.day) + ' ' + dmy(D.day)], ['الغائبون', D.rows.length],
+      ['شعب لم تُسجَّل', D.sum.filter(function (c) { return !c.recorded; }).map(function (c) { return c.cls; }).join('، ')]]).replace(/^<img class="wm"[^>]*>/, '');
+    var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
+    var n = 9, body = '';
+    D.sum.forEach(function (cs) {
+      var mine = D.rows.filter(function (r) { return r.cls === cs.cls; });
+      body += '<tr style="border-top:2px solid #7d8597;background:#eef1f6"><td colspan="' + n + '"><b>' + esc(cs.cls) + '</b> — الطلاب ' + cs.students +
+        (cs.recorded ? ' · الغائبون ' + cs.absent : ' · لم يُسجَّل حضورها') + '</td></tr>' +
+        (mine.length ? mine.map(function (r, i) {
+          return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.x.full_name) + '</b></td>' + c(esc(r.status)) + '<td style="font-size:.85em">' + esc(r.note) + '</td>' +
+            '<td style="font-size:.9em">' + esc(r.guardian) + '</td>' + c('<span dir="ltr">' + esc(r.phone) + '</span>') + c('<span dir="ltr">' + esc(r.alt) + '</span>') + '<td></td><td></td></tr>';
+        }).join('') : '<tr><td colspan="' + n + '" style="color:#7d8597">' + (cs.recorded ? 'لا غياب' : '—') + '</td></tr>');
+    });
+    printLandscape = true;
+    sheet.style.width = '267mm';
+    sheet.className = 'ls att-detail';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>م</th><th>الطالب</th><th>الحالة</th><th>ملاحظة</th><th>ولي الأمر</th><th>جوال ولي الأمر</th><th>جوال بديل</th><th>تم الاتصال</th><th>نتيجة المتابعة</th></tr></thead>' +
+      '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
+  }
+
   function buildAttDetailSheet(D) {
     var head = reportHead('كشف الغياب المفصّل', [['الفترة', 'من ' + dmy(D.from) + ' إلى ' + dmy(D.to)], ['الشعبة', D.cls || 'كل المدرسة'],
       ['الكشف', 'من غاب ' + (D.min > 1 ? D.min + ' أيام فأكثر' : 'يومًا فأكثر')], ['عدد الطلاب', D.rows.length]]).replace(/^<img class="wm"[^>]*>/, '');
@@ -679,6 +751,7 @@
   function buildAttSheet(p) {
     if (p.kind === 'register') return buildAttRegisterSheet(p);
     if (p.kind === 'detail') return buildAttDetailSheet(p.D);
+    if (p.kind === 'contacts') return buildAttContactsSheet(p.D);
     if (p.kind === 'student') return buildAttStudentSheet(p.D);
     var d = p.d, all = { present: 0, absent: 0, excused: 0, suspended: 0 }, total = 0;
     var c = function (v) { return '<td class="c">' + v + '</td>'; };
@@ -776,6 +849,7 @@
       '<div class="toolbar" style="align-items:center">' +
         '<span class="monthpick"><label class="field" for="att-exp-day">تقرير المدرسة عن يوم</label><input type="date" id="att-exp-day" max="' + todayISO() + '" value="' + day + '"></span>' +
         pair('data-attschool="day" data-fmt="X"', 'يومي:') +
+        pair('data-attcontacts="X"', 'الغياب بأرقام التواصل:') +
         pair('data-attschool="week" data-fmt="X"', 'أسبوعي (' + dmy(wk.from).slice(0, 5) + '–' + dmy(wk.to).slice(0, 5) + '):') +
         pair('data-attschool="month" data-fmt="X"', 'شهري (' + monthLabel(day.slice(0, 7)) + '):') + '</div>' +
       (isAdmin() ? (function () {
