@@ -249,7 +249,7 @@
       '<tbody>' + body + '<tr class="total"><td colspan="2">عدد الحاضرين في اليوم</td>' + perDay + '<td colspan="3"></td></tr></tbody></table>' +
       '<p class="att-key">المفتاح: + حاضر · L إجازة · غ غائب · م مأمورية · — خارج مدة عمله · المظلّل: الجمعة والسبت والعطل' + (D.days.some(attHoliday) ? ' (ع: عطلة)' : '') +
         ' والإجازات · الخانة الفارغة: لم يُسجَّل · تاريخ الإصدار: ' + dmy(todayISO()) + '</p>' +
-      reportSigns([['مدير الأكاديمية', principalName()]]) + '</section>';
+      reportSigns([[principalTitle(), principalName()]]) + '</section>';
     fitRegisterPages(sheet);
   }
 
@@ -299,7 +299,7 @@
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>الموظف</th><th>الفئة</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>أيام<br>التأخير</th><th>دقائق<br>التأخير</th><th>دقائق الانصراف<br>المبكر</th><th>ملاحظات</th></tr></thead>' +
       '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
-      reportSigns([['مدير الأكاديمية', principalName()]]);
+      reportSigns([[principalTitle(), principalName()]]);
   }
 
   document.addEventListener('click', async function (e) {

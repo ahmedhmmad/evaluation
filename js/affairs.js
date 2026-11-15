@@ -68,7 +68,7 @@
       '<p style="margin:0 0 .6em;line-height:1.9">نحيطكم علمًا بأنه تقرر فصل ابنكم/ابنتكم المذكور/ة أعلاه فصلًا مؤقتًا لمدة ' + (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n + (n <= 10 ? ' أيام' : ' يومًا')) + '، من يوم ' + esc(dayName(l.from_day)) + ' ' + dmy(l.from_day) + ' إلى يوم ' + esc(dayName(l.to_day)) + ' ' + dmy(l.to_day) + '، وذلك بسبب: <b>' + esc(l.reason) + '</b>.</p>' +
       '<p style="margin:0 0 .6em;line-height:1.9">ويعود الطالب/ة إلى الدوام بعد انتهاء مدة الفصل، ونرجو مراجعة إدارة الأكاديمية ومتابعة سلوك ابنكم/ابنتكم حرصًا على مصلحته/ا.</p>' +
       '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير/ة الأكاديمية', principalName()], ['ولي الأمر (إقرار بالاستلام)', g]]);
+      reportSigns([[principalTitle(), principalName()], ['ولي الأمر (إقرار بالاستلام)', g]]);
     fitSheet();
   }
   function spActive() { var t = todayISO(); return (S.stLeaves || []).filter(function (l) { return l.kind === 'suspension' && l.from_day <= t && t <= l.to_day; }).length; }
@@ -263,7 +263,7 @@
         by[g].map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td>' + (mode === 'all' ? '<td class="c">' + esc(c.sel[x.id] ? L.yes_label : L.no_label) + '</td>' : '') + '<td></td></tr>'; }).join('');
     };
     var foot = '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot>';
-    var signs = reportSigns([['شئون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+    var signs = reportSigns([['شئون الطلاب', ''], [principalTitle(), principalName()]]);
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + (c.perPage && groups.length > 1
       // كل شعبة جدول مستقل يبدأ صفحة جديدة: ترويسته باسم الشعبة وعددها، وتوقيعاته تحته
       ? groups.map(function (g, gi) {
@@ -662,7 +662,7 @@
       '<div class="rsec">المخالفة</div><div class="rbox" style="min-height:42mm;white-space:pre-wrap;line-height:2">' + esc(w.notes) + '</div>' +
       '<div class="rsec">الإجراء المطلوب</div><div class="rbox" style="min-height:14mm;line-height:2"><b>' + esc(w.action) + '</b></div>' +
       '<p style="margin:1em 0 0;line-height:1.9">نأمل منكم التعاون معنا لما فيه مصلحة ابنكم/ابنتكم، ونشكر لكم حسن تعاونكم.</p>' +
-      reportSigns([['مدير/ة الأكاديمية', principalName()], ['ولي الأمر (إقرار بالاستلام)', guardian]]);
+      reportSigns([[principalTitle(), principalName()], ['ولي الأمر (إقرار بالاستلام)', guardian]]);
     fitSheet();
   }
 
@@ -1265,7 +1265,7 @@
         '<div style="font-size:8.5pt;width:28mm">' + ln('التاريخ:') + '</div></div>' +
       ln('اسم المستفيد:') + ln('رقم الموبايل:') + ln('المبلغ:') + ln('فقط') + ln('وذلك مقابل:') + '<div style="border-bottom:1px dotted #444;height:1.2em;margin-top:2.2mm"></div>' +
       '<div style="font-size:8pt;color:#333;margin-top:1.5mm">أقر بأنني استلمت المبلغ المذكور أعلاه، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</div>' +
-      '<div style="display:flex;gap:2mm;margin-top:auto">' + sg('المستلم') + sg('مسلِّم المبلغ') + sg('المدير/ة') + '</div></div>';
+      '<div style="display:flex;gap:2mm;margin-top:auto">' + sg('المستلم') + sg('مسلِّم المبلغ') + sg(principalTitle(true)) + '</div></div>';
   }
   function clVoucher(o, tag) {
     if (o === 'blank') return clBlankVoucher();
@@ -1283,7 +1283,7 @@
       '<div style="margin:1mm 0;padding:1mm 2mm;background:#F4F1EA;border-radius:2mm">المبلغ: <b style="font-size:11pt">' + clMoney(total) + '</b><div style="font-size:8.5pt">فقط ' + esc(arMoneyWords(total)) + ' لا غير</div></div>' +
       (lines ? '<div style="font-size:8.5pt;max-height:3.2em;overflow:hidden">وذلك مقابل: ' + lines + '</div>' : '') +
       '<div style="font-size:8pt;color:#333;margin-top:1mm">أقر بأنني استلمت المبلغ المذكور أعلاه، ولا يحق لي المطالبة بأي مبالغ أخرى عنه.</div>' +
-      '<div style="display:flex;gap:2mm;margin-top:auto">' + sg('المستلم', o.payee) + sg('مسلِّم المبلغ', o.payer) + sg('المدير/ة', principalName()) + '</div></div>';
+      '<div style="display:flex;gap:2mm;margin-top:auto">' + sg('المستلم', o.payee) + sg('مسلِّم المبلغ', o.payer) + sg(principalTitle(true), principalName()) + '</div></div>';
   }
   function buildClaimSheet(o) {
     var cells = o === 'blank' ? [0, 1, 2, 3, 4, 5].map(function () { return ['blank', '']; }) : Array.isArray(o) ? o.map(function (x) { return [x, 'أصل']; }) : [[o, 'أصل'], [o, 'نسخة']], pages = [];
@@ -1439,7 +1439,7 @@
       '<tr><th>م</th><th>الصنف</th><th>العدد</th><th>ملاحظات</th></tr></thead><tbody>' +
       list.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.item) + '</b></td><td class="c">' + esc(x.qty) + '</td><td>' + esc(x.notes) + '</td></tr>'; }).join('') +
       '<tr class="total"><td colspan="2">عدد الأصناف</td><td class="c"><b>' + list.length + '</b></td><td></td></tr></tbody>' +
-      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['أمين العهد', ''], ['مدير/ة الأكاديمية', principalName()]]);
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['أمين العهد', ''], [principalTitle(), principalName()]]);
   }
 
   document.addEventListener('click', function (e) {
@@ -1742,7 +1742,7 @@
         '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
         '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>ساعة الخروج</th><th>السبب</th></tr></thead><tbody>' +
         rows.map(function (r, i) { x = info(r); return '<tr><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td></tr>'; }).join('') +
-        '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+        '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], [principalTitle(), principalName()]]);
       return;
     }
     rows = exSorted(c.list.filter(function (r) { return r.day.slice(0, 7) === c.month; }));
@@ -1757,7 +1757,7 @@
       rows.map(function (r, i) { x = info(r); return '<tr><td class="c">' + (i + 1) + '</td><td class="c" style="white-space:nowrap">' + dmy(r.day) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + esc(exHm(r.exit_time)) + '</td><td>' + esc(r.reason) + '</td></tr>'; }).join('') +
       '<tr><td class="bf-sec" style="background:var(--navy);color:#fff" colspan="' + n + '">ملخص الطلاب (عدد مرات الخروج)</td></tr>' +
       order.map(function (sid, i) { x = info({ student_id: sid }); return '<tr><td class="c">' + (i + 1) + '</td><td colspan="2" style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c"><b>' + per[sid] + (per[sid] === 1 ? ' مرة' : ' مرات') + '</b></td><td></td></tr>'; }).join('') +
-      '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], ['مدير/ة الأكاديمية', principalName()]]);
+      '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول شؤون الطلاب', ''], [principalTitle(), principalName()]]);
   }
 
   document.addEventListener('submit', async function (e) {
@@ -1881,7 +1881,7 @@
       table +
       '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
       '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير/ة الأكاديمية', principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
+      reportSigns([[principalTitle(), principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
     fitSheet();
   }
 
@@ -1950,7 +1950,7 @@
       table +
       '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
       '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير/ة الأكاديمية', principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
+      reportSigns([[principalTitle(), principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
     fitSheet();
   }
   document.addEventListener('click', function (e) {
@@ -2053,7 +2053,7 @@
       '<p style="margin:.6em 0 0;line-height:1.9">نُعلمكم بالاستغناء عن خدماتكم اعتبارًا من تاريخ <b>' + dmy(u.from) + '</b>.</p>' +
       '<p style="margin:.4em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
       '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['مدير/ة الأكاديمية', principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
+      reportSigns([[principalTitle(), principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
     fitSheet();
   }
 
@@ -2105,7 +2105,7 @@
       '<div><label class="field" for="wn-subject">العنوان</label><input type="text" id="wn-subject" data-ro-ok value="' + esc(u.subject) + '"></div>' +
       '<div style="grid-column:1/-1"><label class="field" for="wn-text">نص التنبيه</label><textarea id="wn-text" data-ro-ok rows="6">' + esc(u.text) + '</textarea></div>' +
       '<div><label class="field" for="wn-sup">اسم المشرف التربوي</label><input type="text" id="wn-sup" data-ro-ok value="' + esc(u.sup) + '" placeholder="يُترك فارغًا ليكتب باليد"></div>' +
-      '<div><label class="field">مدير/ة الأكاديمية</label><input type="text" value="' + esc(principalName()) + '" disabled></div></div>' +
+      '<div><label class="field">' + principalTitle() + '</label><input type="text" value="' + esc(principalName()) + '" disabled></div></div>' +
       '<div class="actions">' + (isReadOnly() ? '' : '<button type="button" class="btn primary" data-wnsave="print"' + (ui.wnBusy ? ' disabled' : '') + ' title="يُحفظ في ملف الموظف ويأخذ رقم الكتاب، ثم يُطبع">' + (ui.wnBusy ? 'جارٍ الحفظ…' : 'حفظ في ملف الموظف وطباعة') + '</button>') +
         '<button type="button" class="btn" data-wnprint data-ro-ok title="رقم الكتاب يُترك فارغًا ليُكتب باليد">طباعة دون حفظ</button></div>' +
       (u.sid ? wnSavedHtml(u.sid, true) : '') + '</div>';
@@ -2191,7 +2191,7 @@
           paras.map(function (p) { return '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
           '<p style="margin:.8em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
         '<div class="rs wn-signs">' +
-          sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign('مدير/ة الأكاديمية', principalName()) + '</div>' +
+          sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign(principalTitle(), principalName()) + '</div>' +
         '<div style="flex:1"></div><div style="font-size:12.5pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
       '</div>';
   }
@@ -2368,7 +2368,7 @@
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="3"></td></tr><tr><td class="ls-head" colspan="3">' + head + '</td></tr>' +
       '<tr><th>الرقم</th><th>الاسم</th><th>الوظيفة / الشعبة</th></tr></thead><tbody>' + body + '</tbody>' +
-      '<tfoot><tr><td class="pg-space" colspan="3"></td></tr></tfoot></table>' + reportSigns([['رئيس اللجنة', ''], ['مدير/ة الأكاديمية', principalName()]]);
+      '<tfoot><tr><td class="pg-space" colspan="3"></td></tr></tfoot></table>' + reportSigns([['رئيس اللجنة', ''], [principalTitle(), principalName()]]);
   }
 
   document.addEventListener('click', async function (e) {

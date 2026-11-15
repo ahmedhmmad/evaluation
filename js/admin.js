@@ -214,7 +214,10 @@
         '<input type="text" id="rep-contact" data-settingtext="contact_info" placeholder="العنوان · الهاتف · البريد الإلكتروني" value="' + esc((S.settings && S.settings.contact_info) || '') + '">' +
         '<label class="field" for="principal-name" style="margin-top:14px">اسم مدير/ة الأكاديمية</label>' +
         '<input type="text" id="principal-name" data-settingtext="principal_name" value="' + esc(principalName()) + '">' +
-        '<p class="hint" style="margin:6px 0 0">يظهر في خانة توقيع المدير في التقارير المطبوعة.</p>' +
+        '<label class="field" for="principal-gender" style="margin-top:14px">الصفة في التقارير</label>' +
+        '<select id="principal-gender" data-settingtext="principal_gender">' + [['', 'مدير/ة الأكاديمية'], ['m', 'مدير الأكاديمية (ذكر)'], ['f', 'مديرة الأكاديمية (أنثى)']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (((S.settings && S.settings.principal_gender) || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+        '<p class="hint" style="margin:6px 0 0">الاسم والصفة يظهران في خانة توقيع المدير في كل التقارير المطبوعة.</p>' +
         '<label class="field" for="school-address" style="margin-top:14px">عنوان الأكاديمية (أسفل الخطابات الرسمية كالطلبيات)</label>' +
         '<input type="text" id="school-address" data-settingtext="school_address" placeholder="' + esc(REPORT.address) + '" value="' + esc((S.settings && S.settings.school_address) || '') + '">' +
         '<label class="field" for="school-phone" style="margin-top:14px">هاتف الأكاديمية</label>' +

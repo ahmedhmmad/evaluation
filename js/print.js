@@ -550,7 +550,7 @@
         }).join('') + '</tbody></table>' +
       '<div class="rbox"><b>الملاحظات ومجالات التطوير والتنمية المهنية المطلوبة</b>' + text('development') + '</div>' +
       '<div class="rbox"><b>التوصيات / الإجراء التطويري</b>' + text('recommendations') + '</div>' +
-      reportSigns([['المعلم (بالعلم والاطلاع)', t ? t.name : ''], ['المشرف التربوي', v.supervisor_name], ['مدير/ة الأكاديمية', v.principal_name || principalName()]]);
+      reportSigns([['المعلم (بالعلم والاطلاع)', t ? t.name : ''], ['المشرف التربوي', v.supervisor_name], [principalTitle(), v.principal_name || principalName()]]);
     fitSheet();
   }
 
@@ -584,7 +584,7 @@
         : '') +
       notes('ملاحظات المشرف', o.notes) +
       notes('ملاحظات الاعتماد', o.approver_notes) +
-      reportSigns([['المشرف التربوي', supervisor], ['مدير/ة الأكاديمية', principalName()]]);
+      reportSigns([['المشرف التربوي', supervisor], [principalTitle(), principalName()]]);
     fitSheet();
   }
 
@@ -766,7 +766,7 @@
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + html +
-      reportSigns([['المسؤول المالي', S.profile && S.profile.full_name], ['مدير/ة الأكاديمية', principalName()]]);
+      reportSigns([['المسؤول المالي', S.profile && S.profile.full_name], [principalTitle(), principalName()]]);
   }
 
   // مكان السكن: المدينة ثم العنوان التفصيلي
@@ -858,7 +858,7 @@
           }).join('') + '</tr>';
         }).join('') + '</tbody><tfoot><tr><td class="pg-space" colspan="' + cols + '"></td></tr></tfoot></table>';
     }).join('') +
-      reportSigns([['معلم المادة', ''], ['المرشد أو المنسق', ''], ['مدير/ة الأكاديمية', principalName()]]);
+      reportSigns([['معلم المادة', ''], ['المرشد أو المنسق', ''], [principalTitle(), principalName()]]);
   }
 
 
@@ -922,7 +922,7 @@
       '<table class="rz"><colgroup><col style="width:7%"><col style="width:23%"><col style="width:28%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup>' +
       '<thead><tr><th>م</th><th>الشعبة</th><th>مربي الصف</th><th>السعة القصوى</th><th>المسجلون نهائيًا</th><th>المتاح</th></tr></thead><tbody>' + rows +
       '<tr class="total"><td colspan="3">المجموع</td>' + c(sum.cap || '—') + c(sum.n) + c(sum.cap ? Math.max(0, sum.cap - sum.n) : '—') + '</tr></tbody></table>' +
-      reportSigns([['مدير/ة الأكاديمية', principalName()]]);
+      reportSigns([[principalTitle(), principalName()]]);
     fitSheet();
   }
 

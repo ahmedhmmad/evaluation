@@ -597,7 +597,7 @@
       var last = pg === pages - 1, from = sizes.slice(0, pg).reduce(function (a, b) { return a + b; }, 0), chunk = body.slice(from, from + sizes[pg]).join('').split('ROWMM').join(String(Math.round(rowsMm[pg] * 100) / 100));
       parts += '<section class="pr-page" style="' + (last ? '' : 'break-after:page;page-break-after:always;') + '">' + head +
         '<table class="rz" style="table-layout:fixed;width:100%">' + colHead + '<tbody>' + chunk + (last ? totalRow : '') + '</tbody></table>' +
-        (last ? reportSigns([['مدير الأكاديمية', principalName()], ['مدير المؤسسة المانحة', ''], ['مدير المؤسسة الشريكة', '']], true) : '') +
+        (last ? reportSigns([[principalTitle(), principalName()], ['مدير المؤسسة المانحة', ''], ['مدير المؤسسة الشريكة', '']], true) : '') +
         (pages > 1 ? '<div style="text-align:center;font-size:.85em;margin-top:.6em">صفحة ' + (pg + 1) + ' من ' + pages + '</div>' : '') + '</section>';
     }
     sheet.className = 'ls pay-reg';

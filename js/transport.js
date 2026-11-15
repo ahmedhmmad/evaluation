@@ -1369,7 +1369,7 @@
       }).join('') +
       '<tr class="total"><td colspan="3">المجموع</td>' + c(D.t.n) + c(D.t.paid) + c(D.t.unpaid) + c(D.t.exempt + (D.t.exemptStaff ? ' <small>(+ ' + D.t.exemptStaff + ' موظف)</small>' : '')) + c(plainNum(D.t.sum), true) + c(plainNum(D.t.left)) + '</tr></tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
-      reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
+      reportSigns([['مسؤول المواصلات', ''], [principalTitle(), principalName()]]);
   }
 
   document.addEventListener('click', function (e) {
@@ -1457,7 +1457,7 @@
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>الباص</th><th>العنوان</th><th>الهاتف</th><th>المطلوب</th><th>المدفوع</th><th>المتبقي</th></tr></thead><tbody>' + body + '</tbody>' +
-      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول المواصلات', ''], [principalTitle(), principalName()]]);
   }
 
   async function tsXlsx() {
@@ -2608,7 +2608,7 @@
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>وسيلة الدفع</th><th>الرقم المحوَّل إليه</th><th>عدد الدفعات</th><th>المبلغ (ج.م)</th></tr></thead><tbody>' + (body || '<tr><td colspan="' + n + '" class="c">—</td></tr>') +
       '<tr class="total"><td colspan="3">المبلغ الإجمالي للمواصلات</td><td class="c"><b>' + R.n + '</b></td><td class="c"><b>' + plainNum(R.sum) + '</b></td></tr></tbody>' +
-      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول المواصلات', ''], ['مدير الأكاديمية', principalName()]]);
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['مسؤول المواصلات', ''], [principalTitle(), principalName()]]);
   }
 
   async function exportLedRefXlsx() {

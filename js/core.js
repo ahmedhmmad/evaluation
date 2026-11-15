@@ -292,6 +292,12 @@
     }).join('');
   }
 
+  // صفة المدير بحسب الإعداد «مدير/مديرة» (settings.principal_gender: m أو f)؛ short = «المدير/المديرة»
+  function principalTitle(short) {
+    var g = S.settings && S.settings.principal_gender;
+    if (short) return g === 'm' ? 'المدير' : g === 'f' ? 'المديرة' : 'المدير/ة';
+    return g === 'm' ? 'مدير الأكاديمية' : g === 'f' ? 'مديرة الأكاديمية' : 'مدير/ة الأكاديمية';
+  }
   function principalName() {
     return (S.settings && S.settings.principal_name) || DEFAULT_PRINCIPAL;
   }

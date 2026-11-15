@@ -248,7 +248,7 @@
       '<tr><th>م</th><th>الحصة</th><th>الشعبة</th><th>المادة</th><th>المعلم الغائب</th><th>معلم الاحتياط</th><th>توقيع المعلم</th></tr></thead>' +
       '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       (absList.length ? '<p style="font-size:.9em;margin:.6em 0 0"><b>المعلمون الغائبون:</b> ' + esc(absList.join('، ')) + '</p>' : '') +
-      reportSigns([['المشرف التربوي', ''], ['مدير الأكاديمية', principalName()]]);
+      reportSigns([['المشرف التربوي', ''], [principalTitle(), principalName()]]);
   }
 
   document.addEventListener('click', function (e) {
@@ -2077,7 +2077,7 @@
     } else sum = '<div class="tt-pbox"><b>' + esc(st) + '</b><span>الحصص التي نُقلت: ' + changes.length + '</span></div>';
     sum += '<div class="tt-pdecide"><b>القرار:</b><span>☐ اعتماد</span><span>☐ رفض</span><span>☐ تعديل ثم إعادة العرض</span>' +
       '<div class="tt-plines">ملاحظات: ......................................................................................................................................................</div>' +
-      '<div class="tt-psig"><span>المشرف التربوي: ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div></div>';
+      '<div class="tt-psig"><span>المشرف التربوي: ..........................</span><span>' + principalTitle() + ': ' + esc(principalName()) + ' ..........................</span></div></div>';
     pages.push('<section class="tt-page" data-base="11">' + head('الملخص') + sum + '</section>');
     // 2) التغييرات (على صفحات من 26 سطرًا)
     for (var k = 0; k < changes.length; k += 26) {
@@ -2149,7 +2149,7 @@
       '<div class="tt-ptitle">' + (isT ? 'جدول المعلم/ة: ' + esc(ttName(x)) : 'جدول الصف ' + esc(x)) + '</div>' +
       '<div class="tt-pmeta">' + meta.filter(Boolean).map(esc).join(' · ') + '</div>' +
       '<table class="tt-ptable"><thead>' + head + '</tr></thead><tbody>' + body + '</tbody></table>' +
-      (ttSignOn() ? '<div class="tt-sig"><span>المشرف التربوي: ..........................</span><span>مدير/ة الأكاديمية: ' + esc(principalName()) + ' ..........................</span></div>' : '') + '</section>';
+      (ttSignOn() ? '<div class="tt-sig"><span>المشرف التربوي: ..........................</span><span>' + principalTitle() + ': ' + esc(principalName()) + ' ..........................</span></div>' : '') + '</section>';
   }
 
   function ttMasterPage(byCls) {
