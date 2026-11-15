@@ -2081,6 +2081,66 @@
     else if (el.id === 'dm-days') u.days = el.checked;
   });
 
+  /* ----- كتاب تنبيه لموظف -----
+     في «دوام الموظفين» ← «الكتب»: يُختار الموظف ويُكتب نص التنبيه (ملاحظات أولياء الأمور، ممارسات مخالفة…)،
+     ويُطبع بترويسة الأكاديمية وتوقيع الموظف بالعلم والاطلاع والمشرف التربوي ومدير الأكاديمية */
+  var WN_TEXT = 'وردت ملاحظات من أولياء الأمور بخصوص استخدامكم العقاب اللفظي مع الطلاب، بالإضافة إلى ملاحظتنا تكرار الجلوس أثناء شرح الحصص.\n' +
+    'نلفت انتباهكم إلى أن هذه الممارسات تخالف اللوائح التربوية المعتمدة في الأكاديمية.\nنأمل منكم تصحيح هذه الممارسات فورًا.';
+  var pendingWn = null;
+  function wnSupervisor() {
+    var u = (S.users || []).filter(function (x) { return x.role === 'supervisor' && x.full_name; })[0];
+    return u ? u.full_name : '';
+  }
+  function wnUi() { return ui.wn || (ui.wn = { sid: '', title: 'الأستاذة الفاضلة', date: todayISO(), subject: 'تنبيه', text: WN_TEXT, sup: wnSupervisor() }); }
+  function wnCardHtml() {
+    var u = wnUi(), list = activeTeachers().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    return '<div class="card"><h2>كتاب تنبيه</h2>' +
+      '<p class="hint" style="margin:0 0 8px">تنبيه مكتوب لمعلم أو موظف، يوقّعه الموظف بالعلم والاطلاع، والمشرف التربوي، ومدير الأكاديمية.</p>' +
+      '<div class="grid2"><div><label class="field" for="wn-sid">الموظف</label><select id="wn-sid" data-ro-ok><option value="">اختر الموظف…</option>' +
+        list.map(function (t) { return opt(t.id, t.name + (t.job_title ? ' — ' + t.job_title : ''), u.sid); }).join('') + '</select></div>' +
+      '<div><label class="field" for="wn-title">المخاطبة</label><select id="wn-title" data-ro-ok>' +
+        ['الأستاذة الفاضلة', 'الأستاذ الفاضل', 'السيدة الفاضلة', 'السيد الفاضل'].map(function (v) { return opt(v, v + '/', u.title); }).join('') + '</select></div>' +
+      '<div><label class="field" for="wn-date">التاريخ</label><input type="date" id="wn-date" data-ro-ok value="' + esc(u.date) + '"></div>' +
+      '<div><label class="field" for="wn-subject">العنوان</label><input type="text" id="wn-subject" data-ro-ok value="' + esc(u.subject) + '"></div>' +
+      '<div style="grid-column:1/-1"><label class="field" for="wn-text">نص التنبيه</label><textarea id="wn-text" data-ro-ok rows="6">' + esc(u.text) + '</textarea></div>' +
+      '<div><label class="field" for="wn-sup">اسم المشرف التربوي</label><input type="text" id="wn-sup" data-ro-ok value="' + esc(u.sup) + '" placeholder="يُترك فارغًا ليكتب باليد"></div>' +
+      '<div><label class="field">مدير/ة الأكاديمية</label><input type="text" value="' + esc(principalName()) + '" disabled></div></div>' +
+      '<div class="actions"><button type="button" class="btn primary" data-wnprint data-ro-ok>طباعة التنبيه / PDF</button></div></div>';
+  }
+  function buildWarnSheet() {
+    var u = wnUi(), t = find(u.sid);
+    if (!t) { sheet.className = 'ps'; sheet.innerHTML = '<p>اختر الموظف.</p>'; return; }
+    var paras = String(u.text || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = reportHead(u.subject || 'تنبيه', [['التاريخ', dmy(u.date)]], { noIssueDate: true }) +
+      '<p style="margin:1.4em 0 .3em;font-size:1.15em"><b>' + esc(u.title) + '/ ' + esc(t.name) + '</b>' + (t.job_title ? ' <span style="font-size:.85em">— ' + esc(t.job_title) + '</span>' : '') + '</p>' +
+      '<p style="margin:0 0 .9em">تحية طيبة وبعد،</p>' +
+      paras.map(function (p) { return '<p style="margin:0 0 .7em;line-height:2;text-align:justify">' + esc(p) + '</p>'; }).join('') +
+      '<p style="margin:1em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
+      reportSigns([['الموظف (بالعلم والاطلاع)', t.name], ['المشرف التربوي', u.sup], ['مدير/ة الأكاديمية', principalName()]]);
+    fitSheet();
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/staffatt' || !canView()) return;
+    if (!e.target.closest('[data-wnprint]')) return;
+    var u = wnUi();
+    if (!u.sid) return toast('اختر الموظف', true);
+    if (!String(u.text || '').trim()) return toast('اكتب نص التنبيه', true);
+    pendingWn = true; printNow();
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/staffatt') return;
+    var u = wnUi(), id = e.target.id;
+    if (id === 'wn-text') u.text = e.target.value; else if (id === 'wn-subject') u.subject = e.target.value; else if (id === 'wn-sup') u.sup = e.target.value;
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/staffatt') return;
+    var u = wnUi(), id = e.target.id;
+    if (id === 'wn-sid') u.sid = e.target.value; else if (id === 'wn-title') u.title = e.target.value; else if (id === 'wn-date' && e.target.value) u.date = e.target.value;
+  });
+
   /* ---------- اللجان المدرسية ----------
      لجنة بأعضاء من العاملين وطلاب، تُضاف كما يُضاف الباص: يُختار عامل أو أكثر ثم طالب أو أكثر.
      يعدّلها المدير العام، ويراها المدير والمشرف التربوي. الجدولان committees و committee_members من supabase/committees.sql */

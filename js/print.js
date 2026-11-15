@@ -1001,6 +1001,7 @@
     else if (pendingLa) buildAbsLetterSheet(pendingLa);
     else if (pendingSp) buildSpSheet(pendingSp);
     else if (pendingDm) buildDismissSheet(pendingDm);
+    else if (pendingWn) buildWarnSheet();
     else if (pendingTs) buildTransportStatusSheet();
     else if (pendingLedRef) buildLedRefSheet();
     else if (pendingConsent) buildConsentSheet(pendingConsent);
@@ -1044,6 +1045,7 @@
     pendingAfList = false;
     pendingLt = null;
     pendingDm = null;
+    pendingWn = null;
     pendingTs = false;
     pendingLedRef = false;
     pendingConsent = null;

@@ -227,7 +227,7 @@
         '<label class="field" for="sa-hout" style="margin:0">الانصراف</label><input type="time" id="sa-hout" data-ro-mgr value="' + H.time_out + '" style="width:auto"></div>' +
         '<p class="hint" style="margin:6px 0 0">دوام من لا مجموعة له، وبه يُحسب التأخير والانصراف المبكر.</p></div>';
     if (tab === 'setup') { app.innerHTML = head + hoursCard + shiftsHtml() + saPhonesHtml(); return; }
-    if (tab === 'letters') { app.innerHTML = head + ltCardHtml() + laCardHtml() + dmCardHtml(); return; }
+    if (tab === 'letters') { app.innerHTML = head + wnCardHtml() + ltCardHtml() + laCardHtml() + dmCardHtml(); return; }
     if (tab === 'sheets') { app.innerHTML = head + sheetsCard(); return; }
     app.innerHTML = head +
       '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
