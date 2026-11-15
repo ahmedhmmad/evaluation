@@ -540,6 +540,9 @@
   #print-sheet.ps .rs { margin-top: 1em; }
   /* خطاب الطلبية: خانة المدير والاسم في وسطها، وسطر العنوان والهاتف في أسفل الصفحة */
   #print-sheet .rs.or-signs > div { text-align: center; }
+  #print-sheet .rs.wn-signs { margin-top: 1.6em; gap: 1.2em; }
+  #print-sheet .rs.wn-signs > div { border: 0; padding: 0; text-align: center; }
+  #print-sheet .rs.wn-signs b { font-family: inherit; color: #111; font-size: 15pt; }
   #print-sheet .doc-foot { position: fixed; bottom: 3mm; left: 15mm; right: 15mm; padding-top: 1mm; border-top: .75pt solid #C8A45D; text-align: center; font-size: 7.5pt; line-height: 1.3; color: #13306B; }
   #print-sheet .sig-code { position: fixed; left: 4mm; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); transform-origin: center; font-size: 9pt; font-weight: 700; letter-spacing: .3em; color: rgba(19,48,107,.28); white-space: nowrap; }
   #print-sheet .or-foot { position: fixed; bottom: 7mm; left: 15mm; right: 15mm; padding-top: .4em; border-top: 1.5px solid #C8A45D; text-align: center; font-size: .85em; color: #13306B; }
@@ -960,7 +963,7 @@
 <script>
 /* سكربت الموقع مقسَّم إلى ملفات في مجلد js تُحمَّل بهذا الترتيب، وكلها في نطاق واحد مشترك (كأنها ملف واحد).
    غيّر APP_BUILD مع كل تعديل في أي ملف منها: به يأخذ المتصفح الملفات كلها بنسخة واحدة جديدة. */
-var APP_BUILD = '15/11 — 7';
+var APP_BUILD = '15/11 — 8';
 (function () {
   var v = '?v=' + encodeURIComponent(APP_BUILD);
   ['core', 'staff', 'students', 'transport', 'admin', 'router', 'affairs', 'timetable-base', 'staff-attendance', 'payroll', 'papers', 'staff-sheets', 'timetable', 'attendance', 'messaging', 'reports', 'print', 'start'].forEach(function (n) {

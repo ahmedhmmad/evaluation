@@ -2168,10 +2168,10 @@
     var paras = String(u.text || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
     var year = String(u.date || todayISO()).slice(0, 4), no = u.no ? u.no + '/' + year : '<span style="display:inline-block;min-width:3.5em;border-bottom:1px dotted #333"></span>/' + year;
     var TNR = "'Times New Roman', Times, serif";
+    // بنية خانات التوقيع (.rs) نفسها: التوقيع الإلكتروني يحلّ مكان «التوقيع: ....» تلقائيًا
     var sign = function (role, name) {
-      return '<div style="flex:1;text-align:center"><div style="font-weight:700;font-size:15pt;margin-bottom:.5em">' + role + '</div>' +
-        '<div style="font-size:14pt;min-height:1.5em">' + esc(name || '') + '</div>' +
-        '<div style="margin-top:1.2em;font-size:12pt;color:#444">التوقيع: ..................</div></div>';
+      return '<div><b>' + role + '</b><span style="font-size:14pt;min-height:1.5em">' + esc(name || '') + '</span>' +
+        '<span style="margin-top:1em;font-size:12pt;color:#444">التوقيع: ..................</span></div>';
     };
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
@@ -2181,7 +2181,7 @@
     paras = paras.filter(function (p) { return !/^تحيةs+طيبة/.test(p); });
     // صفحة واحدة: الترويسة، الرقم ثم التاريخ تحته، المخاطبة، الموضوع، النص، والتوقيعات تحته مباشرة
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<div style="font-family:' + TNR + ';font-size:15pt;line-height:1.75;color:#111">' +
+      '<div style="font-family:' + TNR + ';font-size:15pt;line-height:1.75;color:#111;min-height:262mm;display:flex;flex-direction:column">' +
         letterhead() +
         '<div style="margin:.4em 0 0;font-size:13.5pt;line-height:1.6"><div><b>رقم الكتاب:</b> <span dir="ltr">' + no + '</span></div>' +
           '<div><b>التاريخ:</b> <span dir="ltr">' + dmy(u.date) + '</span></div></div>' +
@@ -2190,9 +2190,9 @@
         '<div style="text-align:right"><p style="margin:0 0 .5em">تحية طيبة وبعد،</p>' +
           paras.map(function (p) { return '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
           '<p style="margin:.8em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
-        '<div style="display:flex;gap:1.2em;align-items:flex-start;margin-top:1.6em;break-inside:avoid">' +
+        '<div class="rs wn-signs">' +
           sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign('مدير/ة الأكاديمية', principalName()) + '</div>' +
-        '<div style="margin-top:1.4em;font-size:12.5pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
+        '<div style="flex:1"></div><div style="font-size:12.5pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
       '</div>';
   }
 
@@ -2202,8 +2202,11 @@
     var u = wnUi();
     if (!u.sid) return toast('اختر الموظف', true);
     if (!String(u.text || '').trim()) return toast('اكتب نص التنبيه', true);
-    u.no = null;
-    pendingWn = true; printNow();
+    // رقم الكتاب عدّاد تلقائي: الرقم التالي لآخر كتاب محفوظ
+    sb.from('staff_warnings').select('no').order('no', { ascending: false }).limit(1).then(function (r) {
+      u.no = r.error ? null : ((r.data && r.data[0] ? r.data[0].no : 0) + 1);
+      pendingWn = true; printNow();
+    });
   });
   document.addEventListener('input', function (e) {
     if (location.hash !== '#/staffatt') return;
