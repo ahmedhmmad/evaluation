@@ -2091,7 +2091,7 @@
     var u = (S.users || []).filter(function (x) { return x.role === 'supervisor' && x.full_name; })[0];
     return u ? u.full_name : '';
   }
-  function wnUi() { return ui.wn || (ui.wn = { sid: '', title: 'الأستاذة الفاضلة', date: todayISO(), subject: 'تنبيه', text: WN_TEXT, sup: wnSupervisor() }); }
+  function wnUi() { return ui.wn || (ui.wn = { sid: '', title: 'الأستاذة الفاضلة', date: todayISO(), subject: 'كتاب تنبيه', text: WN_TEXT, sup: wnSupervisor() }); }
   function wnCardHtml() {
     var u = wnUi(), list = activeTeachers().slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ar'); });
     var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
@@ -2106,8 +2106,8 @@
       '<div style="grid-column:1/-1"><label class="field" for="wn-text">نص التنبيه</label><textarea id="wn-text" data-ro-ok rows="6">' + esc(u.text) + '</textarea></div>' +
       '<div><label class="field" for="wn-sup">اسم المشرف التربوي</label><input type="text" id="wn-sup" data-ro-ok value="' + esc(u.sup) + '" placeholder="يُترك فارغًا ليكتب باليد"></div>' +
       '<div><label class="field">مدير/ة الأكاديمية</label><input type="text" value="' + esc(principalName()) + '" disabled></div></div>' +
-      '<div class="actions"><button type="button" class="btn primary" data-wnprint data-ro-ok>طباعة التنبيه / PDF</button>' +
-        (isReadOnly() ? '' : '<button type="button" class="btn" data-wnsave' + (ui.wnBusy ? ' disabled' : '') + '>' + (ui.wnBusy ? 'جارٍ الحفظ…' : 'حفظ في ملف الموظف') + '</button>') + '</div>' +
+      '<div class="actions">' + (isReadOnly() ? '' : '<button type="button" class="btn primary" data-wnsave="print"' + (ui.wnBusy ? ' disabled' : '') + ' title="يُحفظ في ملف الموظف ويأخذ رقم الكتاب، ثم يُطبع">' + (ui.wnBusy ? 'جارٍ الحفظ…' : 'حفظ في ملف الموظف وطباعة') + '</button>') +
+        '<button type="button" class="btn" data-wnprint data-ro-ok title="رقم الكتاب يُترك فارغًا ليُكتب باليد">طباعة دون حفظ</button></div>' +
       (u.sid ? wnSavedHtml(u.sid, true) : '') + '</div>';
   }
   // التنبيهات المحفوظة لموظف (supabase/staff_warnings.sql)
@@ -2125,13 +2125,13 @@
     return (inLetters ? '<h3 style="margin:14px 0 6px">التنبيهات المحفوظة لهذا الموظف (' + rows.length + ')</h3>' : '') +
       '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم</th><th>التاريخ</th><th>العنوان</th><th>النص</th><th>حُفظ بواسطة</th><th></th></tr></thead><tbody>' +
       rows.map(function (w) {
-        return '<tr><td>' + w.no + '</td><td style="white-space:nowrap">' + dmy(w.letter_date) + '</td><td><b>' + esc(w.subject) + '</b></td>' +
+        return '<tr><td style="white-space:nowrap">' + w.no + '/' + String(w.letter_date).slice(0, 4) + '</td><td style="white-space:nowrap">' + dmy(w.letter_date) + '</td><td><b>' + esc(w.subject) + '</b></td>' +
           '<td style="font-size:.88rem">' + esc(String(w.body).replace(/\s+/g, ' ').slice(0, 110)) + (String(w.body).length > 110 ? '…' : '') + '</td><td>' + esc(w.created_by || '') + '</td>' +
           '<td><div class="acts"><button type="button" class="btn" data-wnreprint="' + w.id + '" data-ro-ok>طباعة</button>' +
           (isAdmin() ? '<button type="button" class="btn danger" data-wndel="' + w.id + '">حذف</button>' : '') + '</div></td></tr>';
       }).join('') + '</tbody></table></div>';
   }
-  async function wnSave() {
+  async function wnSave(andPrint) {
     var u = wnUi(), t = find(u.sid);
     if (!t) return toast('اختر الموظف', true);
     if (!String(u.text || '').trim()) return toast('اكتب نص التنبيه', true);
@@ -2141,21 +2141,22 @@
     ui.wnBusy = false;
     if (r.error) { render(); return fail(/staff_warnings/.test(r.error.message || '') ? { message: 'شغّل الملف supabase/staff_warnings.sql أولًا' } : r.error); }
     S.wnList = null;
-    toast('حُفظ التنبيه رقم ' + r.data.no + ' في ملف ' + t.name);
+    toast('حُفظ الكتاب رقم ' + r.data.no + '/' + String(u.date).slice(0, 4) + ' في ملف ' + t.name);
     render();
+    if (andPrint) { u.no = r.data.no; pendingWn = true; printNow(); }
   }
   // إعادة طباعة تنبيه محفوظ كما صدر
   function wnReprint(id) {
     var w = S.wnList && S.wnList.rows.filter(function (x) { return x.id === id; })[0];
     if (!w) return;
-    ui.wn = { sid: w.staff_id, title: w.salutation || 'الأستاذة الفاضلة', date: w.letter_date, subject: w.subject, text: w.body, sup: w.supervisor };
+    ui.wn = { sid: w.staff_id, no: w.no, title: w.salutation || 'الأستاذة الفاضلة', date: w.letter_date, subject: w.subject, text: w.body, sup: w.supervisor };
     pendingWn = true; printNow();
   }
   document.addEventListener('click', function (e) {
     if ((location.hash !== '#/staffatt' && location.hash !== '#/staff') || !canView()) return;
     var b = e.target.closest('[data-wnsave],[data-wnreprint],[data-wndel]');
     if (!b) return;
-    if (b.hasAttribute('data-wnsave')) return wnSave();
+    if (b.hasAttribute('data-wnsave')) return wnSave(b.getAttribute('data-wnsave') === 'print');
     if (b.hasAttribute('data-wnreprint')) return wnReprint(b.getAttribute('data-wnreprint'));
     var id = b.getAttribute('data-wndel');
     if (!confirm('حذف هذا التنبيه من ملف الموظف؟ لا يمكن التراجع.')) return;
@@ -2165,22 +2166,42 @@
     var u = wnUi(), t = find(u.sid);
     if (!t) { sheet.className = 'ps'; sheet.innerHTML = '<p>اختر الموظف.</p>'; return; }
     var paras = String(u.text || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    var year = String(u.date || todayISO()).slice(0, 4), no = u.no ? u.no + '/' + year : '<span style="display:inline-block;min-width:3.5em;border-bottom:1px dotted #333"></span>/' + year;
+    var TNR = "'Times New Roman', Times, serif";
+    var sign = function (role, name) {
+      return '<div style="flex:1;text-align:center"><div style="font-weight:700;font-size:15pt;margin-bottom:.5em">' + role + '</div>' +
+        '<div style="font-size:14pt;min-height:1.5em">' + esc(name || '') + '</div>' +
+        '<div style="margin:1.6em auto 0;width:75%;border-top:1px solid #222;padding-top:.25em;font-size:12pt;color:#444">التوقيع</div></div>';
+    };
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
-    sheet.innerHTML = reportHead(u.subject || 'تنبيه', [['التاريخ', dmy(u.date)]], { noIssueDate: true }) +
-      '<p style="margin:1.4em 0 .3em;font-size:1.15em"><b>' + esc(u.title) + '/ ' + esc(t.name) + '</b>' + (t.job_title ? ' <span style="font-size:.85em">— ' + esc(t.job_title) + '</span>' : '') + '</p>' +
-      '<p style="margin:0 0 .9em">تحية طيبة وبعد،</p>' +
-      paras.map(function (p) { return '<p style="margin:0 0 .7em;line-height:2;text-align:justify">' + esc(p) + '</p>'; }).join('') +
-      '<p style="margin:1em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([['الموظف (بالعلم والاطلاع)', t.name], ['المشرف التربوي', u.sup], ['مدير/ة الأكاديمية', principalName()]]);
-    fitSheet();
+    sheet.style.fontSize = '';
+    // ورقة A4 كاملة: المحتوى في الأعلى، والتوقيعات وسطر الحفظ في أسفل الصفحة
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<div style="font-family:' + TNR + ';font-size:16pt;line-height:1.9;color:#111;min-height:268mm;display:flex;flex-direction:column">' +
+        letterhead() +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:.6em 0 0;font-size:14pt">' +
+          '<div><b>رقم الكتاب:</b> <span dir="ltr">' + no + '</span></div><div><b>التاريخ:</b> <span dir="ltr">' + dmy(u.date) + '</span></div></div>' +
+        '<div style="text-align:center;margin:1.4em 0 1.2em"><span style="font-size:21pt;font-weight:700;border-bottom:2px solid #13306B;padding:0 .8em .15em">الموضوع: ' + esc(u.subject || 'كتاب تنبيه') + '</span></div>' +
+        '<div style="text-align:right"><p style="margin:0 0 .3em;font-weight:700;font-size:17pt">' + esc(u.title) + '/ ' + esc(t.name) + '</p>' +
+          (t.job_title ? '<p style="margin:0 0 .3em;font-size:14pt;color:#333">' + esc(t.job_title) + '</p>' : '') +
+          '<p style="margin:.6em 0 .7em">تحية طيبة وبعد،</p>' +
+          paras.map(function (p) { return '<p style="margin:0 0 .55em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
+          '<p style="margin:1em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
+        '<div style="flex:1;min-height:2em"></div>' +
+        '<div style="display:flex;gap:1.2em;align-items:flex-start;margin-top:1.5em">' +
+          sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign('مدير/ة الأكاديمية', principalName()) + '</div>' +
+        '<div style="margin-top:1.6em;padding-top:.4em;border-top:1px solid #999;font-size:13pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
+      '</div>';
   }
+
   document.addEventListener('click', function (e) {
     if (location.hash !== '#/staffatt' || !canView()) return;
     if (!e.target.closest('[data-wnprint]')) return;
     var u = wnUi();
     if (!u.sid) return toast('اختر الموظف', true);
     if (!String(u.text || '').trim()) return toast('اكتب نص التنبيه', true);
+    u.no = null;
     pendingWn = true; printNow();
   });
   document.addEventListener('input', function (e) {
