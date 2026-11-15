@@ -2178,7 +2178,9 @@
     sheet.style.fontSize = '';
     // ورقة A4 كاملة: المحتوى في الأعلى، والتوقيعات وسطر الحفظ في أسفل الصفحة
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<div style="font-family:' + TNR + ';font-size:16pt;line-height:1.9;color:#111;min-height:268mm;display:flex;flex-direction:column">' +
+      '<div style="font-family:' + TNR + ';font-size:16pt;line-height:1.9;color:#111">' +
+        // الكتاب في ثلثي الصفحة تقريبًا، والتوقيعات تحته مباشرة (لا في أسفل الورقة)
+        '<div style="min-height:175mm">' +
         letterhead() +
         '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:.6em 0 0;font-size:14pt">' +
           '<div><b>رقم الكتاب:</b> <span dir="ltr">' + no + '</span></div><div><b>التاريخ:</b> <span dir="ltr">' + dmy(u.date) + '</span></div></div>' +
@@ -2188,7 +2190,7 @@
           '<p style="margin:.6em 0 .7em">تحية طيبة وبعد،</p>' +
           paras.map(function (p) { return '<p style="margin:0 0 .55em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
           '<p style="margin:1em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
-        '<div style="flex:1;min-height:2em"></div>' +
+        '</div>' +
         '<div style="display:flex;gap:1.2em;align-items:flex-start;margin-top:1.5em">' +
           sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign('مدير/ة الأكاديمية', principalName()) + '</div>' +
         '<div style="margin-top:1.6em;padding-top:.4em;border-top:1px solid #999;font-size:13pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
