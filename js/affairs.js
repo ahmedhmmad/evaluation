@@ -2171,29 +2171,28 @@
     var sign = function (role, name) {
       return '<div style="flex:1;text-align:center"><div style="font-weight:700;font-size:15pt;margin-bottom:.5em">' + role + '</div>' +
         '<div style="font-size:14pt;min-height:1.5em">' + esc(name || '') + '</div>' +
-        '<div style="margin:1.6em auto 0;width:75%;border-top:1px solid #222;padding-top:.25em;font-size:12pt;color:#444">التوقيع</div></div>';
+        '<div style="margin-top:1.2em;font-size:12pt;color:#444">التوقيع: ..................</div></div>';
     };
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     // ورقة A4 كاملة: المحتوى في الأعلى، والتوقيعات وسطر الحفظ في أسفل الصفحة
+    // لا تكرار للتحية إن كانت في النص نفسه
+    paras = paras.filter(function (p) { return !/^تحيةs+طيبة/.test(p); });
+    // صفحة واحدة: الترويسة، الرقم ثم التاريخ تحته، المخاطبة، الموضوع، النص، والتوقيعات تحته مباشرة
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<div style="font-family:' + TNR + ';font-size:16pt;line-height:1.9;color:#111">' +
-        // الكتاب في ثلثي الصفحة تقريبًا، والتوقيعات تحته مباشرة (لا في أسفل الورقة)
-        '<div style="min-height:175mm">' +
+      '<div style="font-family:' + TNR + ';font-size:15pt;line-height:1.75;color:#111">' +
         letterhead() +
-        '<div style="display:flex;justify-content:space-between;align-items:baseline;margin:.6em 0 0;font-size:14pt">' +
-          '<div><b>رقم الكتاب:</b> <span dir="ltr">' + no + '</span></div><div><b>التاريخ:</b> <span dir="ltr">' + dmy(u.date) + '</span></div></div>' +
-        '<div style="text-align:center;margin:1.4em 0 1.2em"><span style="font-size:21pt;font-weight:700;border-bottom:2px solid #13306B;padding:0 .8em .15em">الموضوع: ' + esc(u.subject || 'كتاب تنبيه') + '</span></div>' +
-        '<div style="text-align:right"><p style="margin:0 0 .3em;font-weight:700;font-size:17pt">' + esc(u.title) + '/ ' + esc(t.name) + '</p>' +
-          (t.job_title ? '<p style="margin:0 0 .3em;font-size:14pt;color:#333">' + esc(t.job_title) + '</p>' : '') +
-          '<p style="margin:.6em 0 .7em">تحية طيبة وبعد،</p>' +
-          paras.map(function (p) { return '<p style="margin:0 0 .55em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
-          '<p style="margin:1em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
-        '</div>' +
-        '<div style="display:flex;gap:1.2em;align-items:flex-start;margin-top:1.5em">' +
+        '<div style="margin:.4em 0 0;font-size:13.5pt;line-height:1.6"><div><b>رقم الكتاب:</b> <span dir="ltr">' + no + '</span></div>' +
+          '<div><b>التاريخ:</b> <span dir="ltr">' + dmy(u.date) + '</span></div></div>' +
+        '<p style="margin:.9em 0 0;font-weight:700;font-size:16pt">' + esc(u.title) + '/ ' + esc(t.name) + '</p>' +
+        '<div style="text-align:center;margin:.8em 0 .8em"><span style="font-size:19pt;font-weight:700;border-bottom:2px solid #13306B;padding:0 .8em .1em">الموضوع: ' + esc(u.subject || 'كتاب تنبيه') + '</span></div>' +
+        '<div style="text-align:right"><p style="margin:0 0 .5em">تحية طيبة وبعد،</p>' +
+          paras.map(function (p) { return '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
+          '<p style="margin:.8em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
+        '<div style="display:flex;gap:1.2em;align-items:flex-start;margin-top:1.6em;break-inside:avoid">' +
           sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign('مدير/ة الأكاديمية', principalName()) + '</div>' +
-        '<div style="margin-top:1.6em;padding-top:.4em;border-top:1px solid #999;font-size:13pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
+        '<div style="margin-top:1.4em;font-size:12.5pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
       '</div>';
   }
 
