@@ -1018,6 +1018,7 @@
     else if (pendingBlank) buildBlankFormSheet();
     else if (pendingReceipt) buildReceiptSheet(pendingReceipt);
     else if (pendingProfile) buildProfileSheet(pendingProfile);
+    else if (pendingPledge) buildPledgeSheet(pendingPledge);
     else if (location.hash === '#/students' && canStudents() && !S.studentsMissing && !ui.editStudent && !ui.imp) buildStudentsSheet();
     else if (currentClass() && canStudents()) buildStudentsSheet(currentClass());
     else if (canTransport() && S.tPay[ui.tMonth] && (currentGroup() || /^#\/transport\/(payments|classes)$/.test(location.hash))) buildPaymentsSheet(payScope());
@@ -1054,6 +1055,7 @@
     pendingBusRep = false;
     pendingReceipt = null;
     pendingProfile = null;
+    pendingPledge = null;
     pendingBlank = false;
     pendingRefund = null;
     pendingBus = null;

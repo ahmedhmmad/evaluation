@@ -1072,7 +1072,7 @@
     add(count(evalTeachers(), function (t) { return t.status === 'new'; }), 'معلمون لم يبدأ تقييمهم', '#/teachers');
     if (isAdmin()) {
       if (!S.accountsMissing) add(count(S.teachers, function (t) { return !t.user_id; }), 'معلمون بدون حساب دخول', '#/staff');
-      add(count(S.students, function (x) { return x.status !== 'final'; }), 'تسجيلات مبدئية بانتظار المراجعة والاعتماد', '#/students');
+      add(count(S.students, function (x) { return stStatus(x) === 'pending'; }), 'تسجيلات مبدئية بانتظار المراجعة والاعتماد', '#/students');
       var riding = transportGroupOf();
       add(count(S.students, function (x) { return x.wants_transport === true && !riding[x.id]; }), 'طلاب يحتاجون مواصلات بلا نقطة تجمع', '#/transport');
       add(count(S.users, function (u) { return u.role === 'pending'; }), 'حسابات بانتظار التفعيل', '#/admin');

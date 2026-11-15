@@ -388,7 +388,7 @@
 
   // خانة «نقطة الركوب» تحت اسم الطالب في صفحة الباص (ومعها تنبيه لمن أُضيف قبل تسجيله النهائي)
   function pickupInput(m, x) {
-    var warn = !enrolled(x) ? '<br><span class="badge unpaid" style="margin-top:4px">مبدئي — لا يظهر في كشف الباص</span>' : '';
+    var warn = !enrolled(x) ? '<br><span class="badge unpaid" style="margin-top:4px">' + ST_STATUS[stStatus(x)] + ' — لا يظهر في كشف الباص</span>' : '';
     if (S.busMissing) return warn;
     return warn + pickupBox(m, x);
   }

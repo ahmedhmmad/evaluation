@@ -249,13 +249,13 @@ begin
       'new_students', jsonb_build_object(
           'month', (select count(*) from students x where to_char(x.created_at at time zone 'UTC', 'YYYY-MM') = mon),
           'week', (select count(*) from students x where (x.created_at at time zone 'UTC')::date >= ((now() at time zone 'UTC')::date - 6)),
-          'pending', (select count(*) from students x where x.status not in ('final', 'reserve'))),
+          'pending', (select count(*) from students x where x.status not in ('final', 'reserve', 'dropped'))),
       'classes', jsonb_build_object('full', coalesce((select jsonb_agg(name) from filled where n = cap), '[]'::jsonb),
                                     'over', coalesce((select jsonb_agg(name) from filled where n > cap), '[]'::jsonb)))
   );
 end $$;
 
--- بحث في الطلاب: بالاسم أو اسم ولي الأمر، أو بأرقام الهوية أو الهاتف؛ وتصفية بالشعبة والحالة (final / reserve / pending)
+-- بحث في الطلاب: بالاسم أو اسم ولي الأمر، أو بأرقام الهوية أو الهاتف؛ وتصفية بالشعبة والحالة (final / reserve / pending / dropped)
 create or replace function public.api_students(p_q text default '', p_class text default '', p_status text default '', p_limit int default 50, p_offset int default 0) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -267,13 +267,13 @@ begin
     with f as (
       select x.* from students x
       where (coalesce(p_class, '') = '' or x.class_name = p_class)
-        and (coalesce(p_status, '') = '' or (case when x.status in ('final', 'reserve') then x.status else 'pending' end) = p_status)
+        and (coalesce(p_status, '') = '' or (case when x.status in ('final', 'reserve', 'dropped') then x.status else 'pending' end) = p_status)
         and (q = '' or position(q in public.api_norm(x.full_name || ' ' || coalesce(x.guardian_name, ''))) > 0
              or (length(dg) >= 3 and (position(dg in coalesce(x.national_id, '')) > 0 or position(dg in coalesce(x.phone, '')) > 0 or position(dg in coalesce(x.whatsapp, '')) > 0)))
     )
     select jsonb_build_object('total', (select count(*) from f),
       'students', coalesce((select jsonb_agg(row_to_json(s)) from (
-        select f.id, f.full_name, f.class_name, case when f.status in ('final', 'reserve') then f.status else 'pending' end as status,
+        select f.id, f.full_name, f.class_name, case when f.status in ('final', 'reserve', 'dropped') then f.status else 'pending' end as status,
                f.guardian_name, f.phone, f.whatsapp, g.assembly_point as bus
         from f left join transport_members m on m.student_id = f.id left join transport_groups g on g.id = m.group_id
         order by f.full_name collate public.api_ar, f.id limit least(greatest(coalesce(p_limit, 50), 1), 500) offset greatest(coalesce(p_offset, 0), 0)) s), '[]'::jsonb))

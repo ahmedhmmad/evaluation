@@ -355,7 +355,7 @@
       '<select id="wa-cls" style="width:auto">' + opt('', 'كل الشعب', w.cls) + schoolClasses().map(function (c) { return opt(c, c, w.cls); }).join('') + '</select>' +
       '<select id="wa-bus" style="width:auto">' + opt('', 'كل الطلاب (مواصلات أو لا)', w.bus) + buses.map(function (b) { return opt(b.id, 'باص: ' + b.assembly_point, w.bus); }).join('') + opt('none', 'بلا مواصلات', w.bus) + '</select>' +
       '<select id="wa-reg" style="width:auto">' + opt('', 'المسجلون (نهائي أو احتياط)', w.reg || '') + opt('pending', 'تسجيل مبدئي فقط', w.reg || '') + opt('final', 'تسجيل نهائي فقط', w.reg || '') +
-        opt('reserve', 'احتياط فقط', w.reg || '') + opt('all', 'كل الطلاب', w.reg || '') + '</select>' +
+        opt('reserve', 'احتياط فقط', w.reg || '') + opt('dropped', 'المنقطعون فقط', w.reg || '') + opt('all', 'كل الطلاب', w.reg || '') + '</select>' +
       '<select id="wa-fresh" style="width:auto">' + opt('', 'كل تواريخ التسجيل', w.fresh) + opt('7', 'سُجّلوا آخر 7 أيام', w.fresh) + opt('30', 'سُجّلوا آخر 30 يومًا', w.fresh) + '</select>' +
       '<button type="button" class="btn" data-waall>' + (allOn ? 'إلغاء تحديد المعروضين' : 'تحديد المعروضين (' + list.length + ')') + '</button>' +
       (selIds.length ? '<button type="button" class="btn" data-waclear>مسح الاختيار</button>' : '') + '</div>';
