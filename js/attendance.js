@@ -521,28 +521,29 @@
     if (b) attContacts(b.getAttribute('data-attcontacts'));
   });
   function buildAttContactsSheet(D) {
-    var head = reportHead('كشف الغياب بأرقام التواصل', [['اليوم', dayName(D.day) + ' ' + dmy(D.day)], ['الغائبون', D.rows.length],
-      ['شعب لم تُسجَّل', D.sum.filter(function (c) { return !c.recorded; }).map(function (c) { return c.cls; }).join('، ')]]).replace(/^<img class="wm"[^>]*>/, '');
-    var c = function (v, b) { return '<td class="c" style="white-space:nowrap">' + (b ? '<b>' + v + '</b>' : v) + '</td>'; };
-    var n = 9, body = '';
-    D.sum.forEach(function (cs) {
+    var c = function (v) { return '<td class="c" style="white-space:nowrap">' + v + '</td>'; };
+    var n = 9, absent = D.rows.length, missing = D.sum.filter(function (cs) { return !cs.recorded; }).length;
+    // صفحة لكل شعبة: الترويسة ورأس الجدول في أعلى كل صفحة، وإن طال الكشف تتكرر في الصفحة التالية
+    var pages = D.sum.map(function (cs, gi) {
       var mine = D.rows.filter(function (r) { return r.cls === cs.cls; });
-      body += '<tr style="border-top:2px solid #7d8597;background:#eef1f6"><td colspan="' + n + '"><b>' + esc(cs.cls) + '</b> — الطلاب ' + cs.students +
-        (cs.recorded ? ' · الغائبون ' + cs.absent : ' · لم يُسجَّل حضورها') + '</td></tr>' +
-        (mine.length ? mine.map(function (r, i) {
-          return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.x.full_name) + '</b></td>' + c(esc(r.status)) + '<td style="font-size:.85em">' + esc(r.note) + '</td>' +
-            '<td style="font-size:.9em">' + esc(r.guardian) + '</td>' + c('<span dir="ltr">' + esc(r.phone) + '</span>') + c('<span dir="ltr">' + esc(r.alt) + '</span>') + '<td></td><td></td></tr>';
-        }).join('') : '<tr><td colspan="' + n + '" style="color:#7d8597">' + (cs.recorded ? 'لا غياب' : '—') + '</td></tr>');
+      var head = reportHead('كشف الغياب بأرقام التواصل', [['الشعبة', cs.cls], ['اليوم', dayName(D.day) + ' ' + dmy(D.day)], ['عدد الطلاب', cs.students],
+        ['الغائبون', cs.recorded ? cs.absent : 'لم يُسجَّل حضور الشعبة']]).replace(/^<img class="wm"[^>]*>/, '');
+      var body = mine.length ? mine.map(function (r, i) {
+        return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(r.x.full_name) + '</b></td>' + c(esc(r.status)) + '<td style="font-size:.85em">' + esc(r.note) + '</td>' +
+          '<td style="font-size:.9em">' + esc(r.guardian) + '</td>' + c('<span dir="ltr">' + esc(r.phone) + '</span>') + c('<span dir="ltr">' + esc(r.alt) + '</span>') + '<td></td><td></td></tr>';
+      }).join('') : '<tr><td colspan="' + n + '" class="c" style="color:#7d8597;padding:1em">' + (cs.recorded ? 'لا غياب في هذه الشعبة اليوم' : 'لم يُسجَّل حضور هذه الشعبة') + '</td></tr>';
+      return '<div' + (gi ? ' style="break-before:page;page-break-before:always"' : '') + '><table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr>' +
+        '<tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+        '<tr><th>م</th><th>الطالب</th><th>الحالة</th><th>ملاحظة</th><th>ولي الأمر</th><th>جوال ولي الأمر</th><th>جوال بديل</th><th>تم الاتصال</th><th>نتيجة المتابعة</th></tr></thead>' +
+        '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table></div>';
     });
     printLandscape = true;
     sheet.style.width = '267mm';
     sheet.className = 'ls att-detail';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th>م</th><th>الطالب</th><th>الحالة</th><th>ملاحظة</th><th>ولي الأمر</th><th>جوال ولي الأمر</th><th>جوال بديل</th><th>تم الاتصال</th><th>نتيجة المتابعة</th></tr></thead>' +
-      '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' + pages.join('');
+    sheet.setAttribute('data-summary', absent + ' غائبًا' + (missing ? '، ' + missing + ' شعبة لم تُسجَّل' : ''));
   }
 
   function buildAttDetailSheet(D) {
