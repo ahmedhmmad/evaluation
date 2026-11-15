@@ -1,4 +1,4 @@
-// تنسيق الاختبارات: «تنسيق» ثم الملف (Word أو PDF أو صورة) خلال 30 دقيقة، أو الملف مع تعليق «تنسيق».
+// تنسيق الاختبارات: «تنسيق» ثم الملف (Word أو PDF أو صورة) أو نص الورقة مكتوباً في رسالة، خلال 30 دقيقة، أو الملف مع تعليق «تنسيق».
 // ما عدا ذلك يمر كما هو إلى بوت الغياب والدوام دون أي تغيير، وأي أمر نصي آخر بعد «تنسيق» يلغي انتظار الملف.
 // اختياري: أرقام المسموح لهم بالتنسيق بصيغة دولية مفصولة بفواصل، مثل '201012345678,201098765432'. فارغ = الجميع.
 const ALLOWED = '';
@@ -67,6 +67,19 @@ if (!file && /^(اعتماد|رفض)(\s|$)/.test(text)) {
 if (!file && /^(تم|انتهيت|خلص)[.!\s]*$/.test(text) && sd.fmt[phone]) {
   delete sd.fmt[phone];
   return [{ json: Object.assign(base, { fmt: 'done' }) }];
+}
+// نص الورقة مكتوباً في الرسالة نفسها (لا ملف): «تنسيق» ثم النص في الأسطر التالية، أو رسالة نصية طويلة بعد «تنسيق»
+const bodyOf = (t) => String(t).replace(/^تنسيق[^\n]*\n?/, '').trim();
+const looksLikePaper = (t) => t.replace(/\s/g, '').length >= 60 && (t.split('\n').length >= 3 || t.length >= 150);
+if (!file && isCmd && looksLikePaper(bodyOf(text))) {
+  const first = text.split('\n')[0];
+  delete sd.fmt[phone];
+  return [{ json: Object.assign(base, { fmt: 'process', hint: hintOf(first), pdf: wantPdf(first), textBody: bodyOf(text), fileName: '', mimetype: 'text/plain', base64: '' }) }];
+}
+if (!file && !isCmd && sd.fmt[phone] && looksLikePaper(text)) {
+  const st = sd.fmt[phone];
+  delete sd.fmt[phone];
+  return [{ json: Object.assign(base, { fmt: 'process', hint: st.hint || '', pdf: !!st.pdf, textBody: text, fileName: '', mimetype: 'text/plain', base64: '' }) }];
 }
 if (isCmd && !file) {
   sd.fmt[phone] = { ts: now, hint: hintOf(text), pdf: wantPdf(text) };

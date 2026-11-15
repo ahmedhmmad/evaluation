@@ -160,10 +160,24 @@ if (!OR_KEY || OR_KEY.indexOf('PUT_') === 0) {
   throw new Error('ضع مفتاح OpenRouter في عقدة «المفاتيح»');
 }
 const started = Date.now();
-await say('⏳ تم استلام الملف، جارٍ التنسيق... (قد يستغرق دقيقة أو اثنتين)').catch(() => {});
+await say(src.textBody ? '⏳ تم استلام النص، جارٍ التنسيق... (قد يستغرق دقيقة أو اثنتين)' : '⏳ تم استلام الملف، جارٍ التنسيق... (قد يستغرق دقيقة أو اثنتين)').catch(() => {});
 
 // ---------- 1) الملف ----------
-let b64 = src.base64, mime = src.mimetype || '', pageUrls = null;
+// نص مكتوب في رسالة واتساب: يُعامل كملف Word (أسطره تُنقل حرفياً)؛ تنسيق واتساب *عريض* و_مائل_ يُزال
+let textInput = null;
+if (src.textBody) {
+  const tl = [];
+  String(src.textBody).replace(/\r/g, '').split('\n').forEach((s) => {
+    let t = s.replace(/\s+$/, ''), bold = false;
+    const b = /^\s*\*([^*]+)\*\s*$/.exec(t); if (b) { t = b[1]; bold = true; }
+    t = t.replace(/\*([^*\n]+)\*/g, '$1').replace(/_([^_\n]+)_/g, '$1').trim();
+    const o = { id: tl.length + 1 };
+    if (!t) o.empty = true; else { o.text = t; if (bold) o.bold = true; }
+    tl.push(o);
+  });
+  textInput = { kind: 'word', lines: tl.slice(0, 600) };
+}
+let b64 = src.textBody ? 'x' : src.base64, mime = src.mimetype || '', pageUrls = null;
 if (src.pageIds && src.pageIds.length) {
   // صفحات مصوّرة بالترتيب: كلها تُقرأ في طلب واحد
   pageUrls = [];
@@ -185,8 +199,9 @@ if (!b64) {
 if (!b64) { await say('تعذر استلام الملف. أرسله مرة أخرى.'); throw new Error('لم يُجلب الملف من Evolution'); }
 const ext = (String(src.fileName).split('.').pop() || '').toLowerCase();
 const raw = Buffer.from(String(b64).replace(/^data:[^,]+,/, ''), 'base64');
-let input;   // { kind: 'text' | 'pdf' | 'image', ... }
-if (/^image\//.test(mime)) {
+let input = textInput;   // { kind: 'text' | 'pdf' | 'image', ... }
+if (input) {
+} else if (/^image\//.test(mime)) {
   input = { kind: 'image', url: 'data:' + (/(jpeg|png|webp|gif)/.test(mime) ? mime : 'image/jpeg') + ';base64,' + raw.toString('base64') };
   if (pageUrls && pageUrls.length > 1) input.urls = pageUrls;
 } else if (mime === 'application/pdf' || ext === 'pdf') {
