@@ -619,7 +619,8 @@
         '<p class="hint">من سجل «دوام الموظفين»، والتأخير بحسب موعد دوامه.</p></div>' +
       '<div class="card"><h2 style="margin-top:0">المؤهلات والسيرة الذاتية</h2>' + (qual.length ? kv(qual) : '') +
         (d.summary ? '<p style="margin:10px 0 0">' + esc(d.summary) + '</p>' : '') + '<div class="toolbar" style="margin:10px 0 0;align-items:center">' + cv + '</div></div>' +
-      '<div class="card"><h2 style="margin-top:0">الملفات والشهادات</h2>' + files + '</div>';
+      '<div class="card"><h2 style="margin-top:0">الملفات والشهادات</h2>' + files + '</div>' +
+      '<div class="card"><h2 style="margin-top:0">التنبيهات</h2>' + wnSavedHtml(t.id, false) + '</div>';
   }
 
   document.addEventListener('click', function (e) {

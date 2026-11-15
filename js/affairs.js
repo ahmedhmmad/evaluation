@@ -2106,8 +2106,61 @@
       '<div style="grid-column:1/-1"><label class="field" for="wn-text">نص التنبيه</label><textarea id="wn-text" data-ro-ok rows="6">' + esc(u.text) + '</textarea></div>' +
       '<div><label class="field" for="wn-sup">اسم المشرف التربوي</label><input type="text" id="wn-sup" data-ro-ok value="' + esc(u.sup) + '" placeholder="يُترك فارغًا ليكتب باليد"></div>' +
       '<div><label class="field">مدير/ة الأكاديمية</label><input type="text" value="' + esc(principalName()) + '" disabled></div></div>' +
-      '<div class="actions"><button type="button" class="btn primary" data-wnprint data-ro-ok>طباعة التنبيه / PDF</button></div></div>';
+      '<div class="actions"><button type="button" class="btn primary" data-wnprint data-ro-ok>طباعة التنبيه / PDF</button>' +
+        (isReadOnly() ? '' : '<button type="button" class="btn" data-wnsave' + (ui.wnBusy ? ' disabled' : '') + '>' + (ui.wnBusy ? 'جارٍ الحفظ…' : 'حفظ في ملف الموظف') + '</button>') + '</div>' +
+      (u.sid ? wnSavedHtml(u.sid, true) : '') + '</div>';
   }
+  // التنبيهات المحفوظة لموظف (supabase/staff_warnings.sql)
+  async function loadWarnings(sid) {
+    var r = await sb.from('staff_warnings').select('*').eq('staff_id', sid).order('letter_date', { ascending: false }).order('created_at', { ascending: false });
+    S.wnMissing = !!r.error;
+    S.wnList = { sid: sid, rows: r.data || [] };
+    render();
+  }
+  function wnSavedHtml(sid, inLetters) {
+    if (!S.wnList || S.wnList.sid !== sid) { if (ui.wnLoading !== sid) { ui.wnLoading = sid; loadWarnings(sid).then(function () { ui.wnLoading = null; }); } return '<p class="hint">جارٍ تحميل التنبيهات…</p>'; }
+    if (S.wnMissing) return '<p class="hint">لحفظ التنبيهات في ملف الموظف شغّل الملف <code dir="ltr">supabase/staff_warnings.sql</code> في محرر SQL ثم حدّث الصفحة.</p>';
+    var rows = S.wnList.rows;
+    if (!rows.length) return inLetters ? '<p class="hint" style="margin:10px 0 0">لا تنبيهات محفوظة لهذا الموظف.</p>' : '<p class="hint">لا تنبيهات.</p>';
+    return (inLetters ? '<h3 style="margin:14px 0 6px">التنبيهات المحفوظة لهذا الموظف (' + rows.length + ')</h3>' : '') +
+      '<div class="table-wrap"><table class="grid"><thead><tr><th>رقم</th><th>التاريخ</th><th>العنوان</th><th>النص</th><th>حُفظ بواسطة</th><th></th></tr></thead><tbody>' +
+      rows.map(function (w) {
+        return '<tr><td>' + w.no + '</td><td style="white-space:nowrap">' + dmy(w.letter_date) + '</td><td><b>' + esc(w.subject) + '</b></td>' +
+          '<td style="font-size:.88rem">' + esc(String(w.body).replace(/\s+/g, ' ').slice(0, 110)) + (String(w.body).length > 110 ? '…' : '') + '</td><td>' + esc(w.created_by || '') + '</td>' +
+          '<td><div class="acts"><button type="button" class="btn" data-wnreprint="' + w.id + '" data-ro-ok>طباعة</button>' +
+          (isAdmin() ? '<button type="button" class="btn danger" data-wndel="' + w.id + '">حذف</button>' : '') + '</div></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  async function wnSave() {
+    var u = wnUi(), t = find(u.sid);
+    if (!t) return toast('اختر الموظف', true);
+    if (!String(u.text || '').trim()) return toast('اكتب نص التنبيه', true);
+    ui.wnBusy = true; render();
+    var r = await sb.from('staff_warnings').insert({ staff_id: t.id, letter_date: u.date, subject: u.subject || 'تنبيه', salutation: u.title, body: u.text, supervisor: u.sup || '',
+      principal: principalName(), created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().maybeSingle();
+    ui.wnBusy = false;
+    if (r.error) { render(); return fail(/staff_warnings/.test(r.error.message || '') ? { message: 'شغّل الملف supabase/staff_warnings.sql أولًا' } : r.error); }
+    S.wnList = null;
+    toast('حُفظ التنبيه رقم ' + r.data.no + ' في ملف ' + t.name);
+    render();
+  }
+  // إعادة طباعة تنبيه محفوظ كما صدر
+  function wnReprint(id) {
+    var w = S.wnList && S.wnList.rows.filter(function (x) { return x.id === id; })[0];
+    if (!w) return;
+    ui.wn = { sid: w.staff_id, title: w.salutation || 'الأستاذة الفاضلة', date: w.letter_date, subject: w.subject, text: w.body, sup: w.supervisor };
+    pendingWn = true; printNow();
+  }
+  document.addEventListener('click', function (e) {
+    if ((location.hash !== '#/staffatt' && location.hash !== '#/staff') || !canView()) return;
+    var b = e.target.closest('[data-wnsave],[data-wnreprint],[data-wndel]');
+    if (!b) return;
+    if (b.hasAttribute('data-wnsave')) return wnSave();
+    if (b.hasAttribute('data-wnreprint')) return wnReprint(b.getAttribute('data-wnreprint'));
+    var id = b.getAttribute('data-wndel');
+    if (!confirm('حذف هذا التنبيه من ملف الموظف؟ لا يمكن التراجع.')) return;
+    sb.from('staff_warnings').delete().eq('id', id).then(function (r) { if (r.error) return fail(r.error); S.wnList = null; toast('حُذف'); render(); });
+  });
   function buildWarnSheet() {
     var u = wnUi(), t = find(u.sid);
     if (!t) { sheet.className = 'ps'; sheet.innerHTML = '<p>اختر الموظف.</p>'; return; }
@@ -2138,7 +2191,7 @@
   document.addEventListener('change', function (e) {
     if (location.hash !== '#/staffatt') return;
     var u = wnUi(), id = e.target.id;
-    if (id === 'wn-sid') u.sid = e.target.value; else if (id === 'wn-title') u.title = e.target.value; else if (id === 'wn-date' && e.target.value) u.date = e.target.value;
+    if (id === 'wn-sid') { u.sid = e.target.value; render(); } else if (id === 'wn-title') u.title = e.target.value; else if (id === 'wn-date' && e.target.value) u.date = e.target.value;
   });
 
   /* ---------- اللجان المدرسية ----------
