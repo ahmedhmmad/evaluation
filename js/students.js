@@ -266,7 +266,7 @@
   function filteredStudents() {
     var q = norm(ui.stSearch), cls = ui.stClass, flag = ST_FLAGS[ui.stFlag], groupOf = flag ? transportGroupOf() : null;
     return S.students.filter(function (x) {
-      if (ui.stStatus && stStatus(x) !== ui.stStatus) return false;
+      if (ui.stStatus ? stStatus(x) !== ui.stStatus : isDropped(x)) return false;
       if (cls === '-' ? x.class_name : cls && x.class_name !== cls) return false;
       if (flag && !flag.test(x, groupOf)) return false;
       return !q || norm(x.full_name).indexOf(q) > -1 || String(x.national_id || '').indexOf(latinDigits(ui.stSearch)) > -1;
@@ -297,7 +297,8 @@
         '<button type="button" class="btn" data-stprofile="' + x.id + '">ملف الطالب</button> ' +
         (isAdmin() ? '<button type="button" class="btn danger" data-stdel="' + x.id + '">حذف</button>' : '') + '</td></tr>';
     }).join('');
-    return '<p class="st-count">عدد الطلاب: ' + shown.length + (shown.length !== S.students.length ? ' من ' + S.students.length : '') +
+    var regN = S.students.filter(function (x) { return !isDropped(x); }).length;
+    return '<p class="st-count">عدد الطلاب: ' + shown.length + (shown.length !== regN && !ui.stStatus ? ' من ' + regN : ui.stStatus && shown.length !== S.students.length ? ' من ' + regN : '') +
       (shown.length > LIMIT ? ' — يُعرض أول ' + LIMIT + '؛ استخدم البحث أو التصفية لتضييق القائمة.' : '') + '</p>' +
       (rows
         ? '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الاسم</th><th>رقم الهوية</th><th>الحالة</th><th>الصف</th><th>الهاتف</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
@@ -428,13 +429,13 @@
     if (!isDropped(st)) return '';
     var d = (st.details || {}).dropout || {};
     return '<div class="card" style="border:1.5px solid var(--red);background:var(--red-soft);margin:8px 0">' +
-      '<p style="margin:0 0 6px"><b>الطالب منقطع</b>' + (d.at ? ' منذ ' + dmy(String(d.at).slice(0, 10)) : '') + (d.by ? ' — بقرار ' + esc(d.by) : '') + (d.reason ? '. السبب: ' + esc(d.reason) : '') + '.</p>' +
-      '<p class="hint" style="margin:0 0 8px">لا يظهر في كشوف الحضور ولا الباصات ولا يُحتسب في عدد الشعبة' + (st.class_name ? ' (' + esc(st.class_name) + ')' : '') + '. لا يعود إلى المدرسة إلا بعد تنبيه ولي الأمر وتوقيعه إقرار الالتزام.</p>' +
+      '<p style="margin:0 0 6px"><b>منقطع</b>' + (d.at ? ' منذ ' + dmy(String(d.at).slice(0, 10)) : '') + (d.by ? ' — بقرار ' + esc(d.by) : '') + (d.reason ? '. السبب: ' + esc(d.reason) : '') + '.</p>' +
+      '<p class="hint" style="margin:0 0 8px">ليست له أي صفة في المدرسة: لا شعبة' + (d.cls ? ' (كان في ' + esc(d.cls) + ')' : '') + '، ولا باص' + (d.bus && findGroup(d.bus) ? ' (كان في ' + esc(findGroup(d.bus).assembly_point) + ')' : '') + '، ولا حضور ولا رسوم، ولا يُعدّ في الطلاب. لا يعود إلا بعد تنبيه ولي الأمر وتوقيعه إقرار الالتزام، ثم يعود تسجيلًا مبدئيًا يُراجَع ويُعتمد من جديد.</p>' +
       '<div class="toolbar" style="align-items:center;margin:0">' +
         '<button type="button" class="btn" data-stpledge="' + st.id + '">طباعة التنبيه وإقرار الالتزام / PDF</button>' +
         (isAdmin()
           ? '<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="sf-pledge"> وقّع ولي الأمر إقرار الالتزام واستلمته المدرسة</label>' +
-            '<button type="button" class="btn primary" data-stback="' + st.id + '">إعادة إلى المدرسة</button>'
+            '<button type="button" class="btn primary" data-stback="' + st.id + '">إعادة بعد الإقرار (تسجيل مبدئي)</button>'
           : '<span class="meta">الإعادة للمدير العام فقط.</span>') +
       '</div></div>';
   }
@@ -445,7 +446,7 @@
     var line = function (k, v) { return '<div style="display:flex;gap:.5em;margin:.55em 0;align-items:baseline"><span style="white-space:nowrap">' + k + '</span><span style="flex:1;border-bottom:1px dotted #555;min-height:1.2em">' + (v || '') + '</span></div>'; };
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
-    sheet.innerHTML = reportHead('تنبيه وإقرار التزام ولي الأمر', [['الطالب', x.full_name], ['الصف / الشعبة', x.class_name || '—'], ['التاريخ', dmy(todayISO())]], { noIssueDate: true }) +
+    sheet.innerHTML = reportHead('تنبيه وإقرار التزام ولي الأمر', [['الطالب', x.full_name], ['الشعبة السابقة', x.class_name || d.cls || '—'], ['التاريخ', dmy(todayISO())]], { noIssueDate: true }) +
       '<p style="margin:1em 0 .4em;font-size:1.1em"><b>السيد/ة ولي أمر الطالب/ة: ' + esc(x.full_name) + '</b> المحترم/ة،</p>' +
       '<p style="margin:0 0 .6em">تحية طيبة وبعد،</p>' +
       '<p style="margin:0 0 .6em;line-height:1.9">نُحيطكم علمًا بأن الطالب/ة المذكور/ة قد انقطع/ت عن الدراسة في الأكاديمية' + (d.at ? ' منذ <b>' + dmy(String(d.at).slice(0, 10)) + '</b>' : '') + (d.reason ? '، بسبب: <b>' + esc(d.reason) + '</b>' : '') +
@@ -510,7 +511,7 @@
             (st && stStatus(st) === 'reserve'
               ? '<button type="button" class="btn" data-stunfinal="' + st.id + '">إعادة إلى التسجيل المبدئي</button>'
               : '<button type="submit" class="btn" data-mode="reserve" formnovalidate title="قائمة الانتظار: لا يُحتسب في الشعب">تسجيل احتياط</button>')) +
-        (st && isAdmin() && enrolled(st) ? '<button type="button" class="btn danger" data-stdrop="' + st.id + '" title="يخرج من كشوف الحضور والباصات وعدد الشعبة">نقل إلى المنقطعين</button>' : '') +
+        (st && isAdmin() && enrolled(st) ? '<button type="button" class="btn danger" data-stdrop="' + st.id + '" title="تسقط عنه صفة الطالب: يخرج من الشعبة والباص والحضور والرسوم">نقل إلى المنقطعين</button>' : '') +
         (st ? '<button type="button" class="btn" data-stprofile="' + st.id + '">طباعة ملف الطالب</button>' : '') +
         '<button type="button" class="btn" data-stedit="">إلغاء</button>' +
       '</div></form>';
@@ -848,7 +849,7 @@
           '<input type="file" id="imp-file" accept=".xlsx,.xls,.csv" hidden>' +
           '<button type="button" class="btn" data-sibfixopen>تصحيح عدد الأبناء في المركز</button>' : '')) +
         '</div>') +
-      '<nav class="pills no-print" aria-label="حالة التسجيل">' + [['pending', 'تسجيل مبدئي', byStatus.pending], ['reserve', 'احتياط', byStatus.reserve], ['final', 'تسجيل نهائي', byStatus.final], ['dropped', 'منقطع', byStatus.dropped], ['', 'الكل', S.students.length]].map(function (p) {
+      '<nav class="pills no-print" aria-label="حالة التسجيل">' + [['pending', 'تسجيل مبدئي', byStatus.pending], ['reserve', 'احتياط', byStatus.reserve], ['final', 'تسجيل نهائي', byStatus.final], ['dropped', 'منقطع', byStatus.dropped], ['', 'الكل', S.students.length - byStatus.dropped]].map(function (p) {
         return '<button type="button" data-ststatus="' + p[0] + '"' + (ui.stStatus === p[0] ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + '>' + p[1] + ' <b>' + p[2] + '</b></button>';
       }).join('') + '</nav>' +
       '<div class="card"><div class="toolbar">' +
@@ -1538,26 +1539,34 @@
       printNow();
     } else if (isAdmin() && (el = e.target.closest('[data-stdrop]'))) {
       st = findStudent(el.getAttribute('data-stdrop'));
-      var why = prompt('نقل «' + st.full_name + '» إلى المنقطعين.\nيخرج من كشوف الحضور والباصات وعدد الشعبة، ولا يعود إلا بعد توقيع ولي الأمر إقرار الالتزام.\n\nسبب الانقطاع:');
+      var why = prompt('نقل «' + st.full_name + '» إلى المنقطعين.\nتسقط عنه صفة الطالب: يخرج من شعبته وباصه وكشوف الحضور، ولا تُطلب منه رسوم. ولا يعود إلا بعد توقيع ولي الأمر إقرار الالتزام، تسجيلًا مبدئيًا يُعتمد من جديد.\n\nسبب الانقطاع:');
       if (why == null) return;
-      var dd = Object.assign({}, st.details, { dropout: { at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || '', reason: why.trim(), prev: stStatus(st) } });
-      r = await sb.from('students').update({ status: 'dropped', details: dd }).eq('id', st.id);
+      var bus = transportGroupOf()[st.id] || '';
+      var dd = Object.assign({}, st.details, { dropout: { at: new Date().toISOString(), by: (S.profile && S.profile.full_name) || '', reason: why.trim(), prev: stStatus(st), cls: st.class_name || '', bus: bus } });
+      r = await sb.from('students').update({ status: 'dropped', class_name: '', finalized_at: null, details: dd }).eq('id', st.id);
       if (r.error) return fail(r.error);
-      st.status = 'dropped'; st.details = dd;
+      st.status = 'dropped'; st.class_name = ''; st.finalized_at = null; st.details = dd;
+      if (bus) {
+        var tr = await sb.from('transport_members').delete().eq('student_id', st.id);
+        if (tr.error) { render(); return fail(tr.error); }
+        S.tMembers = S.tMembers.filter(function (m) { return m.student_id !== st.id; });
+      }
       render();
       toast('نُقل «' + st.full_name + '» إلى المنقطعين');
     } else if (isAdmin() && (el = e.target.closest('[data-stback]'))) {
       st = findStudent(el.getAttribute('data-stback'));
       var ok = document.getElementById('sf-pledge');
       if (!ok || !ok.checked) return toast('لا يعود الطالب إلا بعد توقيع ولي الأمر إقرار الالتزام: علّم خانة الإقرار أولًا.', true);
-      var od = st.details || {}, d0 = od.dropout || {}, back = d0.prev === 'reserve' ? 'reserve' : 'final';
-      if (back === 'final' && st.class_name && !confirmClass(st.class_name, st, st.gender)) return;
-      var nd = Object.assign({}, od, { dropout: null, dropout_log: (od.dropout_log || []).concat([Object.assign({}, d0, { back_at: new Date().toISOString(), back_by: (S.profile && S.profile.full_name) || '', pledge: true })]) });
+      var od = st.details || {}, d0 = od.dropout || {}, back = 'pending';
+      if (!confirm('إعادة «' + st.full_name + '» بعد إقرار ولي الأمر؟\nيعود تسجيلًا مبدئيًا بلا شعبة ولا باص، ولا يصير طالبًا في المدرسة إلا بعد مراجعة تسجيله واعتماده نهائيًا من جديد.')) return;
+      var nd = Object.assign({}, od, { dropout: null, bus_wish: d0.bus || '', dropout_log: (od.dropout_log || []).concat([Object.assign({}, d0, { back_at: new Date().toISOString(), back_by: (S.profile && S.profile.full_name) || '', pledge: true })]) });
       r = await sb.from('students').update({ status: back, details: nd }).eq('id', st.id);
       if (r.error) return fail(r.error);
       st.status = back; st.details = nd;
       render();
-      toast('عاد «' + st.full_name + '» إلى المدرسة (' + ST_STATUS[back] + ') بعد إقرار ولي الأمر');
+      ui.editStudent = st.id;
+      render();
+      toast('أُعيد «' + st.full_name + '» تسجيلًا مبدئيًا بعد إقرار ولي الأمر — راجع بياناته واختر الشعبة ثم اعتمد تسجيله النهائي');
     } else if ((el = e.target.closest('[data-stunfinal]'))) {
       st = findStudent(el.getAttribute('data-stunfinal'));
       if (!confirm('إعادة تسجيل «' + st.full_name + '» إلى التسجيل المبدئي؟')) return;

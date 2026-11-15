@@ -139,7 +139,7 @@
         var m = memberOf(x.id);
         return !!m && !!findGroup(m.group_id) && enrolled(x) && (owesThisMonth(m) || subscribedIn(m, ui.tMonth));
       }
-      return r.scope === 'all' || (r.scope === 'enrolled' ? enrolled(x) : st === r.scope);
+      return r.scope === 'all' ? !isDropped(x) : (r.scope === 'enrolled' ? enrolled(x) : st === r.scope);
     });
   }
 

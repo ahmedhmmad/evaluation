@@ -305,7 +305,7 @@
     var w = waUi(), q = norm(w.q), digits = latinDigits(w.q).replace(/\D/g, ''), g = transportGroupOf();
     var since = w.fresh ? new Date(Date.now() - Number(w.fresh) * 864e5).toISOString().slice(0, 10) : '';
     return S.students.filter(function (x) {
-      if (w.reg === 'all' ? false : w.reg ? stStatus(x) !== w.reg : !enrolled(x)) return false;
+      if (w.reg === 'all' ? isDropped(x) : w.reg ? stStatus(x) !== w.reg : !enrolled(x)) return false;
       if (w.cls && (x.class_name || '') !== w.cls) return false;
       if (w.bus && (w.bus === 'none' ? g[x.id] : g[x.id] !== w.bus)) return false;
       if (since && String(x.created_at || '').slice(0, 10) < since) return false;
