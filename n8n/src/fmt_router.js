@@ -52,6 +52,12 @@ if (file && /^نشر/.test(text)) {
   return [{ json: Object.assign(base, { fmt: 'publish', caption: text, fileName: (doc && doc.fileName) || '', mimetype: String(file.mimetype || '').split(';')[0],
     base64: (d.message && d.message.base64) || m.base64 || '' }) }];
 }
+// «نشر» رسالة نصية: رداً على الملف (اقتباسه)، أو وحدها فيُشرح للمعلم كيف ينشر
+if (!file && /^نشر(\s|$)/.test(text)) {
+  const q = ctx.quotedMessage || {}, qd = q.documentMessage || (q.documentWithCaptionMessage && q.documentWithCaptionMessage.message && q.documentWithCaptionMessage.message.documentMessage) || null;
+  return [{ json: Object.assign(base, { fmt: 'publish', caption: text, quoted: !!qd, msgId: qd ? ctx.stanzaId || '' : '', fileName: qd ? qd.fileName || '' : '',
+    mimetype: qd ? String(qd.mimetype || '').split(';')[0] : '', base64: '' }) }];
+}
 // «اعتماد» أو «رفض»: رد المشرف على ورقة عمل (يتحقق البوت أن المرسل معتمِد)
 if (!file && /^(اعتماد|رفض)(\s|$)/.test(text)) {
   return [{ json: Object.assign(base, { fmt: 'review', text, ref: ctx.stanzaId || '' }) }];

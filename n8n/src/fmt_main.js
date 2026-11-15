@@ -71,6 +71,17 @@ if (src.fmt === 'review') {
 
 // ---------- «نشر»: حفظ الملف، وإرساله لمجموعة الطباعة، وورقة العمل للمشرف ----------
 if (src.fmt === 'publish') {
+  if (!src.base64 && !src.msgId) {
+    await say('لنشر ملف: أرسل ملف Word أو PDF واكتب كلمة «نشر» في خانة التعليق على الملف نفسه.\nأو اضغط مطولاً على الملف في المحادثة ← رد، واكتب: نشر');
+    return [{ json: { skipped: 'نشر بلا ملف' } }];
+  }
+  try { return await publish(); }
+  catch (e) {
+    await say('❌ تعذر نشر الملف الآن. أبلغ الإدارة بهذه الرسالة.\n(' + String(e.message || e).slice(0, 160) + ')').catch(() => {});
+    throw e;
+  }
+}
+async function publish() {
   let b64 = src.base64, mime = src.mimetype || '';
   if (!b64) { const md = await mediaOf(src.msgId); b64 = md.b64; mime = md.mime || mime; }
   if (!b64) { await say('تعذر استلام الملف. أرسله مرة أخرى مع كلمة «نشر».'); return [{ json: { skipped: 'لم يُجلب الملف' } }]; }
@@ -118,6 +129,7 @@ if (src.fmt === 'publish') {
     (notes.length ? '\nℹ️ ' + notes.join('، ') + '.' : ''));
   return [{ json: { published: p.no, kind, grade, subject, term, printed, reviewers: ids.length, notes } }];
 }
+if (src.fmt === 'publish') return [];
 
 // ---------- صفحات الورقة المصوّرة: تُجمع، ثم تُقرأ معاً عند «تم» أو بعد دقيقة بلا صفحة جديدة ----------
 if (src.fmt === 'page') {
