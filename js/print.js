@@ -318,7 +318,7 @@
     var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
     var filtersHtml = (isAdmin() || isManager()) ? '<div class="toolbar no-print" style="flex-wrap:wrap">' +
       '<select data-vf="t" aria-label="المعلم">' + opt('', 'كل المعلمين', f.t) + opt('-', 'لم يُزاروا بعد', f.t) + staff.map(function (t) { return opt(t.id, t.name, f.t); }).join('') + '</select>' +
-      '<select data-vf="sup" aria-label="المشرف">' + opt('', 'كل المشرفين', f.sup) + Object.keys(sups).sort().map(function (k) { return opt(k, k, f.sup); }).join('') + '</select>' +
+      (Object.keys(sups).length > 1 ? '<select data-vf="sup" aria-label="المشرف">' + opt('', 'كل المشرفين', f.sup) + Object.keys(sups).sort().map(function (k) { return opt(k, k, f.sup); }).join('') + '</select>' : '') +
       '<select data-vf="m" aria-label="الشهر">' + opt('', 'كل الأشهر', f.m) + Object.keys(months).sort().reverse().map(function (k) { return opt(k, monthLabel(k), f.m); }).join('') + '</select>' +
       '<select data-vf="st" aria-label="الاعتماد">' + opt('', 'كل الحالات', f.st) + opt('ok', 'معتمد', f.st) + opt('wait', 'بانتظار الاعتماد', f.st) + '</select></div>' : '';
     var list = S.visits.filter(function (v) {
