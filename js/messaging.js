@@ -388,6 +388,15 @@
   function waKindLabel(k) { var t = waTpl(k); return t ? t.title : k === 'custom' ? 'رسالة حرة' : k; }
   function waTime(ts) { var t = new Date(ts); return isNaN(t) ? '' : dmy(t.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })) + ' ' + t.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' }); }
 
+  document.addEventListener('click', function (e) {
+    var b = location.hash === '#/messages' && e.target.closest('[data-wapage]');
+    if (!b) return;
+    var p = b.getAttribute('data-wapage').split('|'), w = waUi();
+    if (p[0] === 'm') w.mpage = Number(p[1]); else w.bpage = Number(p[1]);
+    render();
+    var el = document.getElementById(p[0] === 'm' ? 'wa-msgs' : 'wa-msgs');
+    if (p[0] === 'm' && el) el.scrollIntoView({ block: 'start' });
+  });
   function waArchiveHtml() {
     var w = waUi(), list = waArchiveRows(), cnt = {};
     list.forEach(function (m) { cnt[m.status] = (cnt[m.status] || 0) + 1; });
@@ -399,7 +408,20 @@
     var batches = {}, order = [];
     list.forEach(function (m) { var b = batches[m.batch_id]; if (!b) { b = batches[m.batch_id] = { id: m.batch_id, title: m.title || waKindLabel(m.kind), at: m.created_at, by: m.created_by, n: 0, ok: 0, bad: 0, wait: 0 }; order.push(b); }
       b.n++; if (['sent', 'delivered', 'read'].indexOf(m.status) > -1) b.ok++; else if (m.status === 'queued' || m.status === 'sending') b.wait++; else b.bad++; });
-    var rows = list.slice(0, 500).map(function (m) {
+    // صفحات: 50 رسالة و20 دفعة في الصفحة (الصفحة الطويلة كانت ثقيلة جدًا)
+    var MP = 50, BP = 20, mPages = Math.max(1, Math.ceil(list.length / MP)), bPages = Math.max(1, Math.ceil(order.length / BP));
+    w.mpage = Math.min(Math.max(1, w.mpage || 1), mPages); w.bpage = Math.min(Math.max(1, w.bpage || 1), bPages);
+    var pager = function (key, cur, total) {
+      if (total < 2) return '';
+      var b = function (p, l, dis) { return '<button type="button" class="btn' + (p === cur ? ' primary' : '') + '" data-wapage="' + key + '|' + p + '"' + (dis ? ' disabled' : '') + '>' + l + '</button>'; };
+      var nums = [], seen = {};
+      [1, cur - 2, cur - 1, cur, cur + 1, cur + 2, total].forEach(function (p) { if (p >= 1 && p <= total && !seen[p]) { seen[p] = 1; nums.push(p); } });
+      nums.sort(function (x, y) { return x - y; });
+      var out = [], prev = 0;
+      nums.forEach(function (p) { if (p - prev > 1) out.push('<span class="hint">…</span>'); out.push(b(p, p)); prev = p; });
+      return '<div class="toolbar" style="justify-content:center;margin-top:10px">' + b(cur - 1, 'السابق', cur === 1) + out.join('') + b(cur + 1, 'التالي', cur === total) + '</div>';
+    };
+    var rows = list.slice((w.mpage - 1) * MP, w.mpage * MP).map(function (m) {
       var s = WA_STATUS[m.status] || ['pending', m.status];
       return '<tr><td style="white-space:nowrap">' + waTime(m.created_at) + '</td><td>' + esc(m.title || waKindLabel(m.kind)) + '</td><td>' + esc(m.names || '') + '</td>' +
         '<td dir="ltr" style="text-align:right;white-space:nowrap">' + esc(m.phone || '—') + '</td>' +
@@ -419,10 +441,10 @@
         '<button type="button" class="btn primary" data-warefresh' + (w.busy ? ' disabled' : '') + ' title="يسأل SendWhats عن حالة الرسائل غير المكتملة في آخر 30 يومًا">' + (w.busy ? 'جارٍ التحديث…' : 'تحديث الحالات') + '</button>' +
         '<button type="button" class="btn" data-waxlsx' + (list.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
       (order.length ? '<div class="card"><h2 style="margin-top:0">الدفعات</h2><div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>الرسالة</th><th>المرسِل</th><th>العدد</th><th>أُرسلت</th><th>في الانتظار</th><th>لم تُرسل</th></tr></thead><tbody>' +
-        order.slice(0, 100).map(function (b) { return '<tr><td style="white-space:nowrap">' + waTime(b.at) + '</td><td><b>' + esc(b.title) + '</b></td><td dir="ltr" style="text-align:right">' + esc(displayName(b.by || '')) + '</td><td>' + b.n + '</td><td>' + b.ok + '</td><td>' + b.wait + '</td><td>' + (b.bad ? '<b style="color:var(--danger,#b91c1c)">' + b.bad + '</b>' : 0) + '</td></tr>'; }).join('') +
-        '</tbody></table></div></div>' : '') +
-      '<div class="card"><h2 style="margin-top:0">الرسائل' + (list.length > 500 ? ' (أحدث 500 — ضيّق البحث أو صدّر Excel للكل)' : '') + '</h2>' + (rows
-        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>الرسالة</th><th>الطالب</th><th>الرقم</th><th>النص</th><th>الحالة</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        order.slice((w.bpage - 1) * BP, w.bpage * BP).map(function (b) { return '<tr><td style="white-space:nowrap">' + waTime(b.at) + '</td><td><b>' + esc(b.title) + '</b></td><td dir="ltr" style="text-align:right">' + esc(displayName(b.by || '')) + '</td><td>' + b.n + '</td><td>' + b.ok + '</td><td>' + b.wait + '</td><td>' + (b.bad ? '<b style="color:var(--danger,#b91c1c)">' + b.bad + '</b>' : 0) + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' + pager('b', w.bpage, bPages) + '</div>' : '') +
+      '<div class="card" id="wa-msgs"><h2 style="margin-top:0">الرسائل (' + list.length + ')</h2>' + (rows
+        ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الوقت</th><th>الرسالة</th><th>الطالب</th><th>الرقم</th><th>النص</th><th>الحالة</th></tr></thead><tbody>' + rows + '</tbody></table></div>' + pager('m', w.mpage, mPages)
         : '<div class="empty">لا رسائل.</div>') + '</div>';
   }
 

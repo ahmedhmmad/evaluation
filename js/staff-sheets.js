@@ -227,12 +227,12 @@
   function buildSaRegisterSheet(D) {
     printLandscape = true;
     var off = attOff;
-    var body = D.staff.map(function (s, i) {
+    var rowOf = function (s, i) {
       return '<tr><td class="c">' + (i + 1) + '</td><td class="nm">' + esc(s.t.name) + (s.term ? ' <small>(' + esc(s.term) + ')</small>' : '') + '</td>' + D.days.map(function (dd) {
         var m = saRegMark(s, dd), st = (s.days[dd] || {}).status;
         return '<td class="c' + (off(dd) || st === 'leave' || m === '—' ? ' fr' : '') + (st === 'absent' ? ' ab' : '') + '">' + m + '</td>';
       }).join('') + '<td class="c">' + s.present + '</td><td class="c">' + s.leave + '</td><td class="c"><b>' + s.absent + '</b></td></tr>';
-    }).join('');
+    };
     var perDay = D.days.map(function (dd) {
       if (off(dd)) return '<td class="c fr">' + (attHoliday(dd) ? 'ع' : '') + '</td>';
       if (!saDayRecorded(D, dd)) return '<td class="c"></td>';
@@ -241,16 +241,28 @@
     sheet.className = 'att-regs';
     sheet.removeAttribute('data-fit');
     sheet.style.width = '267mm';
-    sheet.innerHTML = '<section class="att-page">' +
-      '<div class="att-title"><b>' + esc(schoolName()) + '</b><span>كشف حضور الموظفين — ' + monthLabel(D.month) + '</span><span></span></div>' +
-      '<div class="att-sub"><span>عدد الموظفين: <b>' + D.staff.length + '</b></span><span>الوقت الرسمي: <b>' + D.H.time_in + ' – ' + D.H.time_out + '</b></span></div>' +
-      '<table class="rz att-reg"><thead><tr><th>م</th><th>اسم الموظف</th>' + D.days.map(function (dd) { return '<th class="' + (off(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
-        '<th class="tot">حضور</th><th class="tot">إجازة</th><th class="tot">غياب</th></tr></thead>' +
-      '<tbody>' + body + '<tr class="total"><td colspan="2">عدد الحاضرين في اليوم</td>' + perDay + '<td colspan="3"></td></tr></tbody></table>' +
-      '<p class="att-key">المفتاح: + حاضر · L إجازة · غ غائب · م مأمورية · — خارج مدة عمله · المظلّل: الجمعة والسبت والعطل' + (D.days.some(attHoliday) ? ' (ع: عطلة)' : '') +
-        ' والإجازات · الخانة الفارغة: لم يُسجَّل · تاريخ الإصدار: ' + dmy(todayISO()) + '</p>' +
-      reportSigns([[principalTitle(), principalName()]]) + '</section>';
-    fitRegisterPages(sheet, 7);
+    // صفحات أفقية بمقياس واحد: الموظفون موزعون بالتساوي (حتى 20 في الصفحة)، ولكل صفحة عنوانها ورأس جدولها؛
+    // صف «عدد الحاضرين» والمفتاح والتوقيع في الصفحة الأخيرة
+    var PER = 20, pages = Math.max(1, Math.ceil(D.staff.length / PER)), per = Math.ceil(D.staff.length / pages), html = '';
+    var head = '<thead><tr><th>م</th><th>اسم الموظف</th>' + D.days.map(function (dd) { return '<th class="' + (off(dd) ? 'fr' : '') + '">' + Number(dd.slice(8)) + '</th>'; }).join('') +
+      '<th class="tot">حضور</th><th class="tot">إجازة</th><th class="tot">غياب</th></tr></thead>';
+    for (var pg = 0; pg < pages; pg++) {
+      var last = pg === pages - 1, part = D.staff.slice(pg * per, (pg + 1) * per);
+      html += '<section class="att-page">' +
+        '<div class="att-title"><b>' + esc(schoolName()) + '</b><span>كشف حضور الموظفين — ' + monthLabel(D.month) + '</span><span>' + (pages > 1 ? 'صفحة ' + (pg + 1) + ' من ' + pages : '') + '</span></div>' +
+        '<div class="att-sub"><span>عدد الموظفين: <b>' + D.staff.length + '</b></span><span>الوقت الرسمي: <b>' + D.H.time_in + ' – ' + D.H.time_out + '</b></span></div>' +
+        '<table class="rz att-reg">' + head + '<tbody>' + part.map(function (st, i) { return rowOf(st, pg * per + i); }).join('') +
+        (last ? '<tr class="total"><td colspan="2">عدد الحاضرين في اليوم</td>' + perDay + '<td colspan="3"></td></tr>' : '') + '</tbody></table>' +
+        (last ? '<p class="att-key">المفتاح: + حاضر · L إجازة · غ غائب · م مأمورية · — خارج مدة عمله · المظلّل: الجمعة والسبت والعطل' + (D.days.some(attHoliday) ? ' (ع: عطلة)' : '') +
+          ' والإجازات · الخانة الفارغة: لم يُسجَّل · تاريخ الإصدار: ' + dmy(todayISO()) + '</p>' + reportSigns([[principalTitle(), principalName()]]) : '') + '</section>';
+    }
+    sheet.innerHTML = html;
+    // مقياس واحد لكل الصفحات: أصغر خط احتاجته أي صفحة
+    fitRegisterPages(sheet);
+    var sizes = Array.prototype.map.call(sheet.querySelectorAll('.att-page'), function (p) { return parseFloat(p.style.fontSize) || 14; });
+    var min = Math.min.apply(null, sizes);
+    Array.prototype.forEach.call(sheet.querySelectorAll('.att-page'), function (p) { p.style.fontSize = min + 'pt'; });
+
   }
 
   async function saReport(fmt) {
