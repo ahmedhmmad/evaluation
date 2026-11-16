@@ -250,7 +250,7 @@
       '<p class="att-key">المفتاح: + حاضر · L إجازة · غ غائب · م مأمورية · — خارج مدة عمله · المظلّل: الجمعة والسبت والعطل' + (D.days.some(attHoliday) ? ' (ع: عطلة)' : '') +
         ' والإجازات · الخانة الفارغة: لم يُسجَّل · تاريخ الإصدار: ' + dmy(todayISO()) + '</p>' +
       reportSigns([[principalTitle(), principalName()]]) + '</section>';
-    fitRegisterPages(sheet);
+    fitRegisterPages(sheet, 7);
   }
 
   async function saReport(fmt) {

@@ -826,7 +826,7 @@
 
   // يُكبَّر خط كل شعبة في كشف الشهر إلى أكبر حجم تتسع به في صفحة A4 أفقية، دون أن يُقصّ اسم طالب.
   // لا يصغر عن 11pt: الشعبة الكبيرة تمتد على صفحة ثانية ويتكرر رأس الجدول فيها
-  function fitRegisterPages(root) {
+  function fitRegisterPages(root, minSize) {
     var maxH = (REPORT.page.width - 2 * REPORT.page.marginY - 4) * 96 / 25.4;
     Array.prototype.forEach.call(root.querySelectorAll('.att-page'), function (pg) {
       var size = 14, names = pg.querySelectorAll('td.nm, thead th'); // الأسماء وأرقام الأيام لا تُقص ولا تنكسر
@@ -836,7 +836,7 @@
         return false;
       };
       pg.style.fontSize = size + 'pt';
-      while (tooBig() && size > 11) {
+      while (tooBig() && size > (minSize || 11)) {
         size -= 0.25;
         pg.style.fontSize = size + 'pt';
       }
