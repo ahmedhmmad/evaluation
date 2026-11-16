@@ -774,7 +774,14 @@
       });
     } else if (e.target.closest('[data-attnotify]')) {
       var notifyBtn = e.target.closest('[data-attnotify]');
-      if (!confirm('إرسال رسالة واتساب إلى أولياء أمور ' + notifyBtn.dataset.attnotify + ' طالبًا غائبًا اليوم؟\nمن أُرسل له اليوم لن تصله الرسالة مرة أخرى.')) return;
+      // تأكيد بالأسماء: تُرسل لمن هم «غائب» الآن فقط، فصحّح الحضور قبل الإرسال؛ الرسالة لا تُسترجع بعد إرسالها
+      var dayRows = S.attDay[todayISO()] || {}, gone = S.students.filter(function (x) { return dayRows[x.id] && dayRows[x.id].status === 'absent' && enrolled(x) && x.class_name === dayRows[x.id].class_name; });
+      var badPh = gone.filter(function (x) { var p = String(x.phone || '').replace(/\D/g, ''); return !/^01\d{9}$/.test(p) && !/^(20|00)/.test(p); });
+      var notTaken = attClasses().filter(function (c) { return classRoll(c).length && !classRoll(c).some(function (x) { return dayRows[x.id]; }); });
+      if (!confirm('تأكيد إرسال رسالة الغياب لأولياء أمور ' + gone.length + ' طالبًا:\n\n' + gone.map(function (x) { return '• ' + x.full_name + ' — ' + x.class_name; }).join('\n') +
+        (notTaken.length ? '\n\n⚠️ لم يُسجَّل حضور: ' + notTaken.join('، ') : '') +
+        (badPh.length ? '\n\n⚠️ رقم غير صحيح (لن تصل): ' + badPh.map(function (x) { return x.full_name; }).join('، ') : '') +
+        '\n\nتأكد أن الحضور صُحّح نهائيًا: الرسالة لا تُسترجع بعد إرسالها. من أُرسل له اليوم لن تصله مرة أخرى.')) return;
       notifyBtn.disabled = true;
       sb.functions.invoke('send-absence-whatsapp', { body: { school: schoolName() } }).then(function (r) {
         notifyBtn.disabled = false;

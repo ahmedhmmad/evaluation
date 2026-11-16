@@ -1217,6 +1217,14 @@
     if (wantsEl) data.wants_transport = rideEl.value || wantsEl.value === 'yes' ? true : wantsEl.value === 'no' ? false : null;
 
     if (!data.full_name) return toast('اكتب اسم الطالب.', true);
+    // جوال ولي الأمر المصري: 11 رقمًا يبدأ بـ01 (الرقم الدولي بـ+ أو 00 يُقبل كما هو)
+    var gp = latinDigits(String(data.phone || '')).replace(/[\s\-()]/g, '');
+    if (gp && !/^(\+|00)/.test(gp) && !/^01\d{9}$/.test(gp)) {
+      var pe = document.getElementById('sf-phone');
+      if (pe) pe.focus();
+      return toast('رقم جوال ولي الأمر يجب أن يكون 11 رقمًا يبدأ بـ01 (المكتوب ' + gp.replace(/\D/g, '').length + ' أرقام).', true);
+    }
+    if (gp) data.phone = gp;
     var wasFinal = st && stStatus(st) === 'final';
     var welcomeEl = document.getElementById('sf-welcome'), sendWelcome = mode === 'final' && !wasFinal && !!(welcomeEl && welcomeEl.checked);
     // شعبة ممتلئة أو لجنس آخر: تنبيه، والمتابعة ممكنة
