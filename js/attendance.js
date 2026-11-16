@@ -568,7 +568,7 @@
     sheet.style.fontSize = '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام<br>الغياب</th><th>نسبة<br>الحضور</th><th>أطول غياب<br>متصل</th><th>تواريخ الغياب</th><th>ملاحظات</th><th>ولي الأمر</th><th>هاتف ولي الأمر</th><th>واتساب</th><th>جوال الطالب</th><th>المتابعة</th></tr></thead>' +
+      '<tr><th>م</th><th>الطالب</th><th>الشعبة</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>أطول غياب متصل</th><th>تواريخ الغياب</th><th>ملاحظات</th><th>ولي الأمر</th><th>هاتف ولي الأمر</th><th>واتساب</th><th>جوال الطالب</th><th>المتابعة</th></tr></thead>' +
       '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       '<table class="rz" style="margin-top:.8em"><thead><tr><th>الشعبة</th><th>الطلاب</th><th>أيام التسجيل</th><th>الغياب (طالب×يوم)</th><th>نسبة الحضور</th><th>في الكشف</th></tr></thead><tbody>' +
         D.sum.map(function (s2) { return '<tr><td><b>' + esc(s2.cls) + '</b></td>' + c(s2.students) + c(s2.days) + c(s2.absent) + c(s2.pct) + c(s2.listed, true) + '</tr>'; }).join('') + '</tbody></table>' +
@@ -783,7 +783,7 @@
     sheet.innerHTML =
       reportHead('الحضور والغياب — ' + p.range.label.split(' — ')[0], [[p.kind === 'day' ? 'اليوم' : 'الفترة', p.range.label.split(' — ')[1]], ['عدد الطلاب', total], ['الحاضرون' + per, all.present], ['الغائبون' + per, all.absent]].concat(all.excused ? [['المأذونون' + per, all.excused]] : [], [['نسبة الحضور', attPct(all)]])) +
       '<table class="rz"><colgroup><col style="width:5%"><col style="width:13%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:43%"></colgroup>' +
-      '<thead><tr><th>م</th><th>الشعبة</th><th>الطلاب</th><th>حاضر' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>غائب' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>مأذون' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>نسبة الحضور</th><th>أسماء الغائبين' + (per ? ' (عدد أيام الغياب)' : '') + '</th></tr></thead><tbody>' + rows +
+      '<thead><tr><th>م</th><th>الشعبة</th><th>الطلاب</th><th>حاضر' + '</th><th>غائب' + '</th><th>مأذون' + '</th><th>نسبة الحضور</th><th>أسماء الغائبين' + (per ? ' (عدد أيام الغياب)' : '') + '</th></tr></thead><tbody>' + rows +
       '<tr class="total"><td colspan="2">المدرسة</td>' + c(total) + c(all.present) + c(all.absent) + c(all.excused + all.suspended) + c(attPct(all)) + '<td></td></tr></tbody></table>' +
       '<div class="att-notes"><b>' + noteTitle + ':</b><div class="att-lines">' + esc(p.note) + '</div></div>';
     fitSheet();

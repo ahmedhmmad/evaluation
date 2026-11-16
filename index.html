@@ -395,11 +395,11 @@
 
   /* الجداول */
   #print-sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .92em; }
-  #print-sheet.tight th, #print-sheet.tight td { white-space: normal !important; }
+  #print-sheet.tight td { white-space: normal !important; }
   #print-sheet.tight2 th, #print-sheet.tight2 td { overflow-wrap: anywhere; }
   #print-sheet th, #print-sheet td { border: .5pt solid var(--rule); padding: .32em .55em; vertical-align: middle; text-align: start; overflow-wrap: break-word; } /* لا تُكسر الكلمة إلا إن لم تتسع في عمودها: «anywhere» كان يضيّق الأعمدة فتنقسم الكلمات حرفًا حرفًا */
   #print-sheet thead { display: table-header-group; }
-  #print-sheet thead th { background: var(--navy); color: #fff; font-weight: 700; text-align: center; }
+  #print-sheet thead th { background: var(--navy); color: #fff; font-weight: 700; text-align: center; white-space: nowrap; } /* رأس الجدول في سطر واحد في كل الكشوف */
   #print-sheet tr { break-inside: avoid; }
   #print-sheet td.c { text-align: center; }
   #print-sheet table.rz tbody tr:nth-child(even) td { background: var(--gold-soft); }
@@ -963,7 +963,7 @@
 <script>
 /* سكربت الموقع مقسَّم إلى ملفات في مجلد js تُحمَّل بهذا الترتيب، وكلها في نطاق واحد مشترك (كأنها ملف واحد).
    غيّر APP_BUILD مع كل تعديل في أي ملف منها: به يأخذ المتصفح الملفات كلها بنسخة واحدة جديدة. */
-var APP_BUILD = '16/11 — 9';
+var APP_BUILD = '16/11 — 10';
 (function () {
   var v = '?v=' + encodeURIComponent(APP_BUILD);
   ['core', 'staff', 'students', 'transport', 'admin', 'router', 'affairs', 'timetable-base', 'staff-attendance', 'payroll', 'papers', 'staff-sheets', 'timetable', 'attendance', 'messaging', 'reports', 'print', 'start'].forEach(function (n) {

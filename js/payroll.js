@@ -590,7 +590,7 @@
     // كشف الرواتب وحده بترويسة الأكاديمية والمؤسسة الشريكة، وتوقيعات مدير الأكاديمية ومدير المؤسسة المانحة ومدير المؤسسة الشريكة
     var head = reportHead('كشف الرواتب', [['الشهر', monthLabel(P.month)], ['الحالة', P.approved ? 'معتمد' : 'غير معتمد'], ['عدد الموظفين', P.rows.length]], { banner: 'banner-payroll.png' }).replace(/^<img class="wm"[^>]*>/, '');
     // كل صفحة قسم قائم بذاته: الترويسة وعنوان الكشف ورأس الجدول، فتظهر كلها في كل صفحة (الترويسة الطويلة لا يكرّرها رأس الجدول وحده)
-    var colHead = '<colgroup><col style="width:3.5%"><col style="width:22.5%"><col style="width:10.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12.5%"></colgroup><thead><tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>تأخير<br>يوم/دقيقة</th><th>خصومات</th><th>إضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>';
+    var colHead = '<colgroup><col style="width:3.5%"><col style="width:22.5%"><col style="width:10.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:6%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:12.5%"></colgroup><thead><tr><th>م</th><th>الموظف</th><th>الراتب</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>تأخير يوم/دقيقة</th><th>خصومات</th><th>إضافات</th><th>الصافي</th><th>التوقيع</th></tr></thead>';
     var totalRow = '<tr><td></td><td><b>المجموع</b></td>' + m(prMoney(tot.salary), true) + '<td colspan="4"></td>' + m(prMoney(tot.ded), true) + m(prMoney(tot.add), true) + m(prMoney(tot.net), true) + '<td></td></tr>';
     var parts = '';
     for (var pg = 0; pg < pages; pg++) {

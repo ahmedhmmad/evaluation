@@ -1094,7 +1094,7 @@
     if (u.grades == null) { app.innerHTML = head + bar + '<div class="card empty">جارٍ تحميل الدرجات…</div>'; return; }
     var val = function (sid, iid) { var k = sid + '|' + iid; return k in u.draft ? u.draft[k] : (u.grades[k] == null ? '' : u.grades[k]); };
     app.innerHTML = head + bar + '<div class="card"><h2 style="margin-top:0">' + esc(cls) + ' — ' + esc(subj) + ' — ' + esc(u.term) + '</h2><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th>' +
-      items.map(function (x) { return '<th style="white-space:nowrap">' + esc(x.name) + '<br><span class="meta">(' + x.max_score + ')</span></th>'; }).join('') + '<th>المجموع<br><span class="meta">(' + maxSum + ')</span></th></tr></thead><tbody>' +
+      items.map(function (x) { return '<th style="white-space:nowrap">' + esc(x.name) + ' <span class="meta">(' + x.max_score + ')</span></th>'; }).join('') + '<th>المجموع <span class="meta">(' + maxSum + ')</span></th></tr></thead><tbody>' +
       studs.map(function (x, i) {
         var tot = 0, any = false;
         var cells = items.map(function (it) { var v = val(x.id, it.id); if (v !== '' && v != null) { tot += Number(v); any = true; } return '<td><input type="number" min="0" max="' + it.max_score + '" step="0.25" style="width:5.5em" data-tgg="' + x.id + '|' + it.id + '" value="' + esc(v) + '"' + (canEdit ? '' : ' disabled') + '></td>'; }).join('');

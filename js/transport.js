@@ -688,7 +688,7 @@
       // (الهامش السفلي السالب يلغي فراغ الهامش العلوي المتكرر في رأس الجدول تحته في الصفحة الأولى)
       '<div style="padding-top:var(--pad-y);margin-bottom:calc(.3em - var(--pad-y));font-size:1.087em;position:relative">' + head + '</div>' +
       '<table class="rz bus"><thead><tr><td class="pg-space" colspan="7"></td></tr>' +
-      '<tr><th>م</th><th>اسم الطالب</th><th>الشعبة</th><th style="width:42%">العائلة والعنوان</th><th>هاتف ولي الأمر</th><th>جوال الطالب<br>/ واتساب</th><th>الاشتراك</th></tr></thead><tbody>' +
+      '<tr><th>م</th><th>اسم الطالب</th><th>الشعبة</th><th style="width:42%">العائلة والعنوان</th><th>هاتف ولي الأمر</th><th>جوال الطالب / واتساب</th><th>الاشتراك</th></tr></thead><tbody>' +
       (rows || '<tr><td colspan="7" class="c">لا يوجد طلاب في هذا الباص</td></tr>') + staffPart.html + '</tbody><tfoot><tr><td class="pg-space" colspan="7"></td></tr></tfoot></table>' +
       '<p style="margin:.7em 0;font-weight:700">عدد الطلاب: ' + list.length + ' &nbsp;&nbsp;&nbsp; عدد العائلات: ' + families +
         (list.some(function (r) { return isReserve(r.x); }) ? ' &nbsp;&nbsp;&nbsp; * احتياط' : '') + ' &nbsp;&nbsp;&nbsp; سدّدوا اشتراك الشهر: ' + paidN + ' &nbsp;&nbsp;&nbsp; لم يسددوا: ' + (list.length - paidN - exemptN) + (exemptN ? ' &nbsp;&nbsp;&nbsp; معفون: ' + exemptN : '') +
@@ -1359,7 +1359,7 @@
     sheet.style.width = '267mm';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th>رقم<br>الباص</th><th>خط السير</th><th>المشرف</th><th>عدد<br>الطلاب</th><th>المسددون</th><th>غير<br>المسددين</th><th>المعفون</th><th>إجمالي السداد<br>(ج.م)</th><th>المتبقي<br>(ج.م)</th></tr></thead><tbody>' +
+      '<tr><th>رقم الباص</th><th>خط السير</th><th>المشرف</th><th>عدد الطلاب</th><th>المسددون</th><th>غير المسددين</th><th>المعفون</th><th>إجمالي السداد (ج.م)</th><th>المتبقي (ج.م)</th></tr></thead><tbody>' +
       D.rows.map(function (b, i) {
         return '<tr>' + c(busNo(b, i), true) +
           '<td><b>' + esc(b.g.assembly_point) + '</b>' + (b.g.route ? '<br><span style="font-size:.85em">' + esc(b.g.route) + '</span>' : '') + '</td>' +

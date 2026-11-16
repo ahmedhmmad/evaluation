@@ -297,7 +297,7 @@
     sheet.style.fontSize = '';
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th>م</th><th>الموظف</th><th>الفئة</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>أيام<br>التأخير</th><th>دقائق<br>التأخير</th><th>دقائق الانصراف<br>المبكر</th><th>ملاحظات</th></tr></thead>' +
+      '<tr><th>م</th><th>الموظف</th><th>الفئة</th><th>حضور</th><th>غياب</th><th>إجازة</th><th>مأمورية</th><th>أيام التأخير</th><th>دقائق التأخير</th><th>دقائق الانصراف المبكر</th><th>ملاحظات</th></tr></thead>' +
       '<tbody>' + body + '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       reportSigns([[principalTitle(), principalName()]]);
   }
