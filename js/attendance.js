@@ -645,6 +645,10 @@
       .sort(function (p, q) { return per[q.id].absent - per[p.id].absent || p.full_name.localeCompare(q.full_name, 'ar'); })
       .map(function (x) { return shortName(x) + (kind === 'day' ? '' : ' (' + per[x.id].absent + ')'); });
   }
+  function excusedNames(cls, per, kind) {
+    return classRoll(cls).filter(function (x) { var q = per[x.id] || {}; return (q.excused || 0) + (q.suspended || 0) > 0; })
+      .map(function (x) { var q = per[x.id], k = (q.excused || 0) + (q.suspended || 0); return shortName(x) + (kind === 'day' ? '' : ' (' + k + ')'); });
+  }
 
   // جلب سجلات المطلوب ثم تنفيذ الدالة عليها (للتصدير والطباعة)
   async function withAttRange(range, done) {
@@ -760,19 +764,20 @@
     var rows = attClasses().filter(function (cls) { return classRoll(cls).length; }).map(function (cls, i) {
       var k = d.byClass[cls], n = classRoll(cls).length;
       total += n;
-      if (!k) return '<tr>' + c(i + 1) + '<td><b>' + esc(cls) + '</b></td>' + c(n) + '<td class="c" colspan="3" style="color:#7d8597">لم يُسجَّل</td><td></td></tr>';
+      if (!k) return '<tr>' + c(i + 1) + '<td><b>' + esc(cls) + '</b></td>' + c(n) + '<td class="c" colspan="4" style="color:#7d8597">لم يُسجَّل</td><td></td></tr>';
+      var ex = excusedNames(cls, d.per, p.kind);
       all.present += k.n.present; all.absent += k.n.absent; all.excused += k.n.excused; all.suspended += k.n.suspended;
-      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(cls) + '</b></td>' + c(n) + c(k.n.present) + c(k.n.absent ? '<b>' + k.n.absent + '</b>' : 0) + c(attPct(k.n)) +
-        '<td style="font-size:.88em">' + esc(absentNames(cls, d.per, p.kind).join('، ') || '—') + '</td></tr>';
+      return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(cls) + '</b></td>' + c(n) + c(k.n.present) + c(k.n.absent ? '<b>' + k.n.absent + '</b>' : 0) + c(k.n.excused + k.n.suspended) + c(attPct(k.n)) +
+        '<td style="font-size:.88em">' + esc(absentNames(cls, d.per, p.kind).join('، ') || '—') + (ex.length ? '<br><span style="color:#555">مأذون: ' + esc(ex.join('، ')) + '</span>' : '') + '</td></tr>';
     }).join('');
     var per = p.kind === 'day' ? '' : ' (طالب×يوم)';
     var noteTitle = p.kind === 'day' ? 'ملاحظات حول اليوم الدراسي' : p.kind === 'week' ? 'ملاحظات حول الأسبوع الدراسي' : 'ملاحظات حول الشهر الدراسي';
     sheet.className = 'rm att-sch';
     sheet.innerHTML =
       reportHead('الحضور والغياب — ' + p.range.label.split(' — ')[0], [[p.kind === 'day' ? 'اليوم' : 'الفترة', p.range.label.split(' — ')[1]], ['عدد الطلاب', total], ['الحاضرون' + per, all.present], ['الغائبون' + per, all.absent]].concat(all.excused ? [['المأذونون' + per, all.excused]] : [], [['نسبة الحضور', attPct(all)]])) +
-      '<table class="rz"><colgroup><col style="width:5%"><col style="width:13%"><col style="width:8%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:47%"></colgroup>' +
-      '<thead><tr><th>م</th><th>الشعبة</th><th>الطلاب</th><th>حاضر' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>غائب' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>نسبة الحضور</th><th>أسماء الغائبين' + (per ? ' (عدد أيام الغياب)' : '') + '</th></tr></thead><tbody>' + rows +
-      '<tr class="total"><td colspan="2">المدرسة</td>' + c(total) + c(all.present) + c(all.absent) + c(attPct(all)) + '<td></td></tr></tbody></table>' +
+      '<table class="rz"><colgroup><col style="width:5%"><col style="width:13%"><col style="width:7%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:43%"></colgroup>' +
+      '<thead><tr><th>م</th><th>الشعبة</th><th>الطلاب</th><th>حاضر' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>غائب' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>مأذون' + (per ? '<br><small>طالب×يوم</small>' : '') + '</th><th>نسبة الحضور</th><th>أسماء الغائبين' + (per ? ' (عدد أيام الغياب)' : '') + '</th></tr></thead><tbody>' + rows +
+      '<tr class="total"><td colspan="2">المدرسة</td>' + c(total) + c(all.present) + c(all.absent) + c(all.excused + all.suspended) + c(attPct(all)) + '<td></td></tr></tbody></table>' +
       '<div class="att-notes"><b>' + noteTitle + ':</b><div class="att-lines">' + esc(p.note) + '</div></div>';
     fitSheet();
   }
