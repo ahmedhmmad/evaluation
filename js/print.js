@@ -290,16 +290,30 @@
     S.visits.forEach(function (v) { if (v.supervisor_name) sups[v.supervisor_name] = (sups[v.supervisor_name] || 0) + 1; if (v.visit_date) months[v.visit_date.slice(0, 7)] = 1; });
     var oldest = visited.map(function (t) { var last = byT[t.id].map(function (v) { return v.visit_date || ''; }).sort().pop(); return { t: t, last: last }; })
       .sort(function (a, b) { return a.last < b.last ? -1 : 1; }).slice(0, 5);
-    var st = function (label, num, sub, color) { return '<div class="card stat"><span class="lbl">' + label + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
-    var names = function (list) { return list.slice(0, 6).map(function (t) { return esc(t.name); }).join('، ') + (list.length > 6 ? '…' : ''); };
+    // بطاقات مختصرة (العنوان والعدد فقط)؛ الضغط على البطاقة يعرض تفاصيلها تحتها، والضغط ثانيةً يخفيها
+    var st = function (key, label, num, color) {
+      return '<button type="button" class="card stat" data-vstat="' + key + '" style="cursor:pointer;text-align:start;font:inherit' + (ui.vStat === key ? ';outline:2px solid var(--navy)' : '') + '">' +
+        '<span class="lbl">' + label + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span></button>';
+    };
+    var ol = function (items) { return items.length ? '<ol style="margin:6px 0 0;line-height:1.9">' + items.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ol>' : '<p class="hint">لا أحد.</p>'; };
+    var tn = function (t) { return esc(t.name) + (t.subject ? ' — <span class="hint">' + esc(t.subject) + '</span>' : ''); };
+    var DET = {
+      staff: ['المعلمون الذين زِيروا (' + visited.length + ' من ' + staff.length + ')', function () { return ol(visited.map(function (t) { return tn(t) + ' — ' + byT[t.id].length + ' زيارة'; })); }],
+      not: ['لم يُزاروا بعد', function () { return ol(notVisited.map(tn)); }],
+      month: ['لم يُزاروا هذا الشهر (' + notThisMonth.length + ')', function () { return ol(notThisMonth.map(tn)); }],
+      pending: ['بانتظار الاعتماد', function () { return ol(S.visits.filter(function (v) { return !v.approved_at; }).map(function (v) { var t = find(v.teacher_id); return esc(t ? t.name : '—') + ' — ' + dmy(v.visit_date); })); }],
+      oldest: ['أقدم آخر زيارة', function () { return ol(oldest.map(function (o) { return tn(o.t) + ' — ' + dmy(o.last); })); }],
+      sup: ['الزيارات حسب المشرف', function () { return ol(Object.keys(sups).map(function (k) { return esc(k) + ': ' + sups[k]; })); }]
+    };
     var statsHtml = '<div class="stats">' +
-      st('الهيئة التدريسية', staff.length, 'زِير منهم: ' + visited.length + (staff.length ? ' (' + Math.round(visited.length * 100 / staff.length) + '%)' : '')) +
-      st('لم يُزاروا بعد', notVisited.length, notVisited.length ? names(notVisited) : 'زِير كل المعلمين', notVisited.length ? 'var(--red)' : '') +
-      st('زيارات هذا الشهر', thisMonth.length, 'لم يُزَر هذا الشهر: ' + notThisMonth.length + ' معلمًا') +
-      st('بانتظار الاعتماد', pending, 'من ' + S.visits.length + ' زيارة · متوسط ' + (staff.length ? (S.visits.length / staff.length).toFixed(1) : 0) + ' لكل معلم', pending ? 'var(--gold)' : '') +
-      (oldest.length ? st('أقدم زيارة', oldest.length, oldest.map(function (o) { return esc(o.t.name) + ' (' + dmy(o.last) + ')'; }).join('، ')) : '') +
-      (Object.keys(sups).length > 1 ? st('حسب المشرف', Object.keys(sups).length, Object.keys(sups).map(function (k) { return esc(k) + ': ' + sups[k]; }).join(' · ')) : '') +
-      '</div>';
+      st('staff', 'الهيئة التدريسية', staff.length) +
+      st('not', 'لم يُزاروا بعد', notVisited.length, notVisited.length ? 'var(--red)' : '') +
+      st('month', 'زيارات هذا الشهر', thisMonth.length) +
+      st('pending', 'بانتظار الاعتماد', pending, pending ? 'var(--gold)' : '') +
+      (oldest.length ? st('oldest', 'أقدم زيارة', oldest.length) : '') +
+      (Object.keys(sups).length > 1 ? st('sup', 'حسب المشرف', Object.keys(sups).length) : '') +
+      '</div>' +
+      (DET[ui.vStat] ? '<div class="card"><h2 style="margin-top:0">' + DET[ui.vStat][0] + '</h2>' + DET[ui.vStat][1]() + '</div>' : '');
     // الفلاتر للمدير العام والمدير
     var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
     var filtersHtml = (isAdmin() || isManager()) ? '<div class="toolbar no-print" style="flex-wrap:wrap">' +
@@ -336,6 +350,13 @@
         : '') +
       (rows || (f.t === '-' ? '' : '<div class="card empty">' + (S.visits.length ? 'لا زيارات تطابق الفلاتر.' : S.teachers.length ? 'لا توجد تقارير زيارات بعد.' : 'أضف معلمًا أولًا من تبويب «المعلمون».') + '</div>'));
   }
+  document.addEventListener('click', function (e) {
+    var b = location.hash === '#/visits' && e.target.closest('[data-vstat]');
+    if (!b) return;
+    var k = b.getAttribute('data-vstat');
+    ui.vStat = ui.vStat === k ? null : k;
+    render();
+  });
   document.addEventListener('change', function (e) {
     var k = e.target.getAttribute && e.target.getAttribute('data-vf');
     if (!k || location.hash !== '#/visits') return;
