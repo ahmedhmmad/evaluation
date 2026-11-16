@@ -292,6 +292,8 @@
   // سجلات فترة مجمّعة: لكل طالب ولكل شعبة، والغياب لكل شعبة في كل يوم
   function attCollect(rows) {
     var per = {}, byClass = {}, cell = {};
+    // سجلات طالب حُذف أو انقطع أو نُقل من الشعبة لا تُحسب على شعبته القديمة، فتطابق الأعداد عدد طلاب الشعبة الحالي
+    rows = rows.filter(function (r) { var x = findStudent(r.student_id); return x && enrolled(x) && x.class_name === r.class_name; });
     rows.forEach(function (r) {
       var p = per[r.student_id] || (per[r.student_id] = { present: 0, absent: 0, excused: 0, suspended: 0, notes: [], days: {} });
       p[r.status]++;
@@ -766,6 +768,11 @@
       total += n;
       if (!k) return '<tr>' + c(i + 1) + '<td><b>' + esc(cls) + '</b></td>' + c(n) + '<td class="c" colspan="4" style="color:#7d8597">لم يُسجَّل</td><td></td></tr>';
       var ex = excusedNames(cls, d.per, p.kind);
+      // تقرير اليوم: من أُضيف إلى الشعبة بعد حفظ حضورها يُحسب حاضرًا (الافتراضي)
+      if (p.kind === 'day') {
+        var extra = n - (k.n.present + k.n.absent + k.n.excused + k.n.suspended);
+        if (extra > 0) k = { n: { present: k.n.present + extra, absent: k.n.absent, excused: k.n.excused, suspended: k.n.suspended } };
+      }
       all.present += k.n.present; all.absent += k.n.absent; all.excused += k.n.excused; all.suspended += k.n.suspended;
       return '<tr>' + c(i + 1) + '<td style="white-space:nowrap"><b>' + esc(cls) + '</b></td>' + c(n) + c(k.n.present) + c(k.n.absent ? '<b>' + k.n.absent + '</b>' : 0) + c(k.n.excused + k.n.suspended) + c(attPct(k.n)) +
         '<td style="font-size:.88em">' + esc(absentNames(cls, d.per, p.kind).join('، ') || '—') + (ex.length ? '<br><span style="color:#555">مأذون: ' + esc(ex.join('، ')) + '</span>' : '') + '</td></tr>';
