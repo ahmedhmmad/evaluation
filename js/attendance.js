@@ -258,7 +258,8 @@
       if (!roll.length) return '';
       var taken = roll.filter(function (x) { return saved[x.id]; });
       if (!taken.length) missing.push(cls);
-      var n = attCounts(taken, function (x) { return saved[x.id].status; });
+      // بعد تسجيل الشعبة: الطالب الذي أُضيف إليها بعد الحفظ يُحسب حاضرًا (الافتراضي)، والمحذوف أو المنقول لا يُحسب، فيساوي المجموع عدد الشعبة
+      var n = attCounts(taken.length ? roll : [], function (x) { return saved[x.id] ? saved[x.id].status : 'present'; });
       all.present += n.present; all.absent += n.absent; all.excused += n.excused; all.suspended += n.suspended;
       var gone = taken.filter(function (x) { return saved[x.id].status === 'absent'; });
       gone.forEach(function (x) { absentees.push({ x: x, r: saved[x.id] }); });

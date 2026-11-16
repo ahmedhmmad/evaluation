@@ -965,8 +965,12 @@
       var roll = S.students.filter(function (x) { return enrolled(x) && x.class_name; }), byCls = {}, done = {};
       roll.forEach(function (x) { byCls[x.class_name] = (byCls[x.class_name] || 0) + 1; });
       var absent = 0;
-      d.att.forEach(function (r) { done[r.class_name] = 1; if (r.status === 'absent') absent++; });
-      var leftNames = Object.keys(byCls).filter(function (c) { return !done[c]; }).sort(), left = leftNames.length, taken = d.att.length;
+      // سجلات طلاب حُذفوا أو نُقلوا من الشعبة لا تُحسب، ومن أُضيف بعد الحفظ يُحسب حاضرًا
+      var inCls = {};
+      roll.forEach(function (x) { inCls[x.id] = x.class_name; });
+      var attOk = d.att.filter(function (r) { return inCls[r.student_id] === r.class_name; });
+      attOk.forEach(function (r) { done[r.class_name] = 1; if (r.status === 'absent') absent++; });
+      var leftNames = Object.keys(byCls).filter(function (c) { return !done[c]; }).sort(), left = leftNames.length, taken = roll.filter(function (x) { return done[x.class_name]; }).length;
       cards += off && !taken
         ? stat('#/attendance', 'الغياب اليوم', '—', 'لا دراسة اليوم (' + dayName(d.day) + ')')
         : !taken
