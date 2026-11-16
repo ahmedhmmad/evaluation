@@ -420,10 +420,16 @@
   }
 
   // منطقة التوقيعات: خانات من اليمين بالترتيب المعطى، ثم خانة الختم. list: [[الصفة، الاسم]، …]
+  // اسم المعلم أو الموظف في خانة التوقيع يُسبق بـ«أ.» إن لم يكن له لقب
+  function signName(role, name) {
+    name = String(name || '').trim();
+    if (!name || !/معلم|موظف/.test(role || '') || /^(أ|د|م|ا)\.\s?|^(الأستاذ|الأستاذة|الدكتور|المهندس)\s/.test(name)) return name;
+    return 'أ. ' + name;
+  }
   function reportSigns(list, noStamp) {
     var dots = '........................';
     return '<div class="rs">' + list.map(function (p) {
-      return '<div><b>' + p[0] + '</b><span>الاسم: ' + esc(p[1] || dots) + '</span><span>التوقيع: ' + dots + '</span></div>';
+      return '<div><b>' + p[0] + '</b><span>الاسم: ' + esc(signName(p[0], p[1]) || dots) + '</span><span>التوقيع: ' + dots + '</span></div>';
     }).join('') + (noStamp ? '' : '<div class="stamp">الختم</div>') + '</div>';
   }
 

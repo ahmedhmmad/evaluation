@@ -1871,18 +1871,11 @@
     var table = u.days && days.length ? '<table class="rz" style="margin:.6em 0"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th><th>وقت الحضور الرسمي</th><th>وقت الحضور الفعلي</th><th>مدة التأخير</th></tr></thead><tbody>' +
       days.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d.day) + '</td><td class="c">' + esc(dayName(d.day)) + '</td><td class="c">' + esc(d.official) + '</td><td class="c">' + esc(d.in) + '</td><td class="c">' + esc(ltHours(d.mins)) + '</td></tr>'; }).join('') +
       '<tr class="total"><td colspan="5">المجموع</td><td class="c"><b>' + esc(ltHours(s.late)) + '</b></td></tr></tbody></table>' : '';
-    sheet.className = 'ps';
-    sheet.removeAttribute('data-fit');
-    sheet.innerHTML = reportHead('كتاب لفت نظر', [['التاريخ', dmy(u.date)], ['الموضوع', 'التأخر المتكرر عن الدوام']], { noIssueDate: true }) +
-      '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ' + esc(t.name) + '</b>' + (t.job_title ? ' — ' + esc(t.job_title) : '') + '</p>' +
-      '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
-      '<p style="margin:0 0 .6em;line-height:1.9;white-space:pre-wrap">' + esc(u.reason.trim().replace(/\{الأيام\}/g, days.length === 1 ? 'يوم واحد' : days.length === 2 ? 'يومين' : days.length + (days.length <= 10 ? ' أيام' : ' يومًا'))
-        .replace(/\{الشهر\}/g, monthLabel(D.month)).replace(/\{الموعد\}/g, T.time_in || '').replace(/\{المجموع\}/g, ltHours(s.late))) + '</p>' +
-      table +
-      '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
-      '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([[principalTitle(), principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
-    fitSheet();
+    formalLetter({ date: u.date, to: 'السيد/ة ' + esc(t.name) + ' المحترم/ة', subject: 'لفت نظر — التأخر المتكرر عن الدوام',
+      paras: [u.reason.trim().replace(/\{الأيام\}/g, days.length === 1 ? 'يوم واحد' : days.length === 2 ? 'يومين' : days.length + (days.length <= 10 ? ' أيام' : ' يومًا'))
+        .replace(/\{الشهر\}/g, monthLabel(D.month)).replace(/\{الموعد\}/g, T.time_in || '').replace(/\{المجموع\}/g, ltHours(s.late))],
+      html: table.replace('font-size', 'font-size'), after: [u.msg],
+      signs: [['الموظف (إقرار بالاستلام)', t.name], [principalTitle(), principalName()]] });
   }
 
   document.addEventListener('click', function (e) {
@@ -1941,17 +1934,10 @@
     var table = u.days && days.length ? '<table class="rz" style="margin:.6em 0"><thead><tr><th style="width:3em">م</th><th>التاريخ</th><th>اليوم</th></tr></thead><tbody>' +
       days.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d) + '</td><td class="c">' + esc(dayName(d)) + '</td></tr>'; }).join('') +
       '<tr class="total"><td colspan="2">المجموع</td><td class="c"><b>' + esc(dmDaysTxt(days.length)) + '</b></td></tr></tbody></table>' : '';
-    sheet.className = 'ps';
-    sheet.removeAttribute('data-fit');
-    sheet.innerHTML = reportHead('كتاب لفت نظر', [['التاريخ', dmy(u.date)], ['الموضوع', 'الغياب عن العمل']], { noIssueDate: true }) +
-      '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ' + esc(t.name) + '</b>' + (t.job_title ? ' — ' + esc(t.job_title) : '') + '</p>' +
-      '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
-      '<p style="margin:0 0 .6em;line-height:1.9;white-space:pre-wrap">' + esc(u.reason.trim().replace(/\{الأيام\}/g, days.length === 2 ? 'يومين' : dmDaysTxt(days.length)).replace(/\{الشهر\}/g, monthLabel(D.month))) + '</p>' +
-      table +
-      '<p style="margin:.6em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
-      '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([[principalTitle(), principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
-    fitSheet();
+    formalLetter({ date: u.date, to: 'السيد/ة ' + esc(t.name) + ' المحترم/ة', subject: 'لفت نظر — الغياب عن العمل',
+      paras: [u.reason.trim().replace(/\{الأيام\}/g, days.length === 2 ? 'يومين' : dmDaysTxt(days.length)).replace(/\{الشهر\}/g, monthLabel(D.month))],
+      html: table, after: [u.msg],
+      signs: [['الموظف (إقرار بالاستلام)', t.name], [principalTitle(), principalName()]] });
   }
   document.addEventListener('click', function (e) {
     if (location.hash !== '#/staffatt' || !canView()) return;
@@ -2162,38 +2148,43 @@
     if (!confirm('حذف هذا التنبيه من ملف الموظف؟ لا يمكن التراجع.')) return;
     sb.from('staff_warnings').delete().eq('id', id).then(function (r) { if (r.error) return fail(r.error); S.wnList = null; toast('حُذف'); render(); });
   });
-  function buildWarnSheet() {
-    var u = wnUi(), t = find(u.sid);
-    if (!t) { sheet.className = 'ps'; sheet.innerHTML = '<p>اختر الموظف.</p>'; return; }
-    var paras = String(u.text || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
-    var year = String(u.date || todayISO()).slice(0, 4), no = u.no ? u.no + '/' + year : '<span style="display:inline-block;min-width:3.5em;border-bottom:1px dotted #333"></span>/' + year;
+  // الكتاب الرسمي (التنبيه ولفت النظر): ترويسة، رقم الكتاب وتحته التاريخ، المخاطبة، الموضوع في الوسط، النص بخط Times New Roman،
+  // التوقيعات تحته مباشرة (بنية .rs ليحلّ التوقيع الإلكتروني مكان النقاط)، و«نسخة» فوق الهامش السفلي في الصفحة نفسها.
+  // o: { no, date, to, subject, paras: [نص], html: إضافة بعد النص (جدول)، signs: [[الصفة، الاسم]] }
+  function formalLetter(o) {
+    var year = String(o.date || todayISO()).slice(0, 4), no = o.no ? o.no + '/' + year : '<span style="display:inline-block;min-width:3.5em;border-bottom:1px dotted #333"></span>/' + year;
     var TNR = "'Times New Roman', Times, serif";
-    // بنية خانات التوقيع (.rs) نفسها: التوقيع الإلكتروني يحلّ مكان «التوقيع: ....» تلقائيًا
-    var sign = function (role, name) {
-      return '<div><b>' + role + '</b><span style="font-size:14pt;min-height:1.5em">' + esc(name || '') + '</span>' +
+    var sign = function (p) {
+      return '<div><b>' + p[0] + '</b><span style="font-size:14pt;min-height:1.5em">' + esc(signName(p[0], p[1])) + '</span>' +
         '<span style="margin-top:1em;font-size:12pt;color:#444">التوقيع: ..................</span></div>';
     };
+    var paras = (o.paras || []).filter(function (p) { return p && !/^تحية\s+طيبة/.test(p); });
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
-    // ورقة A4 كاملة: المحتوى في الأعلى، والتوقيعات وسطر الحفظ في أسفل الصفحة
-    // لا تكرار للتحية إن كانت في النص نفسه
-    paras = paras.filter(function (p) { return !/^تحيةs+طيبة/.test(p); });
-    // صفحة واحدة: الترويسة، الرقم ثم التاريخ تحته، المخاطبة، الموضوع، النص، والتوقيعات تحته مباشرة
+    // الارتفاع الأدنى أقل من الصفحة بهامش أمان: الطابعات الحقيقية لها هوامش لا تطبع فيها، فلا يسقط سطر «نسخة» إلى صفحة ثانية
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
-      '<div style="font-family:' + TNR + ';font-size:15pt;line-height:1.75;color:#111;min-height:262mm;display:flex;flex-direction:column">' +
+      '<div style="font-family:' + TNR + ';font-size:15pt;line-height:1.7;color:#111;min-height:240mm;display:flex;flex-direction:column">' +
         letterhead() +
         '<div style="margin:.4em 0 0;font-size:13.5pt;line-height:1.6"><div><b>رقم الكتاب:</b> <span dir="ltr">' + no + '</span></div>' +
-          '<div><b>التاريخ:</b> <span dir="ltr">' + dmy(u.date) + '</span></div></div>' +
-        '<p style="margin:.9em 0 0;font-weight:700;font-size:16pt">' + esc(u.title) + '/ ' + esc(t.name) + '</p>' +
-        '<div style="text-align:center;margin:.8em 0 .8em"><span style="font-size:19pt;font-weight:700;border-bottom:2px solid #13306B;padding:0 .8em .1em">الموضوع: ' + esc(u.subject || 'كتاب تنبيه') + '</span></div>' +
+          '<div><b>التاريخ:</b> <span dir="ltr">' + dmy(o.date) + '</span></div></div>' +
+        '<p style="margin:.9em 0 0;font-weight:700;font-size:16pt">' + o.to + '</p>' +
+        '<div style="text-align:center;margin:.8em 0 .8em"><span style="font-size:19pt;font-weight:700;border-bottom:2px solid #13306B;padding:0 .8em .1em">الموضوع: ' + esc(o.subject) + '</span></div>' +
         '<div style="text-align:right"><p style="margin:0 0 .5em">تحية طيبة وبعد،</p>' +
-          paras.map(function (p) { return '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em">' + esc(p) + '</p>'; }).join('') +
+          paras.map(function (p) { return '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em;white-space:pre-wrap">' + esc(p) + '</p>'; }).join('') +
+          (o.html || '') +
+          (o.after || []).map(function (p) { return '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em;white-space:pre-wrap">' + esc(p) + '</p>'; }).join('') +
           '<p style="margin:.8em 0 0;text-align:center">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p></div>' +
-        '<div class="rs wn-signs">' +
-          sign('الموظف (بالعلم والاطلاع)', t.name) + sign('المشرف التربوي', u.sup) + sign(principalTitle(), principalName()) + '</div>' +
-        '<div style="flex:1"></div><div style="font-size:12.5pt"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
+        '<div class="rs wn-signs">' + o.signs.map(sign).join('') + '</div>' +
+        '<div style="flex:1"></div><div style="font-size:12.5pt;margin-top:1em"><b>نسخة:</b> تُحفظ في ملف الموظف.</div>' +
       '</div>';
+  }
+  function buildWarnSheet() {
+    var u = wnUi(), t = find(u.sid);
+    if (!t) { sheet.className = 'ps'; sheet.innerHTML = '<p>اختر الموظف.</p>'; return; }
+    formalLetter({ no: u.no, date: u.date, to: esc(u.title) + '/ ' + esc(t.name), subject: u.subject || 'كتاب تنبيه',
+      paras: String(u.text || '').split(/\n+/).map(function (x) { return x.trim(); }),
+      signs: [['الموظف (بالعلم والاطلاع)', t.name], ['المشرف التربوي', u.sup], [principalTitle(), principalName()]] });
   }
 
   document.addEventListener('click', function (e) {
