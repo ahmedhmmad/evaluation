@@ -266,7 +266,8 @@
   function filteredStudents() {
     var q = norm(ui.stSearch), cls = ui.stClass, flag = ST_FLAGS[ui.stFlag], groupOf = flag ? transportGroupOf() : null;
     return S.students.filter(function (x) {
-      if (ui.stStatus ? stStatus(x) !== ui.stStatus : isDropped(x)) return false;
+      // «الكل» يخفي المنقطعين، إلا عند البحث فيظهرون مع غيرهم
+      if (ui.stStatus ? stStatus(x) !== ui.stStatus : (isDropped(x) && !q)) return false;
       if (cls === '-' ? x.class_name : cls && x.class_name !== cls) return false;
       if (flag && !flag.test(x, groupOf)) return false;
       return !q || norm(x.full_name).indexOf(q) > -1 || String(x.national_id || '').indexOf(latinDigits(ui.stSearch)) > -1;
@@ -286,7 +287,7 @@
     var LIMIT = 300, rowNo = 0;
     var rows = shown.slice(0, LIMIT).map(function (x) {
       var st = stStatus(x);
-      return '<tr><td>' + (++rowNo) + '</td><td><b>' + esc(x.full_name) + '</b>' + rsvMark(x) + '</td>' +
+      return '<tr><td>' + (++rowNo) + '</td><td>' + (st === 'dropped' ? '<b style="background:#fde2e2;color:#b42318;padding:0 .3em;border-radius:4px">' + esc(x.full_name) + '</b> <span class="badge unpaid">منقطع</span>' : '<b>' + esc(x.full_name) + '</b>') + rsvMark(x) + '</td>' +
         '<td dir="ltr" style="text-align:right">' + esc(x.national_id || '—') + (idCount[x.national_id] > 1 ? ' <span class="badge unpaid" dir="rtl">مكرر</span>' : '') + '</td>' +
         '<td><span class="badge ' + stBadge(st) + '">' + ST_STATUS[st] + '</span>' + ((x.details || {}).scan ? ' <span class="badge part">مصوّرة</span>' : '') + '</td>' +
         '<td>' + (st === 'final'
