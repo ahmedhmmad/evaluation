@@ -1059,11 +1059,12 @@
       return '<a class="card stat" href="' + href + '"><span class="lbl">' + label + '</span><span class="num">' + num + '</span><span class="sub">' + sub + '</span></a>';
     };
     var stats =
-      stat('#/teachers', 'المعلمون', activeTeachers().length,
-        'تقييمات منشورة: ' + count(activeTeachers(), function (t) { return t.status === 'published'; }) +
-        ' · قيد العمل: ' + count(activeTeachers(), function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
+      stat('#/teachers', 'الهيئة التدريسية', evalTeachers().length,
+        'تقييمات منشورة: ' + count(evalTeachers(), function (t) { return t.status === 'published'; }) +
+        ' · قيد العمل: ' + count(evalTeachers(), function (t) { return t.status === 'edit' || t.status === 'review' || t.status === 'approved'; })) +
       stat('#/visits', 'الزيارات الإشرافية', S.visits.length,
-        'هذا الشهر: ' + count(S.visits, function (v) { return (v.visit_date || '').slice(0, 7) === month; }));
+        'هذا الشهر: ' + count(S.visits, function (v) { return (v.visit_date || '').slice(0, 7) === month; }) +
+        ' · لم يُزَر بعد: ' + count(evalTeachers(), function (t) { return !S.visits.some(function (v) { return v.teacher_id === t.id; }); }) + ' معلمًا');
     if (isAdmin()) {
       stats +=
         stat('#/students', 'الطلاب', count(S.students, enrolled), 'المسجلون نهائيًا والاحتياط · منهم ' + count(S.students, function (x) { return stStatus(x) === 'reserve'; }) + ' احتياط') +

@@ -278,7 +278,50 @@
       return '<option value="' + t.id + '">' + esc(t.name) + (t.subject ? ' — ' + esc(t.subject) : '') + '</option>';
     }).join('');
 
-    var rows = S.visits.map(function (v) {
+    // المشرف التربوي مسؤول عن الهيئة التدريسية: الإحصاءات على معلمي هيئة التدريس وحدهم
+    var staff = evalTeachers(), month = todayISO().slice(0, 7), f = ui.vf || (ui.vf = { t: '', sup: '', m: '', st: '' });
+    var byT = {};
+    S.visits.forEach(function (v) { (byT[v.teacher_id] = byT[v.teacher_id] || []).push(v); });
+    var visited = staff.filter(function (t) { return byT[t.id]; }), notVisited = staff.filter(function (t) { return !byT[t.id]; });
+    var thisMonth = S.visits.filter(function (v) { return (v.visit_date || '').slice(0, 7) === month; });
+    var notThisMonth = staff.filter(function (t) { return !(byT[t.id] || []).some(function (v) { return (v.visit_date || '').slice(0, 7) === month; }); });
+    var pending = S.visits.filter(function (v) { return !v.approved_at; }).length;
+    var sups = {}, months = {};
+    S.visits.forEach(function (v) { if (v.supervisor_name) sups[v.supervisor_name] = (sups[v.supervisor_name] || 0) + 1; if (v.visit_date) months[v.visit_date.slice(0, 7)] = 1; });
+    var oldest = visited.map(function (t) { var last = byT[t.id].map(function (v) { return v.visit_date || ''; }).sort().pop(); return { t: t, last: last }; })
+      .sort(function (a, b) { return a.last < b.last ? -1 : 1; }).slice(0, 5);
+    var st = function (label, num, sub, color) { return '<div class="card stat"><span class="lbl">' + label + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
+    var names = function (list) { return list.slice(0, 6).map(function (t) { return esc(t.name); }).join('، ') + (list.length > 6 ? '…' : ''); };
+    var statsHtml = '<div class="stats">' +
+      st('الهيئة التدريسية', staff.length, 'زِير منهم: ' + visited.length + (staff.length ? ' (' + Math.round(visited.length * 100 / staff.length) + '%)' : '')) +
+      st('لم يُزاروا بعد', notVisited.length, notVisited.length ? names(notVisited) : 'زِير كل المعلمين', notVisited.length ? 'var(--red)' : '') +
+      st('زيارات هذا الشهر', thisMonth.length, 'لم يُزَر هذا الشهر: ' + notThisMonth.length + ' معلمًا') +
+      st('بانتظار الاعتماد', pending, 'من ' + S.visits.length + ' زيارة · متوسط ' + (staff.length ? (S.visits.length / staff.length).toFixed(1) : 0) + ' لكل معلم', pending ? 'var(--gold)' : '') +
+      (oldest.length ? st('أقدم زيارة', oldest.length, oldest.map(function (o) { return esc(o.t.name) + ' (' + dmy(o.last) + ')'; }).join('، ')) : '') +
+      (Object.keys(sups).length > 1 ? st('حسب المشرف', Object.keys(sups).length, Object.keys(sups).map(function (k) { return esc(k) + ': ' + sups[k]; }).join(' · ')) : '') +
+      '</div>';
+    // الفلاتر للمدير العام والمدير
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var filtersHtml = (isAdmin() || isManager()) ? '<div class="toolbar no-print" style="flex-wrap:wrap">' +
+      '<select data-vf="t" aria-label="المعلم">' + opt('', 'كل المعلمين', f.t) + opt('-', 'لم يُزاروا بعد', f.t) + staff.map(function (t) { return opt(t.id, t.name, f.t); }).join('') + '</select>' +
+      '<select data-vf="sup" aria-label="المشرف">' + opt('', 'كل المشرفين', f.sup) + Object.keys(sups).sort().map(function (k) { return opt(k, k, f.sup); }).join('') + '</select>' +
+      '<select data-vf="m" aria-label="الشهر">' + opt('', 'كل الأشهر', f.m) + Object.keys(months).sort().reverse().map(function (k) { return opt(k, monthLabel(k), f.m); }).join('') + '</select>' +
+      '<select data-vf="st" aria-label="الاعتماد">' + opt('', 'كل الحالات', f.st) + opt('ok', 'معتمد', f.st) + opt('wait', 'بانتظار الاعتماد', f.st) + '</select></div>' : '';
+    var list = S.visits.filter(function (v) {
+      if (f.t && f.t !== '-' && v.teacher_id !== f.t) return false;
+      if (f.sup && v.supervisor_name !== f.sup) return false;
+      if (f.m && (v.visit_date || '').slice(0, 7) !== f.m) return false;
+      if (f.st === 'ok' && !v.approved_at) return false;
+      if (f.st === 'wait' && v.approved_at) return false;
+      return true;
+    });
+    if (f.t === '-') {
+      statsHtml += '<div class="card"><h2>لم يُزاروا بعد (' + notVisited.length + ')</h2>' + (notVisited.length ? '<ol style="margin:6px 0 0;line-height:1.9">' +
+        notVisited.map(function (t) { return '<li>' + esc(t.name) + (t.subject ? ' — <span class="hint">' + esc(t.subject) + '</span>' : '') + '</li>'; }).join('') + '</ol>' : '<p class="hint">زِير كل المعلمين.</p>') + '</div>';
+      list = [];
+    }
+
+    var rows = list.map(function (v) {
       var t = find(v.teacher_id);
       return '<button type="button" class="card visit-row" data-openv="' + v.id + '">' +
         '<span><span class="name">' + esc(t ? t.name : '—') + '</span><br>' +
@@ -286,13 +329,19 @@
         '<span class="meta" style="text-align:end">' + fmtDate(v.visit_date + 'T00:00') + '<br>الزيارة رقم ' + v.visit_number + '<br>' + (v.approved_at ? '<span class="badge paid">معتمد</span>' : '<span class="badge pending">بانتظار الاعتماد</span>') + '</span></button>';
     }).join('');
 
-    app.innerHTML = tabs('visits') +
+    app.innerHTML = tabs('visits') + statsHtml + filtersHtml +
       (S.teachers.length
         ? '<div class="toolbar"><select id="visit-teacher" aria-label="المعلم" style="flex:1;min-width:180px">' + options + '</select>' +
           '<button type="button" class="btn primary" data-newvisit>+ تقرير زيارة جديد</button></div>'
         : '') +
-      (rows || '<div class="card empty">' + (S.teachers.length ? 'لا توجد تقارير زيارات بعد.' : 'أضف معلمًا أولًا من تبويب «المعلمون».') + '</div>');
+      (rows || (f.t === '-' ? '' : '<div class="card empty">' + (S.visits.length ? 'لا زيارات تطابق الفلاتر.' : S.teachers.length ? 'لا توجد تقارير زيارات بعد.' : 'أضف معلمًا أولًا من تبويب «المعلمون».') + '</div>'));
   }
+  document.addEventListener('change', function (e) {
+    var k = e.target.getAttribute && e.target.getAttribute('data-vf');
+    if (!k || location.hash !== '#/visits') return;
+    (ui.vf || (ui.vf = {}))[k] = e.target.value;
+    render();
+  });
 
   // اعتماد المدير للتقرير: المشرف يطبع قبله فيظهر «بانتظار اعتماد المدير»، وبعده «معتمد»
   function canApproveVisit() { return isAdmin() || (isManager() && !isReadOnly()); }

@@ -2027,20 +2027,14 @@
     if (u.days && u.r.leave && lv.length) tables += '<p style="margin:.6em 0 .2em"><b>أيام الإجازات:</b></p><table class="rz" style="margin:0 0 .6em"><thead><tr><th>م</th><th>التاريخ</th><th>اليوم</th></tr></thead><tbody>' +
       lv.map(function (d, i) { return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + dmy(d) + '</td><td class="c">' + esc(dayName(d)) + '</td></tr>'; }).join('') +
       '<tr class="total"><td colspan="2">مجموع الإجازات</td><td class="c"><b>' + dmDaysTxt(lv.length) + '</b></td></tr></tbody></table>';
-    sheet.className = 'ps';
-    sheet.removeAttribute('data-fit');
-    sheet.innerHTML = reportHead('كتاب استغناء عن خدمات', [['التاريخ', dmy(u.date)], ['الموضوع', 'الاستغناء عن الخدمات']], { noIssueDate: true }) +
-      '<p style="margin:1.1em 0 .2em;font-size:1.1em"><b>السيد/ة ' + esc(t.name) + '</b>' + (t.job_title ? ' — ' + esc(t.job_title) : '') + '</p>' +
-      '<p style="margin:0 0 .8em">المحترم/ة،</p><p style="margin:0 0 .8em">تحية طيبة وبعد،</p>' +
-      (facts.length ? '<p style="margin:0 0 .6em;line-height:1.9">بالإشارة إلى سجلات الدوام عن شهر <b>' + esc(monthLabel(D.month)) + '</b>، تبيّن ' + facts.join('، كما تبيّن ') + '.</p>' : '') +
-      tables +
-      (reasons.length ? '<p style="margin:.4em 0 .2em;line-height:1.9">ونظرًا ' + (reasons.length === 1 ? 'لما يلي' : 'للأسباب الآتية') + ':</p><ol style="margin:0 0 .6em;padding-inline-start:1.6em;line-height:1.9">' +
-        reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ol>' : '') +
-      '<p style="margin:.6em 0 0;line-height:1.9">نُعلمكم بالاستغناء عن خدماتكم اعتبارًا من تاريخ <b>' + dmy(u.from) + '</b>.</p>' +
-      '<p style="margin:.4em 0 0;line-height:1.9;white-space:pre-wrap">' + esc(u.msg) + '</p>' +
-      '<p style="margin:.8em 0 0">وتفضلوا بقبول فائق الاحترام والتقدير،،،</p>' +
-      reportSigns([[principalTitle(), principalName()], ['الموظف (إقرار بالاستلام)', t.name]]);
-    fitSheet();
+    formalLetter({ date: u.date, to: 'السيد/ة ' + esc(t.name) + ' المحترم/ة', subject: 'الاستغناء عن الخدمات',
+      html: (facts.length ? '<p style="margin:0 0 .45em;text-align:justify;text-indent:1.5em">بالإشارة إلى سجلات الدوام عن شهر <b>' + esc(monthLabel(D.month)) + '</b>، تبيّن ' + facts.join('، كما تبيّن ') + '.</p>' : '') +
+        tables +
+        (reasons.length ? '<p style="margin:.3em 0 .2em">ونظرًا ' + (reasons.length === 1 ? 'لما يلي' : 'للأسباب الآتية') + ':</p><ol style="margin:0 0 .5em;padding-inline-start:1.6em">' +
+          reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ol>' : '') +
+        '<p style="margin:.4em 0 .45em;text-align:justify;text-indent:1.5em">نُعلمكم بالاستغناء عن خدماتكم اعتبارًا من تاريخ <b>' + dmy(u.from) + '</b>.</p>',
+      after: [u.msg],
+      signs: [['الموظف (إقرار بالاستلام)', t.name], [principalTitle(), principalName()]] });
   }
 
   document.addEventListener('click', function (e) {
