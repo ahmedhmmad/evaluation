@@ -265,7 +265,7 @@
       gone.forEach(function (x) { absentees.push({ x: x, r: saved[x.id] }); });
       return '<tr><td><button type="button" class="btn link" data-attcls="' + esc(cls) + '">' + esc(cls) + '</button></td><td>' + roll.length + '</td>' +
         '<td>' + (taken.length ? '<span class="badge paid">سُجّل</span>' : '<span class="badge unpaid">لم يُسجَّل</span>') + '</td>' +
-        (taken.length ? '<td>' + n.present + '</td><td>' + (n.absent ? '<b style="color:var(--red)">' + n.absent + '</b>' : 0) + '</td><td><b>' + attPct(n) + '</b></td>' +
+        (taken.length ? '<td>' + n.present + '</td><td>' + (n.absent ? '<b style="color:var(--red)">' + n.absent + '</b>' : 0) + (n.excused + n.suspended ? ' <small class="hint">+ ' + (n.excused ? 'مأذون ' + n.excused : '') + (n.excused && n.suspended ? '، ' : '') + (n.suspended ? 'مفصول ' + n.suspended : '') + '</small>' : '') + '</td><td><b>' + attPct(n) + '</b></td>' +
           '<td style="font-size:.9rem">' + (gone.map(function (x) { return esc(shortName(x)); }).join('، ') || '—') + '</td>'
           : '<td colspan="4" style="color:var(--muted)">—</td>') + '</tr>';
     }).join('');
