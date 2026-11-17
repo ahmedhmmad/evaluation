@@ -639,7 +639,7 @@
      كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وقرار الفصل المؤقت أو النهائي إن اختير (ويُطبَّق على الحضور في «الفصل المؤقت»)، وتوقيع المدير والمشرف التربوي وإقرار ولي الأمر بالاستلام.
      لا يُحفظ في البرنامج، يُكتب ويُطبع */
   var AF_ACTIONS = ['إحضار ولي الأمر', 'مراجعة مرشد/ة الأكاديمية', 'توقيع تعهد خطي', 'استدعاء ولي الأمر هاتفيًا'];
-  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], log: true, saved: '', susp: '', sFrom: todayISO(), sTo: todayISO(), sSaved: '' }); }
+  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], log: true, saved: '', susp: '', sFrom: todayISO(), sTo: todayISO(), sSaved: '', send: false, text: null, sent: '' }); }
 
   function afWarnScreen(x) {
     var w = afWarn();
@@ -653,6 +653,9 @@
         (w.susp ? '<div><label class="field" for="afw-sfrom">' + (w.susp === 'temp' ? 'من تاريخ' : 'اعتبارًا من') + '</label><input type="date" id="afw-sfrom" data-ro-ok value="' + esc(w.sFrom) + '"></div>' : '') +
         (w.susp === 'temp' ? '<div><label class="field" for="afw-sto">إلى تاريخ</label><input type="date" id="afw-sto" data-ro-ok value="' + esc(w.sTo) + '"></div>' : '') + '</div>' +
       (w.susp ? '<p class="hint" style="margin:6px 0 0">' + (canEditDisc() ? 'عند الطباعة يُطبَّق الفصل على الحضور: أيامه تُحفظ «مفصول» ولا تُحتسب غيابًا' + (w.susp === 'perm' ? '، حتى نهاية العام الدراسي' : '') + '. يُعدَّل أو يُلغى من «الفصل المؤقت».' : 'يُطبع الفصل في الإنذار فقط؛ تطبيقه على الحضور للمدير العام والمسجِّل.') + '</p>' : '') +
+      (canEditDisc() ? '<div style="margin-top:10px"><label class="check" style="margin:0"><input type="checkbox" id="afw-send" data-ro-ok' + (w.send ? ' checked' : '') + '> إرسال الإنذار' + (w.susp ? ' وقرار الفصل' : '') + ' برسالة واتساب لولي الأمر (على جوال ولي الأمر) عند الطباعة</label>' +
+        (w.send ? '<textarea id="afw-text" data-ro-ok rows="7" style="margin-top:6px">' + esc(w.text != null ? w.text : afWarnMsg(x, w)) + '</textarea><p class="hint" style="margin:4px 0 0">النص يُكتب تلقائيًا من بيانات الإنذار، ويمكن تعديله. {الاسم} و{الأكاديمية} تُستبدل عند الإرسال.' +
+          (w.text != null ? ' <a href="#" data-afwreset>إعادة كتابته من البيانات</a>' : '') + '</p>' : '') + '</div>' : '') +
       (canEditDisc() ? '<label class="check" style="margin-top:10px"><input type="checkbox" id="afw-log" data-ro-ok' + (w.log ? ' checked' : '') + '> تسجيل هذا الإنذار في سجل المخالفات عند الطباعة</label>' : '') +
       '<div class="actions"><button type="button" class="btn primary" data-afwprint="' + x.id + '" data-ro-ok>طباعة الإنذار / PDF</button></div></div>';
   }
@@ -691,6 +694,22 @@
     S.attDay = {};
     if (ui.af) ui.af.rows = null;
     toast('طُبِّق الفصل على الحضور من ' + dmy(w.sFrom) + ' إلى ' + dmy(to));
+  }
+  function afWarnMsg(x, w) {
+    var t = 'السيد/ة ولي أمر الطالب/ة {الاسم} المحترم/ة،\nتحية طيبة وبعد،\nنفيدكم بصدور إنذار بحق ابنكم/ابنتكم بتاريخ ' + dmy(w.date) + (w.notes.trim() ? ' بسبب: ' + w.notes.trim() : '') + '.';
+    if (w.action.trim()) t += '\nالإجراء المطلوب: ' + w.action.trim() + '.';
+    if (w.susp) t += '\nالقرار: ' + afSuspText(w);
+    return t + '\nنأمل تعاونكم لما فيه مصلحة ابنكم/ابنتكم.\n{الأكاديمية}';
+  }
+  // يُرسل مرة واحدة لكل نص (طباعة الإنذار مرة ثانية بلا تعديل لا تكرر الرسالة)
+  async function afSendWarn(x, w) {
+    var text = (w.text != null ? w.text : afWarnMsg(x, w)).trim(), key = x.id + '|' + text;
+    if (!text || w.sent === key) return;
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'send', batch_id: 'warn-' + x.id + '-' + Date.now(), kind: 'warning', title: w.susp ? 'إنذار وفصل' : 'إنذار', text: text, student_ids: [x.id], per: 'student', school: schoolName() } });
+    var d = r.data || {};
+    if (r.error || d.error) return toast('تعذّر إرسال رسالة الإنذار: ' + (d.error || r.error.message), true);
+    w.sent = key;
+    toast('أُضيفت رسالة الإنذار إلى قائمة الإرسال. تابعها في «رسائل واتساب».');
   }
   function afSuspText(w) {
     if (!w.susp) return '';
@@ -773,6 +792,7 @@
   document.addEventListener('click', function (e) {
     if (!/^#\/affairs/.test(location.hash) || !canAttView()) return;
     var el, x = afCurrent();
+    if (e.target.closest('[data-afwreset]')) { e.preventDefault(); afWarn().text = null; return render(); }
     if ((el = e.target.closest('[data-afwprint]'))) {
       var wx = findStudent(el.getAttribute('data-afwprint')), ww = afWarn();
       if (!wx) return;
@@ -781,7 +801,8 @@
       if (ww.log && canEditDisc() && !ww.notes.trim()) toast('لم تُكتب ملاحظات المخالفة، فلن يُسجَّل الإنذار في سجل المخالفات', true);
       if (ww.susp && (!ww.sFrom || (ww.susp === 'temp' && (!ww.sTo || ww.sTo < ww.sFrom)))) return toast('اختر تواريخ الفصل الصحيحة', true);
       var susp = ww.susp && canEditDisc() ? afApplySusp(wx, ww).catch(function (err) { toast('طُبع الإنذار لكن تعذّر تطبيق الفصل على الحضور: ' + err.message, true); }) : Promise.resolve();
-      return Promise.all([logged, susp]).then(function () { pendingWarn = wx; return printNow(); });
+      var sent = ww.send && canEditDisc() ? afSendWarn(wx, ww).catch(function (err) { toast('تعذّر إرسال رسالة الإنذار: ' + err.message, true); }) : Promise.resolve();
+      return Promise.all([logged, susp, sent]).then(function () { pendingWarn = wx; return printNow(); });
     }
     if ((el = e.target.closest('[data-afexp]')) && location.hash === '#/affairs') {
       if (el.getAttribute('data-afexp') === 'xlsx') return afExportXlsx();
@@ -816,8 +837,12 @@
   // حقول الإنذار تُحفظ أثناء الكتابة دون إعادة رسم الصفحة
   document.addEventListener('input', function (e) {
     if (e.target.id === 'afw-log') { afWarn().log = e.target.checked; return; }
+    if (e.target.id === 'afw-text') { afWarn().text = e.target.value; return; }
+    if (e.target.id === 'afw-send') { afWarn().send = e.target.checked; return render(); }
     var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes', 'afw-sfrom': 'sFrom', 'afw-sto': 'sTo' }[e.target.id];
     if (k && /\/warning$/.test(location.hash)) afWarn()[k] = e.target.value;
+    var wt = document.getElementById('afw-text'), wcur = afCurrent();
+    if (k && wt && afWarn().text == null && wcur) wt.value = afWarnMsg(wcur, afWarn());
   });
   document.addEventListener('change', function (e) {
     if (e.target.id === 'afw-susp' && /\/warning$/.test(location.hash)) {
