@@ -620,10 +620,10 @@
   }
 
   /* ----- إنذار الطالب -----
-     كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وتوقيع المدير وإقرار ولي الأمر بالاستلام.
+     كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وتوقيع المدير والمشرف التربوي وإقرار ولي الأمر بالاستلام.
      لا يُحفظ في البرنامج، يُكتب ويُطبع */
   var AF_ACTIONS = ['إحضار ولي الأمر', 'مراجعة مرشد/ة الأكاديمية', 'توقيع تعهد خطي', 'استدعاء ولي الأمر هاتفيًا'];
-  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], log: true, saved: '' }); }
+  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], sup: '', log: true, saved: '' }); }
 
   function afWarnScreen(x) {
     var w = afWarn();
@@ -631,6 +631,7 @@
       '<div><label class="field" for="afw-date">تاريخ الإنذار</label><input type="date" id="afw-date" data-ro-ok value="' + esc(w.date) + '"></div>' +
       '<div><label class="field" for="afw-action">الإجراء المطلوب</label><input type="text" id="afw-action" data-ro-ok list="afw-actions" autocomplete="off" value="' + esc(w.action) + '"><datalist id="afw-actions">' +
         AF_ACTIONS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist></div>' +
+      '<div><label class="field" for="afw-sup">اسم المشرف التربوي</label><input type="text" id="afw-sup" data-ro-ok value="' + esc(w.sup) + '" placeholder="يُترك فارغًا ليكتب باليد"></div>' +
       '<div style="grid-column:1/-1"><label class="field" for="afw-notes">ملاحظات المخالفة</label><textarea id="afw-notes" data-ro-ok rows="5" placeholder="اكتب المخالفة وتفاصيلها">' + esc(w.notes) + '</textarea></div></div>' +
       (canEditDisc() ? '<label class="check" style="margin-top:10px"><input type="checkbox" id="afw-log" data-ro-ok' + (w.log ? ' checked' : '') + '> تسجيل هذا الإنذار في سجل المخالفات عند الطباعة</label>' : '') +
       '<div class="actions"><button type="button" class="btn primary" data-afwprint="' + x.id + '" data-ro-ok>طباعة الإنذار / PDF</button></div></div>';
@@ -662,7 +663,7 @@
       '<div class="rsec">المخالفة</div><div class="rbox" style="min-height:42mm;white-space:pre-wrap;line-height:2">' + esc(w.notes) + '</div>' +
       '<div class="rsec">الإجراء المطلوب</div><div class="rbox" style="min-height:14mm;line-height:2"><b>' + esc(w.action) + '</b></div>' +
       '<p style="margin:1em 0 0;line-height:1.9">نأمل منكم التعاون معنا لما فيه مصلحة ابنكم/ابنتكم، ونشكر لكم حسن تعاونكم.</p>' +
-      reportSigns([[principalTitle(), principalName()], ['ولي الأمر (إقرار بالاستلام)', guardian]]);
+      reportSigns([[principalTitle(), principalName()], ['المشرف التربوي', w.sup], ['ولي الأمر (إقرار بالاستلام)', guardian]]);
     fitSheet();
   }
 
@@ -764,7 +765,7 @@
   // حقول الإنذار تُحفظ أثناء الكتابة دون إعادة رسم الصفحة
   document.addEventListener('input', function (e) {
     if (e.target.id === 'afw-log') { afWarn().log = e.target.checked; return; }
-    var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes' }[e.target.id];
+    var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes', 'afw-sup': 'sup' }[e.target.id];
     if (k && /\/warning$/.test(location.hash)) afWarn()[k] = e.target.value;
   });
   document.addEventListener('change', function (e) {
@@ -1599,7 +1600,7 @@
       '<table class="rz"><colgroup><col style="width:3%"><col style="width:13%"><col style="width:6%">' + [1, 2, 3].map(function () { return '<col style="width:7.5%"><col style="width:10.5%"><col style="width:8%">'; }).join('') + '</colgroup>' +
       '<thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th><th>اسم الطالب</th><th>الصف</th>' + th + '</tr></thead><tbody>' + rows + '</tbody>' +
-      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['توقيع المدير', principalName()]]);
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['توقيع المشرف التربوي', ''], ['توقيع المدير', principalName()]]);
   }
 
   document.addEventListener('submit', async function (e) {
