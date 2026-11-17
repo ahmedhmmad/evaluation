@@ -620,10 +620,10 @@
   }
 
   /* ----- إنذار الطالب -----
-     كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وتوقيع المدير والمشرف التربوي وإقرار ولي الأمر بالاستلام.
+     كتاب إنذار مطبوع لولي الأمر بمخالفة الطالب: التاريخ، وملاحظات المخالفة، والإجراء المطلوب (مثل إحضار ولي الأمر)، وقرار الفصل المؤقت أو النهائي إن اختير (ويُطبَّق على الحضور في «الفصل المؤقت»)، وتوقيع المدير والمشرف التربوي وإقرار ولي الأمر بالاستلام.
      لا يُحفظ في البرنامج، يُكتب ويُطبع */
   var AF_ACTIONS = ['إحضار ولي الأمر', 'مراجعة مرشد/ة الأكاديمية', 'توقيع تعهد خطي', 'استدعاء ولي الأمر هاتفيًا'];
-  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], log: true, saved: '' }); }
+  function afWarn() { var u = afUi(); return u.warn || (u.warn = { date: todayISO(), notes: '', action: AF_ACTIONS[0], log: true, saved: '', susp: '', sFrom: todayISO(), sTo: todayISO(), sSaved: '' }); }
 
   function afWarnScreen(x) {
     var w = afWarn();
@@ -632,6 +632,11 @@
       '<div><label class="field" for="afw-action">الإجراء المطلوب</label><input type="text" id="afw-action" data-ro-ok list="afw-actions" autocomplete="off" value="' + esc(w.action) + '"><datalist id="afw-actions">' +
         AF_ACTIONS.map(function (a) { return '<option value="' + esc(a) + '">'; }).join('') + '</datalist></div>' +
       '<div style="grid-column:1/-1"><label class="field" for="afw-notes">ملاحظات المخالفة</label><textarea id="afw-notes" data-ro-ok rows="5" placeholder="اكتب المخالفة وتفاصيلها">' + esc(w.notes) + '</textarea></div></div>' +
+      '<div class="grid2" style="margin-top:10px"><div><label class="field" for="afw-susp">الفصل</label><select id="afw-susp" data-ro-ok>' +
+        [['', 'بلا فصل'], ['temp', 'فصل مؤقت'], ['perm', 'فصل نهائي']].map(function (o) { return '<option value="' + o[0] + '"' + (w.susp === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+        (w.susp ? '<div><label class="field" for="afw-sfrom">' + (w.susp === 'temp' ? 'من تاريخ' : 'اعتبارًا من') + '</label><input type="date" id="afw-sfrom" data-ro-ok value="' + esc(w.sFrom) + '"></div>' : '') +
+        (w.susp === 'temp' ? '<div><label class="field" for="afw-sto">إلى تاريخ</label><input type="date" id="afw-sto" data-ro-ok value="' + esc(w.sTo) + '"></div>' : '') + '</div>' +
+      (w.susp ? '<p class="hint" style="margin:6px 0 0">' + (canEditDisc() ? 'عند الطباعة يُطبَّق الفصل على الحضور: أيامه تُحفظ «مفصول» ولا تُحتسب غيابًا' + (w.susp === 'perm' ? '، حتى نهاية العام الدراسي' : '') + '. يُعدَّل أو يُلغى من «الفصل المؤقت».' : 'يُطبع الفصل في الإنذار فقط؛ تطبيقه على الحضور للمدير العام والمسجِّل.') + '</p>' : '') +
       (canEditDisc() ? '<label class="check" style="margin-top:10px"><input type="checkbox" id="afw-log" data-ro-ok' + (w.log ? ' checked' : '') + '> تسجيل هذا الإنذار في سجل المخالفات عند الطباعة</label>' : '') +
       '<div class="actions"><button type="button" class="btn primary" data-afwprint="' + x.id + '" data-ro-ok>طباعة الإنذار / PDF</button></div></div>';
   }
@@ -649,6 +654,34 @@
     toast('سُجّل الإنذار في سجل المخالفات');
   }
 
+  // الفصل النهائي يُطبَّق على الحضور حتى آخر العام الدراسي (31 يوليو من سنته الثانية)
+  function afSuspEnd(w) {
+    if (w.susp === 'temp') return w.sTo;
+    var y2 = +((/(\d{4})\s*\/\s*(\d{4})/.exec(academicYear()) || [])[2]) || (+w.sFrom.slice(0, 4) + (+w.sFrom.slice(5, 7) >= 8 ? 1 : 0));
+    var end = y2 + '-07-31';
+    return end >= w.sFrom ? end : (+w.sFrom.slice(0, 4) + 1) + '-07-31';
+  }
+  // يُسجَّل الفصل في «الفصل المؤقت» (student_leaves بنوع suspension) مرة واحدة لكل فترة
+  async function afApplySusp(x, w) {
+    if (S.stSuspMissing) return toast('طُبع الفصل في الإنذار، لكنه لم يُطبَّق على الحضور: شغّل الملف supabase/student_suspensions.sql', true);
+    var to = afSuspEnd(w), key = [x.id, w.susp, w.sFrom, to].join('|');
+    if (w.sSaved === key) return;
+    var reason = (w.susp === 'perm' ? 'فصل نهائي' : 'فصل مؤقت') + (w.notes.trim() ? ': ' + w.notes.trim().replace(/\s+/g, ' ').slice(0, 200) : '');
+    var r = await sb.from('student_leaves').insert({ student_id: x.id, from_day: w.sFrom, to_day: to, reason: reason, kind: 'suspension',
+      created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
+    if (r.error) throw r.error;
+    w.sSaved = key;
+    S.stLeaves = [r.data].concat(S.stLeaves || []);
+    S.attDay = {};
+    if (ui.af) ui.af.rows = null;
+    toast('طُبِّق الفصل على الحضور من ' + dmy(w.sFrom) + ' إلى ' + dmy(to));
+  }
+  function afSuspText(w) {
+    if (!w.susp) return '';
+    if (w.susp === 'perm') return 'فصل الطالب/ة فصلًا نهائيًا اعتبارًا من ' + dmy(w.sFrom) + '.';
+    var n = Math.round((new Date(w.sTo) - new Date(w.sFrom)) / 864e5) + 1;
+    return 'فصل الطالب/ة فصلًا مؤقتًا من ' + dmy(w.sFrom) + ' إلى ' + dmy(w.sTo) + ' (' + n + (n === 1 ? ' يوم' : n === 2 ? ' يومان' : n <= 10 ? ' أيام' : ' يومًا') + ')، ويعود إلى الدوام بعد انتهاء المدة بصحبة ولي أمره.';
+  }
   function buildWarningSheet(x) {
     var w = afWarn(), guardian = String(stVal(x, 'guardian_name') || '').trim(), dots = '..................................';
     var row = function (a, b) { return '<tr><th style="width:24%">' + a + '</th><td>' + b + '</td></tr>'; };
@@ -661,6 +694,7 @@
       '<table class="rk">' + row('اسم الطالب/ة', esc(x.full_name)) + row('الشعبة', esc(x.class_name || '')) + row('تاريخ الإنذار', dmy(w.date)) + '</table>' +
       '<div class="rsec">المخالفة</div><div class="rbox" style="min-height:42mm;white-space:pre-wrap;line-height:2">' + esc(w.notes) + '</div>' +
       '<div class="rsec">الإجراء المطلوب</div><div class="rbox" style="min-height:14mm;line-height:2"><b>' + esc(w.action) + '</b></div>' +
+      (w.susp ? '<div class="rsec">قرار الفصل</div><div class="rbox" style="line-height:2"><b>' + esc(afSuspText(w)) + '</b></div>' : '') +
       '<p style="margin:1em 0 0;line-height:1.9">نأمل منكم التعاون معنا لما فيه مصلحة ابنكم/ابنتكم، ونشكر لكم حسن تعاونكم.</p>' +
       reportSigns([[principalTitle(), principalName()], ['المشرف التربوي', supervisorName()], ['ولي الأمر (إقرار بالاستلام)', guardian]]);
     fitSheet();
@@ -729,7 +763,9 @@
       // يُسجَّل قبل فتح نافذة الطباعة: نافذة الطباعة توقف الصفحة فيفشل الحفظ الجاري معها
       var logged = ww.log && canEditDisc() && ww.notes.trim() ? afLogWarning(wx, ww).catch(function (err) { toast('تعذّر تسجيل الإنذار في سجل المخالفات: ' + err.message, true); }) : Promise.resolve();
       if (ww.log && canEditDisc() && !ww.notes.trim()) toast('لم تُكتب ملاحظات المخالفة، فلن يُسجَّل الإنذار في سجل المخالفات', true);
-      return logged.then(function () { pendingWarn = wx; return printNow(); });
+      if (ww.susp && (!ww.sFrom || (ww.susp === 'temp' && (!ww.sTo || ww.sTo < ww.sFrom)))) return toast('اختر تواريخ الفصل الصحيحة', true);
+      var susp = ww.susp && canEditDisc() ? afApplySusp(wx, ww).catch(function (err) { toast('طُبع الإنذار لكن تعذّر تطبيق الفصل على الحضور: ' + err.message, true); }) : Promise.resolve();
+      return Promise.all([logged, susp]).then(function () { pendingWarn = wx; return printNow(); });
     }
     if ((el = e.target.closest('[data-afexp]')) && location.hash === '#/affairs') {
       if (el.getAttribute('data-afexp') === 'xlsx') return afExportXlsx();
@@ -764,10 +800,16 @@
   // حقول الإنذار تُحفظ أثناء الكتابة دون إعادة رسم الصفحة
   document.addEventListener('input', function (e) {
     if (e.target.id === 'afw-log') { afWarn().log = e.target.checked; return; }
-    var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes' }[e.target.id];
+    var k = { 'afw-date': 'date', 'afw-action': 'action', 'afw-notes': 'notes', 'afw-sfrom': 'sFrom', 'afw-sto': 'sTo' }[e.target.id];
     if (k && /\/warning$/.test(location.hash)) afWarn()[k] = e.target.value;
   });
   document.addEventListener('change', function (e) {
+    if (e.target.id === 'afw-susp' && /\/warning$/.test(location.hash)) {
+      var sw = afWarn();
+      sw.susp = e.target.value;
+      if (sw.susp === 'temp' && (!sw.sTo || sw.sTo < sw.sFrom)) sw.sTo = sw.sFrom;
+      return render();
+    }
     if (!/^#\/affairs/.test(location.hash)) return;
     var u = afUi(), id = e.target.id, map = { 'af-cls': 'cls', 'af-reg': 'reg', 'af-abs': 'abs', 'af-ride': 'ride' };
     if (map[id]) { u[map[id]] = e.target.value; return afRefreshList(); }
