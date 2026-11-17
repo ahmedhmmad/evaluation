@@ -298,6 +298,12 @@
     if (short) return g === 'm' ? 'المدير' : g === 'f' ? 'المديرة' : 'المدير/ة';
     return g === 'm' ? 'مدير الأكاديمية' : g === 'f' ? 'مديرة الأكاديمية' : 'مدير/ة الأكاديمية';
   }
+  // اسم المشرف التربوي من «الإعدادات» ← «بيانات المدرسة»، ثلاثيًا في خانات التوقيع (اللقب مثل «أ.» لا يُعدّ من الثلاثة)
+  function supervisorName() {
+    var n = String((S.settings && S.settings.supervisor_name) || '').trim().replace(/\s+/g, ' ');
+    var m = /^((?:أ|د|م)\.\s?|(?:الأستاذة?|الدكتورة?|المهندسة?)\s)?(.*)$/.exec(n);
+    return n ? (m[1] || '') + m[2].split(' ').slice(0, 3).join(' ') : '';
+  }
   function principalName() {
     return (S.settings && S.settings.principal_name) || DEFAULT_PRINCIPAL;
   }

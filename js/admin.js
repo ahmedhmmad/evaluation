@@ -218,6 +218,9 @@
         '<select id="principal-gender" data-settingtext="principal_gender">' + [['', 'مدير/ة الأكاديمية'], ['m', 'مدير الأكاديمية (ذكر)'], ['f', 'مديرة الأكاديمية (أنثى)']].map(function (o) {
           return '<option value="' + o[0] + '"' + (((S.settings && S.settings.principal_gender) || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
         '<p class="hint" style="margin:6px 0 0">الاسم والصفة يظهران في خانة توقيع المدير في كل التقارير المطبوعة.</p>' +
+        '<label class="field" for="supervisor-name" style="margin-top:14px">اسم المشرف/ة التربوي/ة</label>' +
+        '<input type="text" id="supervisor-name" data-settingtext="supervisor_name" value="' + esc((S.settings && S.settings.supervisor_name) || '') + '">' +
+        '<p class="hint" style="margin:6px 0 0">يظهر ثلاثيًا في خانة توقيع المشرف التربوي في إنذارات الطلاب وسجل المخالفات وتنبيهات العاملين. إن لم يُحفظ فشغّل الملف <code dir="ltr">supabase/supervisor_name.sql</code> مرة في محرر SQL.</p>' +
         '<label class="field" for="school-address" style="margin-top:14px">عنوان الأكاديمية (أسفل الخطابات الرسمية كالطلبيات)</label>' +
         '<input type="text" id="school-address" data-settingtext="school_address" placeholder="' + esc(REPORT.address) + '" value="' + esc((S.settings && S.settings.school_address) || '') + '">' +
         '<label class="field" for="school-phone" style="margin-top:14px">هاتف الأكاديمية</label>' +
