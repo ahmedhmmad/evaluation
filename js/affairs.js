@@ -104,9 +104,12 @@
       (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>الشعبة</th><th>من</th><th>إلى</th><th>الأيام</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' +
         list.map(function (l) {
           var x = findStudent(l.student_id), n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1;
-          return '<tr><td><b>' + esc(x ? x.full_name : '—') + '</b>' + (l.from_day <= today && today <= l.to_day ? ' <span class="badge unpaid">مفصول اليوم</span>' : l.from_day > today ? ' <span class="badge pending">لم يبدأ</span>' : '') + '</td><td>' + esc(x ? x.class_name || '' : '') + '</td><td>' + dmy(l.from_day) + '</td><td>' + dmy(l.to_day) + '</td><td>' + n + '</td><td>' + esc(l.reason) + '</td><td>' + esc(l.created_by || '') + '</td>' +
+          return '<tr><td><b>' + esc(x ? x.full_name : '—') + '</b>' + (l.from_day <= today && today <= l.to_day ? ' <span class="badge unpaid">مفصول اليوم</span>' : l.from_day > today ? ' <span class="badge pending">لم يبدأ</span>' : '') + '</td><td>' + esc(x ? x.class_name || '' : '') + '</td>' +
+            (u.editId === l.id ? '<td><input type="date" id="sp-ef" value="' + l.from_day + '"></td><td><input type="date" id="sp-et" value="' + l.to_day + '"></td>' : '<td>' + dmy(l.from_day) + '</td><td>' + dmy(l.to_day) + '</td>') + '<td>' + n + '</td><td>' + esc(l.reason) + '</td><td>' + esc(l.created_by || '') + '</td>' +
             '<td style="white-space:nowrap"><button type="button" class="btn" data-ro-ok data-spprint="' + l.id + '">كتاب الفصل</button> ' +
-              (edit && l.from_day < today && l.to_day >= today ? '<button type="button" class="btn" data-spend="' + l.id + '">إنهاء اليوم</button> ' : '') +
+              (edit && u.editId === l.id ? '<button type="button" class="btn primary" data-spsave="' + l.id + '">حفظ</button> <button type="button" class="btn" data-spcancel>إلغاء</button> ' :
+                edit ? '<button type="button" class="btn" data-spedit="' + l.id + '">تعديل</button> ' : '') +
+              (edit && u.editId !== l.id && l.from_day < today && l.to_day >= today ? '<button type="button" class="btn" data-spend="' + l.id + '">إنهاء اليوم</button> ' : '') +
               (edit ? '<button type="button" class="btn danger" data-spdel="' + l.id + '">حذف</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty" style="margin-top:8px">لا فصل مؤقت ' + (u.all ? 'مسجَّل' : 'حالي أو قادم') + '.</div>') + '</div>';
   }
@@ -115,6 +118,19 @@
     var el, u = spUi();
     if ((el = e.target.closest('[data-spprint]'))) { pendingSp = el.getAttribute('data-spprint'); return printNow(); }
     if (!canEditDisc()) return;
+    if ((el = e.target.closest('[data-spedit]'))) { u.editId = el.getAttribute('data-spedit'); return render(); }
+    if (e.target.closest('[data-spcancel]')) { u.editId = null; return render(); }
+    if ((el = e.target.closest('[data-spsave]'))) {
+      var sid2 = el.getAttribute('data-spsave'), rec = S.stLeaves.filter(function (q) { return q.id === sid2; })[0];
+      var nf = document.getElementById('sp-ef').value, nt = document.getElementById('sp-et').value;
+      if (!rec || !nf || !nt || nt < nf) return toast('اختر فترة صحيحة', true);
+      var sr = await sb.from('student_leaves').update({ from_day: nf, to_day: nt }).eq('id', sid2).select();
+      if (sr.error) return fail(sr.error);
+      rec.from_day = nf; rec.to_day = nt; u.editId = null; S.attDay = {};
+      if (ui.af) ui.af.rows = null;
+      render();
+      return toast('عُدِّل الفصل: من ' + dmy(nf) + ' إلى ' + dmy(nt) + '. الأيام التي خرجت من الفترة وسُجّلت من قبل تبقى «مأذون»؛ عدّلها من الحضور اليومي إن لزم.');
+    }
     if ((el = e.target.closest('[data-spend]'))) {
       var eid = el.getAttribute('data-spend'), el2 = S.stLeaves.filter(function (q) { return q.id === eid; })[0], y = addDaysISO(todayISO(), -1);
       if (!el2 || !confirm('إنهاء فصل ' + ((findStudent(el2.student_id) || {}).full_name || '') + ' اليوم؟ يعود الطالب إلى الدوام من اليوم، ويبقى الفصل مسجَّلًا حتى ' + dmy(y) + '.')) return;
