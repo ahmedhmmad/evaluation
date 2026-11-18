@@ -713,6 +713,41 @@
 
   function buildReceiptSheet(q) {
     if (q.staff) return buildStaffReceiptSheet(q);
+    if (q.bus) return buildBusReceiptsSheet(q.bus);
+    var p = receiptPair(q);
+    sheet.className = 'rc';
+    sheet.innerHTML = p[0] + rvCut('receipt') + p[1];
+    fitSheet();
+  }
+
+  /* ----- وصولات باص كامل لتوفير الورق: 4 وصولات في الورقة الأفقية، لكل دفعة صف: الأصل يمينًا ونسخته يسارًا -----
+     الدفعات نفسها مسجّلة كالمعتاد؛ هذه طباعة مجمّعة لكل إيصالات الدورة المختارة لطلاب الباص */
+  function buildBusReceiptsSheet(gid) {
+    var g = findGroup(gid);
+    var mem = S.tMembers.filter(function (m) { return m.group_id === gid && findStudent(m.student_id); })
+      .map(function (m) { return findStudent(m.student_id); })
+      .sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
+    var pairs = [];
+    mem.forEach(function (x) {
+      payReceipts(x.id).forEach(function (r) { pairs.push(receiptPair({ sid: x.id, no: r.receipt_no })); });
+    });
+    printLandscape = true;
+    sheet.className = 'rc rc4';
+    sheet.style.width = '267mm';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '';
+    if (!pairs.length) { sheet.innerHTML = '<p>لا إيصالات لطلاب باص ' + esc(g ? g.assembly_point : '') + ' في ' + tLabel(ui.tMonth) + '.</p>'; return; }
+    var html = '';
+    for (var i = 0; i < pairs.length; i += 2) {
+      html += '<section class="rc4-page">' + pairs.slice(i, i + 2).map(function (p) {
+        return '<div class="rc4-row"><div class="rc4-cell"><div class="rc4-in">' + p[0] + '</div></div><div class="rc4-cell"><div class="rc4-in">' + p[1] + '</div></div></div>';
+      }).join('') + '</section>';
+    }
+    sheet.innerHTML = html;
+  }
+
+  // أصل الإيصال ونسخته (HTML) لإيصال طالب برقمه
+  function receiptPair(q) {
     var x = findStudent(q.sid), recs = payReceipts(q.sid);
     var mem = S.tMembers.filter(function (m) { return m.student_id === q.sid; })[0], g = findGroup(mem.group_id);
     // الإيصال المطلوب: برقمه، وإلا الأول. كلٌّ بمبلغه هو، والمتبقي بعده كما كان يوم صدوره
@@ -753,9 +788,7 @@
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + money(left) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
     };
-    sheet.className = 'rc';
-    sheet.innerHTML = copy('أصل') + rvCut('receipt') + copy('نسخة', true);
-    fitSheet();
+    return [copy('أصل'), copy('نسخة', true)];
   }
 
   /* ----- سند استرداد اشتراك المواصلات -----

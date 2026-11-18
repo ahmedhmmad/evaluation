@@ -2160,6 +2160,7 @@
           (g.pickup_time ? ' · وقت التجمع: ' + esc(g.pickup_time) : '') +
           (g.capacity != null ? ' · السعة: ' + busCount(g) + ' من ' + g.capacity : '') + (g.notes ? '<br>' + esc(g.notes) : '') + '</div></div>' +
           '<div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" data-busprint="' + g.id + '">طباعة كشف الباص</button>' + EXPORT_BTNS +
+          '<button type="button" class="btn" data-busrc4="' + g.id + '" title="كل إيصالات الدورة المختارة لطلاب الباص: 4 في الورقة، الأصل يمينًا والنسخة يسارًا">طباعة وصولات الباص (4 في الورقة)</button>' +
           '<button type="button" class="btn" data-gedit="' + g.id + '">تعديل</button>' +
           '<button type="button" class="btn danger" data-gdel="' + g.id + '">حذف الباص</button></div></div>' +
         (editing ? groupFormHtml(g) : '') + exemptFormHtml(g) +
@@ -2956,6 +2957,10 @@
     if (e.target.closest('[data-exsave]')) return saveExempt(false);
     if (e.target.closest('[data-exdel]')) return saveExempt(true);
     if (e.target.closest('[data-excancel]')) { ui.exemptFor = null; return render(); }
+    if ((el = e.target.closest('[data-busrc4]'))) {
+      pendingReceipt = { bus: el.getAttribute('data-busrc4') };
+      return printNow();
+    }
     if ((el = e.target.closest('[data-busprint]'))) {
       pendingBus = findGroup(el.getAttribute('data-busprint'));
       return pendingBus ? printNow() : null;
