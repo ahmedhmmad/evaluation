@@ -720,7 +720,7 @@
     fitSheet();
   }
 
-  /* ----- وصولات باص كامل لتوفير الورق: 4 وصولات في الورقة الأفقية، لكل دفعة صف: الأصل يمينًا ونسخته يسارًا -----
+  /* ----- وصولات باص كامل لتوفير الورق: 4 أشخاص في الورقة، لكل واحد وصل مختصر بأصله (يمينًا) ونسخته (يسارًا) -----
      الدفعات نفسها مسجّلة كالمعتاد؛ هذه طباعة مجمّعة لكل إيصالات الدورة المختارة لطلاب الباص */
   function buildBusReceiptsSheet(gid) {
     var g = findGroup(gid);
@@ -729,18 +729,17 @@
       .sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
     var pairs = [];
     mem.forEach(function (x) {
-      payReceipts(x.id).forEach(function (r) { pairs.push(receiptPair({ sid: x.id, no: r.receipt_no })); });
+      payReceipts(x.id).forEach(function (r) { pairs.push(receiptPair({ sid: x.id, no: r.receipt_no, mini: true })); });
     });
-    printLandscape = true;
     sheet.className = 'rc rc4';
-    sheet.style.width = '267mm';
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = '';
     if (!pairs.length) { sheet.innerHTML = '<p>لا إيصالات لطلاب باص ' + esc(g ? g.assembly_point : '') + ' في ' + tLabel(ui.tMonth) + '.</p>'; return; }
     var html = '';
-    for (var i = 0; i < pairs.length; i += 2) {
-      html += '<section class="rc4-page">' + pairs.slice(i, i + 2).map(function (p) {
-        return '<div class="rc4-row"><div class="rc4-cell"><div class="rc4-in">' + p[0] + '</div></div><div class="rc4-cell"><div class="rc4-in">' + p[1] + '</div></div></div>';
+    // ورقة A4 عمودية: 4 أشخاص، لكل واحد صف: الأصل يمينًا ونسخته يسارًا
+    for (var i = 0; i < pairs.length; i += 4) {
+      html += '<section class="rc4-page">' + pairs.slice(i, i + 4).map(function (p) {
+        return '<div class="rc4-row"><div class="rc4-cell">' + p[0] + '</div><div class="rc4-cell">' + p[1] + '</div></div>';
       }).join('') + '</section>';
     }
     sheet.innerHTML = html;
@@ -788,6 +787,22 @@
           '<div><span>المتبقي</span><b' + (left > 0 ? ' class="bad"' : ' class="ok"') + '>' + money(left) + '</b></div></div>' +
         '<div class="rv-stamp">الختم</div></div></div>'; // بلا توقيعات: خانة الختم فقط
     };
+    if (q.mini) {
+      var mini = function (second) {
+        var row = function (k, v) { return '<div class="m-r"><span>' + k + '</span><b>' + esc(v || '') + '</b></div>'; };
+        return '<div class="m-rc' + (second ? ' m-2' : '') + '">' +
+          '<div class="m-hd"><img src="' + REPORT.logo + '" alt=""><div><b>' + esc(schoolName()) + '</b><span>إيصال اشتراك المواصلات</span></div><i>' + (second ? 'نسخة' : 'أصل') + '</i></div>' +
+          '<div class="m-top"><span>رقم: <b>' + no + '</b></span><span>التاريخ: <b>' + dmy(rec.paid_on || todayISO()) + '</b></span><span class="m-amt">' + fixed(rec.amount) + ' ج.م</span></div>' +
+          row('استلمنا من', x.guardian_name) + row('ولي أمر', x.full_name + ' — ' + (x.class_name || '')) +
+          row('مبلغ وقدره', amountInWords(rec.amount)) +
+          row('عن', (rec.kind === 'topup' ? 'دفعة مكمِّلة ' : 'اشتراك ') + tLabel(ui.tMonth) + ' — ' + g.assembly_point) +
+          row('طريقة الدفع', (method === 'other' && rec.method_note ? 'أخرى: ' + rec.method_note : PAY_METHODS[method]) + (hasPayRef(method) && rec.method_note ? ' — ' + rec.method_note : '')) +
+          '<div class="m-ft"><span>الاشتراك: <b>' + money(share + disc) + '</b></span>' + (disc > 0 ? '<span>تخفيض: <b>' + money(disc) + '</b></span>' : '') +
+            '<span>المتبقي: <b class="' + (left > 0 ? 'bad' : 'ok') + '">' + money(left) + '</b></span><span class="m-st">الختم</span></div>' +
+          (second ? '<div class="m-mark" aria-hidden="true">نسخة</div>' : '') + '</div>';
+      };
+      return [mini(false), mini(true)];
+    }
     return [copy('أصل'), copy('نسخة', true)];
   }
 

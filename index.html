@@ -589,15 +589,28 @@
   /* الهامش السفلي أصغر في الإيصال (6mm) ليتسع ما بين السطور */
   #print-sheet.rc { font-size: 10pt; line-height: 1.35; padding-bottom: 6mm; }
   #print-sheet .rc-copy { position: relative; }
-  #print-sheet.rc4 { padding-bottom: 0; }
-  #print-sheet.rc4 .rc4-page { height: 184mm; display: flex; flex-direction: column; overflow: hidden; }
+  #print-sheet.rc4 { padding-bottom: 0; font-size: 10pt; line-height: 1.35; }
+  #print-sheet.rc4 .rc4-page { height: 271mm; display: flex; flex-direction: column; }
   #print-sheet.rc4 .rc4-page + .rc4-page { break-before: page; page-break-before: always; }
-  #print-sheet.rc4 .rc4-row { display: flex; height: 92mm; overflow: hidden; }
-  #print-sheet.rc4 .rc4-row + .rc4-row { border-top: 1px dashed #888; }
-  #print-sheet.rc4 .rc4-cell { width: 50%; height: 92mm; overflow: hidden; padding: 1mm 2mm; box-sizing: border-box; }
+  #print-sheet.rc4 .rc4-row { display: flex; height: 25%; border-bottom: 1px dashed #888; box-sizing: border-box; }
+  #print-sheet.rc4 .rc4-row:last-child { border-bottom: 0; }
+  #print-sheet.rc4 .rc4-cell { width: 50%; padding: 2mm 2.5mm; box-sizing: border-box; overflow: hidden; }
   #print-sheet.rc4 .rc4-cell + .rc4-cell { border-inline-start: 1px dashed #888; }
-  #print-sheet.rc4 .rc4-in { width: 180mm; zoom: .7; }
-  #print-sheet.rc4 .rc-copy:first-child { min-height: 0; }
+  #print-sheet .m-rc { position: relative; height: 100%; border: .6pt solid var(--navy); border-radius: 2mm; padding: 1.5mm 2.5mm; box-sizing: border-box; display: flex; flex-direction: column; gap: .9mm; overflow: hidden; }
+  #print-sheet .m-hd { display: flex; align-items: center; gap: 2mm; border-bottom: 1.2pt solid var(--gold); padding-bottom: 1mm; }
+  #print-sheet .m-hd img { height: 9mm; }
+  #print-sheet .m-hd div { flex: 1; display: flex; flex-direction: column; line-height: 1.2; }
+  #print-sheet .m-hd b { color: var(--navy); font-size: 1.1em; }
+  #print-sheet .m-hd i { font-style: normal; font-weight: 700; color: #fff; background: var(--navy); padding: .3mm 2.5mm; border-radius: 1mm; }
+  #print-sheet .m-top { display: flex; justify-content: space-between; align-items: center; }
+  #print-sheet .m-amt { font-weight: 700; font-size: 1.25em; color: var(--navy); border: .6pt solid var(--navy); padding: 0 2mm; border-radius: 1mm; }
+  #print-sheet .m-r { display: flex; gap: 1.5mm; border-bottom: .4pt dotted #999; white-space: nowrap; overflow: hidden; }
+  #print-sheet .m-r span { color: #555; flex: none; }
+  #print-sheet .m-r b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  #print-sheet .m-ft { margin-top: auto; display: flex; gap: 3mm; align-items: center; flex-wrap: wrap; }
+  #print-sheet .m-ft .bad { color: #b42318; } #print-sheet .m-ft .ok { color: #157347; }
+  #print-sheet .m-st { margin-inline-start: auto; border: .6pt dashed var(--gold); border-radius: 50%; width: 13mm; height: 13mm; display: grid; place-items: center; color: #999; }
+  #print-sheet .m-mark { position: absolute; inset: 0; display: grid; place-items: center; font-size: 30pt; font-weight: 700; color: rgba(19,48,107,.08); transform: rotate(-18deg); pointer-events: none; }
   #print-sheet .rc-copy:first-child { min-height: 145mm; }
   #print-sheet .rc-copy .wm { position: absolute; width: 60mm; }
   /* الترويسة على عرض الورقة كله في النسختين، كما في بقية التقارير */
