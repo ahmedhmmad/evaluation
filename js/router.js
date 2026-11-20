@@ -17,8 +17,11 @@
     if (!S.ready) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; return; }
     // دخول شاشة ممنوحة أو الخروج منها: تُحمَّل البيانات من جديد بالصلاحية المناسبة
     if (S.baseProfile && permAreaFor(location.hash) !== ACT_AREA) { loadAll(); return; }
-    if (role() === 'pending') return renderPending();
+    if (role() === 'pending') return S.brand && !S.brand.has_admin ? renderClaimAdmin() : renderPending();
     if (S.profile && S.profile.must_change_password) return renderChangePw();
+    if (location.hash === '#/setup' && isAdmin()) return renderSetupWizard();
+    // مدرسة جديدة: المعالج يُفتح للمدير العام مرة في كل جلسة إلى أن يُنهى الإعداد
+    if (setupPending() && !ui.swSeen) { ui.swSeen = true; return go('#/setup'); }
     if (location.hash === '#/mine' && S.myStaff) return renderMine();
     if (location.hash === '#/papers' && canPapers()) return renderPapers();
     if (location.hash === '#/thome' && isTeacherRole()) return renderTeacherHome();

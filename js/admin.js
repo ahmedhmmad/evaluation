@@ -202,10 +202,14 @@
     app.innerHTML = tabs('admin') + vtabsHtml('admin', 'users', [['users', 'المستخدمون والصلاحيات'], ['perms', 'صلاحيات الموظفين'], ['school', 'بيانات المدرسة'], ['viewers', 'ما يراه المشاهدون'], ['backup', 'النسخ الاحتياطي والربط']]) +
       (adTab === 'perms' ? permsCardHtml() : '') +
       (adTab === 'backup' ? backupCardHtml() + botKeyCardHtml() : '') +
-      (adTab !== 'school' ? '' : '<div class="card"><h2>بيانات المدرسة</h2>' +
+      (adTab !== 'school' ? '' : '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">بيانات المدرسة</h2>' +
+        (S.brand ? '<a class="btn" href="#/setup">معالج إعداد المدرسة</a>' : '') + '</div>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
         '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
-        '<p class="hint" style="margin:6px 0 0">يظهر بجانب الشعار في ترويسة كل التقارير المطبوعة. اتركه فارغًا لاستخدام «أكاديمية الركيزة الثالثة».</p>' +
+        '<p class="hint" style="margin:6px 0 0">يظهر في أعلى الموقع وبجانب الشعار في ترويسة كل التقارير المطبوعة.' + (legacyBrand() ? ' اتركه فارغًا لاستخدام «أكاديمية الركيزة الثالثة».' : '') + '</p>' +
+        (S.brand ? '<label class="field" for="school-name-en" style="margin-top:14px">اسم المدرسة بالإنجليزية</label>' +
+          '<input type="text" id="school-name-en" dir="ltr" style="text-align:right" data-settingtext="school_name_en" value="' + esc((S.settings && S.settings.school_name_en) || '') + '">' +
+          '<div class="grid2" style="margin-top:14px">' + brandImageField('logo_data') + brandImageField('banner_data') + '</div>' : '') +
         '<label class="field" for="rep-sub" style="margin-top:14px">المرحلة أو القسم (سطر تحت اسم الأكاديمية في الترويسة)</label>' +
         '<input type="text" id="rep-sub" data-settingtext="report_subtitle" value="' + esc((S.settings && S.settings.report_subtitle) || '') + '">' +
         '<label class="field" for="rep-year" style="margin-top:14px">العام الدراسي</label>' +

@@ -473,7 +473,9 @@
   // الترويسة: الصورة العريضة أعلى الصفحة، وتحتها سطر صغير (اسم الأكاديمية والمرحلة يمينًا، العام الدراسي يسارًا) وخط ذهبي
   function letterhead(banner) {
     var cfg = S.settings || {};
-    return '<div class="rh"><img class="rh-banner" src="' + (banner || REPORT.banner) + '" alt="' + REPORT.nameEn + '">' +
+    var img = banner || REPORT.banner;
+    return '<div class="rh">' + (img ? '<img class="rh-banner" src="' + img + '" alt="' + esc(REPORT.nameEn) + '">'
+        : '<div class="rh-text"><img src="' + REPORT.logo + '" alt=""><div><b>' + esc(schoolName()) + '</b>' + (REPORT.nameEn ? '<small dir="ltr">' + esc(REPORT.nameEn) + '</small>' : '') + '</div></div>') +
       '<div class="rh-line"><span><b>' + esc(schoolName()) + '</b>' + (cfg.report_subtitle ? ' · ' + esc(cfg.report_subtitle) : '') + '</span>' +
       '<span>العام الدراسي ' + esc(academicYear()) + '</span></div></div>';
   }

@@ -23,5 +23,6 @@
         if (uid) loadAll(); else { S.ready = false; render(); }
       }, 0);
     });
+    loadBrand().then(function () { if (!S.uid || !S.ready) render(); });
   }
   render();

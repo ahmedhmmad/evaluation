@@ -25,7 +25,7 @@ const FIRST = [
   'attendance_supervisor', 'committees', 'discipline', 'parent_accounts', 'protect_payments', 'receipt_archive',
   'receipts_due', 'receipts_lock', 'registrar', 'registrar_transport', 'staff_cv', 'student_exits', 'student_leaves',
   'student_registration', 'student_suspensions', 'teacher_grades', 'visit_approval', 'attendance_links',
-  'paper_files', 'reserve_and_exempt', 'staff_bot', 'student_dropout'
+  'paper_files', 'reserve_and_exempt', 'staff_bot', 'student_dropout', 'setup_wizard'
 ];
 const LAST = [
   'attendance_clerk', 'auto_backup', 'manager', 'payroll', 'registrar', 'registrar_transport', 'staff_self',

@@ -960,18 +960,33 @@
   .td-row .no { width: 28px; height: 28px; border-radius: 50%; background: #F6EFDF; color: #13306B; font-weight: 700; display: grid; place-items: center; font-size: .85rem; }
   .td-row .pn b { display: block; color: #13306B; } .td-row .pn small { color: var(--muted); } .td-row .sj { color: #13306B; } .td-row .tc { color: var(--muted); text-align: left; }
   @media (max-width: 900px) { .td-stats { grid-template-columns: 1fr 1fr; } .td-row { grid-template-columns: 30px 1fr; } .td-row .sj, .td-row .tc { grid-column: 2; text-align: right; } .td-hello { flex-direction: column; align-items: flex-start; } .td-banner { flex-wrap: wrap; } }
+  /* معالج إعداد المدرسة وهويتها (js/setup.js) */
+  .tree-logo.letter-logo { display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 1.3em; }
+  .sw-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .sw-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 12px 5px 8px; font: inherit; cursor: pointer; color: inherit; }
+  .sw-pill span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--line); font-size: .8rem; font-weight: 700; }
+  .sw-pill.done span { background: #2e7d32; color: #fff; }
+  .sw-pill.on { border-color: var(--navy, #13306B); box-shadow: 0 0 0 2px rgba(19,48,107,.15); font-weight: 700; }
+  .sw-prev { border: 1px dashed var(--line); border-radius: 10px; min-height: 110px; display: grid; place-items: center; padding: 8px; background: #fafafa; }
+  .sw-prev img { max-width: 100%; max-height: 160px; object-fit: contain; }
+  .sw-prev.wide img { max-height: 110px; }
+  /* ترويسة نصية حين لا توجد صورة ترويسة (مدرسة لم ترفع صورتها) */
+  #print-sheet .rh-text, .page-lh .rh-text { display: flex; align-items: center; gap: .8em; padding-bottom: .3em; }
+  #print-sheet .rh-text img, .page-lh .rh-text img { width: 16mm; height: 16mm; object-fit: contain; }
+  #print-sheet .rh-text b, .page-lh .rh-text b { display: block; font-family: var(--font-head); font-size: 1.5em; color: var(--navy-dark); }
+  #print-sheet .rh-text small, .page-lh .rh-text small { display: block; font-family: 'Montserrat', sans-serif; color: var(--navy); letter-spacing: .03em; }
 </style>
 </head>
 <body>
 <div id="shell" class="bare">
   <aside id="side" class="navy-deco" aria-label="التنقل الرئيسي">
-    <div class="brand"><span class="logo tree-logo" role="img" aria-label="شعار الأكاديمية"></span><div><strong id="brand-name">أكاديمية الركيزة الثالثة</strong><small>Third Pillar Academy</small></div></div>
+    <div class="brand"><span class="logo tree-logo" role="img" aria-label="شعار الأكاديمية"></span><div><strong id="brand-name">أكاديمية الركيزة الثالثة</strong><small id="brand-en">Third Pillar Academy</small></div></div>
     <nav id="side-nav"></nav>
     <div class="side-user" id="userbar"></div>
   </aside>
   <div id="scrim"></div>
   <div id="content">
-    <div class="topbar navy-deco"><button type="button" id="menu-btn" aria-label="فتح القائمة" aria-expanded="false">☰</button><span class="tree-logo"></span><strong>أكاديمية الركيزة الثالثة</strong></div>
+    <div class="topbar navy-deco"><button type="button" id="menu-btn" aria-label="فتح القائمة" aria-expanded="false">☰</button><span class="tree-logo"></span><strong id="top-name">أكاديمية الركيزة الثالثة</strong></div>
     <div class="page-lh print-only" id="page-lh"></div>
     <main id="app"></main>
   </div>
@@ -985,10 +1000,10 @@
 <script>
 /* سكربت الموقع مقسَّم إلى ملفات في مجلد js تُحمَّل بهذا الترتيب، وكلها في نطاق واحد مشترك (كأنها ملف واحد).
    غيّر APP_BUILD مع كل تعديل في أي ملف منها: به يأخذ المتصفح الملفات كلها بنسخة واحدة جديدة. */
-var APP_BUILD = '17/11 — 5';
+var APP_BUILD = '20/11 — 1';
 (function () {
   var v = '?v=' + encodeURIComponent(APP_BUILD);
-  ['core', 'staff', 'students', 'transport', 'admin', 'router', 'affairs', 'timetable-base', 'staff-attendance', 'payroll', 'papers', 'staff-sheets', 'timetable', 'attendance', 'messaging', 'reports', 'print', 'start'].forEach(function (n) {
+  ['core', 'staff', 'students', 'transport', 'admin', 'router', 'affairs', 'timetable-base', 'staff-attendance', 'payroll', 'papers', 'staff-sheets', 'timetable', 'attendance', 'messaging', 'reports', 'setup', 'print', 'start'].forEach(function (n) {
     document.write('<script src="js/' + n + '.js' + v + '"><\/script>');
   });
 })();

@@ -44,7 +44,7 @@
 <body>
 <div class="top">
   <span class="logo" role="img" aria-label="شعار الأكاديمية"></span>
-  <div><h1>أكاديمية الركيزة الثالثة</h1><p>مواعيد الدوام المدرسي</p></div>
+  <div><h1 data-school-name>أكاديمية الركيزة الثالثة</h1><p>مواعيد الدوام المدرسي</p></div>
   <div class="clock"><b id="clock">—</b><span id="date"></span></div>
 </div>
 <div id="main"><p class="msg">جارٍ التحميل…</p></div>
@@ -56,6 +56,7 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="brand.js"></script>
 <script>/* مكتبة الاتصال بإصدار ثابت يعمل على المتصفحات القديمة؛ إن حُجب مصدرها تُحمَّل من مصدر احتياطي */ window.supabase || document.write('<script src="https://unpkg.com/@supabase/supabase-js@2.80.0/dist/umd/supabase.js"><\/script>');</script>
 <script>
 (function () {

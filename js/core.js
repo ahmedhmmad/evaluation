@@ -439,6 +439,7 @@
       var reg = await Promise.all([sb.from('settings').select('*').eq('id', 1).maybeSingle(), loadStudents(), loadTransport()]);
       S.settings = reg[0].data || null;
     }
+    applyBrand();
     S.ready = true;
     S.syncedAt = new Date();
     render();
@@ -1132,7 +1133,8 @@
     app.innerHTML =
       '<form class="card auth" id="auth-form">' +
         '<h2>' + (signup ? 'إنشاء حساب' : 'تسجيل الدخول') + '</h2>' +
-        (signup ? '<p class="hint">بعد إنشاء الحساب يقوم مدير النظام بتفعيله وتحديد صلاحيته.</p>' : '') +
+        (S.brand && !S.brand.has_admin ? '<div class="info" style="margin:0 0 12px">مدرسة جديدة: لم يُنشأ فيها مدير عام بعد. ' + (signup ? 'أنشئ حسابك، وبعد الدخول تجعله حساب المدير العام وتبدأ معالج الإعداد.' : 'إن كنت من يجهّز النظام فأنشئ حسابًا أولًا.') + '</div>' : '') +
+        (signup && !(S.brand && !S.brand.has_admin) ? '<p class="hint">بعد إنشاء الحساب يقوم مدير النظام بتفعيله وتحديد صلاحيته.</p>' : '') +
         (signup ? '<div class="f"><label class="field" for="au-name">الاسم</label><input type="text" id="au-name" required autocomplete="name"></div>' : '') +
         '<div class="f"><label class="field" for="au-email">' + (signup ? 'البريد الإلكتروني' : 'البريد الإلكتروني أو اسم المستخدم') + '</label>' +
           '<input type="' + (signup ? 'email' : 'text') + '" id="au-email" dir="ltr" required autocomplete="' + (signup ? 'email' : 'username') + '"></div>' +

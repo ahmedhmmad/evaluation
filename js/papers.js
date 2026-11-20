@@ -305,7 +305,7 @@
     if (p.mode === 'scan') {
       sheet.className = 'paper';
       sheet.removeAttribute('data-fit');
-      sheet.innerHTML = '<img class="pp-hdr" src="paper-header.png" alt=""><img class="pp-ftr" src="paper-footer.png" alt="">' +
+      sheet.innerHTML = '<img class="pp-hdr" src="' + paperImg('hdr') + '" alt=""><img class="pp-ftr" src="' + paperImg('ftr') + '" alt="">' +
         (p._imgs || []).map(function (im, i, a) {
           return '<div class="pp-scan"' + (i < a.length - 1 ? ' style="break-after:page;page-break-after:always"' : '') + '><img src="data:' + im.media_type + ';base64,' + im.data + '" alt=""></div>';
         }).join('');
@@ -325,7 +325,7 @@
         : '<th>الدرس</th><td>' + esc(p.lesson || '') + '</td></tr><tr><th>التقييم</th><td colspan="5" class="pp-score">ــــ / ' + (total ? arDigits(total) : '') + '</td></tr>') + '</table>';
     sheet.className = 'paper';
     sheet.removeAttribute('data-fit');
-    sheet.innerHTML = '<img class="pp-hdr" src="paper-header.png" alt=""><img class="pp-ftr" src="paper-footer.png" alt="">' + (exam ? '' : '<img class="pp-wm" src="paper-wm.png" alt="">') +
+    sheet.innerHTML = '<img class="pp-hdr" src="' + paperImg('hdr') + '" alt=""><img class="pp-ftr" src="' + paperImg('ftr') + '" alt="">' + (exam ? '' : '<img class="pp-wm" src="' + paperImg('wm') + '" alt="">') +
       '<table class="pp-frame"><thead><tr><td class="pp-top"></td></tr></thead><tfoot><tr><td class="pp-bottom"></td></tr></tfoot><tbody><tr><td class="pp-content">' +
         '<div class="pp-title"><span>' + (exam ? 'نموذج اختبار' : 'ورقة عمل') + (p.kind !== 'worksheet' && p.kind !== 'quiz' ? ' — ' + PP_KINDS[p.kind].replace('اختبار ', '') : '') + '</span><b>' + esc(p.subject) + '</b>' +
           (p.term ? '<small>' + esc(p.term) + '</small>' : '') + '</div>' + info +
