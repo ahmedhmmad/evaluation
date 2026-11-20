@@ -4,6 +4,7 @@
 // 2) لا اسم عام (function/var في أعلى الملف) معرَّف في ملفين، ولا اسم يطابق خاصية من خصائص المتصفح (window)
 // 3) قاعدة البيانات: لا دالة «create or replace» معرَّفة في أكثر من ملف sql (إعادة تشغيل ملف قديم كانت تُرجِع نسخة أقدم)
 // 4) وركفلو n8n: الملف المنشور n8n/absence-bot.json يطابق ما يبنيه n8n/src/build.js من مصادره
+// 5) supabase/install.sql (ملف تثبيت مدرسة جديدة) يطابق ما يبنيه tools/build-install.js من ملفات sql
 // لا يفتح الشاشات ولا يجرّب الحفظ: هذا يبقى للتجربة في المتصفح.
 const fs = require('fs'), path = require('path'), vm = require('vm'), os = require('os'), cp = require('child_process');
 const ROOT = path.join(__dirname, '..') + path.sep;
@@ -44,7 +45,7 @@ for (const n of order) {
 
 // ---- 3: دوال القاعدة المكررة
 const defs = {};
-for (const f of fs.readdirSync(ROOT + 'supabase').filter((x) => x.endsWith('.sql'))) {
+for (const f of fs.readdirSync(ROOT + 'supabase').filter((x) => x.endsWith('.sql') && x !== 'install.sql')) {
   const s = fs.readFileSync(ROOT + 'supabase/' + f, 'utf8');
   const re = /create or replace function public\.([a-z_0-9]+)\s*\(/g;
   let m;
@@ -64,6 +65,14 @@ try {
   if (norm(tmp) !== norm(ROOT + 'n8n/absence-bot.json')) bad('n8n/absence-bot.json لا يطابق مصادره في n8n/src: شغّل  node n8n/src/build.js  (ولا تعدّل الملف باليد)');
   fs.unlinkSync(tmp);
 } catch (e) { bad('n8n/src/build.js فشل: ' + String(e.stderr || e.message).slice(0, 300)); }
+
+// ---- 5: ملف التثبيت الكامل محدَّث
+try {
+  const tmp = path.join(os.tmpdir(), 'tpa-install-check.sql');
+  cp.execFileSync(process.execPath, [ROOT + 'tools/build-install.js', tmp], { stdio: 'pipe' });
+  if (fs.readFileSync(tmp, 'utf8') !== fs.readFileSync(ROOT + 'supabase/install.sql', 'utf8').replace(/\r\n/g, '\n')) bad('supabase/install.sql لا يطابق ملفات supabase/*.sql: شغّل  node tools/build-install.js  (ولا تعدّله باليد)');
+  fs.unlinkSync(tmp);
+} catch (e) { bad('tools/build-install.js فشل: ' + String(e.stderr || e.message).slice(0, 300)); }
 
 if (errs.length) { console.error('✖ فحص ما قبل الرفع: ' + errs.length + ' مشكلة\n- ' + errs.join('\n- ')); process.exit(1); }
 console.log('✔ الفحص سليم: ' + order.length + ' ملف js، ' + Object.keys(where).length + ' اسماً عاماً، ' + Object.keys(defs).length + ' دالة قاعدة، وركفلو n8n مطابق لمصادره');
