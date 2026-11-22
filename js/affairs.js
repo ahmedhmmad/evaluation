@@ -590,34 +590,40 @@
   }
 
   /* ----- استمارات مقاس التيشيرت (الزي المدرسي) -----
-     قصاصة لكل طالب يعلّم فيها ولي الأمر المقاس: 10 في كل ورقة A4، مرتبة بالشعب. لكل المدرسة أو لشعبة */
+     قصاصة لكل طالب يعلّم فيها ولي الأمر المقاس: من 4 إلى 10 في ورقة A4 (7 افتراضًا) وتكبر كلما قلّ عددها، مرتبة بالشعب. لكل المدرسة أو لشعبة */
   var SZ_LIST = ['4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
-  var SZ_PER_PAGE = 10;
+  var SZ_PER_OPTS = [4, 5, 6, 7, 8, 9, 10];
+  function szPer() { return ui.szPer || 7; }
   var pendingSz = null;
   function szStudents(cls) { return slStudents().filter(function (x) { return !cls || x.class_name === cls; }); }
   function szCountText(cls) {
     var n = szStudents(cls).length;
-    return 'عدد الطلاب: ' + n + ' · عدد الأوراق: ' + Math.ceil(n / SZ_PER_PAGE);
+    return 'عدد الطلاب: ' + n + ' · عدد الأوراق: ' + Math.ceil(n / szPer());
   }
   function szCardHtml() {
     var cls = ui.szCls || '';
-    return '<div class="card"><h2>مقاسات الزي المدرسي (التيشيرت)</h2><p class="hint" style="margin:0">قصاصة لكل طالب باسمه وشعبته يعلّم فيها ولي الأمر المقاس، 10 في كل ورقة، مرتبة بالشعب. تشمل المسجلين نهائيًا والاحتياط.</p>' +
+    return '<div class="card"><h2>مقاسات الزي المدرسي (التيشيرت)</h2><p class="hint" style="margin:0">قصاصة لكل طالب باسمه وشعبته يعلّم فيها ولي الأمر المقاس، مرتبة بالشعب. اختر عدد البطاقات في الورقة. تشمل المسجلين نهائيًا والاحتياط.</p>' +
       '<div class="toolbar" style="align-items:center;margin:10px 0 0"><select id="sz-cls" data-ro-ok aria-label="شعبة استمارات المقاس" style="width:auto"><option value="">كل المدرسة</option>' +
         attClasses().map(function (n) { return '<option' + (n === cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>' +
+      '<label class="field" for="sz-per" style="margin:0">البطاقات في الورقة</label><select id="sz-per" data-ro-ok style="width:auto">' +
+        SZ_PER_OPTS.map(function (n) { return '<option' + (n === szPer() ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>' +
       '<button type="button" class="btn primary" data-szprint data-ro-ok>طباعة استمارات المقاس / PDF</button><span class="st-count" id="sz-count">' + szCountText(cls) + '</span></div></div>';
   }
   function buildSizeSheet(p) {
     var list = szStudents(p.cls), pages = [];
     var sizes = '<table class="sz-tb"><tr>' + SZ_LIST.map(function (z) { return '<th dir="ltr">' + z + '</th>'; }).join('') + '</tr><tr>' + SZ_LIST.map(function () { return '<td></td>'; }).join('') + '</tr></table>';
     var slip = function (x) {
-      return '<div class="sz-slip"><div class="sz-top"><img src="' + REPORT.logo + '" alt=""><b class="sz-name">' + esc(x.full_name) + '</b><span>الشعبة: <b>' + esc(x.class_name || '—') + '</b></span></div>' +
+      return '<div class="sz-slip"><div class="sz-top"><img src="' + REPORT.logo + '" alt=""><div class="sz-name">السيد ولي أمر الطالب: <b>' + esc(x.full_name) + '</b></div><span>الشعبة: <b>' + esc(x.class_name || '—') + '</b></span></div>' +
         sizes + '<div class="sz-bot"><span>ضع علامة ✓ تحت مقاس التيشيرت المناسب للطالب/ة (مقاس واحد)</span><span>توقيع ولي الأمر: ....................................</span></div></div>';
     };
-    for (var i = 0; i < list.length; i += SZ_PER_PAGE) pages.push(list.slice(i, i + SZ_PER_PAGE));
+    var per = szPer(), h = Math.floor(276 / per * 10) / 10; // 276mm هي المتاح في الورقة بين الهامش والتذييل
+    for (var i = 0; i < list.length; i += per) pages.push(list.slice(i, i + per));
+    // k: تكبير الخط والخانات بقدر المساحة، بما لا يضيق به عرض الورقة
+    var vars = ' style="--h:' + h + 'mm;--k:' + Math.min(1.3, 1 + (10 - per) * 0.06).toFixed(2) + ';--box:' + Math.min(15, 6 + (h - 27.6) * 0.4).toFixed(1) + 'mm"';
     sheet.className = 'sz';
     sheet.removeAttribute('data-fit');
     sheet.setAttribute('data-nosign', '1'); // يوقّعها ولي الأمر لا الإدارة
-    sheet.innerHTML = pages.map(function (pg) { return '<section class="sz-page">' + pg.map(slip).join('') + '</section>'; }).join('');
+    sheet.innerHTML = pages.map(function (pg) { return '<section class="sz-page"' + vars + '>' + pg.map(slip).join('') + '</section>'; }).join('');
   }
   document.addEventListener('click', function (e) {
     if (location.hash !== '#/affairs' || !canAttView() || !e.target.closest('[data-szprint]')) return;
@@ -627,9 +633,10 @@
     printNow();
   });
   document.addEventListener('change', function (e) {
-    if (e.target.id !== 'sz-cls') return;
-    ui.szCls = e.target.value;
-    document.getElementById('sz-count').textContent = szCountText(ui.szCls);
+    if (e.target.id === 'sz-cls') ui.szCls = e.target.value;
+    else if (e.target.id === 'sz-per') ui.szPer = +e.target.value;
+    else return;
+    document.getElementById('sz-count').textContent = szCountText(ui.szCls || '');
   });
 
   function afListHtml() {
