@@ -1033,12 +1033,11 @@
 
 
   /* ---------- الرئيسية للمعلم ----------
-     تخطيطها من تصميم Figma «لوحة المعلم»: شريط بحث، وترحيب بالحصة القادمة، وخطوة تالية، وثلاثة أرقام، وإنجاز اليوم، وما ينتظر إجراء، واختصارات */
+     بهوية الأكاديمية: شريط بحث، وترحيب بالحصة القادمة، وخطوة تالية، وثلاثة أرقام، وإنجاز اليوم، وما ينتظر إجراء، واختصارات */
   var TD_SV = {
-    check: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M16 11l2 2 4-5',
     users: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M19 8v6M16 11h6',
     clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2', cal: 'M3 5h18v16H3zM8 3v4M16 3v4M3 10h18',
-    search: 'M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4', book: 'M12 5v16M12 5c-2-2-5-3-9-2v16c4-1 7 0 9 2 2-2 5-3 9-2V3c-4-1-7 0-9 2',
+    search: 'M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4',
     menu: 'M4 7h16M4 12h16M4 17h16', go: 'M15 18l-6-6 6-6', grade: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4', paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6'
   };
   function tdSv(k) { return '<svg class="tw-i" viewBox="0 0 24 24" aria-hidden="true"><path d="' + TD_SV[k] + '"/></svg>'; }
@@ -1111,14 +1110,13 @@
         '<div class="tw-search"><label>' + tdSv('search') + '<input type="search" id="tw-q" data-ro-ok autocomplete="off" placeholder="ابحث عن طالب بالاسم..." aria-label="البحث عن طالب"></label><div id="tw-found" hidden></div></div>' +
         '<div class="tw-date">' + tdSv('cal') + '<span>' + esc(now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></div></header>' +
       '<div class="tw-body">' +
-      '<section class="tw-welcome"><div><p>السلام عليكم ورحمة الله وبركاته</p><h1>أهلًا بك، ' + esc(first) + '</h1><span>نتمنى لك يومًا مباركًا مع طلابك</span></div>' +
+      '<section class="tw-welcome navy-deco"><div class="tw-hi"><span class="tree-logo" aria-hidden="true"></span><div><p>' + esc(schoolName()) + ' · العام الدراسي ' + esc(academicYear()) + '</p><h1>أهلًا بك، ' + esc(first) + '</h1><span class="tw-wish">نتمنى لك يومًا دراسيًا موفقًا</span></div></div>' +
         '<div class="tw-next"><span>' + (isNow ? 'الحصة الحالية' : 'موعد الحصة القادمة') + '</span><strong>' + tdSv('clock') + '<span>' +
           (next ? (isNow ? 'حتى <bdi>' + esc(next.time[1]) + '</bdi>' : when + '، ' + (next.time ? '<bdi>' + esc(next.time[0]) + '</bdi>' : ord(next))) : 'لا حصص في جدولك') + '</span></strong></div></section>' +
-      '<section class="tw-task"><span class="tw-tico">' + tdSv('book') + '</span><div class="tw-copy"><span class="tw-eye">' + (isNow ? 'حصتك الآن' : 'خطوتك التالية') + '</span>' +
+      '<section class="tw-task"><span class="tw-tico">' + tdSv('cal') + '</span><div class="tw-copy"><span class="tw-eye">' + (isNow ? 'حصتك الآن' : 'خطوتك التالية') + '</span>' +
         (next ? '<h2>' + esc(next.subject || ord(next)) + ' — ' + esc(next.cls.join('، ')) + '</h2><p>' + ord(next) + ' · ' + when + (next.time ? ' · ' + ttRange(next.time[0], next.time[1]) : '') + '</p></div>' +
-          '<div class="tw-go"><button type="button" class="tw-cta" data-ro-ok data-taopen="' + esc(when === 'اليوم' ? next.cls[0] : '') + '">تسجيل الحضور ' + go1 + '</button>' +
-          '<button type="button" class="tw-sec" data-ro-ok data-twgrade="' + esc(key) + '">أو رصد درجات الشعبة</button></div>'
-          : '<h2>جهّز عملك</h2><p>لا حصص باسمك في جدول الحصص بعد</p></div><button type="button" class="tw-cta" data-ro-ok data-taopen="">تسجيل الحضور ' + go1 + '</button>') + '</section>' +
+          '<button type="button" class="tw-cta" data-ro-ok data-twgrade="' + esc(key) + '">رصد درجات الشعبة ' + go1 + '</button>'
+          : '<h2>جهّز عملك</h2><p>لا حصص باسمك في جدول الحصص بعد</p></div><a class="tw-cta" href="#/timetable">فتح جدولي ' + go1 + '</a>') + '</section>' +
       '<section class="tw-stats" aria-label="ملخص عملك">' +
         stat('users', TG.missing ? '—' : TG.students.length, 'طلابي', nCls ? 'عدد الشعب التي تدرّسها: ' + nCls : 'لا شعب باسمك بعد', '#/mystudents') +
         stat('clock', today.length, 'حصص اليوم', di < 0 ? 'ليس يوم دوام' : today.length ? 'أولها ' + ord(today[0]) : 'لا حصص لك اليوم', '#/timetable') +
@@ -1135,7 +1133,7 @@
         }).join('') + (todo.length > 4 ? '<a class="tw-all" href="#/papers">عرض الكل (' + todo.length + ')</a>' : '')
           : '<p class="tw-none">' + (waiting ? 'جارٍ التحميل…' : TD_P.failed && !S.papers ? 'تعذّر جلب الأوراق؛ حدّث الصفحة.' : 'لا أوراق معادة أو مسودات.') + '</p>') + '</section></div>' +
       '<section class="tw-panel tw-quick">' + head('اختصارات مفيدة', 'إجراءات سريعة', '<p>اختر ما تريد القيام به</p>') + '<div class="tw-links">' +
-        quick('check', '#/tatt', 'تسجيل الحضور', 'سجّل حضور طلاب اليوم') + quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') +
+        quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') +
         (S.myStaff ? quick('paper', '#/papers', 'أوراق العمل والاختبارات', 'أنشئ ورقة واطبعها') : quick('cal', '#/timetable', 'جدولي', 'حصصك طوال الأسبوع')) + '</div></section></div>';
   }
 
