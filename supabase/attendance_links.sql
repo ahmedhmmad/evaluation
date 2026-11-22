@@ -56,12 +56,12 @@ language sql immutable as $$
   from (select regexp_replace(translate(coalesce(p, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'), '[^0-9]', '', 'g') as d) x
 $$;
 
--- Classes that have finally registered students, in the order of «إعداد الفصول», then by name.
+-- Classes that have enrolled students (final or reserve, as enrolled() on the site), in the order of «إعداد الفصول», then by name.
 create or replace function public.att_classes() returns table (pos int, class_name text, students int)
 language sql stable security definer set search_path = public as $$
   with c as (
     select s.class_name, count(*)::int as students
-    from students s where s.status = 'final' and s.class_name <> ''
+    from students s where s.status in ('final', 'reserve') and s.class_name <> ''
     group by s.class_name
   ), cfg as (
     select e.value ->> 'name' as name, e.ordinality as ord
@@ -72,11 +72,11 @@ language sql stable security definer set search_path = public as $$
   from c left join cfg on cfg.name = c.class_name
 $$;
 
--- The finally registered students of a class, numbered the same way every time.
+-- The enrolled students of a class (final or reserve), numbered the same way every time.
 create or replace function public.att_roll(p_class text) returns table (pos int, id uuid, full_name text)
 language sql stable security definer set search_path = public as $$
   select (row_number() over (order by s.full_name, s.id))::int, s.id, s.full_name
-  from students s where s.status = 'final' and s.class_name = p_class
+  from students s where s.status in ('final', 'reserve') and s.class_name = p_class
 $$;
 
 -- Records a class for today: the given students absent, everyone else present.
@@ -91,7 +91,7 @@ begin
          else 'present' end,
          coalesce((select a.note from attendance a where a.student_id = s.id and a.day = att_today()), ''),
          p_class, p_by, now()
-  from students s where s.status = 'final' and s.class_name = p_class
+  from students s where s.status in ('final', 'reserve') and s.class_name = p_class
   on conflict (student_id, day) do update
     set status = excluded.status, class_name = excluded.class_name, recorded_by = excluded.recorded_by, updated_at = excluded.updated_at;
   get diagnostics n = row_count;
