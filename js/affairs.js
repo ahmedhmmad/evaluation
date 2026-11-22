@@ -614,12 +614,13 @@
     var sizes = '<table class="sz-tb"><tr>' + SZ_LIST.map(function (z) { return '<th dir="ltr">' + z + '</th>'; }).join('') + '</tr><tr>' + SZ_LIST.map(function () { return '<td></td>'; }).join('') + '</tr></table>';
     var slip = function (x) {
       return '<div class="sz-slip"><div class="sz-top"><img src="' + REPORT.logo + '" alt=""><div class="sz-name">السيد ولي أمر الطالب: <b>' + esc(x.full_name) + '</b></div><span>الشعبة: <b>' + esc(x.class_name || '—') + '</b></span></div>' +
-        sizes + '<div class="sz-bot"><span>ضع علامة ✓ تحت مقاس التيشيرت المناسب للطالب/ة (مقاس واحد)</span><span>توقيع ولي الأمر: ....................................</span></div></div>';
+        '<div class="sz-note">ضع علامة ✓ داخل مربع واحد فقط، تحت مقاس التيشيرت المناسب للطالب/ة</div>' +
+        sizes + '<div class="sz-bot"><span>توقيع ولي الأمر: ....................................</span></div></div>';
     };
     var per = szPer(), h = Math.floor(276 / per * 10) / 10; // 276mm هي المتاح في الورقة بين الهامش والتذييل
     for (var i = 0; i < list.length; i += per) pages.push(list.slice(i, i + per));
     // k: تكبير الخط والخانات بقدر المساحة، بما لا يضيق به عرض الورقة
-    var vars = ' style="--h:' + h + 'mm;--k:' + Math.min(1.3, 1 + (10 - per) * 0.06).toFixed(2) + ';--box:' + Math.min(15, 6 + (h - 27.6) * 0.4).toFixed(1) + 'mm"';
+    var vars = ' style="--h:' + h + 'mm;--k:' + Math.min(1.3, 1 + (10 - per) * 0.06).toFixed(2) + ';--box:' + Math.min(11, 5.4 + (h - 27.6) * 0.4).toFixed(1) + 'mm"';
     sheet.className = 'sz';
     sheet.removeAttribute('data-fit');
     sheet.setAttribute('data-nosign', '1'); // يوقّعها ولي الأمر لا الإدارة
