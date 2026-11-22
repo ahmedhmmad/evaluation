@@ -223,7 +223,7 @@
      ويُرسل مع كل طلب إلى القاعدة، فتقبله القاعدة فقط إن كانت الشاشة ممنوحة له. عند الخروج منها يعود إلى صلاحيته */
   var ACT_AREA = '';
   // شاشات لا تُمنح: الرئيسية، الإعدادات والمستخدمون، سجل التعديلات، وما هو خاص بصاحب الحساب
-  var PERM_SKIP = ['home', 'admin', 'audit', 'results', 'signatures', 'mine', 'papers', 'mystudents', 'thome'];
+  var PERM_SKIP = ['home', 'admin', 'audit', 'results', 'signatures', 'mine', 'papers', 'mystudents', 'thome', 'tatt'];
   // مسارات فرعية لا تبدأ بمسار الشاشة نفسها
   var PERM_ALIAS = { teachers: ['#/t/'], visits: ['#/v/'] };
   function permsColumn() { var b = S.baseProfile || S.profile; return !!b && 'perms' in b; }
@@ -745,6 +745,7 @@
     classes: 'M4 5h7v6H4zM13 5h7v6h-7zM4 13h7v6H4zM13 13h7v6h-7z',
     admin: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
     rooms: 'M4 20V6l8-3 8 3v14M4 20h16M9 20v-5h6v5M8 9h2M14 9h2M8 12h2M14 12h2',
+    tatt: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M16 11l2 2 4-5',
     attendance: 'M8 3v3M16 3v3M4 7h16v13H4zM8 14l3 3 5-6',
     reports: 'M5 3h10l4 4v14H5zM14 3v5h5M8 17v-3M12 17v-6M16 17v-4',
     timetable: 'M4 5h16v15H4zM4 10h16M9 5v15M14 5v15M8 3v4M16 3v4',
@@ -824,7 +825,7 @@
   }
   function navModel0() {
     if (isRegistrar()) return [{ title: 'الطلاب', items: [['#/students', 'students', 'تسجيل الطلاب'], ['#/classes', 'classes', 'الطلاب حسب الشعب'], ['#/attendance', 'attendance', 'الحضور والغياب'], ['#/reports', 'reports', 'التقارير'], ['#/transport', 'transport', 'المواصلات'], ['#/messages', 'messages', 'رسائل واتساب']] }];
-    if (!isStaff()) return [{ items: (isTeacherRole() ? [['#/thome', 'home', 'الرئيسية']] : []).concat([['#/', 'results', 'نتائج التقييم']], isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
+    if (!isStaff()) return [{ items: (isTeacherRole() ? [['#/thome', 'home', 'الرئيسية'], ['#/tatt', 'tatt', 'تسجيل الحضور']] : []).concat([['#/', 'results', 'نتائج التقييم']], isTeacherRole() ? [['#/timetable', 'timetable', 'جدولي']] : []) }];
     var groups = [
       { items: [['#/', 'home', 'الرئيسية']] },
       { title: 'المعلمون', items: [['#/teachers', 'teachers', 'تقييم المعلمين'], ['#/visits', 'visits', 'الزيارات الإشرافية'], ['#/results', 'results', 'النتائج المنشورة'], ['#/timetable', 'timetable', 'جدول الحصص']] }
@@ -851,6 +852,7 @@
     if (h === '#/mine' && S.myStaff) return 'mine';
     if (h === '#/papers' && canPapers()) return 'papers';
     if (h === '#/thome' && isTeacherRole()) return 'thome';
+    if (h === '#/tatt' && isTeacherRole()) return 'tatt';
     if (h === '#/mystudents' && isTeacherRole()) return 'mystudents';
     if (h === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return 'grades';
     if (h === '#/gradecfg' && isAdmin()) return 'gradecfg';

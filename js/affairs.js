@@ -1035,6 +1035,7 @@
   /* ---------- الرئيسية للمعلم ----------
      تخطيطها من تصميم Figma «لوحة المعلم»: شريط بحث، وترحيب بالحصة القادمة، وخطوة تالية، وثلاثة أرقام، وإنجاز اليوم، وما ينتظر إجراء، واختصارات */
   var TD_SV = {
+    check: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M16 11l2 2 4-5',
     users: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M19 8v6M16 11h6',
     clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2', cal: 'M3 5h18v16H3zM8 3v4M16 3v4M3 10h18',
     search: 'M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4', book: 'M12 5v16M12 5c-2-2-5-3-9-2v16c4-1 7 0 9 2 2-2 5-3 9-2V3c-4-1-7 0-9 2',
@@ -1115,8 +1116,9 @@
           (next ? (isNow ? 'حتى <bdi>' + esc(next.time[1]) + '</bdi>' : when + '، ' + (next.time ? '<bdi>' + esc(next.time[0]) + '</bdi>' : ord(next))) : 'لا حصص في جدولك') + '</span></strong></div></section>' +
       '<section class="tw-task"><span class="tw-tico">' + tdSv('book') + '</span><div class="tw-copy"><span class="tw-eye">' + (isNow ? 'حصتك الآن' : 'خطوتك التالية') + '</span>' +
         (next ? '<h2>' + esc(next.subject || ord(next)) + ' — ' + esc(next.cls.join('، ')) + '</h2><p>' + ord(next) + ' · ' + when + (next.time ? ' · ' + ttRange(next.time[0], next.time[1]) : '') + '</p></div>' +
-          '<button type="button" class="tw-cta" data-ro-ok data-twgrade="' + esc(key) + '">رصد درجات الشعبة ' + go1 + '</button>'
-          : '<h2>جهّز عملك</h2><p>لا حصص باسمك في جدول الحصص بعد</p></div><a class="tw-cta" href="#/timetable">فتح جدولي ' + go1 + '</a>') + '</section>' +
+          '<div class="tw-go"><button type="button" class="tw-cta" data-ro-ok data-taopen="' + esc(when === 'اليوم' ? next.cls[0] : '') + '">تسجيل الحضور ' + go1 + '</button>' +
+          '<button type="button" class="tw-sec" data-ro-ok data-twgrade="' + esc(key) + '">أو رصد درجات الشعبة</button></div>'
+          : '<h2>جهّز عملك</h2><p>لا حصص باسمك في جدول الحصص بعد</p></div><button type="button" class="tw-cta" data-ro-ok data-taopen="">تسجيل الحضور ' + go1 + '</button>') + '</section>' +
       '<section class="tw-stats" aria-label="ملخص عملك">' +
         stat('users', TG.missing ? '—' : TG.students.length, 'طلابي', nCls ? 'عدد الشعب التي تدرّسها: ' + nCls : 'لا شعب باسمك بعد', '#/mystudents') +
         stat('clock', today.length, 'حصص اليوم', di < 0 ? 'ليس يوم دوام' : today.length ? 'أولها ' + ord(today[0]) : 'لا حصص لك اليوم', '#/timetable') +
@@ -1133,7 +1135,7 @@
         }).join('') + (todo.length > 4 ? '<a class="tw-all" href="#/papers">عرض الكل (' + todo.length + ')</a>' : '')
           : '<p class="tw-none">' + (waiting ? 'جارٍ التحميل…' : TD_P.failed && !S.papers ? 'تعذّر جلب الأوراق؛ حدّث الصفحة.' : 'لا أوراق معادة أو مسودات.') + '</p>') + '</section></div>' +
       '<section class="tw-panel tw-quick">' + head('اختصارات مفيدة', 'إجراءات سريعة', '<p>اختر ما تريد القيام به</p>') + '<div class="tw-links">' +
-        quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') +
+        quick('check', '#/tatt', 'تسجيل الحضور', 'سجّل حضور طلاب اليوم') + quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') +
         (S.myStaff ? quick('paper', '#/papers', 'أوراق العمل والاختبارات', 'أنشئ ورقة واطبعها') : quick('cal', '#/timetable', 'جدولي', 'حصصك طوال الأسبوع')) + '</div></section></div>';
   }
 

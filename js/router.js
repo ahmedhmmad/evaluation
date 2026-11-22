@@ -23,6 +23,7 @@
     if (location.hash === '#/papers' && canPapers()) return renderPapers();
     if (location.hash === '#/thome' && isTeacherRole()) return renderTeacherHome();
     if (isTeacherRole() && (location.hash === '' || location.hash === '#') && !ui.thomeSeen) { ui.thomeSeen = true; return go('#/thome'); }
+    if (location.hash === '#/tatt' && isTeacherRole()) return renderTeacherAtt();
     if (location.hash === '#/mystudents' && isTeacherRole()) return renderMyStudents();
     if (location.hash === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return renderGrades();
     if (location.hash === '#/gradecfg' && isAdmin()) return renderGradeCfg();
