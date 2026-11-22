@@ -589,6 +589,49 @@
       : '<div class="empty">لا يوجد طلاب مطابقون.</div>') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ ضيّق البحث أو اختر شعبة.</p>' : '');
   }
 
+  /* ----- استمارات مقاس التيشيرت (الزي المدرسي) -----
+     قصاصة لكل طالب يعلّم فيها ولي الأمر المقاس: 10 في كل ورقة A4، مرتبة بالشعب. لكل المدرسة أو لشعبة */
+  var SZ_LIST = ['4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+  var SZ_PER_PAGE = 10;
+  var pendingSz = null;
+  function szStudents(cls) { return slStudents().filter(function (x) { return !cls || x.class_name === cls; }); }
+  function szCountText(cls) {
+    var n = szStudents(cls).length;
+    return 'عدد الطلاب: ' + n + ' · عدد الأوراق: ' + Math.ceil(n / SZ_PER_PAGE);
+  }
+  function szCardHtml() {
+    var cls = ui.szCls || '';
+    return '<div class="card"><h2>مقاسات الزي المدرسي (التيشيرت)</h2><p class="hint" style="margin:0">قصاصة لكل طالب باسمه وشعبته يعلّم فيها ولي الأمر المقاس، 10 في كل ورقة، مرتبة بالشعب. تشمل المسجلين نهائيًا والاحتياط.</p>' +
+      '<div class="toolbar" style="align-items:center;margin:10px 0 0"><select id="sz-cls" data-ro-ok aria-label="شعبة استمارات المقاس" style="width:auto"><option value="">كل المدرسة</option>' +
+        attClasses().map(function (n) { return '<option' + (n === cls ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('') + '</select>' +
+      '<button type="button" class="btn primary" data-szprint data-ro-ok>طباعة استمارات المقاس / PDF</button><span class="st-count" id="sz-count">' + szCountText(cls) + '</span></div></div>';
+  }
+  function buildSizeSheet(p) {
+    var list = szStudents(p.cls), pages = [];
+    var sizes = '<table class="sz-tb"><tr>' + SZ_LIST.map(function (z) { return '<th dir="ltr">' + z + '</th>'; }).join('') + '</tr><tr>' + SZ_LIST.map(function () { return '<td></td>'; }).join('') + '</tr></table>';
+    var slip = function (x) {
+      return '<div class="sz-slip"><div class="sz-top"><img src="' + REPORT.logo + '" alt=""><b class="sz-name">' + esc(x.full_name) + '</b><span>الشعبة: <b>' + esc(x.class_name || '—') + '</b></span></div>' +
+        sizes + '<div class="sz-bot"><span>ضع علامة ✓ تحت مقاس التيشيرت المناسب للطالب/ة (مقاس واحد)</span><span>توقيع ولي الأمر: ....................................</span></div></div>';
+    };
+    for (var i = 0; i < list.length; i += SZ_PER_PAGE) pages.push(list.slice(i, i + SZ_PER_PAGE));
+    sheet.className = 'sz';
+    sheet.removeAttribute('data-fit');
+    sheet.setAttribute('data-nosign', '1'); // يوقّعها ولي الأمر لا الإدارة
+    sheet.innerHTML = pages.map(function (pg) { return '<section class="sz-page">' + pg.map(slip).join('') + '</section>'; }).join('');
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/affairs' || !canAttView() || !e.target.closest('[data-szprint]')) return;
+    var cls = ui.szCls || '';
+    if (!szStudents(cls).length) return toast('لا يوجد طلاب لطباعة استماراتهم', true);
+    pendingSz = { cls: cls };
+    printNow();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'sz-cls') return;
+    ui.szCls = e.target.value;
+    document.getElementById('sz-count').textContent = szCountText(ui.szCls);
+  });
+
   function afListHtml() {
     var u = afUi(), per = afAgg(), shown = afShown(), list = shown ? afFiltered(per) : [], rideOn = S.tMembers.length > 0;
     return '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
@@ -603,7 +646,7 @@
         '<span style="flex:1"></span><a class="btn" href="#/affairs/suspend" title="فصل تأديبي لفترة: يُسجَّل الطالب «ف» في أيامه ولا يُحتسب غيابًا">الفصل المؤقت' + (spActive() ? ' <b>(' + spActive() + ')</b>' : '') + '</a><a class="btn" href="#/affairs/lists" title="قوائم بعنوان يُختار فيها الطلاب (مثل الموافقين على التطعيم) وتُطبع حسب الشعبة">قوائم الطلاب (موافقات وغيرها)</a><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
       '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
         ' مرّر الفأرة على «سجل الغياب» لترى ملخصه، واضغط عليه أو على «ملف الطالب» للانتقال إلى شاشته.' + (shown ? ' الطلاب: <b id="af-n">' + list.length + '</b>' : '<span id="af-n"></span>') + '</p></div>' +
-      '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>' + afConsentCardHtml(list.length);
+      '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>' + szCardHtml() + afConsentCardHtml(list.length);
   }
 
   function afStudentData(x) {

@@ -589,6 +589,20 @@
   /* الهامش السفلي أصغر في الإيصال (6mm) ليتسع ما بين السطور */
   #print-sheet.rc { font-size: 10pt; line-height: 1.35; padding-bottom: 6mm; }
   #print-sheet .rc-copy { position: relative; }
+  /* استمارات مقاس الزي: 10 في الورقة. هامش كل ورقة من .sz-page، وأسفلها متسع لتذييل الأكاديمية */
+  #print-sheet.sz { padding: 0 15mm; font-size: 10pt; line-height: 1.2; }
+  #print-sheet.sz .sz-page { height: 295mm; padding: 7mm 0 12mm; box-sizing: border-box; overflow: hidden; }
+  #print-sheet.sz .sz-page + .sz-page { break-before: page; page-break-before: always; }
+  #print-sheet.sz .sz-slip { height: 27.6mm; padding: 1.4mm 0; box-sizing: border-box; border-bottom: 1px dashed #888; display: flex; flex-direction: column; justify-content: space-between; }
+  #print-sheet.sz .sz-slip:last-child { border-bottom: 0; }
+  #print-sheet.sz .sz-top { display: flex; align-items: center; gap: 2mm; white-space: nowrap; }
+  #print-sheet.sz .sz-top img { height: 6mm; }
+  #print-sheet.sz .sz-name { flex: 1; min-width: 0; font-size: 11.5pt; white-space: normal; line-height: 1; }
+  #print-sheet.sz .sz-tb { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0; }
+  #print-sheet.sz .sz-tb th, #print-sheet.sz .sz-tb td { border: .6pt solid #333; padding: 0; text-align: center; }
+  #print-sheet.sz .sz-tb th { height: 4.8mm; background: #EEF1F7; color: var(--navy); font-size: 9.5pt; line-height: 1; }
+  #print-sheet.sz .sz-tb td { height: 6.5mm; }
+  #print-sheet.sz .sz-bot { display: flex; justify-content: space-between; font-size: 8.5pt; }
   #print-sheet.rc4 { padding-bottom: 0; font-size: 10pt; line-height: 1.35; }
   #print-sheet.rc4 .rc4-page { height: 271mm; display: flex; flex-direction: column; }
   #print-sheet.rc4 .rc4-page + .rc4-page { break-before: page; page-break-before: always; }
@@ -985,7 +999,7 @@
 <script>
 /* سكربت الموقع مقسَّم إلى ملفات في مجلد js تُحمَّل بهذا الترتيب، وكلها في نطاق واحد مشترك (كأنها ملف واحد).
    غيّر APP_BUILD مع كل تعديل في أي ملف منها: به يأخذ المتصفح الملفات كلها بنسخة واحدة جديدة. */
-var APP_BUILD = '17/11 — 5';
+var APP_BUILD = '22/11 — 1';
 (function () {
   var v = '?v=' + encodeURIComponent(APP_BUILD);
   ['core', 'staff', 'students', 'transport', 'admin', 'router', 'affairs', 'timetable-base', 'staff-attendance', 'payroll', 'papers', 'staff-sheets', 'timetable', 'attendance', 'messaging', 'reports', 'print', 'start'].forEach(function (n) {

@@ -1116,6 +1116,7 @@
     else if (pendingCl) buildClaimSheet(pendingCl);
     else if (pendingTg) buildMyStudentsSheet();
     else if (pendingSl) buildSlSheet(pendingSl);
+    else if (pendingSz) buildSizeSheet(pendingSz);
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
     else if (pendingDc) buildDisciplineSheet();
@@ -1162,6 +1163,7 @@
     pendingCl = null;
     pendingTg = false;
     pendingSl = null;
+    pendingSz = null;
     pendingLa = null;
     pendingSp = null;
     pendingWarn = null;
