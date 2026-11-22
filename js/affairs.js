@@ -1033,40 +1033,142 @@
 
 
   /* ---------- الرئيسية للمعلم ----------
-     على تصميم صفحة ولي الأمر: شريط باسمه، وبطاقات (شعبي، طلابي، حصص اليوم، حصص الأسبوع)، وجدول اليوم بحصصه وشعبها وأوقاتها */
+     تخطيطها من تصميم Figma «لوحة المعلم»: شريط بحث، وترحيب بالحصة القادمة، وخطوة تالية، وثلاثة أرقام، وإنجاز اليوم، وما ينتظر إجراء، واختصارات */
   var TD_SV = {
-    cls: '<path d="M4 5h16v12H4zM8 21h8M12 17v4"/>', users: '<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0112 0M16 5a3 3 0 010 6M17.5 14a5 5 0 013.5 6"/>',
-    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>', cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'
+    users: 'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M19 8v6M16 11h6',
+    clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2', cal: 'M3 5h18v16H3zM8 3v4M16 3v4M3 10h18',
+    search: 'M11 18a7 7 0 100-14 7 7 0 000 14zM20 20l-4-4', book: 'M12 5v16M12 5c-2-2-5-3-9-2v16c4-1 7 0 9 2 2-2 5-3 9-2V3c-4-1-7 0-9 2',
+    menu: 'M4 7h16M4 12h16M4 17h16', go: 'M15 18l-6-6 6-6', grade: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4', paper: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6'
   };
-  function tdSv(k) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + TD_SV[k] + '</svg>'; }
+  function tdSv(k) { return '<svg class="tw-i" viewBox="0 0 24 24" aria-hidden="true"><path d="' + TD_SV[k] + '"/></svg>'; }
+
+  // أوراق المعلم التي تنتظر منه إجراء: المعادة ثم المسودات
+  var TD_P = { uid: null, at: 0, list: null, failed: false };
+  async function tdLoadPapers() {
+    var uid = S.uid, sid = S.myStaff && S.myStaff.id;
+    TD_P = { uid: uid, at: Date.now(), list: null, failed: false };
+    var r = sid ? await sb.from('papers').select('id, teacher_id, kind, subject, class_name, status').eq('teacher_id', sid).limit(500) : { data: [] };
+    if (S.uid !== uid) return;
+    TD_P.failed = !!r.error; TD_P.list = r.data || [];
+    render();
+  }
+  function tdTodo() {
+    var src = S.papers || (TD_P.uid === S.uid && TD_P.list) || [], sid = S.myStaff && S.myStaff.id;
+    var mine = src.filter(function (p) { return sid && p.teacher_id === sid; });
+    return mine.filter(function (p) { return p.status === 'returned'; }).concat(mine.filter(function (p) { return p.status === 'draft'; }));
+  }
+
+  // حصص المعلم في يوم، بترتيب وقتها. الحصة المشتركة بين شعبتين سطر واحد
+  function tdDay(mine, di) {
+    var by = {};
+    mine.forEach(function (x) {
+      if (x.day !== di) return;
+      var t = ttTimeFor(x.class_name, x.period), k = x.period + '|' + (t ? t[0] : '');
+      if (!by[k]) by[k] = { period: x.period, subject: x.subject || '', time: t, from: t ? ttMins(t[0]) : NaN, to: t ? ttMins(t[1]) : NaN, cls: [] };
+      if (by[k].cls.indexOf(x.class_name) < 0) by[k].cls.push(x.class_name);
+    });
+    return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) { return (a.from - b.from) || a.period - b.period; });
+  }
+
   function renderTeacherHome() {
     if (!S.ttLoaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; S.ttLoaded = true; Promise.all([loadTimetable(), TG.loaded ? null : tgLoad()]).then(render); return; }
+    if (!TG.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; tgLoad(); return; }
+    if (TD_P.uid !== S.uid) tdLoadPapers();
     var tid = (S.profile && S.profile.teacher_id) || (S.myStaff && S.myStaff.id), t = tid && find(tid);
     var name = (t && t.name) || (S.myStaff && S.myStaff.name) || (S.profile && S.profile.full_name) || displayName(S.email);
-    var mine = ttLive().filter(function (x) { return x.teacher_id === tid; });
-    var days = ttCfg().days, wd = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'][new Date().getDay()], di = days.indexOf(wd);
-    var today = di < 0 ? [] : mine.filter(function (x) { return x.day === di; }).sort(function (a, b) { return a.period - b.period; });
+    var w = String(name).trim().replace(/^(أ|د)\s*[.\/]\s*/, '').split(/\s+/), first = /^(عبد|أبو|ابو)$/.test(w[0]) && w[1] ? w[0] + ' ' + w[1] : w[0];
+    var mine = ttLive().filter(function (x) { return x.teacher_id === tid; }), days = ttCfg().days;
+    var now = new Date(), nowM = now.getHours() * 60 + now.getMinutes(), names = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+    var di = days.indexOf(names[now.getDay()]), today = di < 0 ? [] : tdDay(mine, di);
+
+    // الحالية أو التالية: اليوم، وإلا فأول حصة في أقرب يوم دوام. ما لا وقت له لا يُحسب منتهيًا
+    var next = null, when = '', isNow = false, off, i;
+    for (i = 0; i < today.length && !next; i++) if (!(today[i].to <= nowM)) { next = today[i]; when = 'اليوم'; isNow = next.from <= nowM; }
+    for (off = 1; off <= 7 && !next; off++) {
+      var dn = names[(now.getDay() + off) % 7], nd = days.indexOf(dn), l = nd < 0 ? [] : tdDay(mine, nd);
+      if (l.length) { next = l[0]; when = off === 1 ? 'غدًا' : dn; }
+    }
+    var done = today.filter(function (x) { return x.to <= nowM; }).length, pct = today.length ? Math.round(done / today.length * 100) : 0;
+    var week = days.reduce(function (n, d, k) { return n + tdDay(mine, k).length; }, 0);
     var classes = {}; mine.forEach(function (x) { classes[x.class_name] = 1; });
-    var nCls = Object.keys(classes).length, nSt = Array.isArray(TG.students) ? TG.students.length : 0;
-    var w = String(name).trim().split(/\s+/).map(function (x) { return x.replace(/^ال(?=..)/, ''); }), ini = (w[0] || '').charAt(0) + ' ' + (w.length > 1 ? w[w.length - 1].charAt(0) : '');
-    var nowM = new Date().getHours() * 60 + new Date().getMinutes();
-    var card = function (c, ic, v, l, sub, href) { return '<a class="td-st ' + c + '" href="' + href + '"><span class="ico">' + tdSv(ic) + '</span><span class="go">←</span><span class="l">' + l + '</span><span class="n">' + v + '</span><span class="s">' + sub + '</span></a>'; };
+    var nCls = Object.keys(classes).length, ord = function (x) { return 'الحصة ' + (TT_ORD[x.period - 1] || x.period); };
+    var key = next ? next.cls[0] + '\u0001' + next.subject : '', go1 = tdSv('go');
+
+    var head = function (small, title, side) { return '<div class="tw-ph"><div><span>' + small + '</span><h2>' + title + '</h2></div>' + side + '</div>'; };
+    var stat = function (ic, v, label, note, href) { return '<a class="tw-stat" href="' + href + '"><span class="tw-ico">' + tdSv(ic) + '</span><div><strong>' + v + '</strong><b>' + label + '</b><small>' + note + '</small></div></a>'; };
+    var quick = function (ic, href, title, note) { return '<a href="' + href + '"><span class="tw-ico">' + tdSv(ic) + '</span><div><strong>' + title + '</strong><small>' + note + '</small></div>' + go1 + '</a>'; };
     var rows = today.map(function (x) {
-      var tm = ttTimeFor(x.class_name, x.period), now = tm && nowM >= ttMins(tm[0]) && nowM < ttMins(tm[1]);
-      return '<div class="td-row' + (now ? ' now' : '') + '"><span class="no">' + x.period + '</span><div class="pn"><b>الحصة ' + (TT_ORD[x.period - 1] || x.period) + '</b>' + (tm ? '<small>' + ttRange(tm[0], tm[1]) + '</small>' : '') + '</div>' +
-        '<div class="sj">' + esc(x.subject || '—') + '</div><div class="tc">' + esc(x.class_name) + (now ? ' · الآن' : '') + '</div></div>';
+      var st = x.to <= nowM ? 'done' : x.from <= nowM ? 'now' : '';
+      return '<li class="' + st + '"><i>' + x.period + '</i><div><b>' + esc(x.subject || ord(x)) + '</b><small>' + esc(x.cls.join('، ')) + '</small></div>' +
+        (x.time ? '<time>' + ttRange(x.time[0], x.time[1]) + '</time>' : '') + (st ? '<em>' + (st === 'now' ? 'الآن' : 'انتهت') + '</em>' : '') + '</li>';
     }).join('');
-    app.innerHTML = '<div class="td-banner"><span class="av">' + esc(ini) + '</span><div class="who"><small>' + esc((t && t.job_title) || 'المعلم') + '</small><b>' + esc(name) + '</b><span>' + (nCls ? Object.keys(classes).sort().map(esc).join(' · ') : 'لا شعب في جدول الحصص بعد') + '</span></div>' +
-        '<div class="yr">العام الدراسي<b>' + esc(academicYear().replace('/', ' / ')) + '</b></div></div>' +
-      '<div class="td-hello"><div><h2>مرحبًا بك</h2><p>ملخص يومك وصفوفك</p></div><span class="td-chip">' + esc(new Date().toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></div>' +
-      '<div class="td-stats">' +
-        card('c3', 'clock', today.length, 'حصص اليوم', today.length ? 'أولها الحصة ' + (TT_ORD[today[0].period - 1] || today[0].period) : 'لا حصص اليوم', '#/timetable') +
-        card('c4', 'cal', mine.length, 'حصص الأسبوع', 'في ' + days.length + ' أيام', '#/timetable') +
-        card('c2', 'cls', nCls, 'شعبي', 'من جدول الحصص', '#/mystudents') +
-        card('c1', 'users', TG.missing ? '—' : nSt, 'طلابي', 'في شعبي', '#/mystudents') + '</div>' +
-      '<div class="td-today"><div class="th"><span class="ic">' + tdSv('clock') + '</span><div><b>جدول اليوم' + (di > -1 ? ' — ' + esc(days[di]) : '') + '</b><small>' + (today.length ? today.length + ' حصص' : 'لا حصص اليوم') + '</small></div><a href="#/timetable">عرض الجدول الأسبوعي ←</a></div>' +
-        (rows || '<p class="hint" style="margin:0;padding:14px 18px">لا حصص لك اليوم.</p>') + '</div>';
+    var todo = tdTodo(), waiting = !S.papers && TD_P.list == null;
+
+    app.innerHTML =
+      '<header class="tw-top"><button type="button" class="tw-menu" data-twmenu aria-label="فتح القائمة">' + tdSv('menu') + '</button>' +
+        '<div class="tw-title"><b>الرئيسية</b><small>نظرة سريعة على يومك</small></div>' +
+        '<div class="tw-search"><label>' + tdSv('search') + '<input type="search" id="tw-q" data-ro-ok autocomplete="off" placeholder="ابحث عن طالب بالاسم..." aria-label="البحث عن طالب"></label><div id="tw-found" hidden></div></div>' +
+        '<div class="tw-date">' + tdSv('cal') + '<span>' + esc(now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></div></header>' +
+      '<div class="tw-body">' +
+      '<section class="tw-welcome"><div><p>السلام عليكم ورحمة الله وبركاته</p><h1>أهلًا بك، ' + esc(first) + '</h1><span>نتمنى لك يومًا مباركًا مع طلابك</span></div>' +
+        '<div class="tw-next"><span>' + (isNow ? 'الحصة الحالية' : 'موعد الحصة القادمة') + '</span><strong>' + tdSv('clock') + '<span>' +
+          (next ? (isNow ? 'حتى <bdi>' + esc(next.time[1]) + '</bdi>' : when + '، ' + (next.time ? '<bdi>' + esc(next.time[0]) + '</bdi>' : ord(next))) : 'لا حصص في جدولك') + '</span></strong></div></section>' +
+      '<section class="tw-task"><span class="tw-tico">' + tdSv('book') + '</span><div class="tw-copy"><span class="tw-eye">' + (isNow ? 'حصتك الآن' : 'خطوتك التالية') + '</span>' +
+        (next ? '<h2>' + esc(next.subject || ord(next)) + ' — ' + esc(next.cls.join('، ')) + '</h2><p>' + ord(next) + ' · ' + when + (next.time ? ' · ' + ttRange(next.time[0], next.time[1]) : '') + '</p></div>' +
+          '<button type="button" class="tw-cta" data-ro-ok data-twgrade="' + esc(key) + '">رصد درجات الشعبة ' + go1 + '</button>'
+          : '<h2>جهّز عملك</h2><p>لا حصص باسمك في جدول الحصص بعد</p></div><a class="tw-cta" href="#/timetable">فتح جدولي ' + go1 + '</a>') + '</section>' +
+      '<section class="tw-stats" aria-label="ملخص عملك">' +
+        stat('users', TG.missing ? '—' : TG.students.length, 'طلابي', nCls ? 'عدد الشعب التي تدرّسها: ' + nCls : 'لا شعب باسمك بعد', '#/mystudents') +
+        stat('clock', today.length, 'حصص اليوم', di < 0 ? 'ليس يوم دوام' : today.length ? 'أولها ' + ord(today[0]) : 'لا حصص لك اليوم', '#/timetable') +
+        stat('cal', week, 'حصص الأسبوع', 'حسب جدول الحصص', '#/timetable') + '</section>' +
+      '<div class="tw-grid"><section class="tw-panel">' + head('جدول اليوم', 'إنجاز يومك', '<a href="#/timetable">جدول الأسبوع ' + go1 + '</a>') +
+        (today.length ? (today.every(function (x) { return x.time; }) ? '<div class="tw-prog"><div class="tw-ring" style="--p:' + pct + '%"><strong>' + pct + '%</strong><span>من اليوم</span></div><div class="tw-pd">' +
+            '<div><span>حصص انتهت</span><strong>' + done + ' <small>من ' + today.length + '</small></strong></div><div class="tw-bar"><i style="width:' + pct + '%"></i></div></div></div>' : '') + '<ol class="tw-day">' + rows + '</ol>'
+          : '<p class="tw-none">لا حصص لك اليوم.</p>') + '</section>' +
+      '<section class="tw-panel">' + head('بحاجة إلى انتباهك', 'بانتظار إجراء', todo.length ? '<b class="tw-count">' + todo.length + '</b>' : '') +
+        (todo.length ? todo.slice(0, 4).map(function (p) {
+          var back = p.status === 'returned';
+          return '<a class="tw-review" href="#/papers"><span class="tw-ico">' + tdSv('paper') + '</span><span class="tw-rt"><strong>' + esc([PP_KINDS[p.kind], p.subject, p.class_name].filter(Boolean).join(' — ')) + '</strong><small>' +
+            (back ? 'أعادها المشرف للتعديل' : 'مسودة لم تكتمل') + '</small></span><span class="tw-act"><span>' + (back ? 'تعديل' : 'إكمال') + '</span>' + go1 + '</span></a>';
+        }).join('') + (todo.length > 4 ? '<a class="tw-all" href="#/papers">عرض الكل (' + todo.length + ')</a>' : '')
+          : '<p class="tw-none">' + (waiting ? 'جارٍ التحميل…' : TD_P.failed && !S.papers ? 'تعذّر جلب الأوراق؛ حدّث الصفحة.' : 'لا أوراق معادة أو مسودات.') + '</p>') + '</section></div>' +
+      '<section class="tw-panel tw-quick">' + head('اختصارات مفيدة', 'إجراءات سريعة', '<p>اختر ما تريد القيام به</p>') + '<div class="tw-links">' +
+        quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') +
+        (S.myStaff ? quick('paper', '#/papers', 'أوراق العمل والاختبارات', 'أنشئ ورقة واطبعها') : quick('cal', '#/timetable', 'جدولي', 'حصصك طوال الأسبوع')) + '</div></section></div>';
   }
+
+  app.addEventListener('input', function (e) {
+    if (e.target.id !== 'tw-q') return;
+    var box = document.getElementById('tw-found'), q = norm(e.target.value);
+    box.hidden = !q;
+    if (!q) { box.innerHTML = ''; return; }
+    var hit = TG.students.filter(function (x) { return norm(x.full_name).indexOf(q) > -1; });
+    box.innerHTML = hit.length ? hit.slice(0, 7).map(function (x) {
+      return '<button type="button" data-ro-ok data-twst="' + esc(x.full_name) + '"><b>' + esc(x.full_name) + '</b><small>' + esc(x.class_name) + '</small></button>';
+    }).join('') : '<p>لا طالب بهذا الاسم في شعبك.</p>';
+  });
+  app.addEventListener('keydown', function (e) {
+    if (e.target.id !== 'tw-q' || e.key !== 'Enter' || !e.target.value.trim()) return;
+    var u = tgUi(); u.q = e.target.value.trim(); u.cls = ''; go('#/mystudents');
+  });
+  app.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-twst], [data-twgrade], [data-twmenu]');
+    if (!el) return;
+    if (el.hasAttribute('data-twmenu')) { document.getElementById('menu-btn').click(); return; }
+    var u = tgUi();
+    if (el.hasAttribute('data-twst')) { u.q = el.getAttribute('data-twst'); u.cls = ''; return go('#/mystudents'); }
+    var k = el.getAttribute('data-twgrade');
+    // درجات كُتبت ولم تُحفظ: تبقى شاشتها كما هي ولا تُبدَّل الشعبة
+    if (Object.keys(u.draft).length && u.key !== k) toast('لديك درجات لم تُحفظ؛ احفظها ثم بدّل الشعبة.', true);
+    else if (TG.classes.some(function (c) { return c.class_name + '\u0001' + c.subject === k; })) u.key = k;
+    go('#/grades');
+  });
+  // الحصة الحالية وما انتهى يتغيران مع الوقت
+  setInterval(function () {
+    if (location.hash !== '#/thome' || !S.ready || !isTeacherRole() || document.hidden) return;
+    var q = document.getElementById('tw-q');
+    if (q && !q.value && document.activeElement !== q) render();
+  }, 60000);
 
   /* ---------- صفوفي (للمعلم) والدرجات ----------
      طلابي: يرى المعلم بحسابه بيانات طلاب الشعب التي يدرّسها (my_students في supabase/teacher_grades.sql)، ويصدّرها PDF بلا توقيع وعليها اسمه علامة مائية، أو Excel.

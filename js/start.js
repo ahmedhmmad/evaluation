@@ -17,6 +17,9 @@
       setTimeout(function () {
         var uid = session && session.user ? session.user.id : null;
         if (uid && uid === S.uid) return; // تجديد الجلسة فقط
+        // حساب آخر: لا يرى ما حُمّل لصاحب الحساب السابق
+        TG.loaded = false; TG.missing = false; TG.classes = []; TG.students = []; TG.items = null; TG.cfgEdit = null;
+        ui.tg = null; ui.pp = null; ui.thomeSeen = false; S.papers = null; S.ppMe = null; S.paperFiles = null; TD_P = { uid: null, at: 0, list: null, failed: false };
         S.uid = uid;
         S.email = uid ? session.user.email : '';
         S.profile = null;

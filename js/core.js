@@ -891,22 +891,28 @@
   function renderSide() {
     var signedIn = !!(S.uid && S.ready && role() !== 'pending' && !(S.profile && S.profile.must_change_password));
     shell.classList.toggle('bare', !signedIn);
+    var tch = signedIn && (S.baseProfile || S.profile || {}).role === 'teacher', active = signedIn ? activeKey() : '';
+    shell.classList.toggle('tch', !!tch);
+    shell.classList.toggle('tch-home', !!tch && active === 'thome');
     if (!signedIn) { sideNav.innerHTML = ''; userbar.innerHTML = ''; return; }
-    var active = activeKey();
+    var todoN = tch ? tdTodo().length : 0;
     sideNav.innerHTML = navModel().map(function (g) {
       return (g.title ? '<h3>' + g.title + '</h3>' : '') + g.items.map(function (it) {
-        return '<a href="' + it[0] + '"' + (it[1] === active ? ' class="on" aria-current="page"' : '') + '>' +
-          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONS[it[1]] + '"/></svg>' + it[2] + '</a>';
+        return '<a href="' + it[0] + '"' + (it[1] === active || active === 'thome' && it[0] === '#/thome' ? ' class="on" aria-current="page"' : '') + '>' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONS[it[1]] + '"/></svg>' + it[2] + (it[1] === 'papers' && todoN ? '<b class="nav-n">' + todoN + '</b>' : '') + '</a>';
       }).join('');
     }).join('');
     document.getElementById('brand-name').textContent = schoolName();
-    userbar.innerHTML =
-      '<div class="who">' + esc((S.profile && S.profile.full_name) || displayName(S.email)) + '</div>' +
-      '<div class="role">' + String(ROLES[roleKey(S.baseProfile || S.profile)] || '').replace(/\s*\(.*\)$/, '') + '</div>' +
+    var uName = (S.profile && S.profile.full_name) || displayName(S.email);
+    var who = '<div class="who">' + esc(uName) + '</div>' +
+      '<div class="role">' + String(ROLES[roleKey(S.baseProfile || S.profile)] || '').replace(/\s*\(.*\)$/, '') + '</div>';
+    var wasOpen = !!userbar.querySelector('details[open]');
+    // للمعلم: بطاقة باسمه، وتحت «•••» المزامنة والخروج
+    userbar.innerHTML = (tch ? '<details' + (wasOpen ? ' open' : '') + '><summary title="خيارات الحساب"><span class="tw-av">' + esc(String(uName).trim().charAt(0)) + '</span><div>' + who + '</div><span>•••</span></summary><div class="more">' : who) +
       '<button type="button" class="btn" data-act="sync" title="إعادة جلب البيانات من القاعدة">مزامنة البيانات</button>' +
       '<div class="role" title="رقم نسخة البرنامج المفتوحة في هذا المتصفح">نسخة البرنامج: ' + APP_BUILD + '</div>' +
       (S.syncedAt ? '<div class="role">آخر مزامنة: ' + S.syncedAt.toLocaleTimeString('ar-u-nu-latn', { hour: '2-digit', minute: '2-digit' }) + '</div>' : '') +
-      '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>';
+      '<button type="button" class="btn" data-act="signout">تسجيل الخروج</button>' + (tch ? '</div></details>' : '');
   }
 
   function closeMenu() {
@@ -918,6 +924,7 @@
     this.setAttribute('aria-expanded', String(shell.classList.toggle('open')));
   });
   document.getElementById('scrim').addEventListener('click', closeMenu);
+  document.getElementById('side-x').addEventListener('click', closeMenu);
   sideNav.addEventListener('click', function (e) { if (e.target.closest('a')) closeMenu(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
 
