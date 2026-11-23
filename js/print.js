@@ -1115,6 +1115,7 @@
     else if (pendingOr) buildOrderSheet(pendingOr);
     else if (pendingCl) buildClaimSheet(pendingCl);
     else if (pendingTg) buildMyStudentsSheet();
+    else if (pendingTgSheet) buildGradeSheet(pendingTgSheet);
     else if (pendingSl) buildSlSheet(pendingSl);
     else if (pendingSz) buildSizeSheet(pendingSz);
     else if (pendingCu) buildCustodySheet();
@@ -1162,6 +1163,7 @@
     pendingOr = null;
     pendingCl = null;
     pendingTg = false;
+    pendingTgSheet = null;
     pendingSl = null;
     pendingSz = null;
     pendingLa = null;
