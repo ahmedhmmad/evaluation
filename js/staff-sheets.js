@@ -16,7 +16,12 @@
         if (chosen) req.model = chosen;
         var r = await sb.functions.invoke('read-staff-sheet', { body: req });
         if (r.error || !r.data || r.data.error) {
-          var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
+          var why = (r.data && r.data.error) || '';
+          // عند رمز غير 2xx يخفي العميل نص الخطأ في r.error.context (الاستجابة نفسها)
+          if (!why && r.error && r.error.context && typeof r.error.context.json === 'function') {
+            try { var eb = await r.error.context.json(); why = (eb && eb.error) || ''; } catch (e2) { /* ليس JSON */ }
+          }
+          why = why || (r.error && r.error.message) || '';
           if (/Failed to send|not found|404/i.test(why)) why = 'خدمة قراءة الكشوف غير منشورة على الخادم بعد. شغّل «Deploy Supabase functions» من تبويب Actions في GitHub.';
           else if (/API_KEY is not set/i.test(why)) why = 'خدمة القراءة منشورة لكن مفتاح ' + (/OPENROUTER/.test(why) ? 'OpenRouter' : 'DeepInfra') + ' لم يصلها. أضفه في أسرار GitHub ثم أعد تشغيل «Deploy Supabase functions» من تبويب Actions، أو بدّل المزوّد من الإعدادات.';
           else if (/no credit/i.test(why)) why = 'لا رصيد في ' + (/OpenRouter/.test(why) ? 'OpenRouter' : 'DeepInfra') + '. بدّل مزوّد القراءة من «الإعدادات والمستخدمون» ← «النسخ الاحتياطي والربط».';
