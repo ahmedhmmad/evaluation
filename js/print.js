@@ -595,17 +595,26 @@
   }
 
   // كشف الدرجات: أسطر فارغة بلا ترقيم تُضاف حتى آخر الصفحة الأخيرة، فتقع التوقيعات أسفلها
+  // كشف الدرجات في صفحة واحدة دائمًا: الصفوف 8 مم، وإن كثر الطلاب تقصر الصفوف (حتى 5.5 مم) ثم يصغر اسم الطالب (حتى 11pt)؛
+  // ثم تُضاف أسطر فارغة بلا ترقيم حتى تقع التوقيعات في آخر الصفحة. يُقاس بهامش أمان لأن الطباعة قد تختلف قليلًا عن الشاشة
   function gradeSheetFill(el) {
-    var row = el.getAttribute('data-gfill'), body = el.querySelector('table.rz tbody'), head = el.querySelector('table.rz thead');
+    var row = el.getAttribute('data-gfill'), body = el.querySelector('table.gsheet tbody');
     el.removeAttribute('data-gfill');
-    el.querySelectorAll('tr.gfill').forEach(function (tr) { tr.remove(); });
     if (!body || !el.offsetHeight) return;
-    var pagePx = (REPORT.page.height - 2 * REPORT.page.marginY) * 96 / 25.4 - 12, headPx = head ? head.offsetHeight : 0;
-    var h = el.offsetHeight, pages = Math.max(1, Math.ceil(h / pagePx)), limit = pages * pagePx - (pages - 1) * headPx;
+    var mm = 96 / 25.4, p = REPORT.page, limit = (p.height - 2 * p.marginY - 8) * mm + 2 * p.marginY * mm;
+    var trs = body.querySelectorAll('tr'), rowMm = 8, nameMm = 13;
+    var setRows = function () { Array.prototype.forEach.call(body.querySelectorAll('tr'), function (tr) { tr.style.height = rowMm + 'mm'; }); };
+    var setName = function () { Array.prototype.forEach.call(body.querySelectorAll('td.gname'), function (td) { td.style.setProperty('font-size', nameMm + 'pt', 'important'); }); };
+    setRows();
+    while (el.offsetHeight > limit && rowMm > 5.5) { rowMm -= 0.25; setRows(); }
+    while (el.offsetHeight > limit && nameMm > 11) { nameMm -= 0.5; setName(); }
+    if (el.offsetHeight > limit) return;
     for (var i = 0; i < 200; i++) {
       body.insertAdjacentHTML('beforeend', row);
+      body.lastElementChild.style.height = rowMm + 'mm';
       if (el.offsetHeight > limit) { body.lastElementChild.remove(); break; }
     }
+    if (!trs.length) return;
   }
 
   function fitSheet() {
