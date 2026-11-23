@@ -7,11 +7,16 @@
 // or by the WhatsApp bot in n8n with the bot key (see supabase/staff_bot.sql and n8n/absence-bot.json).
 // Nothing is stored here: the image goes to the model and the answer comes back.
 //
-// Secrets: DEEPINFRA_API_KEY (required, the same key as read-registration-form), DEEPINFRA_MODEL (optional default).
+// The provider (DeepInfra or OpenRouter) is chosen by the superadmin in the website settings (supabase/staff_sheet_provider.sql);
+// without that file it stays DeepInfra. Only this function follows it: the other readers stay on DeepInfra.
+// Secrets: DEEPINFRA_API_KEY, DEEPINFRA_MODEL (optional default) for DeepInfra; OPENROUTER_API_KEY, OPENROUTER_MODEL
+// (optional default) for OpenRouter. Only the chosen provider's key is needed.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const ENDPOINT = "https://api.deepinfra.com/v1/openai/chat/completions";
-const DEFAULT_MODEL = "google/gemini-3.1-pro";
+const PROVIDERS = {
+  deepinfra: { name: "DeepInfra", endpoint: "https://api.deepinfra.com/v1/openai/chat/completions", key: "DEEPINFRA_API_KEY", model: "DEEPINFRA_MODEL", fallback: "google/gemini-3.1-pro" },
+  openrouter: { name: "OpenRouter", endpoint: "https://openrouter.ai/api/v1/chat/completions", key: "OPENROUTER_API_KEY", model: "OPENROUTER_MODEL", fallback: "google/gemini-3.1-pro-preview" },
+} as const;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -89,8 +94,11 @@ Deno.serve(async (req) => {
     if (readOnly === true) return json({ error: "forbidden" }, 403);
   }
 
-  const apiKey = Deno.env.get("DEEPINFRA_API_KEY");
-  if (!apiKey) return json({ error: "DEEPINFRA_API_KEY is not set for this function" }, 500);
+  const { data: chosen } = await supabase.rpc("staff_sheet_provider");
+  const pid = chosen?.provider === "openrouter" ? "openrouter" : "deepinfra";
+  const P = PROVIDERS[pid];
+  const apiKey = Deno.env.get(P.key);
+  if (!apiKey) return json({ error: `${P.key} is not set for this function` }, 500);
 
   const mediaType = body.file?.media_type ?? "";
   const data = body.file?.data ?? "";
@@ -101,9 +109,13 @@ Deno.serve(async (req) => {
   const list = staff.map((s) => `- ${s.key}: ${s.name}${s.title ? ` (${s.title})` : ""}`).join("\n");
 
   const asked = typeof body.model === "string" ? body.model.trim() : "";
-  const model = role === "superadmin" && /^[A-Za-z0-9][A-Za-z0-9._\/-]{2,99}$/.test(asked)
+  // The models the page offers are DeepInfra names; on OpenRouter the model comes from the settings or the secret
+  const orModel = typeof chosen?.model === "string" ? chosen.model.trim() : "";
+  const model = pid === "openrouter"
+    ? orModel || Deno.env.get(P.model) || P.fallback
+    : role === "superadmin" && /^[A-Za-z0-9][A-Za-z0-9._\/-]{2,99}$/.test(asked)
     ? asked
-    : Deno.env.get("DEEPINFRA_MODEL") || DEFAULT_MODEL;
+    : Deno.env.get(P.model) || P.fallback;
 
   const request = {
     model,
@@ -120,7 +132,7 @@ Deno.serve(async (req) => {
     ],
   };
   const call = (extra: Record<string, unknown>) =>
-    fetch(ENDPOINT, {
+    fetch(P.endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ ...request, ...extra }),
@@ -131,20 +143,21 @@ Deno.serve(async (req) => {
     response = await call({ temperature: 0, response_format: { type: "json_object" } });
     if (response.status === 400 || response.status === 422) response = await call({});
   } catch (err) {
-    return json({ error: `could not reach DeepInfra: ${String(err)}` }, 502);
+    return json({ error: `could not reach ${P.name}: ${String(err)}` }, 502);
   }
-  if (response.status === 401 || response.status === 403) return json({ error: "the DeepInfra API key was rejected" }, 502);
-  if (response.status === 429) return json({ error: "rate limited by DeepInfra; try again shortly" }, 429);
+  if (response.status === 401 || response.status === 403) return json({ error: `the ${P.name} API key was rejected` }, 502);
+  if (response.status === 402) return json({ error: `no credit left on ${P.name}` }, 402);
+  if (response.status === 429) return json({ error: `rate limited by ${P.name}; try again shortly` }, 429);
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 300);
-    return json({ error: `DeepInfra error ${response.status} (${model}): ${detail}` }, 502);
+    return json({ error: `${P.name} error ${response.status} (${model}): ${detail}` }, 502);
   }
 
   let answer: { choices?: { message?: { content?: string }; finish_reason?: string }[] };
   try {
     answer = await response.json();
   } catch {
-    return json({ error: "unreadable answer from DeepInfra" }, 502);
+    return json({ error: `unreadable answer from ${P.name}` }, 502);
   }
   const choice = answer.choices?.[0];
   if (choice?.finish_reason === "length") return json({ error: "the answer was cut off; photograph one page per image" }, 502);
@@ -195,5 +208,5 @@ Deno.serve(async (req) => {
     if (saved?.error) return json({ error: saved.error }, 403);
     return json({ reply: saved?.reply ?? "" });
   }
-  return json({ date, rows, model });
+  return json({ date, rows, model, provider: P.name });
 });

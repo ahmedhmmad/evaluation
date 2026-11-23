@@ -18,7 +18,8 @@
         if (r.error || !r.data || r.data.error) {
           var why = (r.data && r.data.error) || (r.error && r.error.message) || '';
           if (/Failed to send|not found|404/i.test(why)) why = 'خدمة قراءة الكشوف غير منشورة على الخادم بعد. شغّل «Deploy Supabase functions» من تبويب Actions في GitHub.';
-          else if (/API_KEY is not set/i.test(why)) why = 'خدمة القراءة منشورة لكن مفتاح DeepInfra لم يصلها. أعد تشغيل «Deploy Supabase functions» من تبويب Actions.';
+          else if (/API_KEY is not set/i.test(why)) why = 'خدمة القراءة منشورة لكن مفتاح ' + (/OPENROUTER/.test(why) ? 'OpenRouter' : 'DeepInfra') + ' لم يصلها. أضفه في أسرار GitHub ثم أعد تشغيل «Deploy Supabase functions» من تبويب Actions، أو بدّل المزوّد من الإعدادات.';
+          else if (/no credit/i.test(why)) why = 'لا رصيد في ' + (/OpenRouter/.test(why) ? 'OpenRouter' : 'DeepInfra') + '. بدّل مزوّد القراءة من «الإعدادات والمستخدمون» ← «النسخ الاحتياطي والربط».';
           else if (/forbidden/i.test(why)) why = 'قراءة الكشوف للمدير العام والمدير فقط.';
           throw new Error(why || 'تعذر الاتصال بخدمة القراءة');
         }
@@ -420,3 +421,40 @@
     render();
   });
 
+
+  /* ----- مزوّد قراءة كشف الدوام (DeepInfra أو OpenRouter) -----
+     للمدير العام في «الإعدادات والمستخدمون» ← «النسخ الاحتياطي والربط». يخص read-staff-sheet وحدها (supabase/staff_sheet_provider.sql) */
+  async function loadSheetProvider() {
+    var r = await sb.rpc('staff_sheet_provider');
+    S.sheetProv = r.error ? { missing: true } : { provider: (r.data && r.data.provider) || 'deepinfra', model: (r.data && r.data.model) || '' };
+    render();
+  }
+
+  function sheetProviderCardHtml() {
+    if (!isAdmin()) return '';
+    if (!S.sheetProv) { loadSheetProvider(); return ''; }
+    var p = S.sheetProv;
+    if (p.missing) return '<div class="card"><h2>مزوّد قراءة كشف الدوام</h2><p class="hint" style="margin:0">لتفعيل الاختيار بين DeepInfra وOpenRouter شغّل الملف <code dir="ltr">supabase/staff_sheet_provider.sql</code> في Supabase. حتى ذلك تبقى القراءة على DeepInfra.</p></div>';
+    var opt = function (v, t) { return '<label style="display:flex;gap:6px;align-items:center"><input type="radio" name="sp-prov" value="' + v + '"' + (p.provider === v ? ' checked' : '') + '> ' + t + '</label>'; };
+    return '<div class="card"><h2>مزوّد قراءة كشف الدوام</h2>' +
+      '<p class="hint">الخدمة التي تقرأ صورة كشف حضور وانصراف الموظفين (من الشاشة ومن واتساب). إن نفد الرصيد في أحدهما فبدّل إلى الآخر. لا يغيّر قراءة الاستمارات والسير الذاتية.</p>' +
+      '<div class="toolbar" style="align-items:center;gap:18px;margin:0 0 8px">' + opt('deepinfra', 'DeepInfra') + opt('openrouter', 'OpenRouter') + '</div>' +
+      (p.provider === 'openrouter' ? '<label class="field" for="sp-model">نموذج OpenRouter (اختياري)</label><input type="text" id="sp-model" dir="ltr" autocomplete="off" placeholder="google/gemini-3.1-pro-preview" value="' + esc(p.model) + '" style="max-width:320px">' +
+        '<p class="hint" style="margin:6px 0 0">اسم النموذج كما في openrouter.ai ويجب أن يقرأ الصور. فارغ = الافتراضي. ويحتاج مفتاح <code dir="ltr">OPENROUTER_API_KEY</code> في أسرار GitHub ثم تشغيل «Deploy Supabase functions».</p>' : '') +
+      '<div class="toolbar" style="margin:10px 0 0"><button type="button" class="btn primary" data-spsave>حفظ</button></div></div>';
+  }
+
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/admin' || !S.sheetProv || e.target.name !== 'sp-prov') return;
+    S.sheetProv.provider = e.target.value;
+    render();
+  });
+
+  document.addEventListener('click', async function (e) {
+    if (location.hash !== '#/admin' || !isAdmin() || !S.sheetProv || S.sheetProv.missing || !e.target.closest('[data-spsave]')) return;
+    var m = document.getElementById('sp-model'), p = S.sheetProv;
+    if (m) p.model = m.value.trim();
+    var r = await sb.rpc('set_staff_sheet_provider', { p_provider: p.provider, p_model: p.provider === 'openrouter' ? p.model : '' });
+    if (r.error) return fail(r.error);
+    toast('حُفظ: قراءة كشف الدوام عبر ' + (p.provider === 'openrouter' ? 'OpenRouter' : 'DeepInfra'));
+  });

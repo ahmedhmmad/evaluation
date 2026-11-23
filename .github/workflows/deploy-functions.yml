@@ -4,6 +4,7 @@
 #
 # Repository secrets used (Settings → Secrets and variables → Actions):
 #   DEEPINFRA_API_KEY      - the DeepInfra key the function calls the model with
+#   OPENROUTER_API_KEY     - optional: the OpenRouter key, for reading staff sheets when OpenRouter is chosen in the settings
 #   SUPABASE_ACCESS_TOKEN  - a Supabase personal access token (supabase.com/dashboard/account/tokens)
 #
 # Runs when the function's code changes, or by hand from the Actions tab ("Run workflow").
@@ -25,6 +26,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       PROJECT_REF: wvklhyjtzqomiyhzsfuf
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +48,11 @@ jobs:
 
       - name: Give the function its DeepInfra key
         if: steps.check.outputs.ready == 'true'
-        run: supabase secrets set DEEPINFRA_API_KEY="$DEEPINFRA_API_KEY" --project-ref "$PROJECT_REF"
+        run: |
+          supabase secrets set DEEPINFRA_API_KEY="$DEEPINFRA_API_KEY" --project-ref "$PROJECT_REF"
+          if [ -n "$OPENROUTER_API_KEY" ]; then
+            supabase secrets set OPENROUTER_API_KEY="$OPENROUTER_API_KEY" --project-ref "$PROJECT_REF"
+          fi
 
       - name: Deploy the function
         if: steps.check.outputs.ready == 'true'

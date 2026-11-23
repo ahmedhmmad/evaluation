@@ -201,7 +201,7 @@
     var adTab = vtab('admin', 'users');
     app.innerHTML = tabs('admin') + vtabsHtml('admin', 'users', [['users', 'المستخدمون والصلاحيات'], ['perms', 'صلاحيات الموظفين'], ['school', 'بيانات المدرسة'], ['viewers', 'ما يراه المشاهدون'], ['backup', 'النسخ الاحتياطي والربط']]) +
       (adTab === 'perms' ? permsCardHtml() : '') +
-      (adTab === 'backup' ? backupCardHtml() + botKeyCardHtml() : '') +
+      (adTab === 'backup' ? backupCardHtml() + botKeyCardHtml() + sheetProviderCardHtml() : '') +
       (adTab !== 'school' ? '' : '<div class="card"><h2>بيانات المدرسة</h2>' +
         '<label class="field" for="school-name" style="margin-top:8px">اسم المدرسة</label>' +
         '<input type="text" id="school-name" data-settingtext="school_name" value="' + esc((S.settings && S.settings.school_name) || '') + '">' +
