@@ -1397,13 +1397,14 @@
       ths = '<tr><th style="width:2.2em">م</th><th>اسم الطالب</th>' + g0.items.map(function (x) { return '<th class="c">' + esc(x.name) + sub(x.max_score) + '</th>'; }).join('') + '<th class="c">المجموع' + sub(g0.max) + '</th></tr>';
     }
     var empty = new Array(nData + 1).join('<td></td>');
-    sheet.className = 'gs-one';
+    sheet.className = 'ls';
     sheet.setAttribute('data-nosign', '1');
+    sheet.style.paddingTop = '12mm'; // صفحة واحدة بلا صف الهامش المتكرر
     sheet.setAttribute('data-gfill', '<tr class="gfill" style="height:2.1em"><td></td><td></td>' + empty + '</tr>');
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = both ? '10.5pt' : '12pt';
     // خطوط الجدول داكنة، واسم الطالب 13pt على الأقل مهما صغُر خط الكشف ليتسع
-    sheet.innerHTML = '<style>#print-sheet table.gsheet th,#print-sheet table.gsheet tbody td{border:1pt solid #000!important}#print-sheet table.gsheet td.gname{font-size:13pt!important;white-space:nowrap}#print-sheet table.gsheet{width:100%}#print-sheet table.gsheet tbody td{padding:0 .35em!important;line-height:1.15!important}</style>' +
+    sheet.innerHTML = '<style>#print-sheet table.gsheet th,#print-sheet table.gsheet tbody td{border:1pt solid #000!important}#print-sheet table.gsheet td.gname{font-size:12pt!important}</style>' +
       head + '<table class="rz gsheet"><thead>' + ths + '</thead><tbody>' +
       studs.map(function (x, i) { return '<tr style="height:2.1em"><td class="c">' + (i + 1) + '</td><td class="gname"><b>' + esc(x.full_name) + '</b></td>' + empty + '</tr>'; }).join('') +
       '</tbody></table>' +
