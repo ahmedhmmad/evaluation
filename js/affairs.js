@@ -1402,8 +1402,10 @@
     sheet.setAttribute('data-gfill', '<tr class="gfill" style="height:2.1em"><td></td><td></td>' + empty + '</tr>');
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = both ? '10.5pt' : '12pt';
-    sheet.innerHTML = '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' + ths + '</thead><tbody>' +
-      studs.map(function (x, i) { return '<tr style="height:2.1em"><td class="c">' + (i + 1) + '</td><td style="white-space:nowrap"><b>' + esc(x.full_name) + '</b></td>' + empty + '</tr>'; }).join('') +
+    // خطوط الجدول داكنة، واسم الطالب 13pt على الأقل مهما صغُر خط الكشف ليتسع
+    sheet.innerHTML = '<style>#print-sheet table.gsheet th,#print-sheet table.gsheet tbody td{border:1pt solid #000!important}#print-sheet table.gsheet td.gname{font-size:13pt!important;white-space:nowrap}#print-sheet table.gsheet tbody tr{height:8mm!important}</style>' +
+      '<table class="rz gsheet"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' + ths + '</thead><tbody>' +
+      studs.map(function (x, i) { return '<tr style="height:2.1em"><td class="c">' + (i + 1) + '</td><td class="gname"><b>' + esc(x.full_name) + '</b></td>' + empty + '</tr>'; }).join('') +
       '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       reportSigns([['معلم المبحث', teacher], ['المشرف التربوي', supervisorName()], [principalTitle(), principalName()]], true);
   }
