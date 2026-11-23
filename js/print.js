@@ -594,6 +594,20 @@
     el.classList.toggle('one-page', fits);
   }
 
+  // كشف الدرجات: أسطر فارغة بلا ترقيم تُضاف حتى آخر الصفحة الأخيرة، فتقع التوقيعات أسفلها
+  function gradeSheetFill(el) {
+    var row = el.getAttribute('data-gfill'), body = el.querySelector('table.rz tbody'), head = el.querySelector('table.rz thead');
+    el.removeAttribute('data-gfill');
+    el.querySelectorAll('tr.gfill').forEach(function (tr) { tr.remove(); });
+    if (!body || !el.offsetHeight) return;
+    var pagePx = (REPORT.page.height - 2 * REPORT.page.marginY) * 96 / 25.4 - 12, headPx = head ? head.offsetHeight : 0;
+    var h = el.offsetHeight, pages = Math.max(1, Math.ceil(h / pagePx)), limit = pages * pagePx - (pages - 1) * headPx;
+    for (var i = 0; i < 200; i++) {
+      body.insertAdjacentHTML('beforeend', row);
+      if (el.offsetHeight > limit) { body.lastElementChild.remove(); break; }
+    }
+  }
+
   function fitSheet() {
     sheet.setAttribute('data-fit', '1');
     fitElement(sheet, false);
@@ -1153,6 +1167,7 @@
     else if (o) buildEvalSheet(o);
     else return false;
     if (sheet.classList.contains('ls')) { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
+    if (sheet.hasAttribute('data-gfill')) gradeSheetFill(sheet);
     pendingTT = null;
     pendingPaper = null;
     pendingPay = null;
