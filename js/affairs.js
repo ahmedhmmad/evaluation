@@ -1323,7 +1323,7 @@
     var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
       '<label class="field" for="tg-term" style="margin:0">الفصل</label><select id="tg-term" data-ro-ok style="width:auto">' + terms.map(function (t) { return '<option' + (t === u.term ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select>' +
       '<label class="field" for="tg-key" style="margin:0">الشعبة والمادة</label><select id="tg-key" data-ro-ok style="width:auto">' + TG.classes.map(function (c) { var k = c.class_name + '\u0001' + c.subject; return '<option value="' + esc(k) + '"' + (k === u.key ? ' selected' : '') + '>' + esc(c.class_name + ' — ' + (c.subject || 'بلا مادة')) + '</option>'; }).join('') + '</select>' +
-      '<span style="flex:1"></span>' + terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="' + esc(t) + '">طباعة كشف ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="*">طباعة الفصلين معًا</button>' : '') + (canEdit ? '<button type="button" class="btn primary" data-tgsave' + (Object.keys(u.draft).length ? '' : ' disabled') + '>حفظ الدرجات</button>' : '') + '<button type="button" class="btn" data-tggx data-ro-ok>تصدير Excel</button></div></div>';
+      '<span style="flex:1"></span>' + '<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="tg-nosubj" data-ro-ok' + (u.noSubj ? ' checked' : '') + '> طباعة بلا مبحث</label>' + terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="' + esc(t) + '">طباعة كشف ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="*">طباعة الفصلين معًا</button>' : '') + (canEdit ? '<button type="button" class="btn primary" data-tgsave' + (Object.keys(u.draft).length ? '' : ' disabled') + '>حفظ الدرجات</button>' : '') + '<button type="button" class="btn" data-tggx data-ro-ok>تصدير Excel</button></div></div>';
     if (!terms.length) { app.innerHTML = head + '<div class="card empty">لم تُعدّ الإدارة اختبارات بعد' + (isAdmin() ? '؛ أضفها من <a href="#/gradecfg">إعداد الدرجات</a>.' : '.') + '</div>'; return; }
     if (!TG.classes.length) { app.innerHTML = head + '<div class="card empty">لا شعب في جدول الحصص' + (staffView ? '' : ' باسمك') + '.</div>'; return; }
     if (!studs.length) { app.innerHTML = head + bar + '<div class="card empty">لا طلاب في هذه الشعبة.</div>'; return; }
@@ -1380,11 +1380,13 @@
     var short = function (t) { return t.replace(/^الفصل الدراسي\s+/, 'الفصل '); };
     var studs = TG.students.filter(function (x) { return x.class_name === cls; }).sort(function (a, b) { return a.full_name.localeCompare(b.full_name, 'ar'); });
     var nData = groups.reduce(function (a, g) { return a + g.items.length + 1; }, 0) + (both ? 1 : 0), n = nData + 2;
-    var teacher = isTeacherRole() ? tgTeacherName() : '';
+    // «طباعة بلا مبحث»: كشف الشعبة نفسه، والمبحث والمعلم نقاط تُكتب باليد (لأي مادة)
+    if (u.noSubj) subj = '';
+    var teacher = isTeacherRole() && !u.noSubj ? tgTeacherName() : '';
     var sub = function (v) { return '<br><span style="font-weight:400">(' + v + ')</span>'; };
     var head = '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.15em;margin-bottom:.4em"><b style="font-size:1.15em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(academicYear()) + '</span></div>' +
       '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:1.35em;color:var(--navy);margin:.1em 0 .25em">كشف درجات ' + (both ? 'الفصلين الدراسيين' : esc(term)) + '</div>' +
-      '<div style="display:flex;justify-content:space-between;gap:1em;margin-bottom:.4em;font-size:1.05em"><span><b>الشعبة:</b> ' + esc(cls) + '</span><span><b>المبحث:</b> ' + esc(subj) + '</span><span><b>المعلم:</b> ' + esc(teacher || '........................') + '</span></div>';
+      '<div style="display:flex;justify-content:space-between;gap:1em;margin-bottom:.4em;font-size:1.05em"><span><b>الشعبة:</b> ' + esc(cls) + '</span><span><b>المبحث:</b> ' + esc(subj || '........................') + '</span><span><b>المعلم:</b> ' + esc(teacher || '........................') + '</span></div>';
     var ths;
     if (both) {
       ths = '<tr><th rowspan="2" style="width:2.2em">م</th><th rowspan="2">اسم الطالب</th>' + groups.map(function (g) { return '<th class="c" colspan="' + (g.items.length + 1) + '">' + esc(g.term) + '</th>'; }).join('') +
@@ -1433,6 +1435,7 @@
   document.addEventListener('change', function (e) {
     var u = tgUi(), id = e.target.id;
     if (location.hash === '#/mystudents' && id === 'tg-cls') { u.cls = e.target.value; return render(); }
+    if (location.hash === '#/grades' && id === 'tg-nosubj') { u.noSubj = e.target.checked; return; }
     if (location.hash === '#/grades' && (id === 'tg-term' || id === 'tg-key')) {
       if (Object.keys(u.draft).length && !confirm('في الدرجات تعديلات لم تُحفظ. تركها؟')) { e.target.value = id === 'tg-term' ? u.term : u.key; return; }
       u[id === 'tg-term' ? 'term' : 'key'] = e.target.value; u.draft = {}; return render();
