@@ -155,7 +155,8 @@ Deno.serve(async (req) => {
       if (!/^[1-9]\d{9,14}$/.test(ph)) { noPhone.push({ externalId: "bad" + noPhone.length, phone: String(r?.phone ?? ""), text: t, studentIds: [], names: name || String(r?.phone ?? "") }); continue; }
       if (seen.has(ph)) continue;
       seen.add(ph);
-      msgs.push({ externalId: "n" + ph, phone: ph, text: t, studentIds: [], names: name || ph });
+      // «+» مطلوبة: SendWhats يعدّ الرقم بلا + ولا 00 رقمًا محليًا ويضيف إليه كود مصر (فيفسد الرقم الفلسطيني)
+      msgs.push({ externalId: "n" + ph, phone: "+" + ph, text: t, studentIds: [], names: name || ph });
     }
     const r = await sendBatch(ctx, batchId, "bulk", title || "رسالة متنوعة", msgs, noPhone);
     return json(r, "error" in r ? 502 : 200);
