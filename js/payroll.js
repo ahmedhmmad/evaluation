@@ -11,7 +11,7 @@
     ['leave_days', 'أيام الإجازات المسموح بها في العام الدراسي', 'يوم', 1],
     ['leave_month', 'أيام الإجازات المسموح بها في الشهر', 'يوم', 1]
   ];
-  var PR_LATE_MODES = { minutes: 'بالدقيقة: ما زاد عن الساعات المسموحة يُخصم بأجر الدقيقة', days: 'باليوم: كل يوم تأخير زائد عن الأيام المسموحة يُخصم منه جزء من أجر اليوم', both: 'الاثنان معًا: ما زاد عن الساعات المسموحة بالدقيقة، وكل يوم زاد عن الأيام المسموحة بجزء من أجر اليوم' };
+  var PR_LATE_MODES = { minutes: 'بالدقيقة: ما زاد عن الساعات المسموحة يُخصم بأجر الدقيقة', days: 'باليوم: إن تجاوزت أيام التأخير الأيام المسموحة يُخصم يوم كامل عن كل 3 أيام تأخير', both: 'الاثنان معًا: ما زاد عن الساعات المسموحة بالدقيقة، وإن تجاوزت أيام التأخير الأيام المسموحة يُخصم يوم كامل عن كل 3 أيام تأخير' };
 
   // صلاحية الرواتب: edit أو view أو ''
   function prLevel() { return isAdmin() ? 'edit' : isManager() ? S.prAccess || '' : ''; }
@@ -153,8 +153,7 @@
       '</div>' +
       '<h3 style="margin:16px 0 6px">خصم التأخير الزائد</h3>' +
         Object.keys(PR_LATE_MODES).map(function (k) { return '<label style="display:block;margin:4px 0"><input type="radio" name="pr-latemode" data-prrule="late_mode" value="' + k + '"' + (R.late_mode === k ? ' checked' : '') + dis + '> ' + PR_LATE_MODES[k] + '</label>'; }).join('') +
-        '<div style="margin:6px 0 0;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><label class="field" for="pr-r-late_fraction" style="margin:0">جزء اليوم المخصوم عن كل يوم تأخير زائد</label>' +
-          '<select id="pr-r-late_fraction" data-prrule="late_fraction" style="width:auto"' + dis + '>' + [[0.25, 'ربع يوم'], [0.5, 'نصف يوم'], [1, 'يوم كامل']].map(function (o) { return '<option value="' + o[0] + '"' + (Number(R.late_fraction) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+        '<p class="hint" style="margin:6px 0 0">في وضع «باليوم»: حين تتجاوز أيام تأخير الموظف الأيام المسموحة في الشهر يُخصم يوم كامل عن كل 3 أيام تأخير من مجموع أيام تأخيره (6 أيام ← يومان، 9 ← 3 أيام)، وما لم يتجاوز الحد المسموح فلا خصم.</p>' +
       '<h3 style="margin:16px 0 6px">ساعات الدوام</h3>' +
         '<p class="hint" style="margin:0">من «دوام الموظفين» ← «مجموعات الدوام»: لكل موظف دوام مجموعته (8:00–12:30، 8:00–10:00…)، وبه يُحسب تأخيره وأجر ساعته. ' +
           (H ? 'الآن: الوقت الرسمي ' + H.time_in + '–' + H.time_out + ((H.groups || []).length ? '، و' + H.groups.map(function (g) { return esc(g.name) + ' ' + g.time_in + '–' + g.time_out; }).join('، ') : '، بلا مجموعات بعد') + '.' : '') + '</p>' +
@@ -406,12 +405,12 @@
       x.leaveExtra = leaveIn - leaveCovered;
       x.leaveLeft = allowLeave == null ? null : Math.max(0, allowLeave - usedLeave - leaveCovered);
       // التأخير: بالدقيقة، أو باليوم، أو الاثنان معًا (كلٌّ بحدّه المسموح)
-      var exDays = allowDays == null ? 0 : Math.max(0, x.lateDays - allowDays), exMins = allowMins == null ? 0 : Math.max(0, x.lateMins - allowMins);
-      var fracTxt = { 0.25: 'ربع يوم', 0.5: 'نصف يوم', 1: 'يوم كامل' }[Number(R.late_fraction)] || R.late_fraction;
+      // باليوم: إن تجاوزت أيام التأخير الأيام المسموحة يُخصم يوم كامل عن كل 3 أيام تأخير (من مجموع أيام التأخير لا من الزائد وحده)
+      var exDays = allowDays == null || x.lateDays <= allowDays ? 0 : Math.floor(x.lateDays / 3), exMins = allowMins == null ? 0 : Math.max(0, x.lateMins - allowMins);
       var useDays = R.late_mode === 'days' || R.late_mode === 'both', useMins = R.late_mode !== 'days';
       x.lateExtra = useDays && !useMins ? exDays : useMins && !useDays ? exMins : exDays + exMins;
-      x.dLate = (useDays ? exDays * (Number(R.late_fraction) || 0.25) * dayVal : 0) + (useMins ? exMins * minVal : 0);
-      x.lateNote = [useMins && exMins ? exMins + ' دقيقة زائدة' : '', useDays && exDays ? exDays + ' يوم تأخير زائد × ' + fracTxt : ''].filter(Boolean).join(' + ');
+      x.dLate = (useDays ? exDays * dayVal : 0) + (useMins ? exMins * minVal : 0);
+      x.lateNote = [useMins && exMins ? exMins + ' دقيقة زائدة' : '', useDays && exDays ? 'خصم ' + (exDays === 1 ? 'يوم' : exDays === 2 ? 'يومين' : exDays + ' أيام') + ' (' + x.lateDays + ' أيام تأخير ÷ 3)' : ''].filter(Boolean).join(' + ');
       var r2 = function (v) { return Math.round(v * 100) / 100; };
       x.dLate = r2(x.dLate);
       x.dAbsent = r2(x.absent * dayVal);
@@ -478,7 +477,7 @@
         '<td><button type="button" class="btn link" data-prslip="' + x.id + '" data-ro-ok>السليب</button></td></tr>';
     }).join('');
     var card = function (lbl, num, sub, color) { return '<div class="card stat"><span class="lbl">' + lbl + '</span><span class="num"' + (color ? ' style="color:' + color + '"' : '') + '>' + num + '</span><span class="sub">' + sub + '</span></div>'; };
-    var lateRule = R.late_mode === 'both' ? 'التأخير: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— ساعة' : R.late_hours + ' ساعة') + ' بالدقيقة، وما زاد عن ' + (R.late_days === '' || R.late_days == null ? '— أيام' : R.late_days + ' أيام') + ' باليوم' : R.late_mode === 'days' ? 'التأخير باليوم: ما زاد عن ' + (R.late_days === '' || R.late_days == null ? '— (بلا حد)' : R.late_days + ' أيام') : 'التأخير بالدقيقة: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— (بلا حد)' : R.late_hours + ' ساعة');
+    var lateRule = R.late_mode === 'both' ? 'التأخير: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— ساعة' : R.late_hours + ' ساعة') + ' بالدقيقة، وإن زاد عدد أيام التأخير عن ' + (R.late_days === '' || R.late_days == null ? '— أيام' : R.late_days + ' أيام') + ' يُخصم يوم عن كل 3 أيام تأخير' : R.late_mode === 'days' ? 'التأخير باليوم: إن زاد عن ' + (R.late_days === '' || R.late_days == null ? '— (بلا حد)' : R.late_days + ' أيام') + ' يُخصم يوم عن كل 3 أيام تأخير' : 'التأخير بالدقيقة: ما زاد عن ' + (R.late_hours === '' || R.late_hours == null ? '— (بلا حد)' : R.late_hours + ' ساعة');
     app.innerHTML = head + bar +
       '<div class="stats">' + card('مجموع الرواتب', prMoney(sum.salary), rows.length + ' موظفًا') + card('الخصومات', prMoney(sum.ded), 'غياب وإجازات وتأخير ويدوي', sum.ded ? 'var(--red)' : '') +
         card('الإضافات', prMoney(sum.add), 'مكافآت وبدلات') + card('صافي الرواتب', prMoney(sum.net), 'بالجنيه المصري', 'var(--navy-dark)') + '</div>' +
