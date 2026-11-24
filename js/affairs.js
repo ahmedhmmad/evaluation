@@ -1524,8 +1524,8 @@
     sheet.removeAttribute('data-fit');
     sheet.style.fontSize = both ? '10.5pt' : '12pt';
     // خطوط الجدول داكنة، واسم الطالب 13pt على الأقل مهما صغُر خط الكشف ليتسع
-    sheet.innerHTML = '<style>#print-sheet table.gsheet th,#print-sheet table.gsheet tbody td{border:1pt solid #000!important}#print-sheet table.gsheet td.gname{font-size:11pt!important;white-space:nowrap}#print-sheet table.gsheet thead th{background:#d9d9d9!important;color:#000!important}#print-sheet table.gsheet tbody td{padding-top:0!important;padding-bottom:0!important}</style>' +
-      head + '<table class="rz gsheet"><thead>' + ths + '</thead><tbody>' +
+    sheet.innerHTML = '<style>#print-sheet table.gsheet th,#print-sheet table.gsheet tbody td{border:1pt solid #000!important}#print-sheet table.gsheet td.gname{font-size:11pt!important;white-space:nowrap}' + (both ? '#print-sheet table.gsheet{width:100%;table-layout:fixed}#print-sheet table.gsheet td.gname{font-size:10pt!important;overflow:hidden}#print-sheet table.gsheet thead th{font-size:8.5pt!important;padding:1px 2px!important;overflow-wrap:break-word;word-break:normal}#print-sheet table.gsheet tbody td{padding-left:2px!important;padding-right:2px!important}' : '') + '#print-sheet table.gsheet thead th{background:#d9d9d9!important;color:#000!important}#print-sheet table.gsheet tbody td{padding-top:0!important;padding-bottom:0!important}</style>' +
+      head + '<table class="rz gsheet">' + (both ? '<colgroup><col style="width:4%"><col style="width:27%">' + new Array(nData + 1).join('<col style="width:' + (69 / nData).toFixed(2) + '%">') + '</colgroup>' : '') + '<thead>' + ths + '</thead><tbody>' +
       studs.map(function (x, i) { return '<tr style="height:2.1em"><td class="c">' + (i + 1) + '</td><td class="gname"><b>' + esc(x.full_name) + '</b></td>' + empty + '</tr>'; }).join('') +
       '</tbody></table>' +
       reportSigns([['معلم المبحث', teacher], ['المشرف التربوي', supervisorName()], [principalTitle(), principalName()]], true);
