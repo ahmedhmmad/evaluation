@@ -1299,8 +1299,13 @@
   // ----- رصد الدرجات -----
   // الشعب والمواد: للمعلم من جدوله؛ وللمدير العام والمدير كل ما في جدول الحصص
   async function tgLoadAllClasses() {
-    var r = await fetchAll(function () { return sb.from('timetable_sessions').select('class_name, subject').neq('status', 'removed'); });
-    var m = {}; (r || []).forEach(function (x) { if (x.class_name && x.subject) m[x.class_name + '\u0001' + x.subject] = { class_name: x.class_name, subject: x.subject }; });
+    var r = await fetchAll(function () { return sb.from('timetable_sessions').select('class_name, subject, teacher_id').neq('status', 'removed'); });
+    // معلم كل مادة في كل شعبة من الجدول (قد يدرّسها أكثر من معلم)
+    var m = {}; (r || []).forEach(function (x) {
+      if (!x.class_name || !x.subject) return;
+      var k = x.class_name + '\u0001' + x.subject, e = m[k] || (m[k] = { class_name: x.class_name, subject: x.subject, teachers: [] }), t = x.teacher_id && find(x.teacher_id);
+      if (t && e.teachers.indexOf(t.name) < 0) e.teachers.push(t.name);
+    });
     TG.classes = Object.keys(m).sort().map(function (k) { return m[k]; });
     TG.students = S.students.filter(enrolled).map(function (x) { return { id: x.id, full_name: x.full_name, class_name: x.class_name }; });
     TG.loaded = true; render();
@@ -1382,7 +1387,9 @@
     var nData = groups.reduce(function (a, g) { return a + g.items.length + 1; }, 0) + (both ? 1 : 0), n = nData + 2;
     // «طباعة بلا مبحث»: كشف الشعبة نفسه، والمبحث والمعلم نقاط تُكتب باليد (لأي مادة)
     if (u.noSubj) subj = '';
-    var teacher = isTeacherRole() && !u.noSubj ? tgTeacherName() : '';
+    // المعلم: للمعلم نفسه اسمه، وللمدير العام والمدير معلم المادة في الشعبة من جدول الحصص، ويسبقه «أ.»
+    var tc = TG.classes.filter(function (c) { return c.class_name === cls && c.subject === subj; })[0];
+    var teacher = u.noSubj ? '' : isTeacherRole() ? signName('معلم', tgTeacherName()) : tc && tc.teachers ? tc.teachers.map(function (n) { return signName('معلم', n); }).join('، ') : '';
     var sub = function (v) { return '<br><span style="font-weight:400">(' + v + ')</span>'; };
     var head = '<div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5pt solid var(--gold);padding-bottom:.15em;margin-bottom:.4em"><b style="font-size:1.15em;color:var(--navy)">' + esc(schoolName()) + '</b><span>العام الدراسي ' + esc(academicYear()) + '</span></div>' +
       '<div style="text-align:center;font-family:var(--font-head);font-weight:800;font-size:1.35em;color:var(--navy);margin:.1em 0 .25em">كشف درجات ' + (both ? 'الفصلين الدراسيين' : esc(term)) + '</div>' +
