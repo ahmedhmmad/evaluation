@@ -431,7 +431,7 @@
     var b = wbUi(), ok = b.rows.filter(function (r) { return r.ok; }), bad = b.rows.filter(function (r) { return !r.norm; }), dup = b.rows.filter(function (r) { return r.dup; });
     var noName = ok.filter(function (r) { return !r.name; }).length, usesName = /\{الاسم(_الأول)?\}/.test(b.text);
     var file = '<div class="card"><h2 style="margin-top:0">ملف الأرقام</h2>' +
-      '<p class="hint" style="margin:0 0 8px">أرفق ملف Excel (xlsx) أو CSV فيه أرقام الأشخاص الذين ستصلهم الرسالة. اجعل الأرقام في عمود عنوانه «الجوال» (أو «رقم» أو «هاتف»)، وعمودًا اختياريًا عنوانه «الاسم» لتكتب {الاسم} في الرسالة. بلا عناوين: العمود الأول أرقام والثاني أسماء. الأرقام المصرية 11 رقمًا تبدأ بـ01، والدولية بكود الدولة.</p>' +
+      '<p class="hint" style="margin:0 0 8px">أرفق ملف Excel (xlsx) أو CSV فيه أرقام الأشخاص الذين ستصلهم الرسالة. اجعل الأرقام في عمود عنوانه «الجوال» (أو «رقم» أو «هاتف»)، وعمودًا اختياريًا عنوانه «الاسم» لتكتب {الاسم} في الرسالة. بلا عناوين: العمود الأول أرقام والثاني أسماء. الأرقام المصرية: 01xxxxxxxxx أو 0020… أو +20…؛ والفلسطينية: 00972… أو 00970… أو +972… أو +970…؛ وأي رقم دولي بكود دولته (00 أو +).</p>' +
       '<input type="file" id="wb-file" accept=".xlsx,.xls,.csv" data-ro-ok>' +
       (b.err ? '<p class="formhint" style="color:var(--red,#b42318)">' + esc(b.err) + '</p>' : '') +
       (b.rows.length ? '<p style="margin:10px 0 0"><b>' + esc(b.file) + '</b> — أرقام صالحة: <b>' + ok.length + '</b>' + (bad.length ? ' · غير صالحة: <b style="color:var(--red,#b42318)">' + bad.length + '</b>' : '') + (dup.length ? ' · مكررة (تُرسل مرة واحدة): ' + dup.length : '') + '</p>' : '') +
@@ -907,7 +907,7 @@
       var notifyBtn = e.target.closest('[data-attnotify]');
       // تأكيد بالأسماء: تُرسل لمن هم «غائب» الآن فقط، فصحّح الحضور قبل الإرسال؛ الرسالة لا تُسترجع بعد إرسالها
       var dayRows = S.attDay[todayISO()] || {}, gone = S.students.filter(function (x) { return dayRows[x.id] && dayRows[x.id].status === 'absent' && enrolled(x) && x.class_name === dayRows[x.id].class_name; });
-      var badPh = gone.filter(function (x) { var p = String(x.phone || '').replace(/\D/g, ''); return !/^01\d{9}$/.test(p) && !/^(20|00)/.test(p); });
+      var badPh = gone.filter(function (x) { var p = String(x.phone || '').replace(/\D/g, ''); return !/^01\d{9}$/.test(p) && !/^(00\d{9,}|(20|970|972)\d{8,10})$/.test(p); });
       var notTaken = attClasses().filter(function (c) { return classRoll(c).length && !classRoll(c).some(function (x) { return dayRows[x.id]; }); });
       if (!confirm('تأكيد إرسال رسالة الغياب لأولياء أمور ' + gone.length + ' طالبًا:\n\n' + gone.map(function (x) { return '• ' + x.full_name + ' — ' + x.class_name; }).join('\n') +
         (notTaken.length ? '\n\n⚠️ لم يُسجَّل حضور: ' + notTaken.join('، ') : '') +
