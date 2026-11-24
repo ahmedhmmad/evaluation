@@ -1328,7 +1328,8 @@
     var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
       '<label class="field" for="tg-term" style="margin:0">الفصل</label><select id="tg-term" data-ro-ok style="width:auto">' + terms.map(function (t) { return '<option' + (t === u.term ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select>' +
       '<label class="field" for="tg-key" style="margin:0">الشعبة والمادة</label><select id="tg-key" data-ro-ok style="width:auto">' + TG.classes.map(function (c) { var k = c.class_name + '\u0001' + c.subject; return '<option value="' + esc(k) + '"' + (k === u.key ? ' selected' : '') + '>' + esc(c.class_name + ' — ' + (c.subject || 'بلا مادة')) + '</option>'; }).join('') + '</select>' +
-      '<span style="flex:1"></span>' + '<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="tg-nosubj" data-ro-ok' + (u.noSubj ? ' checked' : '') + '> طباعة بلا مبحث</label>' + terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="' + esc(t) + '">طباعة كشف ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="*">طباعة الفصلين معًا</button>' : '') + (canEdit ? '<button type="button" class="btn primary" data-tgsave' + (Object.keys(u.draft).length ? '' : ' disabled') + '>حفظ الدرجات</button>' : '') + '<button type="button" class="btn" data-tggx data-ro-ok>تصدير Excel</button></div></div>';
+      '<span style="flex:1"></span>' + '<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="tg-nosubj" data-ro-ok' + (u.noSubj ? ' checked' : '') + '> طباعة بلا مبحث</label>' + terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="' + esc(t) + '">طباعة كشف ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="*">طباعة الفصلين معًا</button>' : '') +
+        (staffView ? terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="ALL|' + esc(t) + '" title="كشف لكل شعبة ومبحث باسم معلمه، كلٌّ في صفحة، في ملف واحد">طباعة كل كشوف المعلمين — ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="ALL|*" title="كشف لكل شعبة ومبحث للفصلين معًا">طباعة كل كشوف المعلمين — الفصلين</button>' : '') : '') + (canEdit ? '<button type="button" class="btn primary" data-tgsave' + (Object.keys(u.draft).length ? '' : ' disabled') + '>حفظ الدرجات</button>' : '') + '<button type="button" class="btn" data-tggx data-ro-ok>تصدير Excel</button></div></div>';
     if (!terms.length) { app.innerHTML = head + '<div class="card empty">لم تُعدّ الإدارة اختبارات بعد' + (isAdmin() ? '؛ أضفها من <a href="#/gradecfg">إعداد الدرجات</a>.' : '.') + '</div>'; return; }
     if (!TG.classes.length) { app.innerHTML = head + '<div class="card empty">لا شعب في جدول الحصص' + (staffView ? '' : ' باسمك') + '.</div>'; return; }
     if (!studs.length) { app.innerHTML = head + bar + '<div class="card empty">لا طلاب في هذه الشعبة.</div>'; return; }
@@ -1375,7 +1376,32 @@
   // خاناتٍ فارغة تُكتب باليد، وخانة فارغة للمجموع، بالترويسة الصغيرة، ثم أسطر فارغة بلا ترقيم حتى تقع التوقيعات
   // (معلم المبحث، المشرف التربوي، مدير الأكاديمية) في آخر الصفحة (gradeSheetFill في print.js)
   var pendingTgSheet = null;
+  // كل كشوف الدرجات لكل المعلمين: كشف لكل شعبة ومبحث (باسم معلم المبحث من الجدول) كلٌّ في صفحة A4 واحدة، في ملف طباعة واحد
+  function buildAllGradeSheets(term) {
+    var u = tgUi(), keep = { key: u.key, noSubj: u.noSubj }, secs = [], students = {};
+    TG.students.forEach(function (x) { students[x.class_name] = (students[x.class_name] || 0) + 1; });
+    var list = TG.classes.filter(function (c) { return students[c.class_name]; }).sort(function (a, b) {
+      return classRank(a.class_name) - classRank(b.class_name) || a.class_name.localeCompare(b.class_name, 'ar') || a.subject.localeCompare(b.subject, 'ar');
+    });
+    list.forEach(function (c) {
+      u.key = c.class_name + '\u0001' + c.subject; u.noSubj = false;
+      buildGradeSheet(term);
+      secs.push({ html: sheet.innerHTML, row: sheet.getAttribute('data-gfill') || '' });
+    });
+    u.key = keep.key; u.noSubj = keep.noSubj;
+    sheet.className = 'ls';
+    sheet.setAttribute('data-nosign', '1');
+    sheet.setAttribute('data-gall', '1');
+    sheet.removeAttribute('data-gfill');
+    sheet.removeAttribute('data-fit');
+    sheet.style.paddingTop = '0'; sheet.style.paddingBottom = '0';
+    sheet.innerHTML = secs.length ? secs.map(function (x, i) {
+      return '<div class="gsec" data-gfill="' + esc(x.row) + '" style="padding:12mm 0;box-sizing:border-box;' + (i ? 'break-before:page;page-break-before:always;' : '') + '">' + x.html + '</div>';
+    }).join('') : '<p>لا شعب ولا طلاب.</p>';
+    Array.prototype.forEach.call(sheet.querySelectorAll('.gsec'), function (sec) { sec.setAttribute('data-gfill', sec.getAttribute('data-gfill')); gradeSheetFill(sec); });
+  }
   function buildGradeSheet(term) {
+    if (/^ALL\|/.test(term)) return buildAllGradeSheets(term.slice(4));
     var u = tgUi(), parts = u.key.split('\u0001'), cls = parts[0], subj = parts[1] || '';
     var terms = []; TG.items.forEach(function (x) { if (terms.indexOf(x.term) < 0) terms.push(x.term); });
     var both = term === '*', groups = (both ? terms : [term]).map(function (t) {

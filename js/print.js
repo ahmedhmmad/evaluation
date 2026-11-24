@@ -1125,6 +1125,8 @@
     var v = currentVisit(), o = currentTeacher() || currentResult();
     printLandscape = false;
     sheet.removeAttribute('data-nosign');
+    sheet.removeAttribute('data-gall');
+    sheet.style.paddingBottom = '';
     sheet.style.width = '';
     sheet.style.fontSize = '';
     sheet.style.paddingTop = '';
@@ -1174,7 +1176,7 @@
     else if (v) buildVisitSheet(v);
     else if (o) buildEvalSheet(o);
     else return false;
-    if (sheet.classList.contains('ls')) { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
+    if (sheet.classList.contains('ls') && !sheet.hasAttribute('data-gall')) { sheet.setAttribute('data-pages', '1'); fitPages(sheet); }
     if (sheet.hasAttribute('data-gfill')) gradeSheetFill(sheet);
     pendingTT = null;
     pendingPaper = null;
