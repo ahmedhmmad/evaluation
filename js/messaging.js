@@ -317,7 +317,7 @@
   function renderMessages() {
     var w = waUi();
     if (S.waTpl == null) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; loadWaTemplates().then(render); return; }
-    var tabs = [['send', 'إرسال رسالة'], ['archive', 'الأرشيف والتقرير'], ['templates', 'القوالب']];
+    var tabs = [['send', 'إرسال رسالة'], ['bulk', 'رسائل متنوعة (ملف أرقام)'], ['archive', 'الأرشيف والتقرير'], ['templates', 'القوالب']];
     var head = '<div class="page-head"><div><h1>رسائل واتساب</h1><p>رسائل لأولياء الأمور من رقم الأكاديمية عبر SendWhats: ترحيب، وتنويهات، ودعوات، ورسائل الغياب. وكل ما يُرسل محفوظ في الأرشيف بحالته.</p></div></div>' +
       '<div class="tabbar"><nav class="tabs" aria-label="أقسام الرسائل">' + tabs.map(function (t) { return '<button type="button"' + (w.tab === t[0] ? ' class="on" aria-current="true"' : '') + ' data-watab="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</nav></div>';
     if (S.waMissing) {
@@ -327,6 +327,7 @@
     }
     if (w.tab === 'archive') { if (S.waMsgs == null) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; loadWaArchive().then(function () { if (!w.autoRefreshed) { w.autoRefreshed = true; waRefresh(true); } }); return; } app.innerHTML = head + waArchiveHtml(); return; }
     if (w.tab === 'templates') { app.innerHTML = head + waTemplatesHtml(); return; }
+    if (w.tab === 'bulk') { app.innerHTML = head + wbHtml(); return; }
     app.innerHTML = head + waSendHtml();
   }
 
@@ -385,7 +386,115 @@
       return !q || norm((m.names || '') + ' ' + (m.title || '') + ' ' + m.body).indexOf(q) > -1 || (d && latinDigits(m.phone || '').replace(/\D/g, '').indexOf(d) > -1);
     });
   }
-  function waKindLabel(k) { var t = waTpl(k); return t ? t.title : k === 'custom' ? 'رسالة حرة' : k; }
+  /* ----- رسائل متنوعة: أرقام من ملف Excel أو CSV (متقدمون لوظيفة، دعوة، تنويه لغير أولياء الأمور…) -----
+     عمود الجوال يُعرف من عنوانه (جوال، رقم، هاتف، mobile…) أو يُؤخذ العمود الأول؛ وعمود «الاسم» اختياري ليُستعمل {الاسم} في النص.
+     الإرسال عبر الدالة send-whatsapp (action: "bulk") والرسائل تُحفظ في الأرشيف بنوع «رسائل متنوعة». */
+  function wbUi() { var w = waUi(); return w.bulk || (w.bulk = { rows: [], file: '', title: '', text: '', batch: null, busy: false, err: '' }); }
+  function wbNorm(v) {
+    var t = latinDigits(String(v == null ? '' : v)).replace(/\D/g, '');
+    if (/^00/.test(t)) t = t.slice(2);
+    else if (/^01\d{9}$/.test(t)) t = '2' + t;            // 01012345678 → 201012345678
+    else if (/^1[0125]\d{8}$/.test(t)) t = '20' + t;       // ضاع الصفر الأول في Excel
+    return /^[1-9]\d{9,14}$/.test(t) ? t : '';
+  }
+  async function wbParse(file) {
+    var b = wbUi();
+    b.err = ''; b.rows = []; b.file = file.name; b.batch = null;
+    try {
+      await loadXlsx();
+      var wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]];
+      var grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+      if (!grid.length) { b.err = 'الملف فارغ.'; return render(); }
+      var head = grid[0].map(function (c) { return String(c).trim(); });
+      var pi = head.findIndex(function (c) { return /جوال|موبايل|محمول|هاتف|تليفون|رقم|واتس|phone|mobile|whats|tel/i.test(c); });
+      var ni = head.findIndex(function (c) { return /اسم|name/i.test(c); });
+      var start = 1;
+      if (pi < 0) {
+        // بلا عناوين: العمود الأول أرقام، والثاني (إن وُجد) أسماء
+        pi = 0; ni = ni >= 0 ? ni : (head.length > 1 ? 1 : -1);
+        if (wbNorm(head[0]) || /\d{7,}/.test(latinDigits(head[0]))) start = 0;
+      }
+      var seen = {}, rows = [];
+      for (var i = start; i < grid.length; i++) {
+        var raw = String(grid[i][pi] == null ? '' : grid[i][pi]).trim();
+        if (!raw && !(ni >= 0 && String(grid[i][ni] || '').trim())) continue;
+        var n = wbNorm(raw), dup = !!n && !!seen[n];
+        if (n) seen[n] = 1;
+        rows.push({ raw: raw, norm: n, name: ni >= 0 ? String(grid[i][ni] || '').trim() : '', ok: !!n && !dup, dup: dup });
+      }
+      b.rows = rows;
+      if (!rows.length) b.err = 'لم أجد أرقامًا في الملف. ضع الأرقام في عمود عنوانه «الجوال» أو في العمود الأول.';
+    } catch (err) { b.err = 'تعذّرت قراءة الملف: ' + (err.message || err); }
+    render();
+  }
+  function wbHtml() {
+    var b = wbUi(), ok = b.rows.filter(function (r) { return r.ok; }), bad = b.rows.filter(function (r) { return !r.norm; }), dup = b.rows.filter(function (r) { return r.dup; });
+    var noName = ok.filter(function (r) { return !r.name; }).length, usesName = /\{الاسم(_الأول)?\}/.test(b.text);
+    var file = '<div class="card"><h2 style="margin-top:0">ملف الأرقام</h2>' +
+      '<p class="hint" style="margin:0 0 8px">أرفق ملف Excel (xlsx) أو CSV فيه أرقام الأشخاص الذين ستصلهم الرسالة. اجعل الأرقام في عمود عنوانه «الجوال» (أو «رقم» أو «هاتف»)، وعمودًا اختياريًا عنوانه «الاسم» لتكتب {الاسم} في الرسالة. بلا عناوين: العمود الأول أرقام والثاني أسماء. الأرقام المصرية 11 رقمًا تبدأ بـ01، والدولية بكود الدولة.</p>' +
+      '<input type="file" id="wb-file" accept=".xlsx,.xls,.csv" data-ro-ok>' +
+      (b.err ? '<p class="formhint" style="color:var(--red,#b42318)">' + esc(b.err) + '</p>' : '') +
+      (b.rows.length ? '<p style="margin:10px 0 0"><b>' + esc(b.file) + '</b> — أرقام صالحة: <b>' + ok.length + '</b>' + (bad.length ? ' · غير صالحة: <b style="color:var(--red,#b42318)">' + bad.length + '</b>' : '') + (dup.length ? ' · مكررة (تُرسل مرة واحدة): ' + dup.length : '') + '</p>' : '') +
+      (b.rows.length ? '<div class="table-wrap" style="max-height:260px;overflow:auto"><table class="grid"><thead><tr><th>م</th><th>الاسم</th><th>الرقم</th><th></th></tr></thead><tbody>' +
+        b.rows.slice(0, 200).map(function (r, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(r.norm || r.raw) + '</td><td>' +
+          (!r.norm ? '<span class="badge unpaid">رقم غير صالح</span>' : r.dup ? '<span class="badge part">مكرر</span>' : '') + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' + (b.rows.length > 200 ? '<p class="hint">يُعرض أول 200 صف، والكل يُرسل.</p>' : '') : '') + '</div>';
+    var vars = [['{الاسم}', 'اسم الشخص من الملف'], ['{الاسم_الأول}', 'أول كلمة من الاسم'], ['{التاريخ}', 'تاريخ اليوم'], ['{الأكاديمية}', 'اسم الأكاديمية']];
+    var compose = '<div class="card"><h2 style="margin-top:0">الرسالة</h2>' +
+      '<label class="field" for="wb-title">عنوان الرسالة في الأرشيف</label><input id="wb-title" value="' + esc(b.title) + '" placeholder="مثلًا: دعوة المتقدمين لوظيفة معلم رياضيات">' +
+      '<label class="field" for="wb-text">نص الرسالة</label><textarea id="wb-text" rows="8" style="width:100%">' + esc(b.text) + '</textarea>' +
+      '<div class="toolbar" style="margin:6px 0">' + vars.map(function (v) { return '<button type="button" class="btn" data-wbvar="' + esc(v[0]) + '" title="' + esc(v[1]) + '">' + esc(v[0]) + '</button>'; }).join('') + '</div>' +
+      (usesName && noName ? '<p class="formhint">في ' + noName + ' صف بلا اسم، فيُترك مكان {الاسم} فارغًا فيهم.</p>' : '') +
+      '<div class="hint" style="white-space:pre-wrap;background:var(--ivory,#faf7f0);border:1px solid var(--line,#e5e7eb);border-radius:8px;padding:10px;margin:0"><b>معاينة:</b>\n' + esc(wbFill(b.text, ok[0] || { name: 'الاسم' }) || '—') + '</div></div>';
+    var send = '<div class="card" style="position:sticky;bottom:0;z-index:2"><div class="toolbar" style="align-items:center;margin:0"><b>المستلمون: ' + ok.length + '</b>' +
+      '<button type="button" class="btn primary" data-wbsend' + (ok.length && b.text.trim() && !b.busy ? '' : ' disabled') + '>' + (b.busy ? 'جارٍ الإرسال…' : 'إرسال (' + ok.length + ' رسالة)') + '</button></div></div>';
+    return file + compose + send;
+  }
+  function wbFill(text, r) {
+    var name = (r && r.name) || '';
+    return String(text || '').replace(/\{الاسم_الأول\}/g, name.split(/\s+/)[0] || '').replace(/\{الاسم\}/g, name).replace(/\{التاريخ\}/g, dmy(todayISO())).replace(/\{الأكاديمية\}/g, schoolName());
+  }
+  async function wbSend() {
+    var b = wbUi(), ok = b.rows.filter(function (r) { return r.ok; });
+    if (!ok.length || !b.text.trim() || b.busy) return;
+    if (!confirm('إرسال الرسالة إلى ' + ok.length + ' رقمًا من الملف «' + b.file + '»؟\nلا يمكن التراجع بعد الإرسال.')) return;
+    if (!b.batch) b.batch = waBatchId();
+    b.busy = true; render();
+    var r = await sb.functions.invoke('send-whatsapp', { body: { action: 'bulk', batch_id: b.batch, title: b.title.trim() || 'رسالة متنوعة', text: b.text,
+      recipients: ok.map(function (x) { return { phone: x.norm, name: x.name }; }), school: schoolName() } });
+    b.busy = false;
+    if (r.error || (r.data && r.data.error)) {
+      render();
+      var msg = r.error ? r.error.message : r.data.error;
+      return toast('تعذّر الإرسال: ' + msg + (/unknown action/i.test(msg) ? ' — حدّث الدالة send-whatsapp في Supabase بآخر نسخة من supabase/functions/send-whatsapp/index.ts' : ' — يمكنك الضغط مرة أخرى، ولن تتكرر الرسائل التي وصلت'), true);
+    }
+    var d = r.data || {}, skipped = (d.noPhone || []).length + (d.rejected || 0);
+    b.batch = null; b.rows = []; b.file = ''; b.text = ''; b.title = ''; S.waMsgs = null;
+    render();
+    toast('أُضيف ' + (d.queued || 0) + ' رسالة إلى قائمة الإرسال' + (skipped ? '، و' + skipped + ' رُفضت' : '') + '. تابعها في «الأرشيف والتقرير».', skipped > 0);
+  }
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/messages' || e.target.id !== 'wb-file' || !e.target.files[0]) return;
+    wbParse(e.target.files[0]);
+  });
+  document.addEventListener('input', function (e) {
+    if (location.hash !== '#/messages') return;
+    var b = waUi().bulk;
+    if (!b) return;
+    if (e.target.id === 'wb-title') b.title = e.target.value;
+    else if (e.target.id === 'wb-text') b.text = e.target.value;
+  });
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/messages' || !canRecordAtt()) return;
+    var el;
+    if ((el = e.target.closest('[data-wbvar]'))) {
+      var ta = document.getElementById('wb-text'), b = wbUi(), v = el.getAttribute('data-wbvar'), p = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+      b.text = ta.value.slice(0, p) + v + ta.value.slice(ta.selectionEnd == null ? p : ta.selectionEnd);
+      render();
+      var t2 = document.getElementById('wb-text'); t2.focus(); t2.setSelectionRange(p + v.length, p + v.length);
+    } else if (e.target.closest('[data-wbsend]')) wbSend();
+  });
+  function waKindLabel(k) { var t = waTpl(k); return t ? t.title : k === 'custom' ? 'رسالة حرة' : k === 'bulk' ? 'رسائل متنوعة' : k; }
   function waTime(ts) { var t = new Date(ts); return isNaN(t) ? '' : dmy(t.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' })) + ' ' + t.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' }); }
 
   document.addEventListener('click', function (e) {

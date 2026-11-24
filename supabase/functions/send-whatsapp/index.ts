@@ -4,6 +4,7 @@
 //   The page sends the wording and the chosen students only; names and phone numbers are read here from the students table.
 //   per "family": one message per phone number, naming all its chosen children. batch_id comes from the page and is kept
 //   across retries of the same send, so pressing again never repeats a message.
+// { action: "bulk", batch_id, title, text, recipients: [{ phone, name }], school }  free messages to numbers from an uploaded file (no students).
 // { action: "refresh", batch_ids }  asks SendWhats where each message stands and updates the archive (wa_messages).
 //
 // Secrets: SENDWHATS_API_URL, SENDWHATS_API_KEY. Needs supabase/whatsapp_messages.sql.
@@ -140,6 +141,24 @@ Deno.serve(async (req) => {
   if (body?.action === "refresh") {
     const ids = Array.isArray(body.batch_ids) ? body.batch_ids.filter((x: unknown) => typeof x === "string") : [];
     return json(await refresh(ctx, ids));
+  }
+  // رسائل متنوعة لأرقام من ملف (لا طلاب): { action: "bulk", batch_id, title, text, recipients: [{ phone, name }], school }
+  if (body?.action === "bulk") {
+    const batchId = String(body.batch_id ?? "").trim(), text = String(body.text ?? "").trim(), title = String(body.title ?? "").slice(0, 120);
+    const rec = Array.isArray(body.recipients) ? body.recipients : [];
+    if (!/^[\w-]{6,100}$/.test(batchId) || !text || text.length > 3500 || !rec.length || rec.length > 2000) return json({ error: "bad request" }, 400);
+    const day = dmy(cairoToday()), school = String(body.school ?? "").slice(0, 120);
+    const seen = new Set<string>(), msgs: Out[] = [], noPhone: Out[] = [];
+    for (const r of rec) {
+      const ph = digits(String(r?.phone ?? "")), name = String(r?.name ?? "").trim().slice(0, 120);
+      const t = fill(text, { "الاسم": name, "الاسم_الأول": name.split(/\s+/)[0] ?? "", "التاريخ": day, "الأكاديمية": school });
+      if (!/^[1-9]\d{9,14}$/.test(ph)) { noPhone.push({ externalId: "bad" + noPhone.length, phone: String(r?.phone ?? ""), text: t, studentIds: [], names: name || String(r?.phone ?? "") }); continue; }
+      if (seen.has(ph)) continue;
+      seen.add(ph);
+      msgs.push({ externalId: "n" + ph, phone: ph, text: t, studentIds: [], names: name || ph });
+    }
+    const r = await sendBatch(ctx, batchId, "bulk", title || "رسالة متنوعة", msgs, noPhone);
+    return json(r, "error" in r ? 502 : 200);
   }
   if (body?.action !== "send") return json({ error: "unknown action" }, 400);
 
