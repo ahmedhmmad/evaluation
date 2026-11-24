@@ -1142,6 +1142,7 @@
     else if (pendingTgSheet) buildGradeSheet(pendingTgSheet);
     else if (pendingSl) buildSlSheet(pendingSl);
     else if (pendingSz) buildSizeSheet(pendingSz);
+    else if (pendingFc) buildFieldSheet(pendingFc);
     else if (pendingCu) buildCustodySheet();
     else if (pendingWarn) buildWarningSheet(pendingWarn);
     else if (pendingDc) buildDisciplineSheet();
@@ -1191,6 +1192,7 @@
     pendingTgSheet = null;
     pendingSl = null;
     pendingSz = null;
+    pendingFc = null;
     pendingLa = null;
     pendingSp = null;
     pendingWarn = null;

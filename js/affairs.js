@@ -36,6 +36,7 @@
     var u = afUi();
     if (!u.from) { u.from = afYearStart(); u.to = todayISO(); }
     if (!u.rows && !u.loading && !u.attErr) { afLoad(u.from); }
+    if (location.hash === '#/affairs/collect') { app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب — جمع بيانات الشعب</h1>' + fcScreen(); return; }
     if (location.hash === '#/affairs/lists') { app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب — قوائم الطلاب</h1>' + slScreen(); return; }
     if (S.stLeaves == null && !S.stLeavesLoading) { S.stLeavesLoading = true; loadStLeaves().then(function () { S.stLeavesLoading = false; if (/^#\/affairs/.test(location.hash)) render(); }); }
     if (location.hash === '#/affairs/suspend') { app.innerHTML = '<h1 class="page-title" style="margin:0 0 12px">إدارة شئون الطلاب — الفصل المؤقت التأديبي</h1>' + spScreen(); return; }
@@ -589,6 +590,92 @@
       : '<div class="empty">لا يوجد طلاب مطابقون.</div>') + (list.length > LIMIT ? '<p class="st-count" style="margin-top:8px">يُعرض أول ' + LIMIT + ' من ' + list.length + '؛ ضيّق البحث أو اختر شعبة.</p>' : '');
   }
 
+  /* ----- جمع حقل واحد لكل شعبة (مثل مقاس التيشيرت) -----
+     «إدارة شئون الطلاب» ← «جمع بيانات الشعب»: يُختار حقل واحد من حقول الطالب ذات القوائم (المقاس، الكتب…)، وتُعرض شعبة شعبة: كل طالب
+     بقيمته المسجَّلة وخانة للقيمة الجديدة. «حفظ» يعتمد الجديد (الخانة الفارغة تُبقي القديم). وتُطبع القائمة فارغة (تُكتب باليد) أو بما أُدخل */
+  function fcUi() { return ui.fc || (ui.fc = { k: 'shirt_size', cls: '', draft: {}, busy: false }); }
+  function fcFields() { return ST_FIELDS.filter(function (f) { return f.type === 'select' && Array.isArray(f.options) && f.k !== 'class_name'; }); }
+  function fcField() { var u = fcUi(); return fcFields().filter(function (f) { return f.k === u.k; })[0] || fcFields()[0]; }
+  function fcClasses() { var m = {}; S.students.filter(enrolled).forEach(function (x) { if (x.class_name) m[x.class_name] = 1; }); return attClasses().filter(function (c) { return m[c]; }); }
+  function fcStudents(cls) { return slStudents().filter(function (x) { return x.class_name === cls; }); }
+  function fcScreen() {
+    var u = fcUi(), f = fcField(), classes = fcClasses(), canEdit = (isAdmin() || isRegistrar()) && !isReadOnly();
+    if (!f) return '<div class="card empty">لا حقول متاحة.</div>';
+    if (!u.cls || classes.indexOf(u.cls) < 0) u.cls = classes[0] || '';
+    var list = fcStudents(u.cls), opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var changed = Object.keys(u.draft).filter(function (id) { return u.draft[id] !== ''; }).length;
+    var rows = list.map(function (x, i) {
+      var old = stVal(x, f.k), cur = u.draft[x.id] == null ? '' : u.draft[x.id];
+      return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + (old ? esc(old) : '<span class="hint">—</span>') + '</td><td>' +
+        '<select data-fcset="' + x.id + '" data-ro-ok style="width:auto"><option value="">— (إبقاء القديم)</option>' + f.options.map(function (o) { return opt(o, o, cur); }).join('') + '</select>' +
+        (cur && cur !== old ? ' <span class="badge part">جديد</span>' : '') + '</td></tr>';
+    }).join('');
+    return '<div class="card"><h2 style="margin-top:0">جمع بيانات الشعب</h2>' +
+      '<p class="hint" style="margin:0 0 8px">اختر حقلًا واحدًا وأدخله لكل شعبة مرة واحدة. تُعرض القيمة المسجَّلة سابقًا، وما تختاره في خانة «الجديد» يحلّ محلها عند «حفظ»؛ والخانة الفارغة تُبقي القديم.</p>' +
+      '<div class="toolbar" style="align-items:center;margin:0;flex-wrap:wrap">' +
+        '<label class="field" for="fc-k" style="margin:0">الحقل</label><select id="fc-k" data-ro-ok style="width:auto">' + fcFields().map(function (g) { return opt(g.k, g.label || g.p || g.k, f.k); }).join('') + '</select>' +
+        '<label class="field" for="fc-cls" style="margin:0">الشعبة</label><select id="fc-cls" data-ro-ok style="width:auto">' + classes.map(function (c) { return opt(c, c + ' (' + fcStudents(c).length + ')', u.cls); }).join('') + '</select>' +
+        '<button type="button" class="btn" data-fcnav="-1" data-ro-ok>→ السابقة</button><button type="button" class="btn" data-fcnav="1" data-ro-ok>التالية ←</button></div></div>' +
+      '<div class="card"><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th><th>القيمة المسجَّلة</th><th>الجديد</th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="4" class="empty">لا طلاب في هذه الشعبة.</td></tr>') + '</tbody></table></div>' +
+      '<div class="actions">' + (canEdit ? '<button type="button" class="btn primary" data-fcsave' + (changed && !u.busy ? '' : ' disabled') + '>' + (u.busy ? 'جارٍ الحفظ…' : 'حفظ الجديد' + (changed ? ' (' + changed + ')' : '')) + '</button>' : '') +
+        '<button type="button" class="btn" data-fcprint="blank" data-ro-ok>طباعة فارغة</button><button type="button" class="btn" data-fcprint="filled" data-ro-ok>طباعة بما أُدخل</button>' +
+        '<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="fc-all" data-ro-ok' + (u.all ? ' checked' : '') + '> كل الشعب (صفحة لكل شعبة)</label></div></div>';
+  }
+  var pendingFc = null;
+  function buildFieldSheet(p) {
+    var f = fcFields().filter(function (g) { return g.k === p.k; })[0], u = fcUi(), classes = p.all ? fcClasses() : [p.cls];
+    sheet.className = 'ps';
+    sheet.removeAttribute('data-fit');
+    sheet.style.fontSize = '12pt';
+    sheet.innerHTML = classes.map(function (c, i) {
+      var list = fcStudents(c);
+      return '<div' + (i ? ' style="break-before:page;page-break-before:always"' : '') + '>' + reportHead('جمع بيانات: ' + (f.label || f.p || f.k), [['الشعبة', c], ['العدد', list.length]], { noIssueDate: true }) +
+        '<table class="rz" style="margin-top:.6em"><thead><tr><th style="width:2.5em">م</th><th>الطالب</th><th style="width:9em">القيمة المسجَّلة</th><th style="width:9em">الجديد</th></tr></thead><tbody>' +
+        list.map(function (x, j) {
+          return '<tr style="height:8.5mm"><td class="c">' + (j + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(stVal(x, f.k) || '') + '</td><td class="c">' + (p.filled ? esc(u.draft[x.id] || '') : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }).join('');
+  }
+  async function fcSave() {
+    var u = fcUi(), f = fcField(), ids = Object.keys(u.draft).filter(function (id) { return u.draft[id] !== '' && findStudent(id); });
+    if (!ids.length || u.busy) return;
+    u.busy = true; render();
+    var bad = 0;
+    await Promise.all(ids.map(async function (id) {
+      var x = findStudent(id), val = u.draft[id], patch = {};
+      if (f.x) { patch.details = Object.assign({}, x.details || {}); patch.details[f.k] = val; } else patch[f.k] = val;
+      var r = await sb.from('students').update(patch).eq('id', id);
+      if (r.error) { bad++; return; }
+      Object.assign(x, patch); delete u.draft[id];
+    }));
+    u.busy = false;
+    toast(bad ? 'حُفظ ' + (ids.length - bad) + ' وتعذّر ' + bad : 'حُفظ ' + ids.length + ' طالبًا', !!bad);
+    render();
+  }
+  document.addEventListener('click', function (e) {
+    if (location.hash !== '#/affairs/collect') return;
+    var el, u = fcUi();
+    if (e.target.closest('[data-fcsave]')) return fcSave();
+    if ((el = e.target.closest('[data-fcprint]'))) { pendingFc = { k: u.k, cls: u.cls, all: !!u.all, filled: el.getAttribute('data-fcprint') === 'filled' }; return printNow(); }
+    if ((el = e.target.closest('[data-fcnav]'))) {
+      var cl = fcClasses(), i = cl.indexOf(u.cls) + Number(el.getAttribute('data-fcnav'));
+      if (i < 0 || i >= cl.length) return;
+      if (Object.keys(u.draft).length && !confirm('في هذه الشعبة تعديلات لم تُحفظ. تركها؟')) return;
+      u.cls = cl[i]; u.draft = {}; render();
+    }
+  });
+  document.addEventListener('change', function (e) {
+    if (location.hash !== '#/affairs/collect') return;
+    var u = fcUi(), id = e.target.id, sid = e.target.getAttribute && e.target.getAttribute('data-fcset');
+    if (sid) { if (e.target.value) u.draft[sid] = e.target.value; else delete u.draft[sid]; return render(); }
+    if (id === 'fc-all') { u.all = e.target.checked; return; }
+    if (id === 'fc-k' || id === 'fc-cls') {
+      if (Object.keys(u.draft).length && !confirm('تعديلات لم تُحفظ. تركها؟')) { e.target.value = id === 'fc-k' ? u.k : u.cls; return; }
+      u[id === 'fc-k' ? 'k' : 'cls'] = e.target.value; u.draft = {}; render();
+    }
+  });
+
   /* ----- استمارات مقاس التيشيرت (الزي المدرسي) -----
      قصاصة لكل طالب يعلّم فيها ولي الأمر المقاس: من 4 إلى 10 في ورقة A4 (7 افتراضًا) وتكبر كلما قلّ عددها، مرتبة بالشعب. لكل المدرسة أو لشعبة */
   var SZ_LIST = ['4', '6', '8', '10', '12', '14', '16', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
@@ -651,7 +738,7 @@
       '<div class="toolbar" style="align-items:center;margin:8px 0 0"><b style="font-size:.95rem">العمر:</b>' +
         '<label class="field" for="af-a1" style="margin:0">من</label><input type="number" id="af-a1" min="0" max="30" step="1" placeholder="سنة" style="width:6em" value="' + esc(u.ageFrom == null ? '' : u.ageFrom) + '">' +
         '<label class="field" for="af-a2" style="margin:0">إلى</label><input type="number" id="af-a2" min="0" max="30" step="1" placeholder="سنة" style="width:6em" value="' + esc(u.ageTo == null ? '' : u.ageTo) + '">' +
-        '<span style="flex:1"></span><a class="btn" href="#/affairs/suspend" title="فصل تأديبي لفترة: يُسجَّل الطالب «ف» في أيامه ولا يُحتسب غيابًا">الفصل المؤقت' + (spActive() ? ' <b>(' + spActive() + ')</b>' : '') + '</a><a class="btn" href="#/affairs/lists" title="قوائم بعنوان يُختار فيها الطلاب (مثل الموافقين على التطعيم) وتُطبع حسب الشعبة">قوائم الطلاب (موافقات وغيرها)</a><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
+        '<span style="flex:1"></span><a class="btn" href="#/affairs/suspend" title="فصل تأديبي لفترة: يُسجَّل الطالب «ف» في أيامه ولا يُحتسب غيابًا">الفصل المؤقت' + (spActive() ? ' <b>(' + spActive() + ')</b>' : '') + '</a><a class="btn" href="#/affairs/collect" title="إدخال حقل واحد (مثل مقاس التيشيرت) لكل شعبة، مع طباعة القائمة فارغة أو مُدخَلة">جمع بيانات الشعب</a><a class="btn" href="#/affairs/lists" title="قوائم بعنوان يُختار فيها الطلاب (مثل الموافقين على التطعيم) وتُطبع حسب الشعبة">قوائم الطلاب (موافقات وغيرها)</a><span id="af-exp">' + afExportBtns(shown && list.length) + '</span></div>' +
       '<p class="hint" style="margin:8px 0 0">' + (u.loading ? 'جارٍ جلب سجلات الحضور…' : u.attErr ? 'تعذّر جلب سجلات الحضور.' : 'الغياب من ' + dmy(u.loadedFrom || u.from) + ' إلى اليوم.') +
         ' مرّر الفأرة على «سجل الغياب» لترى ملخصه، واضغط عليه أو على «ملف الطالب» للانتقال إلى شاشته.' + (shown ? ' الطلاب: <b id="af-n">' + list.length + '</b>' : '<span id="af-n"></span>') + '</p></div>' +
       '<div class="card" id="af-list">' + afResultsHtml(per) + '</div>' + szCardHtml() + afConsentCardHtml(list.length);
