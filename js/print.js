@@ -499,7 +499,7 @@
   function reportSigns(list, noStamp) {
     var dots = '........................';
     return '<div class="rs">' + list.map(function (p) {
-      return '<div><b>' + p[0] + '</b><span>الاسم: ' + esc(signName(p[0], p[1]) || dots) + '</span><span>التوقيع: ' + dots + '</span></div>';
+      return '<div><b>' + p[0] + '</b><span>' + (p[1] ? esc(signName(p[0], p[1])) : 'الاسم: ' + dots) + '</span><span>التوقيع: ' + dots + '</span></div>';
     }).join('') + (noStamp ? '' : '<div class="stamp">الختم</div>') + '</div>';
   }
 
