@@ -56,11 +56,17 @@
   }
   // كتاب قرار الفصل المؤقت لولي الأمر
   var pendingSp = null;
+  // مدة الفصل بأيام الدراسة فقط: لا تُحسب الجمعة ولا السبت ولا العطل المسجَّلة (أيام الأسبوع نفسها التي تُستثنى من كشوف الحضور)
+  function spDays(from, to) {
+    var n = 0;
+    for (var d = from; d <= to; d = addDaysISO(d, 1)) if (!attOff(d)) n++;
+    return Math.max(1, n);
+  }
   function addDaysISO(d, n) { var t = new Date(d + 'T12:00:00'); t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); }
   function buildSpSheet(id) {
     var l = (S.stLeaves || []).filter(function (q) { return q.id === id; })[0], x = l && findStudent(l.student_id);
     if (!l || !x) { sheet.className = 'ps'; sheet.innerHTML = '<p>لا بيانات.</p>'; return; }
-    var n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1, g = x.guardian_name || (x.details && x.details.guardian_name) || '';
+    var n = spDays(l.from_day, l.to_day), g = x.guardian_name || (x.details && x.details.guardian_name) || '';
     sheet.className = 'ps';
     sheet.removeAttribute('data-fit');
     sheet.innerHTML = reportHead('قرار فصل مؤقت', [['التاريخ', dmy(todayISO())], ['الموضوع', 'فصل مؤقت تأديبي']], { noIssueDate: true }) +
@@ -104,7 +110,7 @@
       '<div class="toolbar" style="margin:12px 0 0;align-items:center"><label class="check" style="margin:0"><input type="checkbox" id="sp-all" data-ro-ok' + (u.all ? ' checked' : '') + '> عرض الفصل المنتهي أيضًا</label></div>' +
       (list.length ? '<div class="table-wrap"><table class="grid"><thead><tr><th>الطالب</th><th>الشعبة</th><th>من</th><th>إلى</th><th>الأيام</th><th>السبب</th><th>سجّله</th><th></th></tr></thead><tbody>' +
         list.map(function (l) {
-          var x = findStudent(l.student_id), n = Math.round((new Date(l.to_day) - new Date(l.from_day)) / 864e5) + 1;
+          var x = findStudent(l.student_id), n = spDays(l.from_day, l.to_day);
           return '<tr><td><b>' + esc(x ? x.full_name : '—') + '</b>' + (l.from_day <= today && today <= l.to_day ? ' <span class="badge unpaid">مفصول اليوم</span>' : l.from_day > today ? ' <span class="badge pending">لم يبدأ</span>' : '') + '</td><td>' + esc(x ? x.class_name || '' : '') + '</td>' +
             (u.editId === l.id ? '<td><input type="date" id="sp-ef" value="' + l.from_day + '"></td><td><input type="date" id="sp-et" value="' + l.to_day + '"></td>' : '<td>' + dmy(l.from_day) + '</td><td>' + dmy(l.to_day) + '</td>') + '<td>' + n + '</td><td>' + esc(l.reason) + '</td><td>' + esc(l.created_by || '') + '</td>' +
             '<td style="white-space:nowrap"><button type="button" class="btn" data-ro-ok data-spprint="' + l.id + '">كتاب الفصل</button> ' +
@@ -852,7 +858,7 @@
   function afSuspText(w) {
     if (!w.susp) return '';
     if (w.susp === 'perm') return 'فصل الطالب/ة فصلًا نهائيًا اعتبارًا من ' + dmy(w.sFrom) + '.';
-    var n = Math.round((new Date(w.sTo) - new Date(w.sFrom)) / 864e5) + 1;
+    var n = spDays(w.sFrom, w.sTo);
     return 'فصل الطالب/ة فصلًا مؤقتًا من ' + dmy(w.sFrom) + ' إلى ' + dmy(w.sTo) + ' (' + n + (n === 1 ? ' يوم' : n === 2 ? ' يومان' : n <= 10 ? ' أيام' : ' يومًا') + ')، ويعود إلى الدوام بعد انتهاء المدة بصحبة ولي أمره.';
   }
   function buildWarningSheet(x) {
