@@ -84,6 +84,7 @@
   var GRADES_NEW = ['أول', 'ثاني', 'ثالث', 'رابع', 'خامس', 'سادس', 'سابع', 'ثامن', 'تاسع'];
   var LEVELS = ['ممتاز', 'متوسط', 'ضعيف'];
   var UNIFORM_SIZES = ['6', '8', '10', '12', '14', '16', '18', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+  var SHIRT_SIZES = ['6', '8', '10', '12', '14', '16', '18', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];   // التيشيرت يضيف XS؛ البنطلون بلا XS
 
   var ST_FIELDS = [
     { sec: 'بيانات الطالب', k: 'full_name', label: 'اسم الطالب رباعي', req: true, wide: true },
@@ -129,7 +130,7 @@
     { sec: 'السكن', k: 'city', x: true, sug: [], label: 'المدينة', req: true },
     { k: 'address', label: 'العنوان التفصيلي (الحي - الشارع - رقم العمارة)', p: 'العنوان التفصيلي', req: true, wide: true },
 
-    { sec: 'الزي والكتب المدرسية', k: 'shirt_size', x: true, label: 'مقاس الزي: التيشيرت', p: 'مقاس التيشيرت', type: 'select', options: UNIFORM_SIZES },
+    { sec: 'الزي والكتب المدرسية', k: 'shirt_size', x: true, label: 'مقاس الزي: التيشيرت', p: 'مقاس التيشيرت', type: 'select', options: SHIRT_SIZES },
     { k: 'pants_size', x: true, label: 'مقاس الزي: البنطلون', p: 'مقاس البنطلون', type: 'select', options: UNIFORM_SIZES },
     { k: 'has_books', x: true, label: 'هل لديك كتب مدرسية مسبقًا؟', p: 'لديه كتب مدرسية مسبقًا', type: 'select', options: ['نعم', 'لا'] },
 
