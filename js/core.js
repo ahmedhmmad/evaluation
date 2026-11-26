@@ -765,6 +765,8 @@
     discipline: 'M6 3h9l3 3v15H6zM15 3v3h3M12 9v5M12 17h.01',
     // إذن خروج الطلاب: باب وسهم خروج
     exits: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
+    // الاختبارات: ورقة بعلامة صح
+    exams: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
     // اللجان المدرسية: مجموعة أشخاص
     committees: 'M9 11a3 3 0 100-6 3 3 0 000 6zM3 20a6 6 0 0112 0M16 5.5a3 3 0 010 5.5M17.5 14a5.5 5.5 0 013.5 6',
     // العهد: صندوق
@@ -793,7 +795,7 @@
   function navModelRole() {
     var groups = navModel0();
     if (canView()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/custody', 'custody', 'العهد'], ['#/orders', 'orders', 'الطلبيات']); });
-    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب']); });
+    if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب'], ['#/exams', 'exams', 'الاختبارات']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
     else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
     if (isTeacherRole()) groups.push({ title: 'صفوفي', items: [['#/mystudents', 'mystudents', 'طلابي'], ['#/grades', 'grades', 'رصد الدرجات']] });
@@ -857,6 +859,7 @@
     if (h === '#/signatures') return 'signatures';
     if (h === '#/messages' && canRecordAtt()) return 'messages';
     if (h === '#/exits' && canAttView()) return 'exits';
+    if (h === '#/exams' && canAttView()) return 'exams';
     if (h === '#/discipline' && canDisc()) return 'discipline';
     if (h === '#/custody' && canView()) return 'custody';
     if (h === '#/orders' && canView()) return 'orders';

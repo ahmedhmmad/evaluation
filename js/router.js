@@ -32,6 +32,7 @@
     var r = h.match(/^#\/r\/(.+)$/);
     if (h === '#/messages' && canRecordAtt()) return renderMessages();
     if (h === '#/exits' && canAttView()) return renderExits();
+    if (h === '#/exams' && canAttView()) return renderExams();
     if (h === '#/discipline' && canDisc()) return renderDiscipline();
     if (h === '#/custody' && canView()) return renderCustody();
     if (h === '#/orders' && canView()) return renderOrders();

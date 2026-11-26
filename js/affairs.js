@@ -2861,4 +2861,3 @@
       (rows || '<tr><td colspan="6" class="c">لا توجد حصص في جدول الحصص.</td></tr>') + '</tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="6"></td></tr></tfoot></table>';
   }
-
