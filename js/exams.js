@@ -7,6 +7,19 @@
   function rxHead(t) { return 'كشف ' + t + ' - مركز الركيزة الثالثة'; }
   function rxTeachHead(t) { return /دورة/.test(t || '') ? 'مدرس الدورة' : 'مدرس المادة'; }
   var pendingRx = null;
+  // شرائح التقدير: كل شريحة من درجة إلى درجة (شاملتين) بتقديرها؛ تُعدَّل لكل اختبار
+  var RX_BANDS = [{ from: 90, to: 100, label: 'ممتاز' }, { from: 80, to: 89.99, label: 'جيد جدًا' }, { from: 70, to: 79.99, label: 'جيد' }, { from: 60, to: 69.99, label: 'مقبول' }, { from: 0, to: 59.99, label: 'ضعيف' }];
+  function rxNum(v) { var n = parseFloat(latinDigits(String(v == null ? '' : v)).replace(/[^\d.]/g, '')); return isNaN(n) ? null : n; }
+  // التقدير: الشريحة التي تقع فيها الدرجة (إن وقعت في شريحتين فالأعلى بدايةً)
+  function rxRating(bands, g) {
+    var n = rxNum(g), hit = null;
+    if (n == null) return '';
+    (bands || []).forEach(function (b) {
+      var f = rxNum(b.from), t = rxNum(b.to);
+      if (f != null && t != null && n >= f && n <= t && (!hit || f > hit.f)) hit = { f: f, l: b.label };
+    });
+    return hit ? hit.l : '';
+  }
   function rxState() { return S.rx || (S.rx = { list: [], loaded: false, loading: false, missing: false, open: '', draft: null, dirty: false, cls: '', q: '', show: '' }); }
   function rxCanEdit() { return isAdmin() || isRegistrar(); }
   async function rxLoad() {
@@ -22,7 +35,7 @@
   function rxD() {
     var c = rxState(), E = rxCur();
     if (!c.draft && E) {
-      c.draft = { title: E.title || RX_DEFAULT, exam_date: String(E.exam_date).slice(0, 10), subject: E.subject || '', committee: (E.committee || []).join('\n'), sel: {}, grades: Object.assign({}, E.grades || {}) };
+      c.draft = { title: E.title || RX_DEFAULT, bands: (E.bands && E.bands.length ? E.bands : RX_BANDS).map(function (b) { return { from: b.from, to: b.to, label: b.label }; }), places: {}, exam_date: String(E.exam_date).slice(0, 10), subject: E.subject || '', committee: (E.committee || []).join('\n'), sel: {}, grades: Object.assign({}, E.grades || {}) };
       (E.student_ids || []).forEach(function (id) { c.draft.sel[id] = true; });
     }
     return c.draft;
@@ -55,8 +68,18 @@
       return !q || norm(x.full_name).indexOf(q) > -1;
     });
   }
+  function rxPlace(x, d) { return d.places[x.id] != null ? d.places[x.id] : (x.details && x.details.birth_place) || ''; }
+  function rxBandsHtml(d, dis) {
+    return '<div style="margin-top:10px"><label class="field">شرائح التقدير (من درجة إلى درجة، شاملتان)</label>' + d.bands.map(function (b, i) {
+      return '<div class="toolbar" style="align-items:center;margin:0 0 6px"><span>من</span><input type="text" inputmode="decimal" data-rxband="' + i + '|from" value="' + esc(b.from) + '"' + dis + ' style="width:5em" aria-label="من"><span>إلى</span><input type="text" inputmode="decimal" data-rxband="' + i + '|to" value="' + esc(b.to) + '"' + dis + ' style="width:5em" aria-label="إلى"><span>التقدير</span><input type="text" data-rxband="' + i + '|label" value="' + esc(b.label) + '"' + dis + ' style="width:9em" aria-label="التقدير">' + (dis ? '' : '<button type="button" class="btn" data-rxbanddel="' + i + '">حذف</button>') + '</div>';
+    }).join('') + (dis ? '' : '<button type="button" class="btn" data-rxbandadd>إضافة شريحة</button>') + '</div>';
+  }
   function rxPicked() { var d = rxD(); return slStudents().filter(function (x) { return d.sel[x.id]; }); }
   function rxNames(d) { return String(d.committee || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean); }
+  function rxRefreshRates() {
+    var d = rxD();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rxrate]'), function (td) { td.innerHTML = '<b>' + esc(rxRating(d.bands, d.grades[td.getAttribute('data-rxrate')])) + '</b>'; });
+  }
   function rxMarkDirty() {
     var c = rxState();
     if (c.dirty) return;
@@ -87,10 +110,10 @@
     var d = rxD(), subjects = rxSubjects(), picked = rxPicked(), shown = rxShown();
     var opt = function (v, t, cur) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(t) + '</option>'; };
     var dis = edit ? '' : ' disabled';
-    var formed = picked.length ? '<div class="card"><h2 style="margin-top:0">الاختبار المُشكَّل (' + picked.length + ' طالبًا)</h2><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>اسم الطالب</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:7em">الدرجة</th></tr></thead><tbody>' +
+    var formed = picked.length ? '<div class="card"><h2 style="margin-top:0">الاختبار المُشكَّل (' + picked.length + ' طالبًا)</h2><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>اسم الطالب</th><th>الصف</th><th>تاريخ الميلاد</th><th>مكان الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:7em">الدرجة</th><th>التقدير</th></tr></thead><tbody>' +
       picked.map(function (x, i) {
-        return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td><td>' + dmy(x.birth_date) + '</td><td>' + esc(rxTeacher(x, d.subject) || '—') + '</td>' +
-          '<td><input type="text" inputmode="decimal" data-rxgrade="' + x.id + '" value="' + esc(d.grades[x.id] == null ? '' : d.grades[x.id]) + '" aria-label="درجة ' + esc(x.full_name) + '"' + dis + ' style="width:6em"></td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td><td>' + dmy(x.birth_date) + '</td><td><input type="text" data-rxplace="' + x.id + '" value="' + esc(rxPlace(x, d)) + '" aria-label="مكان ميلاد ' + esc(x.full_name) + '"' + dis + ' style="width:9em"></td><td>' + esc(rxTeacher(x, d.subject) || '—') + '</td>' +
+          '<td><input type="text" inputmode="decimal" data-rxgrade="' + x.id + '" value="' + esc(d.grades[x.id] == null ? '' : d.grades[x.id]) + '" aria-label="درجة ' + esc(x.full_name) + '"' + dis + ' style="width:6em"></td><td class="rx-rate" data-rxrate="' + x.id + '"><b>' + esc(rxRating(d.bands, d.grades[x.id])) + '</b></td></tr>';
       }).join('') + '</tbody></table></div></div>' : '';
     return back + '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">' + esc(d.title) + ' — ' + dmy(d.exam_date) + '</h2>' +
         (edit ? '<button type="button" class="btn primary" data-rxsave' + (c.dirty ? '' : ' disabled') + '>' + (c.dirty ? 'حفظ التغييرات' : 'محفوظ') + '</button>' : '') +
@@ -98,7 +121,7 @@
       '<div style="margin-top:10px"><label class="field" for="rx-title">عنوان الاختبار</label><input type="text" id="rx-title" value="' + esc(d.title) + '"' + dis + '></div>' +
       '<div class="grid2" style="margin-top:10px"><div><label class="field" for="rx-date">تاريخ الاختبار</label><input type="date" id="rx-date" value="' + esc(d.exam_date) + '"' + dis + '></div>' +
         '<div><label class="field" for="rx-subj">مادة الاختبار في جدول الحصص (منها يُعرف مدرس كل طالب)</label><select id="rx-subj"' + dis + '>' + opt('', '— بلا مدرس —', d.subject) + subjects.map(function (n) { return opt(n, n, d.subject); }).join('') + '</select></div></div>' +
-      '<div style="margin-top:10px"><label class="field" for="rx-com">أعضاء لجنة الاختبار (اسم في كل سطر)</label><textarea id="rx-com" rows="3" placeholder="يُترك فارغًا لتبقى خانات التوقيع بلا أسماء"' + dis + '>' + esc(d.committee) + '</textarea></div></div>' +
+      '<div style="margin-top:10px"><label class="field" for="rx-com">أعضاء لجنة الاختبار (اسم في كل سطر)</label><textarea id="rx-com" rows="3" placeholder="يُترك فارغًا لتبقى خانات التوقيع بلا أسماء"' + dis + '>' + esc(d.committee) + '</textarea></div>' + rxBandsHtml(d, dis) + '</div>' +
       '<div class="card"><h2 style="margin-top:0">اختيار الطلاب (' + picked.length + ' مختارًا)</h2><div class="toolbar" style="align-items:center;margin:0">' +
         '<input type="search" id="rx-q" placeholder="ابحث بالاسم" style="flex:1;min-width:200px" value="' + esc(c.q) + '">' +
         '<select id="rx-cls" style="width:auto">' + opt('', 'كل الصفوف', c.cls) + attClasses().map(function (n) { return opt(n, n, c.cls); }).join('') + '</select>' +
@@ -112,19 +135,21 @@
 
   // كشف الاختبار: بما في الشاشة الآن (حتى ما لم يُحفظ بعد)
   function buildRxSheet() {
-    var d = rxD(), rows = rxPicked(), n = 6, names = rxNames(d);
+    var d = rxD(), rows = rxPicked(), n = 8, names = rxNames(d);
     var head = reportHead(rxHead(d.title), [['التاريخ', dmy(d.exam_date)], ['عدد الطلاب', rows.length]], { noIssueDate: true }).replace(/^<img class="wm"[^>]*>/, '').replace('<h1>', '<h1 style="font-size:1.9em;line-height:1.35">');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th style="width:3em">م</th><th>اسم الطالب</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:11%">الدرجة</th></tr></thead><tbody>' +
+      '<tr><th style="width:3em">م</th><th>اسم الطالب</th><th>الصف</th><th>تاريخ الميلاد</th><th>مكان الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:8%">الدرجة</th><th style="width:10%">التقدير</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (x, i) {
         var g = d.grades[x.id];
-        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(rxTeacher(x, d.subject)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td></tr>';
+        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(rxPlace(x, d)) + '</td><td class="c">' + esc(rxTeacher(x, d.subject)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c">' + esc(rxRating(d.bands, g)) + '</td></tr>';
       }).join('') : '<tr><td colspan="' + n + '" class="c">لم يُختر طلاب.</td></tr>') + '</tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
-      reportSigns((names.length ? names : ['', '', '']).map(function (nm) { return ['عضو اللجنة', nm]; }).concat([[principalTitle(), principalName()]]), true);
+      '<div class="rsec" style="text-align:center">لجنة الاختبار</div>' +
+      reportSigns((names.length ? names : ['', '', '']).map(function (nm) { return ['عضو اللجنة', nm]; }), true) +
+      reportSigns([[principalTitle(), principalName()]], true);
   }
 
   document.addEventListener('click', async function (e) {
@@ -149,6 +174,8 @@
     }
     if (!E) return;
     var d = rxD();
+    if (e.target.closest('[data-rxbandadd]')) { d.bands.push({ from: '', to: '', label: '' }); c.dirty = true; return render(); }
+    if ((el = e.target.closest('[data-rxbanddel]'))) { d.bands.splice(Number(el.getAttribute('data-rxbanddel')), 1); c.dirty = true; return render(); }
     if ((el = e.target.closest('[data-rxall]'))) { var on = el.getAttribute('data-rxall') === '1'; rxShown().forEach(function (s1) { if (on) d.sel[s1.id] = true; else delete d.sel[s1.id]; }); c.dirty = true; return render(); }
     if (e.target.closest('[data-rxsave]')) {
       var valid = {}; slStudents().forEach(function (s2) { valid[s2.id] = 1; });
@@ -156,10 +183,21 @@
       var keep = (E.student_ids || []).filter(function (id) { return !valid[id]; }); // طلاب انسحبوا يبقون كما كانوا
       var all = keep.concat(ids), grades = {};
       all.forEach(function (id) { if (d.grades[id] != null && String(d.grades[id]).trim() !== '') grades[id] = String(d.grades[id]).trim(); });
-      var patch = { title: (d.title || '').trim() || RX_DEFAULT, exam_date: d.exam_date || todayISO(), subject: d.subject, committee: rxNames(d), student_ids: all, grades: grades, updated_at: new Date().toISOString() };
+      var pl = [];
+      Object.keys(d.places).forEach(function (id) { var x = findStudent(id), v = String(d.places[id] || '').trim(); if (x && v !== String((x.details && x.details.birth_place) || '')) pl.push([x, v]); });
+      var bands = d.bands.filter(function (b) { return String(b.label || '').trim() && rxNum(b.from) != null && rxNum(b.to) != null; }).map(function (b) { return { from: rxNum(b.from), to: rxNum(b.to), label: String(b.label).trim() }; });
+      var patch = { bands: bands, title: (d.title || '').trim() || RX_DEFAULT, exam_date: d.exam_date || todayISO(), subject: d.subject, committee: rxNames(d), student_ids: all, grades: grades, updated_at: new Date().toISOString() };
       var w = await sb.from('student_exams').update(patch).eq('id', E.id);
       if (w.error) return fail(w.error);
-      Object.assign(E, patch); c.dirty = false; render(); toast('حُفظ الاختبار');
+      // مكان الميلاد يُحفظ في سجل الطالب
+      var bad = 0;
+      await Promise.all(pl.map(async function (p) {
+        var det = Object.assign({}, p[0].details || {}); if (p[1]) det.birth_place = p[1]; else delete det.birth_place;
+        var q = await sb.from('students').update({ details: det }).eq('id', p[0].id);
+        if (q.error) bad++; else { p[0].details = det; delete d.places[p[0].id]; }
+      }));
+      if (bad) toast('حُفظ الاختبار وتعذّر حفظ مكان الميلاد لـ ' + bad + ' طالبًا', true);
+      Object.assign(E, patch); c.dirty = !!bad; render(); toast('حُفظ الاختبار');
     }
   });
   document.addEventListener('change', function (e) {
@@ -181,5 +219,7 @@
     var d = rxD();
     if (el.id === 'rx-title') { d.title = el.value; return rxMarkDirty(); }
     if (el.id === 'rx-com') { d.committee = el.value; return rxMarkDirty(); }
-    if ((id = el.getAttribute('data-rxgrade'))) { d.grades[id] = el.value; rxMarkDirty(); }
+    if ((id = el.getAttribute('data-rxplace'))) { d.places[id] = el.value; rxMarkDirty(); return; }
+    if ((id = el.getAttribute('data-rxband'))) { var bp = id.split('|'); d.bands[Number(bp[0])][bp[1]] = el.value; rxMarkDirty(); rxRefreshRates(); return; }
+    if ((id = el.getAttribute('data-rxgrade'))) { d.grades[id] = el.value; rxMarkDirty(); rxRefreshRates(); }
   });

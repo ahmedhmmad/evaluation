@@ -90,6 +90,7 @@
     { sec: 'بيانات الطالب', k: 'full_name', label: 'اسم الطالب رباعي', req: true, wide: true },
     { k: 'national_id', label: 'رقم هوية الطالب', req: true, ltr: true, num: true },
     { k: 'birth_date', label: 'تاريخ ميلاد الطالب', p: 'تاريخ الميلاد', type: 'date', req: true },
+    { k: 'birth_place', x: true, label: 'مكان ميلاد الطالب', p: 'مكان الميلاد' },
     { k: 'gender', label: 'الجنس', type: 'select', options: ['ذكر', 'أنثى'], req: true },
     { k: 'student_phone', x: true, label: 'رقم جوال الطالب', p: 'جوال الطالب', req: true, ltr: true, num: true },
     { k: 'class_name', label: 'الشعبة', type: 'class', req: true },

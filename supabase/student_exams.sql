@@ -26,3 +26,6 @@ create policy student_exams_edit on public.student_exams
 drop policy if exists student_exams_read on public.student_exams;
 create policy student_exams_read on public.student_exams
   for select to authenticated using (public.my_role() in ('manager', 'supervisor'));
+
+-- شرائح التقدير لكل اختبار (يضاف العمود للجدول المنشأ سابقًا؛ آمن لإعادة التشغيل)
+alter table public.student_exams add column if not exists bands jsonb not null default '[]'::jsonb;
