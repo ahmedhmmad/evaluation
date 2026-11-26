@@ -113,7 +113,7 @@
     var formed = picked.length ? '<div class="card"><h2 style="margin-top:0">الاختبار المُشكَّل (' + picked.length + ' طالبًا)</h2><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>اسم الطالب</th><th>مكان الميلاد</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:7em">الدرجة</th><th>التقدير</th></tr></thead><tbody>' +
       picked.map(function (x, i) {
         return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td><input type="text" data-rxplace="' + x.id + '" value="' + esc(rxPlace(x, d)) + '" aria-label="مكان ميلاد ' + esc(x.full_name) + '"' + dis + ' style="width:9em"></td><td>' + esc(x.class_name || '—') + '</td><td>' + dmy(x.birth_date) + '</td><td>' + esc(rxTeacher(x, d.subject) || '—') + '</td>' +
-          '<td><input type="text" inputmode="decimal" data-rxgrade="' + x.id + '" value="' + esc(d.grades[x.id] == null ? '' : d.grades[x.id]) + '" aria-label="درجة ' + esc(x.full_name) + '"' + dis + ' style="width:6em"></td><td class="rx-rate" data-rxrate="' + x.id + '"><b>' + esc(rxRating(d.bands, d.grades[x.id])) + '</b></td></tr>';
+          '<td><input type="text" inputmode="decimal" data-rxgrade="' + x.id + '" value="' + esc(d.grades[x.id] == null ? '' : d.grades[x.id]) + '" aria-label="درجة ' + esc(x.full_name) + '"' + dis + ' style="width:6em"></td><td class="rx-rate" style="white-space:nowrap" data-rxrate="' + x.id + '"><b>' + esc(rxRating(d.bands, d.grades[x.id])) + '</b></td></tr>';
       }).join('') + '</tbody></table></div></div>' : '';
     return back + '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">' + esc(d.title) + ' — ' + dmy(d.exam_date) + '</h2>' +
         (edit ? '<button type="button" class="btn primary" data-rxsave' + (c.dirty ? '' : ' disabled') + '>' + (c.dirty ? 'حفظ التغييرات' : 'محفوظ') + '</button>' : '') +
@@ -138,7 +138,12 @@
   function rxSigns(names) {
     var inner = function (list) { return reportSigns(list, true).replace(/^<div class="rs">/, '').replace(/<\/div>$/, ''); };
     var list = (names.length ? names : ['', '', '']).map(function (nm) { return ['عضو اللجنة', nm]; });
-    return '<div class="rs"><div style="flex:' + list.length + ';border:0;padding:0"><div class="rsec" style="text-align:center;margin-top:0">أعضاء اللجنة</div><div class="rs" style="margin-top:.4em">' + inner(list) + '</div></div>' + inner([[principalTitle(), principalName()]]) + '</div>';
+    var n = list.length;
+    // شبكة: الصف الأول عنوان «أعضاء اللجنة» فوق الأعضاء فقط، والصف الثاني الخانات كلها في مستوى واحد (الأعضاء ثم المدير)
+    var boxes = inner(list).replace(/<div>/g, '<div style="grid-row:2">');
+    var boss = inner([[principalTitle(), principalName()]]).replace('<div>', '<div style="grid-row:2;grid-column:' + (n + 1) + '">');
+    return '<div class="rs" style="display:grid;grid-template-columns:repeat(' + (n + 1) + ',1fr);align-items:stretch">' +
+      '<div style="grid-row:1;grid-column:1 / span ' + n + ';border:0;padding:0;text-align:center;font-weight:700;font-family:var(--font-head);color:var(--navy);font-size:1.2em">أعضاء اللجنة</div>' + boxes + boss + '</div>';
   }
   function buildRxSheet() {
     var d = rxD(), rows = rxPicked(), n = 8, names = rxNames(d);
@@ -147,10 +152,10 @@
     sheet.removeAttribute('data-fit');
     sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
-      '<tr><th style="width:3em">م</th><th>اسم الطالب</th><th>مكان الميلاد</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:8%">الدرجة</th><th style="width:10%">التقدير</th></tr></thead><tbody>' +
+      '<tr><th style="width:3em">م</th><th>اسم الطالب</th><th>مكان الميلاد</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:8%">الدرجة</th><th style="white-space:nowrap">التقدير</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (x, i) {
         var g = d.grades[x.id];
-        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(rxPlace(x, d)) + '</td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(rxTeacher(x, d.subject)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c">' + esc(rxRating(d.bands, g)) + '</td></tr>';
+        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(rxPlace(x, d)) + '</td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(rxTeacher(x, d.subject)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c" style="white-space:nowrap">' + esc(rxRating(d.bands, g)) + '</td></tr>';
       }).join('') : '<tr><td colspan="' + n + '" class="c">لم يُختر طلاب.</td></tr>') + '</tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       rxSigns(names);
