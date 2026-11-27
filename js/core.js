@@ -789,6 +789,7 @@
     mystudents: 'M9 11a3 3 0 100-6 3 3 0 000 6zM3 20a6 6 0 0112 0M16 5.5a3 3 0 010 5.5M17.5 14a5.5 5.5 0 013.5 6',
     grades: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
     examgrades: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
+    assess: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
     gradestatus: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9',
     toppers: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3',
     gradecfg: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
@@ -912,11 +913,12 @@
     var signedIn = !!(S.uid && S.ready && role() !== 'pending' && !(S.profile && S.profile.must_change_password));
     shell.classList.toggle('bare', !signedIn);
     var tch = signedIn && (S.baseProfile || S.profile || {}).role === 'teacher', active = signedIn ? activeKey() : '';
+    if (assessKey(active)) active = 'assess';
     shell.classList.toggle('tch', !!tch);
     shell.classList.toggle('tch-home', !!tch && active === 'thome');
     if (!signedIn) { sideNav.innerHTML = ''; userbar.innerHTML = ''; return; }
     var todoN = tch ? tdTodo().length : 0;
-    sideNav.innerHTML = navModel().map(function (g) {
+    sideNav.innerHTML = assessCollapse(navModel()).map(function (g) {
       return (g.title ? '<h3>' + g.title + '</h3>' : '') + g.items.map(function (it) {
         return '<a href="' + it[0] + '"' + (it[1] === active || active === 'thome' && it[0] === '#/thome' ? ' class="on" aria-current="page"' : '') + '>' +
           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONS[it[1]] + '"/></svg>' + it[2] + (it[1] === 'papers' && todoN ? '<b class="nav-n">' + todoN + '</b>' : '') + '</a>';
