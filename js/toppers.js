@@ -2,9 +2,8 @@
   /* ---------- الأوائل (الإدارة) ----------
      أوائل كل شعبة وكل مرحلة (سابع أ وسابع ب = مرحلة «سابع») من الدرجات التي رصدها المعلمون.
      نسبة الطالب في المادة = مجموع درجاته ÷ مجموع درجات الاختبارات التي رُصدت له فيها؛ والمعدل = متوسط نسب مواده المحسوبة.
-     يُستبعد من المعدل ما تختاره الإدارة من المواد (الرياضة والفن والقرآن والتكنولوجيا مثلًا) فلا ينخفض معدل الطالب لعدم رصد درجاتها. */
+     يُستبعد من المعدل ما تختاره الإدارة من المواد اختياريًا. */
   var TOPS = { loaded: false, busy: false, items: [], grades: [], error: '' };
-  var TOPS_SOFT = /(^|\s)(ال)?(رياضة|فن|فنون|فنية|بدنية|قرآن|قران|تكنولوجيا)/;
   function topsUi() { return ui.tops || (ui.tops = { term: '', view: 'class', n: 3, ex: topsLoadEx() }); }
   function topsLoadEx() { try { return JSON.parse(localStorage.getItem('tops_ex') || '[]') || []; } catch (e) { return []; } }
   function topsSaveEx(a) { try { localStorage.setItem('tops_ex', JSON.stringify(a)); } catch (e) { /* التخزين غير متاح */ } }
@@ -66,22 +65,42 @@
       '<label class="field" for="tops-term" style="margin:0">الفصل</label><select id="tops-term" data-ro-ok style="width:auto">' + d.terms.map(function (t) { return '<option value="' + esc(t) + '"' + (t === u.term ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + (d.terms.length > 1 ? '<option value="*"' + (u.term === '*' ? ' selected' : '') + '>الفصلان معًا</option>' : '') + '</select>' +
       '<label class="field" for="tops-view" style="margin:0">العرض</label><select id="tops-view" data-ro-ok style="width:auto"><option value="class"' + (lvl ? '' : ' selected') + '>أوائل الشعب</option><option value="level"' + (lvl ? ' selected' : '') + '>أوائل المراحل (سابع أ + سابع ب)</option></select>' +
       '<label class="field" for="tops-n" style="margin:0">عدد الأوائل</label><select id="tops-n" data-ro-ok style="width:auto">' + [1, 3, 5, 10].map(function (n) { return '<option' + (n === u.n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>' +
-      '<span style="flex:1"></span><button type="button" class="btn" data-tops-xlsx data-ro-ok' + (d.groups.length ? '' : ' disabled') + '>تصدير Excel</button><button type="button" class="btn" data-tops-reload data-ro-ok>تحديث الدرجات</button></div>' +
-      '<details style="margin-top:10px"' + (u.ex.length ? ' open' : '') + '><summary><b>المواد المستبعدة من المعدل</b> <span class="meta">(' + (u.ex.length ? u.ex.length + ' مستبعدة' : 'لا شيء مستبعد') + ')</span></summary>' +
-      '<p class="hint" style="margin:6px 0">علّم المواد التي لا تُحسب في المعدل (مثل الرياضة والفن والقرآن الكريم والتكنولوجيا) كي لا ينخفض معدل الطالب لعدم رصد درجاتها.</p>' +
+      '<span style="flex:1"></span><button type="button" class="btn" data-tops-print data-ro-ok' + (d.groups.length ? '' : ' disabled') + '>طباعة</button><button type="button" class="btn" data-tops-xlsx data-ro-ok' + (d.groups.length ? '' : ' disabled') + '>تصدير Excel</button><button type="button" class="btn" data-tops-reload data-ro-ok>تحديث الدرجات</button></div>' +
+      '<details style="margin-top:10px"><summary><b>استبعاد مواد من المعدل</b></summary>' +
+      '<p class="hint" style="margin:6px 0">علّم المواد التي لا تريد احتسابها في المعدل.</p>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px 18px">' + (d.subjects.map(function (s) { return '<label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" data-tops-ex="' + esc(s) + '"' + (u.ex.indexOf(s) > -1 ? ' checked' : '') + '> ' + esc(s) + '</label>'; }).join('') || '<span class="meta">لا درجات مرصودة بعد</span>') + '</div>' +
-      '<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn" data-tops-soft data-ro-ok>استبعاد الرياضة والفن والقرآن والتكنولوجيا</button><button type="button" class="btn" data-tops-none data-ro-ok>تضمين كل المواد</button></div></details></div>';
+      '<div class="toolbar" style="margin:8px 0 0"><button type="button" class="btn" data-tops-none data-ro-ok>إلغاء الاستبعاد</button></div></details></div>';
     var body = d.groups.length ? d.groups.map(function (g) {
       return '<div class="card"><h2 style="margin-top:0">' + esc(g.name) + ' <span class="meta">(' + g.total + ' طالبًا لهم درجات)</span></h2><div class="table-wrap"><table class="grid"><thead><tr><th style="width:4em">الترتيب</th><th>الطالب</th>' + (lvl ? '<th>الشعبة</th>' : '') + '<th>المعدل</th><th>عدد المواد</th></tr></thead><tbody>' +
         g.top.map(function (r) { var medal = r.rank <= 3 ? ' style="font-weight:800;color:' + (r.rank === 1 ? '#C8A45D' : '#13306B') + '"' : ''; return '<tr><td' + medal + '>' + r.rank + '</td><td><b>' + esc(r.name) + '</b></td>' + (lvl ? '<td>' + esc(r.cls) + '</td>' : '') + '<td><b>' + r.avg.toFixed(2) + '%</b></td><td>' + r.n + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
     }).join('') : '<div class="card empty">لا درجات مرصودة في هذا الفصل بعد.</div>';
     app.innerHTML = head + bar + body;
   }
+  // كشف الأوائل المطبوع بترويسة الأكاديمية: عنوان لكل شعبة أو مرحلة ثم أوائلها، وتحته توقيعا المشرف التربوي والمدير
+  var pendingTops = false;
+  function buildToppersSheet() {
+    var d = topsData(), lvl = d.u.view === 'level', n = lvl ? 4 : 3, rows = '';
+    d.groups.forEach(function (g) {
+      rows += '<tr><td class="c" colspan="' + n + '" style="background:#13306B;color:#fff;font-weight:800;font-size:1.1em">' + esc(g.name) + '</td></tr>';
+      g.top.forEach(function (r) {
+        rows += '<tr><td class="c"><b>' + r.rank + '</b></td><td><b>' + esc(r.name) + '</b></td>' + (lvl ? '<td class="c">' + esc(r.cls) + '</td>' : '') + '<td class="c"><b>' + r.avg.toFixed(2) + '%</b></td></tr>';
+      });
+    });
+    var info = [['العرض', lvl ? 'أوائل المراحل' : 'أوائل الشعب'], ['عدد الأوائل', d.u.n]];
+    var head = reportHead('كشف الأوائل — ' + (d.u.term === '*' ? 'الفصلان' : d.u.term), info).replace(/^<img class="wm"[^>]*>/, '');
+    printLandscape = false;
+    sheet.className = 'ls';
+    sheet.removeAttribute('data-fit');
+    sheet.innerHTML = '<img class="wm" src="' + REPORT.logo + '" alt="">' +
+      '<table class="rz"><colgroup><col style="width:9%"><col style="width:' + (lvl ? 50 : 66) + '%">' + (lvl ? '<col style="width:23%">' : '') + '<col style="width:' + (lvl ? 18 : 25) + '%"></colgroup>' +
+      '<thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
+      '<tr><th>الترتيب</th><th>الطالب</th>' + (lvl ? '<th>الشعبة</th>' : '') + '<th>المعدل</th></tr></thead><tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' + reportSigns([['توقيع المشرف التربوي', supervisorName()], ['توقيع المدير', principalName()]]);
+  }
   async function topsXlsx() {
     try {
       await loadXlsx();
       var d = topsData(), lvl = d.u.view === 'level', aoa = [[schoolName() + ' — أوائل ' + (lvl ? 'المراحل' : 'الشعب') + ' — ' + (d.u.term === '*' ? 'الفصلان' : d.u.term)]];
-      if (d.u.ex.length) aoa.push(['المواد المستبعدة من المعدل: ' + d.u.ex.join('، ')]);
       aoa.push([]);
       d.groups.forEach(function (g) {
         aoa.push([g.name]); aoa.push(['الترتيب', 'الطالب', 'الشعبة', 'المعدل %', 'عدد المواد']);
@@ -106,8 +125,8 @@
   document.addEventListener('click', function (e) {
     if (location.hash !== '#/toppers') return;
     var u = topsUi();
+    if (e.target.closest('[data-tops-print]')) { pendingTops = true; return printNow(); }
     if (e.target.closest('[data-tops-xlsx]')) return topsXlsx();
     if (e.target.closest('[data-tops-reload]')) { TOPS.loaded = false; return render(); }
-    if (e.target.closest('[data-tops-soft]')) { u.ex = topsData().subjects.filter(function (s) { return TOPS_SOFT.test(s); }); topsSaveEx(u.ex); return render(); }
     if (e.target.closest('[data-tops-none]')) { u.ex = []; topsSaveEx(u.ex); return render(); }
   });
