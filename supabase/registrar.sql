@@ -5,7 +5,7 @@
 
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
-  check (role in ('pending', 'viewer', 'teacher', 'registrar', 'supervisor', 'manager', 'superadmin'));
+  check (role in ('pending', 'viewer', 'teacher', 'registrar', 'supervisor', 'manager', 'superadmin', 'attclerk'));   -- keep in step with attendance_clerk.sql
 
 -- Students: read, add, edit (no delete).
 drop policy if exists students_registrar_select on public.students;
@@ -40,7 +40,7 @@ create policy transport_members_registrar on public.transport_members
 drop policy if exists settings_select on public.settings;
 create policy settings_select on public.settings
   for select to authenticated
-  using (public.my_role() in ('viewer', 'registrar', 'supervisor', 'superadmin'));
+  using (coalesce(public.my_role(), 'pending') <> 'pending');   -- every active account (see settings_read.sql)
 
 -- Teacher evaluation results are not for registrars.
 create or replace function public.get_results()

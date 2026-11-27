@@ -207,7 +207,7 @@ create policy teachers_staff on public.teachers
 drop policy if exists settings_select on public.settings;
 create policy settings_select on public.settings
   for select to authenticated
-  using (public.my_role() in ('viewer', 'supervisor', 'superadmin'));
+  using (coalesce(public.my_role(), 'pending') <> 'pending');   -- every active account (see settings_read.sql)
 
 drop policy if exists settings_update on public.settings;
 create policy settings_update on public.settings
