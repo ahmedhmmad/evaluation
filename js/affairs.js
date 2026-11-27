@@ -1418,11 +1418,25 @@
     if (u.gkey !== gk && items.length && studs.length) { u.gkey = gk; u.grades = null; u.draft = {}; tgLoadGrades(items, studs, subj); }
     var canEdit = !isManager() && role() !== 'supervisor';
     var head = '<div class="page-head"><div><h1>رصد الدرجات</h1><p>اختر الفصل الدراسي والشعبة والمادة، ثم اكتب درجات الطلاب. اختبارات كل فصل ودرجاتها تحدّدها الإدارة' + (isAdmin() ? ' من <a href="#/gradecfg">إعداد الدرجات</a>' : '') + '.</p></div></div>';
+    // الشعبة والمادة قائمتان منفصلتان (المادة من مواد الشعبة المختارة، وتُخفى إن كانت مادة واحدة)، والطباعة كلها في قائمة «طباعة»
+    var clsList = []; TG.classes.forEach(function (c) { if (clsList.indexOf(c.class_name) < 0) clsList.push(c.class_name); });
+    var subjList = TG.classes.filter(function (c) { return c.class_name === cls; }).map(function (c) { return c.subject; });
+    var tShort = function (t) { return t.replace(/^الفصل الدراسي\s+/, 'الفصل '); };
+    var pItem = function (v, label, ns, title) { return '<button type="button" class="btn" data-ro-ok data-tgprint="' + esc(v) + '"' + (ns ? ' data-tgnosubj' : '') + (title ? ' title="' + title + '"' : '') + '>' + label + '</button>'; };
+    var printMenu = menuHtml('طباعة',
+      pItem(u.term, 'كشف ' + esc(tShort(u.term))) + (terms.length > 1 ? pItem('*', 'كشف الفصلين معًا') : '') +
+      (staffView ? '<hr><p class="hint">للإدارة</p>' + pItem(u.term, 'كشف بلا مبحث — ' + esc(tShort(u.term)), true, 'كشف الشعبة نفسه، والمبحث والمعلم نقاط تُكتب باليد') +
+        pItem('ALL|' + u.term, 'كل كشوف المعلمين — ' + esc(tShort(u.term)), false, 'كشف لكل شعبة ومبحث باسم معلمه، كلٌّ في صفحة، في ملف واحد') +
+        (terms.length > 1 ? pItem('ALL|*', 'كل كشوف المعلمين — الفصلين', false, 'كشف لكل شعبة ومبحث للفصلين معًا') : '') : ''));
     var bar = '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
-      '<label class="field" for="tg-term" style="margin:0">الفصل</label><select id="tg-term" data-ro-ok style="width:auto">' + terms.map(function (t) { return '<option' + (t === u.term ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select>' +
-      '<label class="field" for="tg-key" style="margin:0">الشعبة والمادة</label><select id="tg-key" data-ro-ok style="width:auto">' + TG.classes.map(function (c) { var k = c.class_name + '\u0001' + c.subject; return '<option value="' + esc(k) + '"' + (k === u.key ? ' selected' : '') + '>' + esc(c.class_name + ' — ' + (c.subject || 'بلا مادة')) + '</option>'; }).join('') + '</select>' +
-      '<span style="flex:1"></span>' + '<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" id="tg-nosubj" data-ro-ok' + (u.noSubj ? ' checked' : '') + '> طباعة بلا مبحث</label>' + terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="' + esc(t) + '">طباعة كشف ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="*">طباعة الفصلين معًا</button>' : '') +
-        (staffView ? terms.map(function (t) { return '<button type="button" class="btn" data-ro-ok data-tgprint="ALL|' + esc(t) + '" title="كشف لكل شعبة ومبحث باسم معلمه، كلٌّ في صفحة، في ملف واحد">طباعة كل كشوف المعلمين — ' + esc(t.replace(/^الفصل الدراسي\s+/, 'الفصل ')) + '</button>'; }).join('') + (terms.length > 1 ? '<button type="button" class="btn" data-ro-ok data-tgprint="ALL|*" title="كشف لكل شعبة ومبحث للفصلين معًا">طباعة كل كشوف المعلمين — الفصلين</button>' : '') : '') + (canEdit ? '<button type="button" class="btn primary" data-tgsave' + (Object.keys(u.draft).length ? '' : ' disabled') + '>حفظ الدرجات</button>' : '') + '<button type="button" class="btn" data-tggx data-ro-ok>تصدير Excel</button></div></div>';
+      '<label class="field" for="tg-term" style="margin:0">الفصل</label><select id="tg-term" data-ro-ok style="width:auto">' + terms.map(function (t) { return '<option value="' + esc(t) + '"' + (t === u.term ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join('') + '</select>' +
+      '<label class="field" for="tg-cls" style="margin:0">الشعبة</label><select id="tg-cls" data-ro-ok style="width:auto">' + clsList.map(function (c) { return '<option value="' + esc(c) + '"' + (c === cls ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
+      (subjList.length > 1
+        ? '<label class="field" for="tg-subj" style="margin:0">المادة</label><select id="tg-subj" data-ro-ok style="width:auto">' + subjList.map(function (s) { return '<option value="' + esc(s) + '"' + (s === subj ? ' selected' : '') + '>' + esc(s || 'بلا مادة') + '</option>'; }).join('') + '</select>'
+        : '<span><b>المادة:</b> ' + esc(subj || 'بلا مادة') + '</span>') +
+      '</div><div class="toolbar" style="align-items:center;margin:10px 0 0">' +
+      (canEdit ? '<button type="button" class="btn primary" data-tgsave' + (Object.keys(u.draft).length ? '' : ' disabled') + '>حفظ الدرجات</button>' : '') +
+      '<span style="flex:1"></span>' + printMenu + '<button type="button" class="btn" data-tggx data-ro-ok>تصدير Excel</button></div></div>';
     if (!terms.length) { app.innerHTML = head + '<div class="card empty">لم تُعدّ الإدارة اختبارات بعد' + (isAdmin() ? '؛ أضفها من <a href="#/gradecfg">إعداد الدرجات</a>.' : '.') + '</div>'; return; }
     if (!TG.classes.length) { app.innerHTML = head + '<div class="card empty">لا شعب في جدول الحصص' + (staffView ? '' : ' باسمك') + '.</div>'; return; }
     if (!studs.length) { app.innerHTML = head + bar + '<div class="card empty">لا طلاب في هذه الشعبة.</div>'; return; }
@@ -1558,16 +1572,24 @@
       if (e.target.closest('[data-tgsave]')) return tgSave();
       if (e.target.closest('[data-tggx]')) return tgGradesXlsx();
       var tp = e.target.closest('[data-tgprint]');
-      if (tp) { pendingTgSheet = tp.getAttribute('data-tgprint'); return printNow(); }
+      if (tp) { tgUi().noSubj = tp.hasAttribute('data-tgnosubj'); pendingTgSheet = tp.getAttribute('data-tgprint'); return printNow(); }
     }
   });
   document.addEventListener('change', function (e) {
     var u = tgUi(), id = e.target.id;
     if (location.hash === '#/mystudents' && id === 'tg-cls') { u.cls = e.target.value; return render(); }
-    if (location.hash === '#/grades' && id === 'tg-nosubj') { u.noSubj = e.target.checked; return; }
-    if (location.hash === '#/grades' && (id === 'tg-term' || id === 'tg-key')) {
-      if (Object.keys(u.draft).length && !confirm('في الدرجات تعديلات لم تُحفظ. تركها؟')) { e.target.value = id === 'tg-term' ? u.term : u.key; return; }
-      u[id === 'tg-term' ? 'term' : 'key'] = e.target.value; u.draft = {}; return render();
+    if (location.hash === '#/grades' && (id === 'tg-term' || id === 'tg-cls' || id === 'tg-subj')) {
+      var p = u.key.split('\u0001');
+      if (Object.keys(u.draft).length && !confirm('في الدرجات تعديلات لم تُحفظ. تركها؟')) { e.target.value = id === 'tg-term' ? u.term : id === 'tg-cls' ? p[0] : p[1] || ''; return; }
+      if (id === 'tg-term') u.term = e.target.value;
+      else if (id === 'tg-subj') u.key = p[0] + '\u0001' + e.target.value;
+      else {
+        // شعبة جديدة: تبقى المادة نفسها إن كانت تُدرَّس فيها، وإلا أول مادة فيها
+        var cs = TG.classes.filter(function (c) { return c.class_name === e.target.value; });
+        var keep = cs.filter(function (c) { return c.subject === p[1]; })[0] || cs[0];
+        if (keep) u.key = keep.class_name + '\u0001' + keep.subject;
+      }
+      u.draft = {}; return render();
     }
   });
   document.addEventListener('input', function (e) {
