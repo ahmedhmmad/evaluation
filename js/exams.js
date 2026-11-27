@@ -20,6 +20,14 @@
     });
     return hit ? hit.l : '';
   }
+  // التقدير الظاهر: ما اختاره المعلم يدويًا، وإلا المحسوب من الدرجة بالشرائح
+  function rxRateShown(bands, g, manual) { return manual || rxRating(bands, g); }
+  // قائمة اختيار التقدير: الأول «تلقائي» (يُحسب من الدرجة) ثم شرائح الاختبار
+  function rxRateOptions(bands, g, manual) {
+    var auto = rxRating(bands, g), labels = (bands || []).map(function (b) { return b.label; }).filter(Boolean);
+    if (manual && labels.indexOf(manual) < 0) labels.push(manual);
+    return '<option value="">' + (auto ? 'تلقائي: ' + esc(auto) : '—') + '</option>' + labels.map(function (l) { return '<option' + (l === manual ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('');
+  }
   function rxState() { return S.rx || (S.rx = { list: [], loaded: false, loading: false, missing: false, open: '', draft: null, dirty: false, cls: '', q: '', show: '' }); }
   function rxCanEdit() { return isAdmin() || isRegistrar(); }
   async function rxLoad() {
@@ -35,7 +43,7 @@
   function rxD() {
     var c = rxState(), E = rxCur();
     if (!c.draft && E) {
-      c.draft = { title: E.title || RX_DEFAULT, bands: (E.bands && E.bands.length ? E.bands : RX_BANDS).map(function (b) { return { from: b.from, to: b.to, label: b.label }; }), places: {}, exam_date: String(E.exam_date).slice(0, 10), subject: E.subject || '', committee: (E.committee || []).join('\n'), sel: {}, tsel: {}, grades: Object.assign({}, E.grades || {}) };
+      c.draft = { title: E.title || RX_DEFAULT, bands: (E.bands && E.bands.length ? E.bands : RX_BANDS).map(function (b) { return { from: b.from, to: b.to, label: b.label }; }), places: {}, exam_date: String(E.exam_date).slice(0, 10), subject: E.subject || '', committee: (E.committee || []).join('\n'), sel: {}, tsel: {}, grades: Object.assign({}, E.grades || {}), ratings: Object.assign({}, E.ratings || {}) };
       (E.student_ids || []).forEach(function (id) { c.draft.sel[id] = true; });
       (E.teacher_ids || []).forEach(function (id) { c.draft.tsel[id] = true; });
     }
@@ -88,7 +96,7 @@
   function rxNames(d) { return String(d.committee || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean); }
   function rxRefreshRates() {
     var d = rxD();
-    Array.prototype.forEach.call(document.querySelectorAll('[data-rxrate]'), function (td) { td.innerHTML = '<b>' + esc(rxRating(d.bands, d.grades[td.getAttribute('data-rxrate')])) + '</b>'; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rxrate]'), function (sel) { var id = sel.getAttribute('data-rxrate'); sel.innerHTML = rxRateOptions(d.bands, d.grades[id], d.ratings[id]); });
   }
   function rxMarkDirty() {
     var c = rxState();
@@ -123,7 +131,7 @@
     var formed = picked.length ? '<div class="card"><h2 style="margin-top:0">الاختبار المُشكَّل (' + picked.length + ' طالبًا)</h2><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>اسم الطالب</th><th>مكان الميلاد</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:7em">الدرجة</th><th>التقدير</th></tr></thead><tbody>' +
       picked.map(function (x, i) {
         return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td><input type="text" data-rxplace="' + x.id + '" value="' + esc(rxPlace(x, d)) + '" aria-label="مكان ميلاد ' + esc(x.full_name) + '"' + dis + ' style="width:9em"></td><td>' + esc(x.class_name || '—') + '</td><td>' + dmy(x.birth_date) + '</td><td>' + esc(rxTeacher(x, d.subject) || '—') + '</td>' +
-          '<td><input type="text" inputmode="decimal" data-rxgrade="' + x.id + '" value="' + esc(d.grades[x.id] == null ? '' : d.grades[x.id]) + '" aria-label="درجة ' + esc(x.full_name) + '"' + dis + ' style="width:6em"></td><td class="rx-rate" style="white-space:nowrap" data-rxrate="' + x.id + '"><b>' + esc(rxRating(d.bands, d.grades[x.id])) + '</b></td></tr>';
+          '<td><input type="text" inputmode="decimal" data-rxgrade="' + x.id + '" value="' + esc(d.grades[x.id] == null ? '' : d.grades[x.id]) + '" aria-label="درجة ' + esc(x.full_name) + '"' + dis + ' style="width:6em"></td><td class="rx-rate" style="white-space:nowrap"><select data-rxrating="' + x.id + '" data-rxrate="' + x.id + '" aria-label="تقدير ' + esc(x.full_name) + '"' + dis + ' style="width:auto">' + rxRateOptions(d.bands, d.grades[x.id], d.ratings[x.id]) + '</select></td></tr>';
       }).join('') + '</tbody></table></div></div>' : '';
     return back + '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">' + esc(d.title) + ' — ' + dmy(d.exam_date) + '</h2>' +
         (edit ? '<button type="button" class="btn primary" data-rxsave' + (c.dirty ? '' : ' disabled') + '>' + (c.dirty ? 'حفظ التغييرات' : 'محفوظ') + '</button>' : '') +
@@ -158,7 +166,7 @@
   // مصدر الكشف: ما في الشاشة الآن (المدير) أو اختبار المعلم المكلَّف به؛ الكشف نفسه في الحالتين
   function rxSrc() {
     var d = rxD();
-    return { title: d.title, date: d.exam_date, bands: d.bands, grades: d.grades, names: rxNames(d), rows: rxPicked(),
+    return { title: d.title, date: d.exam_date, bands: d.bands, grades: d.grades, ratings: d.ratings, names: rxNames(d), rows: rxPicked(),
       teacher: function (x) { return rxTeacher(x, d.subject); }, place: function (x) { return rxPlace(x, d); } };
   }
   function buildRxSheet(src) {
@@ -171,7 +179,7 @@
       '<tr><th style="width:3em">م</th><th>اسم الطالب</th><th>مكان الميلاد</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:8%">الدرجة</th><th style="white-space:nowrap">التقدير</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (x, i) {
         var g = d.grades[x.id];
-        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(src.place(x)) + '</td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(src.teacher(x)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c" style="white-space:nowrap">' + esc(rxRating(d.bands, g)) + '</td></tr>';
+        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(src.place(x)) + '</td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(src.teacher(x)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c" style="white-space:nowrap">' + esc(rxRateShown(d.bands, g, (src.ratings || {})[x.id])) + '</td></tr>';
       }).join('') : '<tr><td colspan="' + n + '" class="c">لم يُختر طلاب.</td></tr>') + '</tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       rxSigns(names);
@@ -211,7 +219,9 @@
       var pl = [];
       Object.keys(d.places).forEach(function (id) { var x = findStudent(id), v = String(d.places[id] || '').trim(); if (x && v !== String((x.details && x.details.birth_place) || '')) pl.push([x, v]); });
       var bands = d.bands.filter(function (b) { return String(b.label || '').trim() && rxNum(b.from) != null && rxNum(b.to) != null; }).map(function (b) { return { from: rxNum(b.from), to: rxNum(b.to), label: String(b.label).trim() }; });
+      var ratings = {}; all.forEach(function (id) { if (d.ratings[id]) ratings[id] = d.ratings[id]; });
       var patch = { bands: bands, title: (d.title || '').trim() || RX_DEFAULT, exam_date: d.exam_date || todayISO(), subject: d.subject, committee: rxNames(d), student_ids: all, grades: grades, updated_at: new Date().toISOString() };
+      if ('ratings' in E) patch.ratings = ratings;
       if ('teacher_ids' in E) patch.teacher_ids = Object.keys(d.tsel).filter(function (id) { return d.tsel[id]; });
       var w = await sb.from('student_exams').update(patch).eq('id', E.id);
       if (w.error) return fail(w.error);
@@ -249,14 +259,15 @@
     if ((id = el.getAttribute('data-rxplace'))) { d.places[id] = el.value; rxMarkDirty(); return; }
     if ((id = el.getAttribute('data-rxband'))) { var bp = id.split('|'); d.bands[Number(bp[0])][bp[1]] = el.value; rxMarkDirty(); rxRefreshRates(); return; }
     if ((id = el.getAttribute('data-rxgrade'))) { d.grades[id] = el.value; rxMarkDirty(); rxRefreshRates(); }
+    if ((id = el.getAttribute('data-rxrating'))) { if (el.value) d.ratings[id] = el.value; else delete d.ratings[id]; rxMarkDirty(); }
   });
 
   /* ---------- رصد الاختبارات (للمعلم) ----------
      اختبارات كلّفه بها المدير من شاشة «الاختبارات» (my_exams في supabase/exam_teachers.sql): يرى طلابها ويرصد الدرجات فقط،
      ويطبع الكشف بنفس شكل شاشة الاختبارات. ليست من مواد الجدول ولا تدخل في «رصد الدرجات» العادي */
-  var TX = { uid: '', loaded: false, loading: false, list: [], open: '', draft: {}, saving: false };
+  var TX = { uid: '', loaded: false, loading: false, list: [], open: '', draft: {}, draftR: {}, saving: false };
   function txState() {
-    if (TX.uid !== S.uid) { TX.uid = S.uid; TX.loaded = false; TX.loading = false; TX.list = []; TX.open = ''; TX.draft = {}; }
+    if (TX.uid !== S.uid) { TX.uid = S.uid; TX.loaded = false; TX.loading = false; TX.list = []; TX.open = ''; TX.draft = {}; TX.draftR = {}; }
     return TX;
   }
   function txHas() { return isTeacherRole() && txState().list.length > 0; }
@@ -272,12 +283,13 @@
   }
   function txCur() { var t = txState(); return t.list.filter(function (x) { return x.id === t.open; })[0]; }
   function txGrade(E, id) { var d = TX.draft[E.id]; return d && id in d ? d[id] : ((E.grades || {})[id] == null ? '' : E.grades[id]); }
+  function txRating(E, id) { var d = TX.draftR[E.id]; return d && id in d ? d[id] : ((E.ratings || {})[id] || ''); }
   function txRows(E) { return E.students || []; }
-  function txDirty() { return Object.keys(TX.draft).some(function (k) { return Object.keys(TX.draft[k]).length; }); }
+  function txDirty() { return [TX.draft, TX.draftR].some(function (m) { return Object.keys(m).some(function (k) { return Object.keys(m[k]).length; }); }); }
   function txBands(E) { return E.bands && E.bands.length ? E.bands : RX_BANDS; }
   function txSrc(E) {
     var g = {}; txRows(E).forEach(function (x) { var v = txGrade(E, x.id); if (String(v).trim() !== '') g[x.id] = v; });
-    return { title: E.title, date: String(E.exam_date).slice(0, 10), bands: txBands(E), grades: g, names: E.committee || [], rows: txRows(E),
+    return { title: E.title, date: String(E.exam_date).slice(0, 10), bands: txBands(E), grades: g, ratings: (function () { var r = {}; txRows(E).forEach(function (x) { var v = txRating(E, x.id); if (v) r[x.id] = v; }); return r; })(), names: E.committee || [], rows: txRows(E),
       teacher: function (x) { return (x.teacher || '').split('، ').filter(Boolean).map(ttShortName).join('، ') || (E.teachers || []).map(ttShortName).join('، '); },
       place: function (x) { return x.birth_place || ''; } };
   }
@@ -302,36 +314,45 @@
       (rows.length ? rows.map(function (x, i) {
         return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td><td>' + dmy(x.birth_date) + '</td><td>' + esc(src.teacher(x) || '—') + '</td>' +
           '<td><input type="text" inputmode="decimal" data-txgrade="' + x.id + '" value="' + esc(txGrade(E, x.id)) + '" aria-label="درجة ' + esc(x.full_name) + '" style="width:6em"></td>' +
-          '<td style="white-space:nowrap" data-txrate="' + x.id + '"><b>' + esc(rxRating(bands, txGrade(E, x.id))) + '</b></td></tr>';
+          '<td style="white-space:nowrap"><select data-txrating="' + x.id + '" aria-label="تقدير ' + esc(x.full_name) + '" style="width:auto">' + rxRateOptions(bands, txGrade(E, x.id), txRating(E, x.id)) + '</select></td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">لم تُضف الإدارة طلابًا لهذا الاختبار بعد.</td></tr>') + '</tbody></table></div></div>';
   }
   app.addEventListener('click', async function (e) {
     if (location.hash !== '#/examgrades') return;
     var t = txState(), el, E = txCur();
     if ((el = e.target.closest('[data-txopen]'))) { t.open = el.getAttribute('data-txopen'); scrollTo(0, 0); return render(); }
-    if (e.target.closest('[data-txclose]')) { if (txDirty() && !confirm('لم تُحفظ الدرجات. الخروج بدون حفظ؟')) return; t.draft = {}; t.open = ''; return render(); }
+    if (e.target.closest('[data-txclose]')) { if (txDirty() && !confirm('لم تُحفظ الدرجات. الخروج بدون حفظ؟')) return; t.draft = {}; t.draftR = {}; t.open = ''; return render(); }
     if (!E) return;
     if (e.target.closest('[data-txprint]')) { pendingRx = txSrc(E); return printNow(); }
     if (e.target.closest('[data-txsave]')) {
-      var ch = t.draft[E.id] || {};
-      if (!Object.keys(ch).length || t.saving) return;
+      var ch = t.draft[E.id] || {}, chr = t.draftR[E.id] || {};
+      if ((!Object.keys(ch).length && !Object.keys(chr).length) || t.saving) return;
       t.saving = true;
-      var r = await sb.rpc('exam_save_grades', { p_exam: E.id, p_grades: ch });
+      var r = await sb.rpc('exam_save_grades', Object.keys(chr).length ? { p_exam: E.id, p_grades: ch, p_ratings: chr } : { p_exam: E.id, p_grades: ch });
       t.saving = false;
       if (r.error) return fail(r.error);
-      E.grades = r.data || {};
-      delete t.draft[E.id];
+      // الدالة المحدَّثة تعيد { grades, ratings }؛ والقديمة تعيد الدرجات وحدها
+      var out = r.data || {};
+      if (out.grades && typeof out.grades === 'object') { E.grades = out.grades; E.ratings = out.ratings || {}; } else E.grades = out;
+      delete t.draft[E.id]; delete t.draftR[E.id];
       render(); toast('حُفظت الدرجات');
     }
   });
   app.addEventListener('input', function (e) {
+    var rid = e.target.getAttribute && e.target.getAttribute('data-txrating');
+    if (rid && location.hash === '#/examgrades') {
+      var E2 = txCur(); if (!E2) return;
+      (TX.draftR[E2.id] || (TX.draftR[E2.id] = {}))[rid] = e.target.value;
+      var b2 = document.querySelector('[data-txsave]'); if (b2) { b2.disabled = false; b2.textContent = 'حفظ الدرجات'; }
+      return;
+    }
     var id = e.target.getAttribute && e.target.getAttribute('data-txgrade');
     if (!id || location.hash !== '#/examgrades') return;
     var E = txCur(); if (!E) return;
     var d = TX.draft[E.id] || (TX.draft[E.id] = {});
     d[id] = e.target.value;
-    var cell = document.querySelector('[data-txrate="' + id + '"]');
-    if (cell) cell.innerHTML = '<b>' + esc(rxRating(txBands(E), e.target.value)) + '</b>';
+    var sel = document.querySelector('[data-txrating="' + id + '"]');
+    if (sel) sel.innerHTML = rxRateOptions(txBands(E), e.target.value, txRating(E, id));
     var b = document.querySelector('[data-txsave]');
     if (b) { b.disabled = false; b.textContent = 'حفظ الدرجات'; }
   });
