@@ -35,6 +35,7 @@ create table if not exists public.grade_items (
   created_at timestamptz not null default now()
 );
 alter table public.grade_items add column if not exists open boolean not null default true;   -- مفتوح لرصد المعلمين (grade_items_open.sql)
+alter table public.grade_items add column if not exists shown boolean not null default false; -- غير المفتوح: يظهر للمعلم للقراءة (معطّل)
 alter table public.grade_items enable row level security;
 revoke all on public.grade_items from anon;
 grant select, insert, update, delete on public.grade_items to authenticated;

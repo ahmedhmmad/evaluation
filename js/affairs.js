@@ -1350,16 +1350,17 @@
         '<button type="submit" class="btn primary">إضافة</button></div></form>' +
       (names.length ? names.map(function (t) {
         var sum = terms[t].reduce(function (a, x) { return a + Number(x.max_score); }, 0);
-        var nOpen = terms[t].filter(function (x) { return x.open !== false; }).length;
-        return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0">' + esc(t) + ' — المجموع ' + sum + '</h2><span class="meta">مفتوح للمعلمين: ' + nOpen + ' من ' + terms[t].length + '</span><span style="flex:1"></span>' +
-          '<button type="button" class="btn" data-gcterm="' + esc(t) + '" data-open="1"' + (nOpen === terms[t].length ? ' disabled' : '') + '>فتح الكل</button><button type="button" class="btn" data-gcterm="' + esc(t) + '" data-open="0"' + (nOpen ? '' : ' disabled') + '>غلق الكل</button></div>' +
-          '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الاختبار</th><th>الدرجة</th><th>الترتيب</th><th>مفتوح للمعلمين</th><th></th></tr></thead><tbody>' +
+        var cnt = { open: 0, locked: 0, closed: 0 }; terms[t].forEach(function (x) { cnt[gcState(x)]++; });
+        var allBtn = function (st, label) { return '<button type="button" class="btn" data-gcterm="' + esc(t) + '" data-state="' + st + '"' + (cnt[st] === terms[t].length ? ' disabled' : '') + '>' + label + '</button>'; };
+        return '<div class="card"><div class="toolbar" style="align-items:center;margin:0 0 8px"><h2 style="margin:0">' + esc(t) + ' — المجموع ' + sum + '</h2><span class="meta">للمعلمين: ' + cnt.open + ' مفتوح · ' + cnt.locked + ' معطّل · ' + cnt.closed + ' مغلق</span><span style="flex:1"></span>' +
+          allBtn('open', 'فتح الكل') + allBtn('locked', 'تعطيل الكل') + allBtn('closed', 'غلق الكل') + '</div>' +
+          '<div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الاختبار</th><th>الدرجة</th><th>الترتيب</th><th>للمعلمين</th><th></th></tr></thead><tbody>' +
           terms[t].map(function (x, i) {
             return '<tr><td>' + (i + 1) + '</td><td><input type="text" data-gcname="' + x.id + '" value="' + esc(x.name) + '"></td><td><input type="number" min="0.5" step="0.5" style="width:6em" data-gcmax="' + x.id + '" value="' + esc(x.max_score) + '"></td>' +
               '<td><input type="number" style="width:5em" data-gcsort="' + x.id + '" value="' + esc(x.sort) + '"></td>' +
-              '<td><label class="check" style="margin:0"><input type="checkbox" data-gcopen="' + x.id + '"' + (x.open !== false ? ' checked' : '') + '> ' + (x.open !== false ? 'مفتوح' : 'مغلق') + '</label></td>' +
+              '<td><select data-gcopen="' + x.id + '" style="width:auto">' + GC_STATES.map(function (o) { return '<option value="' + o[0] + '"' + (gcState(x) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></td>' +
               '<td><button type="button" class="btn danger" data-gcdel="' + x.id + '">حذف</button></td></tr>';
-          }).join('') + '</tbody></table></div><p class="hint">التعديل يُحفظ عند الخروج من الخانة. الاختبار المغلق لا يظهر للمعلمين في رصد الدرجات ولا يقبل منهم حفظًا، والإدارة ترصده دائمًا.</p></div>';
+          }).join('') + '</tbody></table></div><p class="hint">التعديل يُحفظ عند الخروج من الخانة. للمعلمين: «مفتوح» يرصدون فيه، و«معطّل» يرون درجاته ولا يعدّلونها، و«مغلق» لا يظهر لهم. الإدارة ترصد وتعدّل دائمًا.</p></div>';
       }).join('') : '<div class="card empty">لا اختبارات بعد.</div>');
   }
   document.addEventListener('submit', async function (e) {
@@ -1375,10 +1376,10 @@
     if (location.hash !== '#/gradecfg' || !isAdmin()) return;
     var el = e.target, id, k;
     if ((id = el.getAttribute('data-gcopen'))) {
-      var ro = await sb.from('grade_items').update({ open: el.checked }).eq('id', id);
-      if (ro.error) { el.checked = !el.checked; return gcOpenFail(ro.error); }
-      TG.items.forEach(function (x) { if (x.id === id) x.open = el.checked; });
-      render(); return toast(el.checked ? 'فُتح للمعلمين' : 'أُغلق عن المعلمين');
+      var st = el.value, ro = await sb.from('grade_items').update(gcPatch(st)).eq('id', id);
+      if (ro.error) { render(); return gcOpenFail(ro.error); }
+      TG.items.forEach(function (x) { if (x.id === id) Object.assign(x, gcPatch(st)); });
+      render(); return toast(gcStateLabel(st) + ' للمعلمين');
     }
     if ((id = el.getAttribute('data-gcname'))) k = 'name'; else if ((id = el.getAttribute('data-gcmax'))) k = 'max_score'; else if ((id = el.getAttribute('data-gcsort'))) k = 'sort'; else return;
     var v = k === 'name' ? el.value.trim() : Number(el.value);
@@ -1390,20 +1391,25 @@
     if (k === 'sort') { TG.items.sort(function (a, b) { return a.term.localeCompare(b.term) || a.sort - b.sort; }); render(); }
     toast('تم الحفظ');
   });
-  // عمود «open» يأتي من supabase/grade_items_open.sql
+  // حالة الاختبار للمعلمين: مفتوح (open) يرصدون فيه، معطّل (shown) يرونه ولا يعدّلونه، مغلق لا يرونه
+  var GC_STATES = [['open', 'مفتوح'], ['locked', 'معطّل'], ['closed', 'مغلق']];
+  function gcState(x) { return x.open !== false ? 'open' : x.shown ? 'locked' : 'closed'; }
+  function gcPatch(st) { return { open: st === 'open', shown: st === 'locked' }; }
+  function gcStateLabel(st) { return GC_STATES.filter(function (o) { return o[0] === st; })[0][1]; }
+  // العمودان «open» و«shown» يأتيان من supabase/grade_items_open.sql
   function gcOpenFail(error) {
-    if (/open/.test(error.message || '') && /column|schema cache/i.test(error.message || '')) return toast('شغّل الملف supabase/grade_items_open.sql في محرر SQL أولًا، ثم حدّث الصفحة', true);
+    if (/open|shown/.test(error.message || '') && /column|schema cache/i.test(error.message || '')) return toast('شغّل الملف supabase/grade_items_open.sql في محرر SQL أولًا، ثم حدّث الصفحة', true);
     fail(error);
   }
   document.addEventListener('click', async function (e) {
     var el;
     if (location.hash === '#/gradecfg' && isAdmin() && (el = e.target.closest('[data-gcterm]'))) {
-      var term = el.getAttribute('data-gcterm'), open = el.getAttribute('data-open') === '1';
+      var term = el.getAttribute('data-gcterm'), st = el.getAttribute('data-state');
       var ids = TG.items.filter(function (q) { return q.term === term; }).map(function (q) { return q.id; });
-      var ru = await sb.from('grade_items').update({ open: open }).in('id', ids);
+      var ru = await sb.from('grade_items').update(gcPatch(st)).in('id', ids);
       if (ru.error) return gcOpenFail(ru.error);
-      TG.items.forEach(function (q) { if (q.term === term) q.open = open; });
-      render(); return toast((open ? 'فُتحت للمعلمين كل اختبارات ' : 'أُغلقت عن المعلمين كل اختبارات ') + term);
+      TG.items.forEach(function (q) { if (q.term === term) Object.assign(q, gcPatch(st)); });
+      render(); return toast('كل اختبارات ' + term + ': ' + gcStateLabel(st) + ' للمعلمين');
     }
     if (location.hash === '#/gradecfg' && isAdmin() && (el = e.target.closest('[data-gcdel]'))) {
       var x = TG.items.filter(function (q) { return q.id === el.getAttribute('data-gcdel'); })[0];
@@ -1428,8 +1434,9 @@
     TG.students = S.students.filter(enrolled).map(function (x) { return { id: x.id, full_name: x.full_name, class_name: x.class_name }; });
     TG.loaded = true; render();
   }
-  // المعلم يرى الاختبارات المفتوحة فقط («مفتوح للمعلمين» في إعداد الدرجات)؛ الإدارة ترى كل الاختبارات
-  function tgVisible() { return isTeacherRole() ? TG.items.filter(function (x) { return x.open !== false; }) : TG.items; }
+  // المعلم يرى المفتوح والمعطّل (إعداد الدرجات)، ويكتب في المفتوح فقط؛ الإدارة ترى كل الاختبارات وتكتب فيها
+  function tgVisible() { return isTeacherRole() ? TG.items.filter(function (x) { return x.open !== false || x.shown; }) : TG.items; }
+  function tgWritable(x) { return !isTeacherRole() || x.open !== false; }
   function renderGrades() {
     var staffView = !isTeacherRole();
     if (!TG.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; if (staffView) tgLoadAllClasses(); else tgLoad(); return; }
@@ -1477,10 +1484,10 @@
     if (u.grades == null) { app.innerHTML = head + bar + '<div class="card empty">جارٍ تحميل الدرجات…</div>'; return; }
     var val = function (sid, iid) { var k = sid + '|' + iid; return k in u.draft ? u.draft[k] : (u.grades[k] == null ? '' : u.grades[k]); };
     app.innerHTML = head + bar + '<div class="card"><h2 style="margin-top:0">' + esc(cls) + ' — ' + esc(subj) + ' — ' + esc(u.term) + '</h2><div class="table-wrap"><table class="grid"><thead><tr><th>م</th><th>الطالب</th>' +
-      items.map(function (x) { return '<th style="white-space:nowrap">' + esc(x.name) + ' <span class="meta">(' + x.max_score + ')</span></th>'; }).join('') + '<th>المجموع <span class="meta">(' + maxSum + ')</span></th></tr></thead><tbody>' +
+      items.map(function (x) { return '<th style="white-space:nowrap">' + esc(x.name) + ' <span class="meta">(' + x.max_score + ')</span>' + (tgWritable(x) ? '' : '<br><span class="meta">معطّل</span>') + '</th>'; }).join('') + '<th>المجموع <span class="meta">(' + maxSum + ')</span></th></tr></thead><tbody>' +
       studs.map(function (x, i) {
         var tot = 0, any = false;
-        var cells = items.map(function (it) { var v = val(x.id, it.id); if (v !== '' && v != null) { tot += Number(v); any = true; } return '<td><input type="number" min="0" max="' + it.max_score + '" step="0.25" style="width:5.5em" data-tgg="' + x.id + '|' + it.id + '" value="' + esc(v) + '"' + (canEdit ? '' : ' disabled') + '></td>'; }).join('');
+        var cells = items.map(function (it) { var v = val(x.id, it.id); if (v !== '' && v != null) { tot += Number(v); any = true; } return '<td><input type="number" min="0" max="' + it.max_score + '" step="0.25" style="width:5.5em" data-tgg="' + x.id + '|' + it.id + '" value="' + esc(v) + '"' + (canEdit && tgWritable(it) ? '' : ' disabled') + '></td>'; }).join('');
         return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td>' + cells + '<td><b data-tgtot="' + x.id + '">' + (any ? Math.round(tot * 100) / 100 : '—') + '</b></td></tr>';
       }).join('') + '</tbody></table></div>' + (canEdit ? '<p class="hint">اكتب الدرجات ثم اضغط «حفظ الدرجات». الخانة الفارغة: لم تُرصد.</p>' : '') + '</div>';
   }
@@ -1506,8 +1513,8 @@
   });
   async function tgSave() {
     var u = tgUi(), subj = u.key.split('\u0001')[1] || '', who = (S.profile && S.profile.full_name) || displayName(S.email), now = new Date().toISOString();
-    // ما كُتب في اختبار أغلقته الإدارة بعد ذلك لا يُرسل (وإلا رُفض الحفظ كله)
-    var vis = {}; tgVisible().forEach(function (x) { vis[x.id] = 1; });
+    // ما كُتب في اختبار أغلقته الإدارة أو عطّلته بعد ذلك لا يُرسل (وإلا رُفض الحفظ كله)
+    var vis = {}; tgVisible().forEach(function (x) { if (tgWritable(x)) vis[x.id] = 1; });
     Object.keys(u.draft).forEach(function (k) { if (!vis[k.split('|')[1]]) delete u.draft[k]; });
     var rows = Object.keys(u.draft).map(function (k) { var p = k.split('|'); return { student_id: p[0], item_id: p[1], subject: subj, score: u.draft[k] === '' ? null : Number(u.draft[k]), teacher_id: S.myStaff ? S.myStaff.id : null, updated_by: who, updated_at: now }; });
     if (!rows.length) return;
