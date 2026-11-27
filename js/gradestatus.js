@@ -9,7 +9,7 @@
   function gstUi() { return ui.gst || (ui.gst = { term: '', view: 'class', status: '', q: '', lim: 60, mf: false }); }
   async function gstLoad() {
     if (GST.busy) return; GST.busy = true;
-    var it = await sb.from('grade_items').select('id, term, name, max_score, sort').order('term').order('sort');
+    var it = await sb.from('grade_items').select('id, term, name, max_score, sort, open').order('term').order('sort');
     var ss = it.error ? null : await fetchAll(function () { return sb.from('timetable_sessions').select('class_name, subject, teacher_id').neq('status', 'removed'); });
     var g = ss == null ? null : await fetchAll(function () { return sb.from('grades').select('student_id, item_id, subject, teacher_id, updated_at').not('score', 'is', null); });
     GST.busy = false;
@@ -32,7 +32,8 @@
   }
   // صف لكل شعبة ومادة: معلموها، وعدد المرصودة درجاتهم في كل اختبار، والحالة
   function gstCompute(term) {
-    var items = GST.items.filter(function (x) { return term === '*' || x.term === term; }), isItem = {};
+    // الاختبارات المفتوحة للمعلمين فقط: المغلق لا يُنتظر رصده فلا يدخل في الحالة ولا النسبة
+    var items = GST.items.filter(function (x) { return (term === '*' || x.term === term) && x.open !== false; }), isItem = {};
     items.forEach(function (x) { isItem[x.id] = 1; });
     var students = {}, cls = {};
     S.students.filter(enrolled).forEach(function (x) { if (x.class_name) { (students[x.class_name] || (students[x.class_name] = [])).push(x.id); cls[x.id] = x.class_name; } });
@@ -56,7 +57,7 @@
       e.status = got === 0 ? 'none' : got >= items.length * n ? 'full' : 'part';
       return e;
     }).sort(function (a, b) { return classRank(a.cls) - classRank(b.cls) || gradeOf(a.cls) - gradeOf(b.cls) || a.cls.localeCompare(b.cls, 'ar', { numeric: true }) || a.subject.localeCompare(b.subject, 'ar'); });
-    return { items: items, rows: rows };
+    return { items: items, rows: rows, closed: GST.items.filter(function (x) { return (term === '*' || x.term === term) && x.open === false; }).length };
   }
   // معلمو القرآن الكريم: من مادته في بياناته قرآن، أو كل حصصه في الجدول قرآن
   function gstQuranTeachers() {
@@ -193,9 +194,9 @@
     var d = gstCompute(u.term), all = d.rows; GST.cur = d;
     var tally = gstTally(all), got = all.reduce(function (a, r) { return a + r.got; }, 0), need = all.reduce(function (a, r) { return a + r.need; }, 0);
     var top = gstTop({ tally: tally, pct: need ? Math.round(got / need * 100) : 0, unit: 'مادة', sub: 'راقب اكتمال درجات الطلاب وحدّد المتأخرين بسرعة.',
-      note: 'مادة في شعبة، بحسب جدول الحصص واختبارات الفصل.', ph: 'ابحث باسم شعبة أو معلم أو مادة…',
+      note: 'مادة في شعبة، بحسب جدول الحصص والاختبارات المفتوحة للمعلمين.', ph: 'ابحث باسم شعبة أو معلم أو مادة…',
       terms: terms.map(function (t) { return [t, t]; }).concat(terms.length > 1 ? [['*', 'الفصلان معًا']] : []) });
-    if (!d.items.length) { app.innerHTML = '<div class="gs">' + top + '<div class="gs-empty"><span>' + gstIcon('book', 28) + '</span><h3>لم تُعدّ اختبارات لهذا الفصل بعد</h3><p>ستظهر الاختبارات هنا بعد إعدادها في «إعداد الدرجات».</p></div></div>'; return; }
+    if (!d.items.length) { app.innerHTML = '<div class="gs">' + top + '<div class="gs-empty"><span>' + gstIcon('book', 28) + '</span><h3>' + (d.closed ? 'كل اختبارات هذا الفصل مغلقة عن المعلمين' : 'لم تُعدّ اختبارات لهذا الفصل بعد') + '</h3><p>' + (d.closed ? 'لا رصد مطلوب الآن. تُحسب المتابعة للاختبارات المفتوحة للمعلمين فقط.' : 'ستظهر الاختبارات هنا بعد إعدادها في «إعداد الدرجات».') + '</p></div></div>'; return; }
     var body = '';
     if (u.view === 'detail') {
       var rows = all.filter(function (r) { return gstMatch(r, u); });
@@ -235,7 +236,7 @@
             return '<button type="button" class="gs-cell ' + r.status + (dim ? ' dim' : '') + '" data-gs-cell="' + i + '" data-ro-ok><span class="gs-cs">' + GST_ICON[r.status] + '</span><strong>' + r.pct + '%</strong>' +
               '<span class="gs-tip"><b>' + esc(s) + ' — ' + esc(c) + '</b>' + d.items.map(function (it, k) { return '<span>' + esc(it.name) + ': ' + r.per[k] + '/' + r.total + '</span>'; }).join('') + '<span>المعلم: ' + (esc(r.teachers.join('، ')) || '—') + '</span><em>اضغط لعرض التفاصيل</em></span></button>';
           }).join('');
-        }).join('') + '</div></div><p class="gs-note">' + gstIcon('alert', 16) + ' حرّك المؤشر فوق أي خلية للتفاصيل، أو اضغط لفتح سجل الاختبارات. النسبة: الدرجات المرصودة من المطلوبة في كل اختبارات الفصل. مادة القرآن الكريم لا تظهر هنا.</p></section>';
+        }).join('') + '</div></div><p class="gs-note">' + gstIcon('alert', 16) + ' حرّك المؤشر فوق أي خلية للتفاصيل، أو اضغط لفتح سجل الاختبارات. النسبة: الدرجات المرصودة من المطلوبة في الاختبارات المفتوحة للمعلمين فقط (المغلقة لا تُحسب). مادة القرآن الكريم لا تظهر هنا.</p></section>';
     }
     app.innerHTML = '<div class="gs">' + top + '<div class="gs-area">' + body + '</div></div>' + gstDrawer(d);
   }
