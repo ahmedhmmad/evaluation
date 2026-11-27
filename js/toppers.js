@@ -5,10 +5,7 @@
      المعدل = متوسط نسب مواد الشعبة المحسوبة، فيتساوى الطلاب في عدد المواد.
      يُستبعد من المعدل ما تختاره الإدارة من المواد */
   var TOPS = { loaded: false, busy: false, items: [], grades: [], error: '' };
-  // الخيارات الثابتة: الاسم الظاهر ونمط يطابق اسم المادة كما رُصدت (لا يطابق «الرياضيات»)
-  var TOPS_FIXED = [['فن', /(^|\s)(ال)?(فن|فنون|فنية)/], ['رياضة', /(رياضة|بدنية)/], ['قرآن كريم', /(قرآن|قران)/]];
-  function topsMatch(subjects, re) { return subjects.filter(function (s) { return re.test(s); }); }
-  function topsRest(subjects, ex) { return subjects.filter(function (s) { return ex.indexOf(s) < 0 && !TOPS_FIXED.some(function (f) { return f[1].test(s); }); }); }
+  function topsRest(subjects, ex) { return subjects.filter(function (s) { return ex.indexOf(s) < 0; }); }
   function topsUi() { return ui.tops || (ui.tops = { term: '', view: 'class', n: 3, ex: topsLoadEx() }); }
   function topsLoadEx() { try { return JSON.parse(localStorage.getItem('tops_ex') || '[]') || []; } catch (e) { return []; } }
   function topsSaveEx(a) { try { localStorage.setItem('tops_ex', JSON.stringify(a)); } catch (e) { /* التخزين غير متاح */ } }
@@ -16,6 +13,8 @@
   async function topsLoad() {
     if (TOPS.busy) return; TOPS.busy = true;
     var it = await sb.from('grade_items').select('id, term, name, max_score').order('term');
+    var ts = await fetchAll(function () { return sb.from('timetable_sessions').select('subject').neq('status', 'removed'); });
+    TOPS.tsubs = []; (ts || []).forEach(function (x) { var v = String(x.subject || '').trim(); if (v && TOPS.tsubs.indexOf(v) < 0) TOPS.tsubs.push(v); });
     var g = it.error ? null : await fetchAll(function () { return sb.from('grades').select('student_id, item_id, subject, score').not('score', 'is', null); });
     TOPS.busy = false;
     if (it.error || g == null) { TOPS.error = (it.error && it.error.message) || 'تعذّر جلب الدرجات'; }
@@ -47,6 +46,7 @@
       var avg = pcts.reduce(function (a, v) { return a + v; }, 0) / pcts.length;
       rows.push({ id: x.id, name: x.full_name, cls: x.class_name || '', level: topsLevel(x.class_name), avg: Math.round(avg * 100) / 100, n: pcts.length });
     });
+    (TOPS.tsubs || []).forEach(function (v) { subjects[v] = subjects[v] || 0; });
     return { rows: rows, subjects: Object.keys(subjects).sort(function (a, b) { return a.localeCompare(b, 'ar'); }) };
   }
   // الترتيب بالمعدل؛ المتساوون في المعدل لهم الترتيب نفسه، ويدخل كل من ساوى آخر المطلوبين
@@ -77,9 +77,8 @@
       '<label class="field" for="tops-n" style="margin:0">عدد الأوائل</label><select id="tops-n" data-ro-ok style="width:auto">' + [1, 3, 5, 10].map(function (n) { return '<option' + (n === u.n ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select>' +
       '<span style="flex:1"></span><select id="tops-one" data-ro-ok style="width:auto"><option value="">طباعة مرحلة واحدة…</option>' + topsData('level').groups.map(function (g) { return '<option>' + esc(g.name) + '</option>'; }).join('') + '</select><button type="button" class="btn" data-tops-print data-ro-ok' + (d.groups.length ? '' : ' disabled') + '>طباعة</button><button type="button" class="btn" data-tops-xlsx data-ro-ok' + (d.groups.length ? '' : ' disabled') + '>تصدير Excel</button><button type="button" class="btn" data-tops-reload data-ro-ok>تحديث الدرجات</button></div>' +
       '<details style="margin-top:10px"><summary><b>استبعاد مواد من المعدل</b></summary>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px">' + TOPS_FIXED.map(function (f) { var m = topsMatch(d.subjects, f[1]); return '<label style="display:flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" data-tops-fix="x|' + esc(f[0]) + '"' + (m.length && m.every(function (s) { return u.ex.indexOf(s) > -1; }) ? ' checked' : '') + (m.length ? '' : ' disabled') + '> ' + esc(f[0]) + '</label>'; }).join('') + '</div>' +
       '<div class="toolbar" style="align-items:center;margin:8px 0 0"><select id="tops-add" data-ro-ok style="width:auto"><option value="">مادة أخرى…</option>' + topsRest(d.subjects, u.ex).map(function (s) { return '<option>' + esc(s) + '</option>'; }).join('') + '</select>' +
-      u.ex.filter(function (s) { return !TOPS_FIXED.some(function (f) { return f[1].test(s); }); }).map(function (s) { return '<span class="chip" style="display:inline-flex;gap:6px;align-items:center;border:1px solid #C8A45D;border-radius:999px;padding:2px 10px">' + esc(s) + ' <a href="#" data-tops-del="' + esc(s) + '" title="إزالة">×</a></span>'; }).join('') +
+      u.ex.map(function (s) { return '<span class="chip" style="display:inline-flex;gap:6px;align-items:center;border:1px solid #C8A45D;border-radius:999px;padding:2px 10px">' + esc(s) + ' <a href="#" data-tops-del="' + esc(s) + '" title="إزالة">×</a></span>'; }).join('') +
       '<span style="flex:1"></span><button type="button" class="btn" data-tops-none data-ro-ok>إلغاء الاستبعاد</button></div></details></div>';
     var body = d.groups.length ? d.groups.map(function (g) {
       return '<div class="card"><h2 style="margin-top:0">' + esc(g.name) + ' <span class="meta">(' + g.total + ' طالبًا لهم درجات)</span></h2><div class="table-wrap"><table class="grid"><thead><tr><th style="width:4em">الترتيب</th><th>الطالب</th>' + (lvl ? '<th>الشعبة</th>' : '') + '<th>المعدل</th><th>عدد المواد</th></tr></thead><tbody>' +
@@ -132,10 +131,6 @@
     else if (t.id === 'tops-view') u.view = t.value;
     else if (t.id === 'tops-n') u.n = Number(t.value) || 3;
     else if (t.id === 'tops-add') { if (!t.value) return; if (u.ex.indexOf(t.value) < 0) u.ex.push(t.value); topsSaveEx(u.ex); }
-    else if (t.getAttribute && t.getAttribute('data-tops-fix')) {
-      var f = TOPS_FIXED.filter(function (x) { return x[0] === t.getAttribute('data-tops-fix').split('|')[1]; })[0], m = topsMatch(topsData().subjects, f[1]);
-      u.ex = u.ex.filter(function (x) { return m.indexOf(x) < 0; }); if (t.checked) u.ex = u.ex.concat(m); topsSaveEx(u.ex);
-    }
     else if (s != null) { u.ex = u.ex.filter(function (x) { return x !== s; }); if (t.checked) u.ex.push(s); topsSaveEx(u.ex); }
     else return;
     render();

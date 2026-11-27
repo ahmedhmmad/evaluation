@@ -790,6 +790,7 @@
     grades: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
     examgrades: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
     assess: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
+    quranstatus: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9',
     gradestatus: 'M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h9',
     toppers: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3',
     gradecfg: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
@@ -814,7 +815,7 @@
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
     else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
     if (isTeacherRole()) groups.push({ title: 'صفوفي', items: [['#/mystudents', 'mystudents', 'طلابي'], ['#/grades', 'grades', 'رصد الدرجات']].concat(txHas() ? [['#/examgrades', 'examgrades', 'رصد الاختبارات']] : []) });
-    else if (isAdmin() || isManager()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.push(['#/grades', 'grades', 'الدرجات'], ['#/toppers', 'toppers', 'الأوائل'], ['#/gradestatus', 'gradestatus', 'متابعة الرصد']); });
+    else if (isAdmin() || isManager()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.push(['#/grades', 'grades', 'الدرجات'], ['#/toppers', 'toppers', 'الأوائل'], ['#/gradestatus', 'gradestatus', 'متابعة الرصد'], ['#/quranstatus', 'quranstatus', 'معلمو القرآن']); });
     if (isAdmin()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/gradecfg', 'gradecfg', 'إعداد الدرجات']); });
     if (!isTeacherRole() && (isStaff() || isRegistrar() || S.myStaff)) groups.push({ title: 'التوقيعات', items: [['#/signatures', 'signatures', 'التوقيع الإلكتروني']] });
     return navArrange(groups);
@@ -873,6 +874,7 @@
     if (h === '#/examgrades' && isTeacherRole()) return 'examgrades';
     if (h === '#/toppers' && (isAdmin() || isManager())) return 'toppers';
     if (h === '#/gradestatus' && (isAdmin() || isManager())) return 'gradestatus';
+    if (h === '#/quranstatus' && (isAdmin() || isManager())) return 'quranstatus';
     if (h === '#/gradecfg' && isAdmin()) return 'gradecfg';
     if (h === '#/signatures') return 'signatures';
     if (h === '#/messages' && canRecordAtt()) return 'messages';

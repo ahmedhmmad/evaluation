@@ -28,6 +28,7 @@
     if (location.hash === '#/examgrades' && isTeacherRole()) return renderExamGrades();
     if (location.hash === '#/toppers' && (isAdmin() || isManager())) return renderToppers();
     if (location.hash === '#/gradestatus' && (isAdmin() || isManager())) return renderGradeStatus();
+    if (location.hash === '#/quranstatus' && (isAdmin() || isManager())) return renderQuranStatus();
     if (location.hash === '#/gradecfg' && isAdmin()) return renderGradeCfg();
     if (location.hash === '#/signatures') return renderSignatures();
 
