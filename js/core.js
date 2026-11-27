@@ -179,7 +179,7 @@
 
   // اليوم الدراسي ست حصص
   var PERIODS = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
-  var DEFAULT_PRINCIPAL = 'أ. سمر أبو مدين';
+  var DEFAULT_PRINCIPAL = '';
 
   var cfg = window.APP_CONFIG || {};
   // حسابات اسم المستخدم (بدون بريد حقيقي) تُخزَّن بهذا النطاق
@@ -308,7 +308,7 @@
     return (S.settings && S.settings.principal_name) || DEFAULT_PRINCIPAL;
   }
 
-  // الاسم الأول والأخير (بلا لقب): «عبد/أبو» تبقى مع ما بعدها، مثل «عبد الله» و«أبو مدين»
+  // الاسم الأول والأخير (بلا لقب): «عبد/أبو» تبقى مع ما بعدها، مثل «عبد الله» و«أبو بكر»
   function firstLastName(name) {
     var w = String(name || '').trim().replace(/^(أ|د|م)\s*[.\/]\s*/, '').split(/\s+/).filter(Boolean);
     var joined = /^(عبد|أبو|ابو|آل|ال)$/;
