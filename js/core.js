@@ -308,6 +308,16 @@
     return (S.settings && S.settings.principal_name) || DEFAULT_PRINCIPAL;
   }
 
+  // الاسم الأول والأخير (بلا لقب): «عبد/أبو» تبقى مع ما بعدها، مثل «عبد الله» و«أبو مدين»
+  function firstLastName(name) {
+    var w = String(name || '').trim().replace(/^(أ|د|م)\s*[.\/]\s*/, '').split(/\s+/).filter(Boolean);
+    var joined = /^(عبد|أبو|ابو|آل|ال)$/;
+    var first = joined.test(w[0]) && w[1] ? w[0] + ' ' + w[1] : w[0] || '';
+    var used = first.split(' ').length, last = w.length > used ? w[w.length - 1] : '';
+    if (last && w.length - 2 >= used && joined.test(w[w.length - 2])) last = w[w.length - 2] + ' ' + last;
+    return (first + ' ' + last).trim();
+  }
+
   // اسم المستخدم بدون @ يُحوَّل إلى بريد داخلي
   function toEmail(login) {
     login = login.trim().toLowerCase();
@@ -907,7 +917,8 @@
     }).join('');
     document.getElementById('brand-name').textContent = schoolName();
     var uName = (S.profile && S.profile.full_name) || displayName(S.email);
-    var who = '<div class="who">' + esc(uName) + '</div>' +
+    // للمعلم: «أ.» والاسم الأول والأخير
+    var who = '<div class="who">' + esc(tch ? 'أ. ' + firstLastName(uName) : uName) + '</div>' +
       '<div class="role">' + String(ROLES[roleKey(S.baseProfile || S.profile)] || '').replace(/\s*\(.*\)$/, '') + '</div>';
     var wasOpen = !!userbar.querySelector('details[open]');
     // للمعلم: بطاقة باسمه، وتحت «•••» المزامنة والخروج

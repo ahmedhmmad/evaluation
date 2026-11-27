@@ -1203,7 +1203,7 @@
         '<div class="tw-search"><label>' + tdSv('search') + '<input type="search" id="tw-q" data-ro-ok autocomplete="off" placeholder="ابحث عن طالب بالاسم..." aria-label="البحث عن طالب"></label><div id="tw-found" hidden></div></div>' +
         '<div class="tw-date">' + tdSv('cal') + '<span>' + esc(now.toLocaleDateString('ar-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></div></header>' +
       '<div class="tw-body">' +
-      '<section class="tw-welcome navy-deco"><div class="tw-hi"><span class="tree-logo" aria-hidden="true"></span><div><p>' + esc(schoolName()) + ' · العام الدراسي ' + esc(academicYear()) + '</p><h1>أهلًا بك، ' + esc(first) + '</h1><span class="tw-wish">نتمنى لك يومًا دراسيًا موفقًا</span></div></div>' +
+      '<section class="tw-welcome navy-deco"><div class="tw-hi"><span class="tree-logo" aria-hidden="true"></span><div><p>' + esc(schoolName()) + ' · العام الدراسي ' + esc(academicYear()) + '</p><h1>أهلًا بك، أ. ' + esc(first) + '</h1><span class="tw-wish">نتمنى لك يومًا دراسيًا موفقًا</span></div></div>' +
         '<div class="tw-next"><span>' + (isNow ? 'الحصة الحالية' : 'موعد الحصة القادمة') + '</span><strong>' + tdSv('clock') + '<span>' +
           (next ? (isNow ? 'حتى <bdi>' + esc(next.time[1]) + '</bdi>' : when + '، ' + (next.time ? '<bdi>' + esc(next.time[0]) + '</bdi>' : ord(next))) : 'لا حصص في جدولك') + '</span></strong></div></section>' +
       '<section class="tw-task"><span class="tw-tico">' + tdSv('cal') + '</span><div class="tw-copy"><span class="tw-eye">' + (isNow ? 'حصتك الآن' : 'خطوتك التالية') + '</span>' +
