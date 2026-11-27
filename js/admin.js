@@ -195,7 +195,8 @@
       }).join('');
       return '<tr><td>' + esc(u.full_name || '—') + '</td><td dir="ltr" style="text-align:right">' + esc(displayName(u.email)) + '</td>' +
         '<td><select data-role="' + u.id + '" aria-label="صلاحية ' + esc(u.email) + '"' + (self ? ' disabled title="لا يمكنك تغيير صلاحيتك"' : isTeacher ? ' disabled title="يُدار من تبويب بيانات المعلمين"' : '') + '>' + opts + '</select></td>' +
-        '<td>' + (self || isTeacher ? '' : '<button type="button" class="btn" data-resetpw="' + u.id + '">كلمة مرور جديدة</button>') + '</td></tr>';
+        '<td>' + (self || isTeacher ? '' : '<button type="button" class="btn" data-resetpw="' + u.id + '">كلمة مرور جديدة</button> ') +
+        (self ? '' : '<button type="button" class="btn" data-renamelogin="' + u.id + '">تغيير اسم المستخدم</button>') + '</td></tr>';
     }).join('');
 
     var adTab = vtab('admin', 'users');
@@ -1217,6 +1218,32 @@
     }
     fail(error);
   }
+
+  // تغيير اسم المستخدم (supabase/rename_user.sql): كلمة المرور والصلاحية لا تتغيران
+  document.addEventListener('click', async function (e) {
+    var el = e.target.closest('[data-renamelogin]');
+    if (!el || !isAdmin() || location.hash !== '#/admin') return;
+    var u = S.users.filter(function (x) { return x.id === el.getAttribute('data-renamelogin'); })[0];
+    if (!u) return;
+    var cur = displayName(u.email);
+    var nv = prompt('اسم المستخدم الجديد للحساب «' + (u.full_name || cur) + '» (الحالي: ' + cur + ').\nكلمة المرور تبقى كما هي.', cur);
+    if (nv == null) return;
+    nv = nv.trim();
+    if (!nv || /\s/.test(nv)) return toast('اكتب اسم مستخدم بلا مسافات.', true);
+    var email = toEmail(nv);
+    if (email === u.email) return;
+    var r = await sb.rpc('rename_user_login', { p_user: u.id, p_login: email });
+    if (r.error) {
+      if (/could not find the function|schema cache|PGRST202/i.test((r.error.message || '') + (r.error.code || ''))) {
+        return toast('شغّل الملف supabase/rename_user.sql في محرر SQL أولًا، ثم حدّث الصفحة', true);
+      }
+      return fail(r.error);
+    }
+    u.email = email;
+    S.teachers.forEach(function (t) { if (t.user_id === u.id) t.login = email; });
+    render();
+    toast('تم تغيير اسم المستخدم إلى «' + displayName(email) + '»');
+  });
 
   document.addEventListener('click', async function (e) {
     var el = e.target.closest('[data-resetpw]');
