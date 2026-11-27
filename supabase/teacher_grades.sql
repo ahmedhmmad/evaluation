@@ -34,6 +34,7 @@ create table if not exists public.grade_items (
   sort int not null default 0,
   created_at timestamptz not null default now()
 );
+alter table public.grade_items add column if not exists open boolean not null default true;   -- مفتوح لرصد المعلمين (grade_items_open.sql)
 alter table public.grade_items enable row level security;
 revoke all on public.grade_items from anon;
 grant select, insert, update, delete on public.grade_items to authenticated;
@@ -65,9 +66,21 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.grade_mine(uuid, text) to authenticated;
 
+-- المعلم يقرأ درجات طلاب شعبه في مواده، ويكتب في الاختبارات المفتوحة فقط (مطابق لـ grade_items_open.sql)
 drop policy if exists grades_teacher on public.grades;
-create policy grades_teacher on public.grades for all to authenticated
-  using (public.grade_mine(student_id, subject)) with check (public.grade_mine(student_id, subject));
+drop policy if exists grades_teacher_read on public.grades;
+create policy grades_teacher_read on public.grades for select to authenticated
+  using (public.grade_mine(student_id, subject));
+drop policy if exists grades_teacher_insert on public.grades;
+create policy grades_teacher_insert on public.grades for insert to authenticated
+  with check (public.grade_mine(student_id, subject) and exists (select 1 from public.grade_items i where i.id = item_id and i.open));
+drop policy if exists grades_teacher_update on public.grades;
+create policy grades_teacher_update on public.grades for update to authenticated
+  using (public.grade_mine(student_id, subject) and exists (select 1 from public.grade_items i where i.id = item_id and i.open))
+  with check (public.grade_mine(student_id, subject) and exists (select 1 from public.grade_items i where i.id = item_id and i.open));
+drop policy if exists grades_teacher_delete on public.grades;
+create policy grades_teacher_delete on public.grades for delete to authenticated
+  using (public.grade_mine(student_id, subject) and exists (select 1 from public.grade_items i where i.id = item_id and i.open));
 drop policy if exists grades_admin on public.grades;
 create policy grades_admin on public.grades for all to authenticated
   using (public.my_role() = 'superadmin') with check (public.my_role() = 'superadmin');
