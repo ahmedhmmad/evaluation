@@ -223,7 +223,7 @@
      ويُرسل مع كل طلب إلى القاعدة، فتقبله القاعدة فقط إن كانت الشاشة ممنوحة له. عند الخروج منها يعود إلى صلاحيته */
   var ACT_AREA = '';
   // شاشات لا تُمنح: الرئيسية، الإعدادات والمستخدمون، سجل التعديلات، وما هو خاص بصاحب الحساب
-  var PERM_SKIP = ['home', 'admin', 'audit', 'results', 'signatures', 'mine', 'papers', 'mystudents', 'thome'];
+  var PERM_SKIP = ['home', 'admin', 'audit', 'results', 'signatures', 'mine', 'papers', 'mystudents', 'thome', 'examgrades'];
   // مسارات فرعية لا تبدأ بمسار الشاشة نفسها
   var PERM_ALIAS = { teachers: ['#/t/'], visits: ['#/v/'] };
   function permsColumn() { var b = S.baseProfile || S.profile; return !!b && 'perms' in b; }
@@ -445,6 +445,7 @@
       S.statements = vis[1].data || [];
     } else if (isTeacherRole()) {
       await loadTimetable(); // «جدولي»
+      txState().loaded = false; txLoad(); // الاختبارات المكلَّف بها (إن وُجدت) تظهر في القائمة
     } else if (isRegistrar()) {
       var reg = await Promise.all([sb.from('settings').select('*').eq('id', 1).maybeSingle(), loadStudents(), loadTransport()]);
       S.settings = reg[0].data || null;
@@ -787,6 +788,7 @@
     // طلابي: مجموعة أشخاص، والدرجات: ورقة بعلامة
     mystudents: 'M9 11a3 3 0 100-6 3 3 0 000 6zM3 20a6 6 0 0112 0M16 5.5a3 3 0 010 5.5M17.5 14a5.5 5.5 0 013.5 6',
     grades: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
+    examgrades: 'M6 3h12v18H6zM9 8h6M9 12h3M9 16l2 2 4-4',
     gradecfg: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
     claims: 'M5 3h10l4 4v14H5zM15 3v4h4M12 10v8M14.5 11.5c-.5-.9-1.5-1.2-2.5-1.2-1.4 0-2.3.7-2.3 1.7 0 2.4 5 1.3 5 3.8 0 1-1 1.7-2.5 1.7-1.2 0-2.2-.5-2.7-1.4'
   };
@@ -808,7 +810,7 @@
     if (canAttView()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.unshift(['#/affairs', 'affairs', 'إدارة شئون الطلاب'], ['#/discipline', 'discipline', 'سجل المخالفات'], ['#/exits', 'exits', 'إذن خروج الطلاب'], ['#/exams', 'exams', 'الاختبارات']); });
     if (S.myStaff) groups.push({ title: 'حسابي', items: [['#/mine', 'mine', 'دوامي وراتبي'], ['#/papers', 'papers', 'أوراق العمل والاختبارات']] });
     else if (canPapers()) groups.forEach(function (g) { if (g.title === 'المعلمون') g.items.push(['#/papers', 'papers', 'أوراق العمل والاختبارات']); });
-    if (isTeacherRole()) groups.push({ title: 'صفوفي', items: [['#/mystudents', 'mystudents', 'طلابي'], ['#/grades', 'grades', 'رصد الدرجات']] });
+    if (isTeacherRole()) groups.push({ title: 'صفوفي', items: [['#/mystudents', 'mystudents', 'طلابي'], ['#/grades', 'grades', 'رصد الدرجات']].concat(txHas() ? [['#/examgrades', 'examgrades', 'رصد الاختبارات']] : []) });
     else if (isAdmin() || isManager()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.push(['#/grades', 'grades', 'الدرجات']); });
     if (isAdmin()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/gradecfg', 'gradecfg', 'إعداد الدرجات']); });
     if (isStaff() || isRegistrar() || S.myStaff) groups.push({ title: 'التوقيعات', items: [['#/signatures', 'signatures', 'التوقيع الإلكتروني']] });
@@ -865,6 +867,7 @@
     if (h === '#/thome' && isTeacherRole()) return 'thome';
     if (h === '#/mystudents' && isTeacherRole()) return 'mystudents';
     if (h === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return 'grades';
+    if (h === '#/examgrades' && isTeacherRole()) return 'examgrades';
     if (h === '#/gradecfg' && isAdmin()) return 'gradecfg';
     if (h === '#/signatures') return 'signatures';
     if (h === '#/messages' && canRecordAtt()) return 'messages';

@@ -25,6 +25,7 @@
     if (isTeacherRole() && (location.hash === '' || location.hash === '#') && !ui.thomeSeen) { ui.thomeSeen = true; return go('#/thome'); }
     if (location.hash === '#/mystudents' && isTeacherRole()) return renderMyStudents();
     if (location.hash === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return renderGrades();
+    if (location.hash === '#/examgrades' && isTeacherRole()) return renderExamGrades();
     if (location.hash === '#/gradecfg' && isAdmin()) return renderGradeCfg();
     if (location.hash === '#/signatures') return renderSignatures();
 

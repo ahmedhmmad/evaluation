@@ -35,8 +35,9 @@
   function rxD() {
     var c = rxState(), E = rxCur();
     if (!c.draft && E) {
-      c.draft = { title: E.title || RX_DEFAULT, bands: (E.bands && E.bands.length ? E.bands : RX_BANDS).map(function (b) { return { from: b.from, to: b.to, label: b.label }; }), places: {}, exam_date: String(E.exam_date).slice(0, 10), subject: E.subject || '', committee: (E.committee || []).join('\n'), sel: {}, grades: Object.assign({}, E.grades || {}) };
+      c.draft = { title: E.title || RX_DEFAULT, bands: (E.bands && E.bands.length ? E.bands : RX_BANDS).map(function (b) { return { from: b.from, to: b.to, label: b.label }; }), places: {}, exam_date: String(E.exam_date).slice(0, 10), subject: E.subject || '', committee: (E.committee || []).join('\n'), sel: {}, tsel: {}, grades: Object.assign({}, E.grades || {}) };
       (E.student_ids || []).forEach(function (id) { c.draft.sel[id] = true; });
+      (E.teacher_ids || []).forEach(function (id) { c.draft.tsel[id] = true; });
     }
     return c.draft;
   }
@@ -73,6 +74,15 @@
     return '<div style="margin-top:10px"><label class="field">شرائح التقدير (من درجة إلى درجة، شاملتان)</label>' + d.bands.map(function (b, i) {
       return '<div class="toolbar" style="align-items:center;margin:0 0 6px"><span>من</span><input type="text" inputmode="decimal" data-rxband="' + i + '|from" value="' + esc(b.from) + '"' + dis + ' style="width:5em" aria-label="من"><span>إلى</span><input type="text" inputmode="decimal" data-rxband="' + i + '|to" value="' + esc(b.to) + '"' + dis + ' style="width:5em" aria-label="إلى"><span>التقدير</span><input type="text" data-rxband="' + i + '|label" value="' + esc(b.label) + '"' + dis + ' style="width:9em" aria-label="التقدير">' + (dis ? '' : '<button type="button" class="btn" data-rxbanddel="' + i + '">حذف</button>') + '</div>';
     }).join('') + (dis ? '' : '<button type="button" class="btn" data-rxbandadd>إضافة شريحة</button>') + '</div>';
+  }
+  // المعلمون المكلّفون برصد درجات هذا الاختبار: يرونه في صفحتهم «رصد الاختبارات» (supabase/exam_teachers.sql)
+  function rxTeachersHtml(d, dis) {
+    var list = (S.teachers || []).filter(function (t) { return !t.not_staff; });
+    if (!rxCur() || !('teacher_ids' in rxCur())) return '<p class="hint" style="margin-top:10px">لتكليف معلمين برصد الدرجات شغّل الملف <code dir="ltr">supabase/exam_teachers.sql</code> ثم حدّث الصفحة.</p>';
+    return '<div style="margin-top:10px"><label class="field">المعلمون المكلّفون برصد الدرجات (يرون هذا الاختبار وطلابه في صفحتهم ويرصدون درجاته فقط)</label>' +
+      (list.length ? '<div class="table-wrap" style="max-height:220px;overflow:auto;padding:6px 10px">' + list.map(function (t) {
+        return '<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" data-rxtpick="' + t.id + '"' + (d.tsel[t.id] ? ' checked' : '') + dis + '><span>' + esc(ttName(t)) + (t.user_id ? '' : ' <small class="hint">(بلا حساب دخول)</small>') + '</span></label>';
+      }).join('') + '</div>' : '<div class="empty">لا معلمين مسجلون.</div>') + '</div>';
   }
   function rxPicked() { var d = rxD(); return slStudents().filter(function (x) { return d.sel[x.id]; }); }
   function rxNames(d) { return String(d.committee || '').split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean); }
@@ -121,7 +131,7 @@
       '<div style="margin-top:10px"><label class="field" for="rx-title">عنوان الاختبار</label><input type="text" id="rx-title" value="' + esc(d.title) + '"' + dis + '></div>' +
       '<div class="grid2" style="margin-top:10px"><div><label class="field" for="rx-date">تاريخ الاختبار</label><input type="date" id="rx-date" value="' + esc(d.exam_date) + '"' + dis + '></div>' +
         '<div><label class="field" for="rx-subj">مادة الاختبار في جدول الحصص (منها يُعرف مدرس كل طالب)</label><select id="rx-subj"' + dis + '>' + opt('', '— بلا مدرس —', d.subject) + subjects.map(function (n) { return opt(n, n, d.subject); }).join('') + '</select></div></div>' +
-      '<div style="margin-top:10px"><label class="field" for="rx-com">أعضاء لجنة الاختبار (اسم في كل سطر)</label><textarea id="rx-com" rows="3" placeholder="يُترك فارغًا لتبقى خانات التوقيع بلا أسماء"' + dis + '>' + esc(d.committee) + '</textarea></div>' + rxBandsHtml(d, dis) + '</div>' +
+      '<div style="margin-top:10px"><label class="field" for="rx-com">أعضاء لجنة الاختبار (اسم في كل سطر)</label><textarea id="rx-com" rows="3" placeholder="يُترك فارغًا لتبقى خانات التوقيع بلا أسماء"' + dis + '>' + esc(d.committee) + '</textarea></div>' + rxBandsHtml(d, dis) + rxTeachersHtml(d, dis) + '</div>' +
       '<div class="card"><h2 style="margin-top:0">اختيار الطلاب (' + picked.length + ' مختارًا)</h2><div class="toolbar" style="align-items:center;margin:0">' +
         '<input type="search" id="rx-q" placeholder="ابحث بالاسم" style="flex:1;min-width:200px" value="' + esc(c.q) + '">' +
         '<select id="rx-cls" style="width:auto">' + opt('', 'كل الصفوف', c.cls) + attClasses().map(function (n) { return opt(n, n, c.cls); }).join('') + '</select>' +
@@ -145,8 +155,14 @@
     return '<div class="rs" style="display:grid;grid-template-columns:repeat(' + (n + 1) + ',1fr);align-items:stretch">' +
       '<div style="grid-row:1;grid-column:1 / span ' + n + ';border:0;padding:0;text-align:center;font-weight:700;font-family:var(--font-head);color:var(--navy);font-size:1.2em">أعضاء اللجنة</div>' + boxes + boss + '</div>';
   }
-  function buildRxSheet() {
-    var d = rxD(), rows = rxPicked(), n = 8, names = rxNames(d);
+  // مصدر الكشف: ما في الشاشة الآن (المدير) أو اختبار المعلم المكلَّف به؛ الكشف نفسه في الحالتين
+  function rxSrc() {
+    var d = rxD();
+    return { title: d.title, date: d.exam_date, bands: d.bands, grades: d.grades, names: rxNames(d), rows: rxPicked(),
+      teacher: function (x) { return rxTeacher(x, d.subject); }, place: function (x) { return rxPlace(x, d); } };
+  }
+  function buildRxSheet(src) {
+    var d = { title: src.title, exam_date: src.date, bands: src.bands, grades: src.grades }, rows = src.rows, n = 8, names = src.names;
     var head = reportHead(rxHead(d.title), [['التاريخ', dmy(d.exam_date)], ['عدد الطلاب', rows.length]], { noIssueDate: true }).replace(/^<img class="wm"[^>]*>/, '').replace('<h1>', '<h1 style="font-size:1.9em;line-height:1.35">');
     sheet.className = 'ls';
     sheet.removeAttribute('data-fit');
@@ -155,7 +171,7 @@
       '<tr><th style="width:3em">م</th><th>اسم الطالب</th><th>مكان الميلاد</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(d.title) + '</th><th style="width:8%">الدرجة</th><th style="white-space:nowrap">التقدير</th></tr></thead><tbody>' +
       (rows.length ? rows.map(function (x, i) {
         var g = d.grades[x.id];
-        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(rxPlace(x, d)) + '</td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(rxTeacher(x, d.subject)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c" style="white-space:nowrap">' + esc(rxRating(d.bands, g)) + '</td></tr>';
+        return '<tr><td class="c">' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td class="c">' + esc(src.place(x)) + '</td><td class="c">' + esc(x.class_name || '') + '</td><td class="c">' + dmy(x.birth_date) + '</td><td class="c">' + esc(src.teacher(x)) + '</td><td class="c">' + (g == null ? '' : esc(g)) + '</td><td class="c" style="white-space:nowrap">' + esc(rxRating(d.bands, g)) + '</td></tr>';
       }).join('') : '<tr><td colspan="' + n + '" class="c">لم يُختر طلاب.</td></tr>') + '</tbody>' +
       '<tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>' +
       rxSigns(names);
@@ -166,7 +182,7 @@
     var el, c = rxState(), E = rxCur();
     if ((el = e.target.closest('[data-rxopen]'))) { c.open = el.getAttribute('data-rxopen'); c.draft = null; c.dirty = false; c.show = ''; scrollTo(0, 0); return render(); }
     if (e.target.closest('[data-rxclose]')) { if (c.dirty && !confirm('لم تُحفظ التغييرات. الخروج بدون حفظ؟')) return; c.open = ''; c.draft = null; c.dirty = false; return render(); }
-    if (e.target.closest('[data-rxprint]')) { if (!E) return; pendingRx = true; return printNow(); }
+    if (e.target.closest('[data-rxprint]')) { if (!E) return; pendingRx = rxSrc(); return printNow(); }
     if (!rxCanEdit()) return;
     if (e.target.closest('[data-rxnew]')) {
       var r = await sb.from('student_exams').insert({ title: RX_DEFAULT, exam_date: todayISO(), subject: rxDefaultSubject(), created_by: (S.profile && S.profile.full_name) || displayName(S.email) }).select().single();
@@ -196,6 +212,7 @@
       Object.keys(d.places).forEach(function (id) { var x = findStudent(id), v = String(d.places[id] || '').trim(); if (x && v !== String((x.details && x.details.birth_place) || '')) pl.push([x, v]); });
       var bands = d.bands.filter(function (b) { return String(b.label || '').trim() && rxNum(b.from) != null && rxNum(b.to) != null; }).map(function (b) { return { from: rxNum(b.from), to: rxNum(b.to), label: String(b.label).trim() }; });
       var patch = { bands: bands, title: (d.title || '').trim() || RX_DEFAULT, exam_date: d.exam_date || todayISO(), subject: d.subject, committee: rxNames(d), student_ids: all, grades: grades, updated_at: new Date().toISOString() };
+      if ('teacher_ids' in E) patch.teacher_ids = Object.keys(d.tsel).filter(function (id) { return d.tsel[id]; });
       var w = await sb.from('student_exams').update(patch).eq('id', E.id);
       if (w.error) return fail(w.error);
       // مكان الميلاد يُحفظ في سجل الطالب
@@ -217,6 +234,7 @@
     if (!rxCur() || !rxCanEdit()) return;
     var d = rxD();
     if ((id = el.getAttribute('data-rxpick'))) { if (el.checked) d.sel[id] = true; else delete d.sel[id]; c.dirty = true; return render(); }
+    if ((id = el.getAttribute('data-rxtpick'))) { if (el.checked) d.tsel[id] = true; else delete d.tsel[id]; return rxMarkDirty(); }
     if (el.id === 'rx-date') { d.exam_date = el.value; c.dirty = true; return render(); }
     if (el.id === 'rx-subj') { d.subject = el.value; c.dirty = true; return render(); }
   });
@@ -231,4 +249,89 @@
     if ((id = el.getAttribute('data-rxplace'))) { d.places[id] = el.value; rxMarkDirty(); return; }
     if ((id = el.getAttribute('data-rxband'))) { var bp = id.split('|'); d.bands[Number(bp[0])][bp[1]] = el.value; rxMarkDirty(); rxRefreshRates(); return; }
     if ((id = el.getAttribute('data-rxgrade'))) { d.grades[id] = el.value; rxMarkDirty(); rxRefreshRates(); }
+  });
+
+  /* ---------- رصد الاختبارات (للمعلم) ----------
+     اختبارات كلّفه بها المدير من شاشة «الاختبارات» (my_exams في supabase/exam_teachers.sql): يرى طلابها ويرصد الدرجات فقط،
+     ويطبع الكشف بنفس شكل شاشة الاختبارات. ليست من مواد الجدول ولا تدخل في «رصد الدرجات» العادي */
+  var TX = { uid: '', loaded: false, loading: false, list: [], open: '', draft: {}, saving: false };
+  function txState() {
+    if (TX.uid !== S.uid) { TX.uid = S.uid; TX.loaded = false; TX.loading = false; TX.list = []; TX.open = ''; TX.draft = {}; }
+    return TX;
+  }
+  function txHas() { return isTeacherRole() && txState().list.length > 0; }
+  async function txLoad() {
+    var t = txState();
+    if (t.loading || !isTeacherRole()) return;
+    t.loading = true;
+    var r = await sb.rpc('my_exams');
+    t.loading = false; t.loaded = true;
+    t.list = r.error ? [] : (r.data || []);
+    if (!t.list.some(function (x) { return x.id === t.open; })) t.open = t.list.length === 1 ? t.list[0].id : '';
+    render();
+  }
+  function txCur() { var t = txState(); return t.list.filter(function (x) { return x.id === t.open; })[0]; }
+  function txGrade(E, id) { var d = TX.draft[E.id]; return d && id in d ? d[id] : ((E.grades || {})[id] == null ? '' : E.grades[id]); }
+  function txRows(E) { return E.students || []; }
+  function txDirty() { return Object.keys(TX.draft).some(function (k) { return Object.keys(TX.draft[k]).length; }); }
+  function txBands(E) { return E.bands && E.bands.length ? E.bands : RX_BANDS; }
+  function txSrc(E) {
+    var g = {}; txRows(E).forEach(function (x) { var v = txGrade(E, x.id); if (String(v).trim() !== '') g[x.id] = v; });
+    return { title: E.title, date: String(E.exam_date).slice(0, 10), bands: txBands(E), grades: g, names: E.committee || [], rows: txRows(E),
+      teacher: function (x) { return (x.teacher || '').split('، ').filter(Boolean).map(ttShortName).join('، ') || (E.teachers || []).map(ttShortName).join('، '); },
+      place: function (x) { return x.birth_place || ''; } };
+  }
+  function renderExamGrades() {
+    var t = txState(), head = '<h1 class="page-title" style="margin:0 0 12px">رصد الاختبارات</h1>';
+    if (!t.loaded) { app.innerHTML = head + '<div class="card empty">جارٍ التحميل…</div>'; txLoad(); return; }
+    var E = txCur();
+    if (!t.list.length) { app.innerHTML = head + '<div class="card empty">لا اختبارات مكلَّف بها حسابك.</div>'; return; }
+    if (!E) {
+      app.innerHTML = head + '<div class="card"><p class="hint" style="margin:0 0 10px">الاختبارات التي كلّفتك بها الإدارة برصد درجاتها.</p><div class="table-wrap"><table class="grid"><thead><tr><th>الاختبار</th><th>التاريخ</th><th>الطلاب</th><th>الدرجات المدخلة</th><th></th></tr></thead><tbody>' +
+        t.list.map(function (x) {
+          return '<tr><td><b>' + esc(x.title) + '</b></td><td>' + dmy(x.exam_date) + '</td><td>' + (x.students || []).length + '</td><td>' + Object.keys(x.grades || {}).length + '</td><td><button type="button" class="btn primary" data-txopen="' + x.id + '">فتح</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+      return;
+    }
+    var rows = txRows(E), dirty = txDirty(), src = txSrc(E), bands = txBands(E);
+    app.innerHTML = head + '<div class="card"><div class="toolbar" style="align-items:center;margin:0"><h2 style="margin:0;flex:1">' + esc(E.title) + ' — ' + dmy(E.exam_date) + '</h2>' +
+      '<button type="button" class="btn primary" data-txsave' + (dirty ? '' : ' disabled') + '>' + (dirty ? 'حفظ الدرجات' : 'محفوظ') + '</button>' +
+      '<button type="button" class="btn" data-txprint data-ro-ok>طباعة الكشف / PDF</button>' +
+      (t.list.length > 1 ? '<button type="button" class="btn" data-txclose>كل الاختبارات</button>' : '') + '</div>' +
+      '<div class="table-wrap" style="margin-top:10px"><table class="grid"><thead><tr><th>م</th><th>اسم الطالب</th><th>الصف</th><th>تاريخ الميلاد</th><th>' + rxTeachHead(E.title) + '</th><th style="width:7em">الدرجة</th><th>التقدير</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(function (x, i) {
+        return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(x.full_name) + '</b></td><td>' + esc(x.class_name || '—') + '</td><td>' + dmy(x.birth_date) + '</td><td>' + esc(src.teacher(x) || '—') + '</td>' +
+          '<td><input type="text" inputmode="decimal" data-txgrade="' + x.id + '" value="' + esc(txGrade(E, x.id)) + '" aria-label="درجة ' + esc(x.full_name) + '" style="width:6em"></td>' +
+          '<td style="white-space:nowrap" data-txrate="' + x.id + '"><b>' + esc(rxRating(bands, txGrade(E, x.id))) + '</b></td></tr>';
+      }).join('') : '<tr><td colspan="7" class="empty">لم تُضف الإدارة طلابًا لهذا الاختبار بعد.</td></tr>') + '</tbody></table></div></div>';
+  }
+  app.addEventListener('click', async function (e) {
+    if (location.hash !== '#/examgrades') return;
+    var t = txState(), el, E = txCur();
+    if ((el = e.target.closest('[data-txopen]'))) { t.open = el.getAttribute('data-txopen'); scrollTo(0, 0); return render(); }
+    if (e.target.closest('[data-txclose]')) { if (txDirty() && !confirm('لم تُحفظ الدرجات. الخروج بدون حفظ؟')) return; t.draft = {}; t.open = ''; return render(); }
+    if (!E) return;
+    if (e.target.closest('[data-txprint]')) { pendingRx = txSrc(E); return printNow(); }
+    if (e.target.closest('[data-txsave]')) {
+      var ch = t.draft[E.id] || {};
+      if (!Object.keys(ch).length || t.saving) return;
+      t.saving = true;
+      var r = await sb.rpc('exam_save_grades', { p_exam: E.id, p_grades: ch });
+      t.saving = false;
+      if (r.error) return fail(r.error);
+      E.grades = r.data || {};
+      delete t.draft[E.id];
+      render(); toast('حُفظت الدرجات');
+    }
+  });
+  app.addEventListener('input', function (e) {
+    var id = e.target.getAttribute && e.target.getAttribute('data-txgrade');
+    if (!id || location.hash !== '#/examgrades') return;
+    var E = txCur(); if (!E) return;
+    var d = TX.draft[E.id] || (TX.draft[E.id] = {});
+    d[id] = e.target.value;
+    var cell = document.querySelector('[data-txrate="' + id + '"]');
+    if (cell) cell.innerHTML = '<b>' + esc(rxRating(txBands(E), e.target.value)) + '</b>';
+    var b = document.querySelector('[data-txsave]');
+    if (b) { b.disabled = false; b.textContent = 'حفظ الدرجات'; }
   });

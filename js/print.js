@@ -1141,7 +1141,7 @@
     else if (pendingTg) buildMyStudentsSheet();
     else if (pendingTgSheet) buildGradeSheet(pendingTgSheet);
     else if (pendingSl) buildSlSheet(pendingSl);
-    else if (pendingRx) buildRxSheet();
+    else if (pendingRx) buildRxSheet(pendingRx);
     else if (pendingSz) buildSizeSheet(pendingSz);
     else if (pendingFc) buildFieldSheet(pendingFc);
     else if (pendingCu) buildCustodySheet();

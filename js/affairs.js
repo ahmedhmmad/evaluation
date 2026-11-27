@@ -1226,7 +1226,7 @@
         }).join('') + (todo.length > 4 ? '<a class="tw-all" href="#/papers">عرض الكل (' + todo.length + ')</a>' : '')
           : '<p class="tw-none">' + (waiting ? 'جارٍ التحميل…' : TD_P.failed && !S.papers ? 'تعذّر جلب الأوراق؛ حدّث الصفحة.' : 'لا أوراق معادة أو مسودات.') + '</p>') + '</section></div>' +
       '<section class="tw-panel tw-quick">' + head('اختصارات مفيدة', 'إجراءات سريعة', '<p>اختر ما تريد القيام به</p>') + '<div class="tw-links">' +
-        quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') +
+        quick('grade', '#/grades', 'رصد الدرجات', 'اكتب درجات طلابك') + quick('users', '#/mystudents', 'قائمة الطلاب', 'بيانات طلاب شعبك وهواتفهم') + (txHas() ? quick('grade', '#/examgrades', 'رصد الاختبارات', 'اختبارات كلّفتك بها الإدارة') : '') +
         (S.myStaff ? quick('paper', '#/papers', 'أوراق العمل والاختبارات', 'أنشئ ورقة واطبعها') : quick('cal', '#/timetable', 'جدولي', 'حصصك طوال الأسبوع')) + '</div></section></div>';
   }
 
