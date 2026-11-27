@@ -134,14 +134,15 @@ Deno.serve(async (req) => {
   const call = (extra: Record<string, unknown>) =>
     fetch(P.endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}`, "X-Title": "School staff sheet reader" },
       body: JSON.stringify({ ...request, ...extra }),
     });
 
   let response: Response;
   try {
     response = await call({ temperature: 0, response_format: { type: "json_object" } });
-    if (response.status === 400 || response.status === 422) response = await call({});
+    // OpenRouter answers 404 («No endpoints found that support …») when no provider of the model accepts these options
+    if ([400, 404, 422].includes(response.status)) response = await call({});
   } catch (err) {
     return json({ error: `could not reach ${P.name}: ${String(err)}` }, 502);
   }
@@ -153,20 +154,30 @@ Deno.serve(async (req) => {
     return json({ error: `${P.name} error ${response.status} (${model}): ${detail}` }, 502);
   }
 
-  let answer: { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+  // OpenRouter can answer 200 with an "error" object (the upstream provider failed) and no choices
+  let answer: {
+    error?: { message?: string; code?: unknown };
+    choices?: { message?: { content?: unknown }; finish_reason?: string; error?: { message?: string } }[];
+  };
   try {
     answer = await response.json();
   } catch {
     return json({ error: `unreadable answer from ${P.name}` }, 502);
   }
   const choice = answer.choices?.[0];
+  const failure = answer.error?.message ?? choice?.error?.message;
+  if (failure) return json({ error: `${P.name} error (${model}): ${String(failure).slice(0, 300)}` }, 502);
   if (choice?.finish_reason === "length") return json({ error: "the answer was cut off; photograph one page per image" }, 502);
-  const text = choice?.message?.content ?? "";
+  // content is normally a string; some models return a list of parts
+  const raw = choice?.message?.content;
+  const text = typeof raw === "string"
+    ? raw
+    : Array.isArray(raw) ? raw.map((p) => (typeof p === "string" ? p : String((p as { text?: unknown })?.text ?? ""))).join("") : "";
   let parsed: { date?: unknown; rows?: unknown } | null = null;
   try {
     parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
   } catch {
-    return json({ error: "the model did not return valid JSON" }, 502);
+    return json({ error: `the model did not return valid JSON (${model}, ${choice?.finish_reason ?? "no choice"}): ${text.slice(0, 150) || "empty answer"}` }, 502);
   }
 
   // Only known keys, valid times and statuses pass; anything else is emptied and marked unsure for the checker.
