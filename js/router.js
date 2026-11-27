@@ -26,6 +26,7 @@
     if (location.hash === '#/mystudents' && isTeacherRole()) return renderMyStudents();
     if (location.hash === '#/grades' && (isTeacherRole() || isAdmin() || isManager())) return renderGrades();
     if (location.hash === '#/examgrades' && isTeacherRole()) return renderExamGrades();
+    if (location.hash === '#/toppers' && (isAdmin() || isManager())) return renderToppers();
     if (location.hash === '#/gradecfg' && isAdmin()) return renderGradeCfg();
     if (location.hash === '#/signatures') return renderSignatures();
 
