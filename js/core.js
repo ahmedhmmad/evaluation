@@ -813,7 +813,7 @@
     if (isTeacherRole()) groups.push({ title: 'صفوفي', items: [['#/mystudents', 'mystudents', 'طلابي'], ['#/grades', 'grades', 'رصد الدرجات']].concat(txHas() ? [['#/examgrades', 'examgrades', 'رصد الاختبارات']] : []) });
     else if (isAdmin() || isManager()) groups.forEach(function (g) { if (g.title === 'الطلاب') g.items.push(['#/grades', 'grades', 'الدرجات']); });
     if (isAdmin()) groups.forEach(function (g) { if (g.title === 'الإدارة') g.items.push(['#/gradecfg', 'gradecfg', 'إعداد الدرجات']); });
-    if (isStaff() || isRegistrar() || S.myStaff) groups.push({ title: 'التوقيعات', items: [['#/signatures', 'signatures', 'التوقيع الإلكتروني']] });
+    if (!isTeacherRole() && (isStaff() || isRegistrar() || S.myStaff)) groups.push({ title: 'التوقيعات', items: [['#/signatures', 'signatures', 'التوقيع الإلكتروني']] });
     return navArrange(groups);
   }
   // إعادة الترتيب: الرئيسية، الموظفون، الطلاب، المواصلات، المالية، الإدارة، ثم الباقي
