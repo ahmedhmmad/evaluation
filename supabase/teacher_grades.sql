@@ -87,3 +87,19 @@ create policy grades_admin on public.grades for all to authenticated
   using (public.my_role() = 'superadmin') with check (public.my_role() = 'superadmin');
 drop policy if exists grades_read on public.grades;
 create policy grades_read on public.grades for select to authenticated using (public.my_role() in ('manager', 'supervisor'));
+
+-- أيام حضور طلاب المعلم في شهر (لكشف «طلابي»): من الحضور اليومي، حاضر أو متأخر. p_month بصيغة 2026-11.
+-- يرجع {معرّف الطالب: عدد الأيام} لطلاب شعبه فقط؛ المعلم لا يقرأ جدول الحضور نفسه.
+create or replace function public.my_students_attendance(p_month text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_object_agg(t.student_id, t.n), '{}'::jsonb) from (
+    select a.student_id, count(*) n from attendance a
+    join students x on x.id = a.student_id
+    where x.status in ('final', 'reserve')
+      and x.class_name in (select c.class_name from public.my_classes() c)
+      and a.status in ('present', 'late')
+      and a.day >= to_date(p_month || '-01', 'YYYY-MM-DD')
+      and a.day < to_date(p_month || '-01', 'YYYY-MM-DD') + interval '1 month'
+    group by a.student_id) t
+$$;
+grant execute on function public.my_students_attendance(text) to authenticated;

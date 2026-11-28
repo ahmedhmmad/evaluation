@@ -1267,13 +1267,24 @@
      طلابي: يرى المعلم بحسابه بيانات طلاب الشعب التي يدرّسها (my_students في supabase/teacher_grades.sql)، ويصدّرها PDF بلا توقيع وعليها اسمه علامة مائية، أو Excel.
      رصد الدرجات: يختار الفصل الدراسي والشعبة والمادة فيرصد درجات الاختبارات التي أعدّتها الإدارة في «إعداد الدرجات»، ويُحسب المجموع */
   var TG = { loaded: false, missing: false, classes: [], students: [], items: null, cfgEdit: null };
-  var TG_COLS = [['full_name', 'اسم الطالب'], ['class_name', 'الشعبة'], ['birth_date', 'تاريخ الميلاد'], ['home', 'السكن'], ['student_phone', 'جوال الطالب'], ['phone', 'جوال ولي الأمر'], ['alt_phone', 'جوال بديل']];
+  var TG_COLS = [['full_name', 'اسم الطالب'], ['class_name', 'الشعبة'], ['birth_date', 'تاريخ الميلاد'], ['home', 'السكن'], ['student_phone', 'جوال الطالب'], ['phone', 'جوال ولي الأمر'], ['alt_phone', 'جوال بديل'], ['att', 'أيام الحضور']];
   function tgVal(x, k) {
     if (k === 'birth_date') return x.birth_date ? dmy(x.birth_date) : '';
+    if (k === 'att') return TG.att && TG.attMonth === tgUi().month ? String(TG.att[x.id] || 0) : '';
     if (k === 'home') return [x.city, x.neighborhood, x.address].filter(function (v) { return v && String(v).trim(); }).join(' — ');
     return x[k] == null ? '' : String(x[k]);
   }
-  function tgUi() { return ui.tg || (ui.tg = { cls: '', q: '', term: '', key: '', draft: {}, grades: null, gkey: '' }); }
+  function tgUi() { return ui.tg || (ui.tg = { cls: '', q: '', term: '', key: '', draft: {}, grades: null, gkey: '', month: todayISO().slice(0, 7) }); }
+  // أيام حضور طلابي في الشهر المختار (my_students_attendance في supabase/teacher_grades.sql)
+  async function tgLoadAtt(month) {
+    TG.attLoading = month;
+    var r = await sb.rpc('my_students_attendance', { p_month: month });
+    if (TG.attLoading !== month) return;
+    TG.attLoading = '';
+    if (r.error) { TG.attMissing = true; TG.att = null; } else { TG.attMissing = false; TG.att = r.data || {}; }
+    TG.attMonth = month;
+    render();
+  }
   function tgTeacherName() { return (S.myStaff && S.myStaff.name) || (S.profile && S.profile.full_name) || displayName(S.email); }
   async function tgLoad() {
     var c = await sb.rpc('my_classes');
@@ -1300,29 +1311,32 @@
     if (!TG.loaded) { app.innerHTML = '<div class="card empty">جارٍ التحميل…</div>'; tgLoad(); return; }
     if (TG.missing) { app.innerHTML = '<div class="card empty">هذه الشاشة تحتاج تجهيز قاعدة البيانات: يشغّل المدير العام الملف <code dir="ltr">supabase/teacher_grades.sql</code>.</div>'; return; }
     var u = tgUi(), list = tgShown(), classes = tgClassList();
+    if (TG.attMonth !== u.month && TG.attLoading !== u.month) tgLoadAtt(u.month);
     var subj = function (cls) { return TG.classes.filter(function (c) { return c.class_name === cls; }).map(function (c) { return c.subject; }).filter(Boolean).join('، '); };
     app.innerHTML = '<div class="page-head"><div><h1>طلابي</h1><p>طلاب الشعب التي تدرّسها في جدول الحصص: ' + (classes.map(function (c) { return esc(c) + (subj(c) ? ' (' + esc(subj(c)) + ')' : ''); }).join(' · ') || 'لا شعب لك في جدول الحصص بعد') + '</p></div></div>' +
       '<div class="card"><div class="toolbar" style="align-items:center;margin:0">' +
         '<select id="tg-cls" data-ro-ok style="width:auto"><option value="">كل شعبي</option>' + classes.map(function (c) { return '<option' + (u.cls === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
         '<input type="search" id="tg-q" placeholder="ابحث بالاسم" style="flex:1;min-width:180px" value="' + esc(u.q) + '">' +
+        '<span class="monthpick"><label class="field" for="tg-month" style="margin:0">شهر أيام الحضور</label><input type="month" id="tg-month" data-ro-ok max="' + todayISO().slice(0, 7) + '" value="' + esc(u.month) + '"></span>' +
         '<button type="button" class="btn" data-tgpdf data-ro-ok' + (list.length ? '' : ' disabled') + '>تصدير PDF</button><button type="button" class="btn" data-tgxlsx data-ro-ok' + (list.length ? '' : ' disabled') + '>تصدير Excel</button></div>' +
       (list.length ? '<div class="table-wrap" style="margin-top:8px"><table class="grid"><thead><tr><th>م</th>' + TG_COLS.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
-        list.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td>' + TG_COLS.map(function (c) { var v = tgVal(x, c[0]); return '<td' + (/phone/.test(c[0]) ? ' dir="ltr" style="text-align:right;white-space:nowrap"' : '') + '>' + (c[0] === 'full_name' ? '<b>' + esc(v) + '</b>' : esc(v)) + '</td>'; }).join('') + '</tr>'; }).join('') +
-        '</tbody></table></div><p class="st-count">' + list.length + ' طالبًا</p>' : '<div class="empty">لا طلاب.</div>') + '</div>';
+        list.map(function (x, i) { return '<tr><td>' + (i + 1) + '</td>' + TG_COLS.map(function (c) { var v = tgVal(x, c[0]); return '<td' + (/phone/.test(c[0]) ? ' dir="ltr" style="text-align:right;white-space:nowrap"' : c[0] === 'att' ? ' style="text-align:center"' : '') + '>' + (c[0] === 'full_name' ? '<b>' + esc(v) + '</b>' : esc(v)) + '</td>'; }).join('') + '</tr>'; }).join('') +
+        '</tbody></table></div><p class="st-count">' + list.length + ' طالبًا · أيام الحضور في ' + esc(monthLabel(u.month)) + ' من سجل الحضور اليومي (حاضر أو متأخر)' +
+          (TG.attLoading ? ' — جارٍ جلبها…' : TG.attMissing ? ' — <span style="color:var(--red)">تحتاج تشغيل الملف <code dir="ltr">supabase/teacher_grades.sql</code></span>' : '') + '</p>' : '<div class="empty">لا طلاب.</div>') + '</div>';
   }
 
   var pendingTg = false;
   // كشف طلابي: بلا توقيعات، واسم المعلم علامة مائية مائلة في وسط كل صفحة
   function buildMyStudentsSheet() {
     var u = tgUi(), list = tgShown(), n = TG_COLS.length + 1, name = tgTeacherName();
-    var head = reportHead('كشف بيانات الطلاب', [['المعلم', name], ['الشعبة', u.cls || 'كل الشعب'], ['العدد', list.length]]).replace(/^<img class="wm"[^>]*>/, '');
+    var head = reportHead('كشف بيانات الطلاب', [['المعلم', name], ['الشعبة', u.cls || 'كل الشعب'], ['العدد', list.length], ['شهر أيام الحضور', monthLabel(u.month)]]).replace(/^<img class="wm"[^>]*>/, '');
     sheet.className = 'ls';
     sheet.setAttribute('data-nosign', '1');
     sheet.removeAttribute('data-fit');
     sheet.innerHTML = '<div style="position:fixed;top:42%;left:0;right:0;text-align:center;transform:rotate(-28deg);font-size:46pt;font-weight:800;color:rgba(19,48,107,.07);white-space:nowrap;pointer-events:none;z-index:0">' + esc(name) + '</div>' +
       '<table class="rz"><thead><tr><td class="pg-space" colspan="' + n + '"></td></tr><tr><td class="ls-head" colspan="' + n + '">' + head + '</td></tr>' +
       '<tr><th>م</th>' + TG_COLS.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      list.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td>' + TG_COLS.map(function (c) { var v = tgVal(x, c[0]); return '<td' + (/phone|birth/.test(c[0]) ? ' class="c" dir="ltr"' : '') + '>' + (c[0] === 'full_name' ? '<b>' + esc(v) + '</b>' : esc(v)) + '</td>'; }).join('') + '</tr>'; }).join('') +
+      list.map(function (x, i) { return '<tr><td class="c">' + (i + 1) + '</td>' + TG_COLS.map(function (c) { var v = tgVal(x, c[0]); return '<td' + (/phone|birth|att/.test(c[0]) ? ' class="c" dir="ltr"' : '') + '>' + (c[0] === 'full_name' ? '<b>' + esc(v) + '</b>' : esc(v)) + '</td>'; }).join('') + '</tr>'; }).join('') +
       '</tbody><tfoot><tr><td class="pg-space" colspan="' + n + '"></td></tr></tfoot></table>';
   }
   async function tgXlsx() {
@@ -1330,7 +1344,7 @@
       await loadXlsx();
       var u = tgUi(), list = tgShown(), wb = XLSX.utils.book_new();
       wb.Workbook = { Views: [{ RTL: true }] };
-      var ws = XLSX.utils.aoa_to_sheet([[schoolName() + ' — كشف بيانات الطلاب'], ['المعلم: ' + tgTeacherName() + ' — ' + (u.cls || 'كل الشعب')], [], ['م'].concat(TG_COLS.map(function (c) { return c[1]; }))].concat(list.map(function (x, i) { return [i + 1].concat(TG_COLS.map(function (c) { return tgVal(x, c[0]); })); })));
+      var ws = XLSX.utils.aoa_to_sheet([[schoolName() + ' — كشف بيانات الطلاب'], ['المعلم: ' + tgTeacherName() + ' — ' + (u.cls || 'كل الشعب') + ' — أيام الحضور: ' + monthLabel(u.month)], [], ['م'].concat(TG_COLS.map(function (c) { return c[1]; }))].concat(list.map(function (x, i) { return [i + 1].concat(TG_COLS.map(function (c) { return tgVal(x, c[0]); })); })));
       XLSX.utils.book_append_sheet(wb, ws, 'الطلاب');
       XLSX.writeFile(wb, 'طلابي-' + (u.cls || 'كل-الشعب') + '-' + todayISO() + '.xlsx');
     } catch (err) { toast(err.message || String(err), true); }
@@ -1622,6 +1636,7 @@
   document.addEventListener('change', function (e) {
     var u = tgUi(), id = e.target.id;
     if (location.hash === '#/mystudents' && id === 'tg-cls') { u.cls = e.target.value; return render(); }
+    if (location.hash === '#/mystudents' && id === 'tg-month') { if (/^d{4}-d{2}$/.test(e.target.value)) u.month = e.target.value; return render(); }
     if (location.hash === '#/grades' && (id === 'tg-term' || id === 'tg-cls' || id === 'tg-subj')) {
       var p = u.key.split('\u0001');
       if (Object.keys(u.draft).length && !confirm('في الدرجات تعديلات لم تُحفظ. تركها؟')) { e.target.value = id === 'tg-term' ? u.term : id === 'tg-cls' ? p[0] : p[1] || ''; return; }
